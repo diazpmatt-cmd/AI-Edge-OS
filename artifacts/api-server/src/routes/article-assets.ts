@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { articleAssetsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 
 const router = Router();
@@ -34,7 +34,12 @@ router.post("/article-assets/:articleId", async (req, res) => {
   const upserted = await db.insert(articleAssetsTable).values(values)
     .onConflictDoUpdate({
       target: [articleAssetsTable.articleId, articleAssetsTable.channel],
-      set: { body: articleAssetsTable.body, status: articleAssetsTable.status, errorMessage: articleAssetsTable.errorMessage, updatedAt: new Date() },
+      set: {
+        body: sql`excluded.body`,
+        status: sql`excluded.status`,
+        errorMessage: sql`excluded.error_message`,
+        updatedAt: new Date(),
+      },
     }).returning();
   res.json(upserted.map(rowToDto));
 });

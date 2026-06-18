@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { generateState } from "../lib/oauthState";
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/business.manage openid email",
           access_type: "offline",
           prompt: "consent",
-          state: `provider=google_business&userId=${userId}`,
+          state: generateState(userId, "google_business"),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -65,7 +66,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/youtube.upload openid email",
           access_type: "offline",
           prompt: "consent",
-          state: `provider=youtube&userId=${userId}`,
+          state: generateState(userId, "youtube"),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -80,7 +81,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
           scope: "pages_manage_posts,pages_read_engagement,instagram_basic",
-          state: `provider=facebook&userId=${userId}`,
+          state: generateState(userId, "facebook"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },
@@ -95,7 +96,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
           scope: "pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
-          state: `provider=instagram&userId=${userId}`,
+          state: generateState(userId, "instagram"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },
@@ -110,7 +111,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           redirect_uri: `${base}/api/oauth/tiktok/callback`,
           response_type: "code",
           scope: "user.info.basic,video.publish",
-          state: `provider=tiktok&userId=${userId}`,
+          state: generateState(userId, "tiktok"),
         });
         return `https://www.tiktok.com/v2/auth/authorize?${params}`;
       },
@@ -125,7 +126,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: clientId,
           redirect_uri: `${base}/api/oauth/linkedin/callback`,
           scope: "w_organization_social r_organization_social",
-          state: `provider=linkedin&userId=${userId}`,
+          state: generateState(userId, "linkedin"),
         });
         return `https://www.linkedin.com/oauth/v2/authorization?${params}`;
       },

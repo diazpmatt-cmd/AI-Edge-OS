@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { verifyState } from "../lib/oauthState";
 
 const router = Router();
 
@@ -44,14 +44,9 @@ router.get("/oauth/google/callback", async (req, res) => {
   if (error) { redirectWithResult(res, "error", { reason: error, step: "google_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "google_callback" }); return; }
 
-  let userId: string | undefined;
-  let provider = "google_business";
-  try {
-    const stateParams = new URLSearchParams(state);
-    userId = stateParams.get("userId") ?? undefined;
-    provider = stateParams.get("provider") ?? "google_business";
-  } catch { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_parse" }); return; }
-  if (!userId) { redirectWithResult(res, "error", { reason: "no_user_id", step: "state_parse" }); return; }
+  const verified = verifyState(state, ["google_business", "youtube"]);
+  if (!verified) { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_verify" }); return; }
+  const { userId, provider } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/google/callback`;
@@ -60,8 +55,7 @@ router.get("/oauth/google/callback", async (req, res) => {
     const expiresAt = tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null;
     await db.insert(socialConnectionsTable).values({
       userId, provider, accountName: userInfo.name ?? userInfo.email, accountId: userInfo.id,
-      accessToken: tokens.access_token, refreshToken: tokens.refresh_token ?? null,
-      expiresAt,
+      accessToken: tokens.access_token, refreshToken: tokens.refresh_token ?? null, expiresAt,
     }).onConflictDoUpdate({
       target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
       set: {
@@ -72,7 +66,7 @@ router.get("/oauth/google/callback", async (req, res) => {
         updatedAt: new Date(),
       },
     });
-    redirectWithResult(res, "success", { provider, connected: provider });
+    redirectWithResult(res, "success", { provider });
   } catch (e: any) {
     redirectWithResult(res, "error", { reason: e?.message ?? "token_exchange_failed", step: "google_token" });
   }
@@ -103,14 +97,9 @@ router.get("/oauth/meta/callback", async (req, res) => {
   if (error) { redirectWithResult(res, "error", { reason: error_reason ?? error, step: "meta_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "meta_callback" }); return; }
 
-  let userId: string | undefined;
-  let provider = "facebook";
-  try {
-    const stateParams = new URLSearchParams(state);
-    userId = stateParams.get("userId") ?? undefined;
-    provider = stateParams.get("provider") ?? "facebook";
-  } catch { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_parse" }); return; }
-  if (!userId) { redirectWithResult(res, "error", { reason: "no_user_id", step: "state_parse" }); return; }
+  const verified = verifyState(state, ["facebook", "instagram"]);
+  if (!verified) { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_verify" }); return; }
+  const { userId, provider } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/meta/callback`;
@@ -127,7 +116,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
         updatedAt: new Date(),
       },
     });
-    redirectWithResult(res, "success", { provider, connected: provider });
+    redirectWithResult(res, "success", { provider });
   } catch (e: any) {
     redirectWithResult(res, "error", { reason: e?.message ?? "token_exchange_failed", step: "meta_token" });
   }
@@ -138,12 +127,9 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
   if (error) { redirectWithResult(res, "error", { reason: error, step: "tiktok_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "tiktok_callback" }); return; }
 
-  let userId: string | undefined;
-  try {
-    const stateParams = new URLSearchParams(state);
-    userId = stateParams.get("userId") ?? undefined;
-  } catch { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_parse" }); return; }
-  if (!userId) { redirectWithResult(res, "error", { reason: "no_user_id", step: "state_parse" }); return; }
+  const verified = verifyState(state, ["tiktok"]);
+  if (!verified) { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_verify" }); return; }
+  const { userId } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/tiktok/callback`;
@@ -174,7 +160,7 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
         updatedAt: new Date(),
       },
     });
-    redirectWithResult(res, "success", { provider: "tiktok", connected: "tiktok" });
+    redirectWithResult(res, "success", { provider: "tiktok" });
   } catch (e: any) {
     redirectWithResult(res, "error", { reason: e?.message ?? "token_exchange_failed", step: "tiktok_token" });
   }
@@ -185,12 +171,9 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
   if (error) { redirectWithResult(res, "error", { reason: error, step: "linkedin_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "linkedin_callback" }); return; }
 
-  let userId: string | undefined;
-  try {
-    const stateParams = new URLSearchParams(state);
-    userId = stateParams.get("userId") ?? undefined;
-  } catch { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_parse" }); return; }
-  if (!userId) { redirectWithResult(res, "error", { reason: "no_user_id", step: "state_parse" }); return; }
+  const verified = verifyState(state, ["linkedin"]);
+  if (!verified) { redirectWithResult(res, "error", { reason: "invalid_state", step: "state_verify" }); return; }
+  const { userId } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/linkedin/callback`;
@@ -226,7 +209,7 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
         updatedAt: new Date(),
       },
     });
-    redirectWithResult(res, "success", { provider: "linkedin", connected: "linkedin" });
+    redirectWithResult(res, "success", { provider: "linkedin" });
   } catch (e: any) {
     redirectWithResult(res, "error", { reason: e?.message ?? "token_exchange_failed", step: "linkedin_token" });
   }

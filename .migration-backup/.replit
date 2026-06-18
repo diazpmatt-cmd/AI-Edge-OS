@@ -1,0 +1,24 @@
+# Replit configuration. Lovable does not read this file.
+run = "bun run dev"
+entrypoint = "src/routes/__root.tsx"
+modules = ["nodejs-20", "bun-1.1"]
+
+[env]
+# Build Nitro for a long-running Node server instead of Cloudflare Workers.
+# The Lovable preview keeps using the default (cloudflare) target.
+NITRO_PRESET = "node-server"
+# Vite/Nitro will bind to this port. Replit auto-forwards it to 443/80.
+PORT = "3000"
+HOST = "0.0.0.0"
+
+[nix]
+channel = "stable-24_05"
+
+# Replit exposes the container's internal port on the public URL.
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[deployment]
+run = ["sh", "-c", "bun run build && NITRO_PRESET=node-server node .output/server/index.mjs"]
+deploymentTarget = "cloudrun"

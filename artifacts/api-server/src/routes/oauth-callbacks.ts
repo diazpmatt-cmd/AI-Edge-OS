@@ -39,7 +39,7 @@ async function getGoogleUserInfo(accessToken: string) {
   return r.json() as Promise<{ email: string; name?: string; id: string }>;
 }
 
-router.get("/api/oauth/google/callback", async (req, res) => {
+router.get("/oauth/google/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectWithResult(res, "error", { reason: error, step: "google_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "google_callback" }); return; }
@@ -98,7 +98,7 @@ async function getMetaUserInfo(accessToken: string) {
   return r.json() as Promise<{ id: string; name: string }>;
 }
 
-router.get("/api/oauth/meta/callback", async (req, res) => {
+router.get("/oauth/meta/callback", async (req, res) => {
   const { code, state, error, error_reason } = req.query as Record<string, string>;
   if (error) { redirectWithResult(res, "error", { reason: error_reason ?? error, step: "meta_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "meta_callback" }); return; }
@@ -133,7 +133,7 @@ router.get("/api/oauth/meta/callback", async (req, res) => {
   }
 });
 
-router.get("/api/oauth/tiktok/callback", async (req, res) => {
+router.get("/oauth/tiktok/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectWithResult(res, "error", { reason: error, step: "tiktok_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "tiktok_callback" }); return; }
@@ -180,7 +180,7 @@ router.get("/api/oauth/tiktok/callback", async (req, res) => {
   }
 });
 
-router.get("/api/oauth/linkedin/callback", async (req, res) => {
+router.get("/oauth/linkedin/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectWithResult(res, "error", { reason: error, step: "linkedin_callback" }); return; }
   if (!code || !state) { redirectWithResult(res, "error", { reason: "missing_params", step: "linkedin_callback" }); return; }

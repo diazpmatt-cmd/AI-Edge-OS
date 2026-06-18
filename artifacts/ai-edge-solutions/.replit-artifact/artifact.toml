@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AI Edge Solutions"
+version = "1.0.0"
+id = "artifacts/ai-edge-solutions"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23997
+
+[services.development]
+run = "pnpm --filter @workspace/ai-edge-solutions run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-edge-solutions", "run", "build" ]
+publicDir = "artifacts/ai-edge-solutions/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23997"
+BASE_PATH = "/"

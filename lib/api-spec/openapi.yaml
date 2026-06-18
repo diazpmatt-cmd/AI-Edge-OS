@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Edge Solutions API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: keywords
+    description: Keyword management
+  - name: articles
+    description: Article draft management
+  - name: article-assets
+    description: Article social assets
+  - name: content-packages
+    description: Content package management
+  - name: content-assets
+    description: Content asset management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +32,543 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /keywords:
+    get:
+      operationId: listKeywords
+      tags: [keywords]
+      summary: List all keywords
+      responses:
+        "200":
+          description: List of keywords
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Keyword"
+    post:
+      operationId: createKeywords
+      tags: [keywords]
+      summary: Insert keywords in bulk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordsBulkInput"
+      responses:
+        "201":
+          description: Created keywords
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Keyword"
+    delete:
+      operationId: clearKeywords
+      tags: [keywords]
+      summary: Delete all keywords
+      responses:
+        "204":
+          description: Cleared
+
+  /articles:
+    get:
+      operationId: listArticles
+      tags: [articles]
+      summary: List all article drafts
+      responses:
+        "200":
+          description: List of articles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArticleDraft"
+    post:
+      operationId: createArticles
+      tags: [articles]
+      summary: Insert article drafts in bulk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticlesBulkInput"
+      responses:
+        "201":
+          description: Created articles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArticleDraft"
+    delete:
+      operationId: clearArticles
+      tags: [articles]
+      summary: Delete all articles for current user
+      responses:
+        "204":
+          description: Cleared
+
+  /articles/{id}:
+    get:
+      operationId: getArticle
+      tags: [articles]
+      summary: Get single article
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleDraft"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateArticle
+      tags: [articles]
+      summary: Update article draft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleUpdate"
+      responses:
+        "200":
+          description: Updated article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleDraft"
+
+  /article-assets:
+    get:
+      operationId: listAllArticleAssets
+      tags: [article-assets]
+      summary: List all article assets
+      responses:
+        "200":
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArticleAsset"
+
+  /article-assets/{articleId}:
+    get:
+      operationId: listArticleAssets
+      tags: [article-assets]
+      summary: List assets for an article
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArticleAsset"
+    post:
+      operationId: upsertArticleAssets
+      tags: [article-assets]
+      summary: Upsert article assets
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleAssetsBulkInput"
+      responses:
+        "200":
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArticleAsset"
+
+  /article-assets/item/{id}:
+    patch:
+      operationId: updateArticleAsset
+      tags: [article-assets]
+      summary: Update a single article asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleAssetUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleAsset"
+
+  /ai/keywords:
+    post:
+      operationId: generateKeywords
+      tags: [keywords]
+      summary: AI-generate keyword ideas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordGenInput"
+      responses:
+        "200":
+          description: Generated keywords
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeywordGenResult"
+
+  /ai/article:
+    post:
+      operationId: generateArticle
+      tags: [articles]
+      summary: AI-generate article content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleGenInput"
+      responses:
+        "200":
+          description: Generated article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleGenResult"
+
+  /ai/article-assets:
+    post:
+      operationId: generateArticleAssets
+      tags: [article-assets]
+      summary: AI-generate social assets for an article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleAssetsGenInput"
+      responses:
+        "200":
+          description: Generated assets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleAssetsGenResult"
+
+  /ai/repurpose:
+    post:
+      operationId: generateContentPackage
+      tags: [content-packages]
+      summary: AI-generate a full repurpose content package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepurposeInput"
+      responses:
+        "200":
+          description: Generated package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepurposeResult"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    Keyword:
+      type: object
+      required: [id, keyword, volume, difficulty, intent, service, city, state]
+      properties:
+        id:
+          type: string
+        keyword:
+          type: string
+        volume:
+          type: integer
+        difficulty:
+          type: string
+        intent:
+          type: string
+        service:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+
+    KeywordsBulkInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [keyword, volume, difficulty, intent, service, city, state]
+            properties:
+              keyword: { type: string }
+              volume: { type: integer }
+              difficulty: { type: string }
+              intent: { type: string }
+              service: { type: string }
+              city: { type: string }
+              state: { type: string }
+
+    ArticleDraft:
+      type: object
+      required: [id, title, keyword, service, project, body, metaTitle, metaDescription, slug, status]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        keyword:
+          type: string
+        keywordId:
+          type: ["string", "null"]
+        service:
+          type: string
+        project:
+          type: string
+        body:
+          type: string
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+        scheduledFor:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+        publishedUrl:
+          type: ["string", "null"]
+        generatedAt:
+          type: ["string", "null"]
+        verifiedLiveAt:
+          type: ["string", "null"]
+        lastStatusCode:
+          type: ["integer", "null"]
+        lastCheckedAt:
+          type: ["string", "null"]
+
+    ArticlesBulkInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArticleDraft"
+
+    ArticleUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        body: { type: string }
+        metaTitle: { type: string }
+        metaDescription: { type: string }
+        slug: { type: string }
+        status: { type: string }
+        scheduledFor: { type: ["string", "null"] }
+        publishedAt: { type: ["string", "null"] }
+        publishedUrl: { type: ["string", "null"] }
+        generatedAt: { type: ["string", "null"] }
+        verifiedLiveAt: { type: ["string", "null"] }
+        lastStatusCode: { type: ["integer", "null"] }
+        lastCheckedAt: { type: ["string", "null"] }
+
+    ArticleAsset:
+      type: object
+      required: [id, articleId, channel, body, status]
+      properties:
+        id:
+          type: string
+        articleId:
+          type: string
+        channel:
+          type: string
+        body:
+          type: string
+        status:
+          type: string
+        publishedUrl:
+          type: ["string", "null"]
+        publishedAt:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+
+    ArticleAssetsBulkInput:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items:
+            type: object
+            required: [channel, body]
+            properties:
+              channel: { type: string }
+              body: { type: string }
+              status: { type: string }
+              errorMessage: { type: ["string", "null"] }
+
+    ArticleAssetUpdate:
+      type: object
+      properties:
+        body: { type: string }
+        status: { type: string }
+        publishedUrl: { type: ["string", "null"] }
+        errorMessage: { type: ["string", "null"] }
+
+    KeywordGenInput:
+      type: object
+      required: [businessName, industry, city, state, mainServices]
+      properties:
+        businessName: { type: string }
+        industry: { type: string }
+        city: { type: string }
+        state: { type: string }
+        mainServices: { type: string }
+        targetCustomers: { type: string }
+
+    KeywordGenResult:
+      type: object
+      required: [keywords]
+      properties:
+        keywords:
+          type: array
+          items:
+            $ref: "#/components/schemas/Keyword"
+
+    ArticleGenInput:
+      type: object
+      required: [title, keyword, service, businessName, industry, city, state]
+      properties:
+        title: { type: string }
+        keyword: { type: string }
+        service: { type: string }
+        businessName: { type: string }
+        industry: { type: string }
+        city: { type: string }
+        state: { type: string }
+        mainServices: { type: string }
+        targetCustomers: { type: string }
+
+    ArticleGenResult:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string }
+
+    ArticleAssetsGenInput:
+      type: object
+      required: [title, keyword]
+      properties:
+        title: { type: string }
+        keyword: { type: string }
+        service: { type: string }
+        businessName: { type: string }
+        city: { type: string }
+        state: { type: string }
+        body: { type: string }
+
+    ArticleAssetsGenResult:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items:
+            type: object
+            required: [channel, body, status]
+            properties:
+              channel: { type: string }
+              body: { type: string }
+              status: { type: string }
+              errorMessage: { type: ["string", "null"] }
+
+    RepurposeInput:
+      type: object
+      required: [businessName, service, city, keyword]
+      properties:
+        businessName: { type: string }
+        service: { type: string }
+        city: { type: string }
+        state: { type: string }
+        keyword: { type: string }
+
+    RepurposeResult:
+      type: object
+      required: [assets]
+      properties:
+        assets:
+          type: array
+          items:
+            type: object
+            required: [channel, label, body]
+            properties:
+              channel: { type: string }
+              label: { type: string }
+              body: { type: string }

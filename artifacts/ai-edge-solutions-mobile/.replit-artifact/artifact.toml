@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/ai-edge-solutions-mobile/"
+title = "AI Edge Solutions Mobile"
+version = "1.0.0"
+id = "artifacts/ai-edge-solutions-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/ai-edge-solutions-mobile/" ]
+localPort = 24764
+
+[services.development]
+run = "pnpm --filter @workspace/ai-edge-solutions-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-edge-solutions-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/ai-edge-solutions-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "24764"
+BASE_PATH = "/ai-edge-solutions-mobile/"

@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "G7xCE810F636aVXlIkMUT"
+uri = "file://artifacts/ai-edge-solutions-mobile/assets/images/icon.png"
+type = "image"
+title = "ai-edge-solutions-mobile-icon"

@@ -6,6 +6,7 @@ import articleAssetsRouter from "./article-assets";
 import aiRouter from "./ai";
 import contentPackagesRouter from "./content-packages";
 import socialConnectionsRouter from "./social-connections";
+import oauthCallbacksRouter from "./oauth-callbacks";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(articleAssetsRouter);
 router.use(aiRouter);
 router.use(contentPackagesRouter);
 router.use(socialConnectionsRouter);
+router.use(oauthCallbacksRouter);
 
 export default router;

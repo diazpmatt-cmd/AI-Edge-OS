@@ -40,6 +40,7 @@ router.post("/article-assets/:articleId", async (req, res) => {
         errorMessage: sql`excluded.error_message`,
         updatedAt: new Date(),
       },
+      setWhere: eq(articleAssetsTable.userId, userId),
     }).returning();
   res.json(upserted.map(rowToDto));
 });

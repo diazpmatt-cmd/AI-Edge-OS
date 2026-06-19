@@ -7,6 +7,45 @@ import { generateState } from "../lib/oauthState";
 
 const router = Router();
 
+router.get("/social-connections/debug", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const ENV_KEYS: Record<string, string[]> = {
+    google_business: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+    youtube:         ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+    facebook:        ["META_APP_ID", "META_APP_SECRET"],
+    instagram:       ["META_APP_ID", "META_APP_SECRET"],
+    tiktok:          ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
+    linkedin:        ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
+  };
+
+  const dbRows = await db.select().from(socialConnectionsTable).where(eq(socialConnectionsTable.userId, userId));
+  const dbByProvider = new Map(dbRows.map((r) => [r.provider, r]));
+
+  const result = Object.entries(ENV_KEYS).map(([provider, keys]) => {
+    const dbRow = dbByProvider.get(provider);
+    const configuredKeys = keys.filter((k) => !!process.env[k]);
+    const source: string = dbRow
+      ? "replit_database"
+      : configuredKeys.length > 0
+        ? "env_secrets_only"
+        : "not_configured";
+    return {
+      provider,
+      inDatabase: !!dbRow,
+      accountName: dbRow?.accountName ?? null,
+      accountId: dbRow?.accountId ?? null,
+      expiresAt: dbRow?.expiresAt?.toISOString() ?? null,
+      envKeysConfigured: configuredKeys,
+      envKeysMissing: keys.filter((k) => !process.env[k]),
+      source,
+    };
+  });
+
+  res.json(result);
+});
+
 router.get("/social-connections", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }

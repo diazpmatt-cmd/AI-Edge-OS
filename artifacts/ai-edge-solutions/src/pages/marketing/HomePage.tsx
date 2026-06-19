@@ -165,7 +165,7 @@ export default function HomePage() {
       </section>
 
       {/* ── WHY CHOOSE US ── */}
-      <section style={{ padding: "96px 24px", background: "rgba(0,174,239,0.03)", borderTop: "1px solid rgba(0,174,239,0.08)" }}>
+      <section id="why-us" style={{ padding: "96px 24px", background: "rgba(0,174,239,0.03)", borderTop: "1px solid rgba(0,174,239,0.08)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 72, alignItems: "center" }}>
 
           {/* Left */}

@@ -2,14 +2,21 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 
 const LINKS = [
-  { label: "Services", href: "/services" },
-  { label: "Products", href: "/products" },
-  { label: "Case Studies", href: "/case-studies" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Contact", href: "/contact" },
+  { label: "Services", href: "/services", icon: "⚙" },
+  { label: "Why Us", href: "/#why-us", icon: "◈", anchor: true },
+  { label: "Products", href: "/products", icon: "⬡" },
+  { label: "Case Studies", href: "/case-studies", icon: "↗" },
+  { label: "Pricing", href: "/pricing", icon: "◇" },
 ];
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
+
+function scrollToWhyUs() {
+  const el = document.getElementById("why-us");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 
 export default function Nav() {
   const [location, navigate] = useLocation();
@@ -24,69 +31,93 @@ export default function Nav() {
 
   useEffect(() => { setMobileOpen(false); }, [location]);
 
+  function handleLink(link: typeof LINKS[0]) {
+    if (link.anchor) {
+      if (location === "/") {
+        scrollToWhyUs();
+      } else {
+        navigate("/");
+        setTimeout(scrollToWhyUs, 300);
+      }
+    } else {
+      navigate(link.href);
+    }
+  }
+
   return (
     <>
       <header style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
         background: scrolled ? "rgba(3,6,18,0.97)" : "rgba(3,6,18,0.75)",
-        backdropFilter: "blur(16px)",
+        backdropFilter: "blur(20px)",
         borderBottom: scrolled ? "1px solid rgba(0,174,239,0.18)" : "1px solid rgba(255,255,255,0.04)",
         transition: "all 0.3s ease",
       }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", height: 70 }}>
+
           {/* Logo */}
           <a
             href="/"
             onClick={e => { e.preventDefault(); navigate("/"); }}
             style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
           >
-            <img
-              src={logoSrc}
-              alt="AI Edge Solutions"
-              style={{ height: 46, width: "auto", objectFit: "contain" }}
-            />
+            <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 46, width: "auto", objectFit: "contain" }} />
           </a>
 
-          {/* Desktop nav */}
-          <nav style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto", marginRight: 24 }}>
+          {/* Desktop nav — silver pill buttons */}
+          <nav style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", marginRight: 20 }}>
             {LINKS.map((link) => {
-              const active = location === link.href || location.startsWith(link.href + "/");
+              const active = !link.anchor && (location === link.href || location.startsWith(link.href + "/"));
               return (
-                <a
+                <button
                   key={link.href}
-                  href={link.href}
-                  onClick={e => { e.preventDefault(); navigate(link.href); }}
+                  onClick={() => handleLink(link)}
                   style={{
-                    padding: "8px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "7px 14px",
                     borderRadius: 8,
-                    textDecoration: "none",
-                    fontSize: 14,
-                    fontWeight: active ? 600 : 500,
-                    color: active ? "#00AEEF" : "#C0C0C0",
-                    background: active ? "rgba(0,174,239,0.08)" : "transparent",
-                    transition: "all 0.2s",
+                    border: active
+                      ? "1px solid rgba(0,174,239,0.5)"
+                      : "1px solid rgba(180,195,220,0.18)",
+                    background: active
+                      ? "rgba(0,174,239,0.12)"
+                      : "rgba(160,180,210,0.09)",
+                    color: active ? "#00AEEF" : "rgba(210,220,235,0.85)",
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    cursor: "pointer",
                     letterSpacing: "-0.1px",
+                    transition: "all 0.2s ease",
+                    backdropFilter: "blur(8px)",
+                    whiteSpace: "nowrap",
                   }}
                   onMouseEnter={e => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-                      (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                      const el = e.currentTarget;
+                      el.style.background = "rgba(180,200,230,0.18)";
+                      el.style.border = "1px solid rgba(180,200,230,0.35)";
+                      el.style.color = "#FFFFFF";
                     }
                   }}
                   onMouseLeave={e => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "#C0C0C0";
-                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                      const el = e.currentTarget;
+                      el.style.background = "rgba(160,180,210,0.09)";
+                      el.style.border = "1px solid rgba(180,195,220,0.18)";
+                      el.style.color = "rgba(210,220,235,0.85)";
                     }
                   }}
                 >
+                  <span style={{ fontSize: 11, opacity: 0.75 }}>{link.icon}</span>
                   {link.label}
-                </a>
+                </button>
               );
             })}
           </nav>
 
-          {/* CTA */}
+          {/* CTA — solid blue */}
           <button
             onClick={() => navigate("/contact")}
             style={{
@@ -102,6 +133,7 @@ export default function Nav() {
               boxShadow: "0 0 0 rgba(0,174,239,0)",
               transition: "all 0.25s",
               flexShrink: 0,
+              whiteSpace: "nowrap",
             }}
             onMouseEnter={e => {
               const el = e.currentTarget;
@@ -116,7 +148,7 @@ export default function Nav() {
               el.style.transform = "translateY(0)";
             }}
           >
-            Book Free Call
+            Book Strategy Call
           </button>
 
           {/* Mobile hamburger */}
@@ -147,22 +179,19 @@ export default function Nav() {
             padding: "16px 24px 24px",
           }}>
             {LINKS.map(link => (
-              <a
+              <button
                 key={link.href}
-                href={link.href}
-                onClick={e => { e.preventDefault(); navigate(link.href); }}
+                onClick={() => handleLink(link)}
                 style={{
-                  display: "block",
-                  padding: "12px 0",
-                  color: "#C0C0C0",
-                  textDecoration: "none",
-                  fontSize: 16,
-                  fontWeight: 500,
+                  display: "flex", alignItems: "center", gap: 8, width: "100%",
+                  padding: "12px 0", color: "#C0C0C0", background: "none", border: "none",
                   borderBottom: "1px solid rgba(255,255,255,0.05)",
+                  fontSize: 16, fontWeight: 500, cursor: "pointer", textAlign: "left",
                 }}
               >
+                <span style={{ fontSize: 12, opacity: 0.6 }}>{link.icon}</span>
                 {link.label}
-              </a>
+              </button>
             ))}
             <button
               onClick={() => navigate("/contact")}
@@ -172,14 +201,14 @@ export default function Nav() {
                 color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer",
               }}
             >
-              Book Free Strategy Call
+              Book Strategy Call
             </button>
           </div>
         )}
       </header>
 
       <style>{`
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           nav { display: none !important; }
           .mobile-menu-btn { display: block !important; }
         }

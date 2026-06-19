@@ -100,6 +100,7 @@ export default function ConnectionsPage() {
     publicAppUrl: string;
     redirectUri: string;
     fullOAuthUrl: string;
+    clientId: string | null;
     clientIdSet: boolean;
     clientSecretSet: boolean;
   };
@@ -353,16 +354,21 @@ export default function ConnectionsPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
 
                   {/* Credential status */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Tag
-                      label={googleDebug.clientIdSet ? "✓ GOOGLE_OAUTH_CLIENT_ID set" : "✗ GOOGLE_OAUTH_CLIENT_ID missing"}
-                      color={googleDebug.clientIdSet ? "#10B981" : "#EF4444"}
-                    />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
                     <Tag
                       label={googleDebug.clientSecretSet ? "✓ GOOGLE_OAUTH_CLIENT_SECRET set" : "✗ GOOGLE_OAUTH_CLIENT_SECRET missing"}
                       color={googleDebug.clientSecretSet ? "#10B981" : "#EF4444"}
                     />
                   </div>
+
+                  {/* Client ID — full value */}
+                  <DebugRow label="GOOGLE_OAUTH_CLIENT_ID">
+                    {googleDebug.clientId ? (
+                      <code style={{ fontSize: 12, color: "#C0C0C0", wordBreak: "break-all" }}>{googleDebug.clientId}</code>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#EF4444" }}>Not set — add GOOGLE_OAUTH_CLIENT_ID to Replit Secrets</span>
+                    )}
+                  </DebugRow>
 
                   {/* PUBLIC_APP_URL */}
                   <DebugRow label="PUBLIC_APP_URL">

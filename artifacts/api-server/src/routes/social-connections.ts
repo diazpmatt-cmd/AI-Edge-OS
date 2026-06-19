@@ -213,6 +213,7 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     publicAppUrl: appBase,
     redirectUri,
     fullOAuthUrl,
+    clientId: clientId || null,
     clientIdSet,
     clientSecretSet,
   });

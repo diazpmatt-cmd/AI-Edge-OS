@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import Nav from "@/components/marketing/Nav";
 import Footer from "@/components/marketing/Footer";
@@ -30,6 +31,13 @@ const RESULTS = [
 
 export default function HomePage() {
   const [, navigate] = useLocation();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 500);
+    window.addEventListener("scroll", handler, { passive: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
 
   return (
     <div style={{ background: "#0B1629", minHeight: "100vh", color: "#FFFFFF", fontFamily: "'Inter', -apple-system, sans-serif" }}>
@@ -156,6 +164,80 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── WHY CHOOSE US ── */}
+      <section style={{ padding: "96px 24px", background: "rgba(0,174,239,0.03)", borderTop: "1px solid rgba(0,174,239,0.08)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 72, alignItems: "center" }}>
+
+          {/* Left */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#00AEEF", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 18 }}>
+              Why Choose Us
+            </div>
+            <h2 style={{ fontSize: "clamp(32px, 4.5vw, 54px)", fontWeight: 900, letterSpacing: "-1.5px", lineHeight: 1.08, marginBottom: 24, color: "#FFFFFF" }}>
+              Why AI Edge<br />Solutions?
+            </h2>
+            <p style={{ fontSize: 17, color: "#6B7280", lineHeight: 1.75, marginBottom: 40, maxWidth: 440 }}>
+              We don't build toys for tech bros. We build profit-generating systems for the guy running a 10-truck operation who wants his time back.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {[
+                "Built explicitly for local service businesses",
+                "More calls, more booked jobs, less manual work",
+                "Multi-platform content publishing across Google, YouTube & Facebook",
+                "Automation without confusing tech jargon",
+              ].map(item => (
+                <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+                    background: "rgba(0,174,239,0.12)", border: "1.5px solid rgba(0,174,239,0.35)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ fontSize: 11, color: "#00AEEF" }}>✓</span>
+                  </div>
+                  <span style={{ fontSize: 15, color: "#C0C0C0", lineHeight: 1.55, fontWeight: 500 }}>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right — Edge Advantage card */}
+          <div style={{
+            background: "rgba(11,22,41,0.8)",
+            border: "1px solid rgba(0,174,239,0.18)",
+            borderRadius: 20,
+            padding: 36,
+            boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 32 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18,
+              }}>⚡</div>
+              <span style={{ fontSize: 18, fontWeight: 800, color: "#FFFFFF" }}>The Edge Advantage</span>
+            </div>
+
+            {[
+              { label: "Average Response Time", value: "Under 60 Seconds", color: "#00AEEF" },
+              { label: "Lead Capture Rate", value: "+214% Increase", color: "#00AEEF" },
+              { label: "Admin Hours Saved", value: "40+ Hrs / Month", color: "#00AEEF" },
+            ].map(({ label, value, color }, i) => (
+              <div key={label} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "18px 0",
+                borderTop: i === 0 ? "1px solid rgba(255,255,255,0.06)" : undefined,
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+              }}>
+                <span style={{ fontSize: 14, color: "#6B7280", fontWeight: 500 }}>{label}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color }}>{value}</span>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
       {/* ── CASE STUDY TEASER ── */}
       <section style={{
         padding: "96px 24px",
@@ -279,6 +361,50 @@ export default function HomePage() {
       </section>
 
       <Footer />
+
+      {/* ── FLOATING CTA BUTTON ── */}
+      <button
+        onClick={() => navigate("/contact")}
+        style={{
+          position: "fixed",
+          bottom: 32,
+          right: 32,
+          zIndex: 200,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "14px 24px",
+          borderRadius: 50,
+          background: "#00AEEF",
+          border: "none",
+          color: "#FFFFFF",
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: "pointer",
+          boxShadow: "0 4px 24px rgba(0,174,239,0.5), 0 2px 8px rgba(0,0,0,0.4)",
+          transition: "all 0.35s cubic-bezier(0.34,1.56,0.64,1)",
+          opacity: scrolled ? 1 : 0,
+          transform: scrolled ? "translateY(0) scale(1)" : "translateY(20px) scale(0.9)",
+          pointerEvents: scrolled ? "auto" : "none",
+          letterSpacing: "-0.2px",
+          whiteSpace: "nowrap",
+        }}
+        onMouseEnter={e => {
+          const el = e.currentTarget;
+          el.style.background = "#00C4FF";
+          el.style.boxShadow = "0 8px 36px rgba(0,174,239,0.65), 0 2px 8px rgba(0,0,0,0.4)";
+          el.style.transform = "translateY(-3px) scale(1.04)";
+        }}
+        onMouseLeave={e => {
+          const el = e.currentTarget;
+          el.style.background = "#00AEEF";
+          el.style.boxShadow = "0 4px 24px rgba(0,174,239,0.5), 0 2px 8px rgba(0,0,0,0.4)";
+          el.style.transform = "translateY(0) scale(1)";
+        }}
+      >
+        <span style={{ fontSize: 16 }}>📞</span>
+        Book Strategy Call
+      </button>
 
       <style>{`
         @media (max-width: 768px) {

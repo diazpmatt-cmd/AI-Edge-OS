@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
-const CORRECT_CODE = import.meta.env.VITE_ADMIN_ACCESS_CODE ?? "2468";
+
+// Temporarily hardcoded for testing — replace with env var once confirmed working
+const ADMIN_ACCESS_CODE = "1661";
 
 export default function AdminAccessPage() {
   const [, navigate] = useLocation();
@@ -32,8 +34,7 @@ export default function AdminAccessPage() {
     }
 
     if (v && index === 3) {
-      const code = [...next.slice(0, 3), v].join("");
-      checkCode(code);
+      checkCode(next.join(""));
     }
   };
 
@@ -56,7 +57,14 @@ export default function AdminAccessPage() {
   };
 
   const checkCode = (code: string) => {
-    if (code === CORRECT_CODE) {
+    const entered = code.trim();
+    const expected = ADMIN_ACCESS_CODE.trim();
+    const match = entered === expected;
+    console.log("[AdminAccess] entered:", entered);
+    console.log("[AdminAccess] expected:", expected);
+    console.log("[AdminAccess] match:", match);
+
+    if (match) {
       navigate("/admin/login");
     } else {
       setError(true);

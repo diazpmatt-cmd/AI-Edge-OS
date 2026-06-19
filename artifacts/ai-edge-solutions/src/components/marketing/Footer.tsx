@@ -1,5 +1,7 @@
 import { useLocation } from "wouter";
 
+const logoSrc = `${import.meta.env.BASE_URL}logo.png`;
+
 const SERVICES = [
   "Lead Recovery AI",
   "AI Receptionist",
@@ -34,21 +36,17 @@ export default function Footer() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 48, marginBottom: 56 }}>
           {/* Brand */}
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <svg width="36" height="36" viewBox="0 0 38 38" fill="none">
-                <rect width="38" height="38" rx="9" fill="url(#footer-ae-grad)" />
-                <defs>
-                  <linearGradient id="footer-ae-grad" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#00AEEF" />
-                    <stop offset="100%" stopColor="#0077BB" />
-                  </linearGradient>
-                </defs>
-                <text x="50%" y="56%" dominantBaseline="middle" textAnchor="middle" fill="#fff" fontSize="14" fontWeight="800" fontFamily="Inter, system-ui, sans-serif" letterSpacing="-0.5">AE</text>
-              </svg>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.2px" }}>AI Edge Solutions</div>
-              </div>
-            </div>
+            <a
+              href="/"
+              onClick={e => { e.preventDefault(); navigate("/"); }}
+              style={{ display: "inline-block", marginBottom: 16, textDecoration: "none" }}
+            >
+              <img
+                src={logoSrc}
+                alt="AI Edge Solutions"
+                style={{ height: 52, width: "auto", objectFit: "contain" }}
+              />
+            </a>
             <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, maxWidth: 240 }}>
               Helping local businesses win with AI automation, intelligent lead recovery, and digital domination.
             </p>

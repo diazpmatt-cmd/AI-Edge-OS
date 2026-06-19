@@ -9,18 +9,7 @@ const LINKS = [
   { label: "Contact", href: "/contact" },
 ];
 
-const AELogo = () => (
-  <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-    <rect width="38" height="38" rx="9" fill="url(#ae-grad)" />
-    <defs>
-      <linearGradient id="ae-grad" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#00AEEF" />
-        <stop offset="100%" stopColor="#0077BB" />
-      </linearGradient>
-    </defs>
-    <text x="50%" y="56%" dominantBaseline="middle" textAnchor="middle" fill="#fff" fontSize="14" fontWeight="800" fontFamily="Inter, system-ui, sans-serif" letterSpacing="-0.5">AE</text>
-  </svg>
-);
+const logoSrc = `${import.meta.env.BASE_URL}logo.png`;
 
 export default function Nav() {
   const [location, navigate] = useLocation();
@@ -39,25 +28,23 @@ export default function Nav() {
     <>
       <header style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        background: scrolled ? "rgba(3,6,18,0.96)" : "rgba(3,6,18,0.7)",
+        background: scrolled ? "rgba(3,6,18,0.97)" : "rgba(3,6,18,0.75)",
         backdropFilter: "blur(16px)",
-        borderBottom: scrolled ? "1px solid rgba(0,174,239,0.15)" : "1px solid rgba(255,255,255,0.04)",
+        borderBottom: scrolled ? "1px solid rgba(0,174,239,0.18)" : "1px solid rgba(255,255,255,0.04)",
         transition: "all 0.3s ease",
       }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", height: 68 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", height: 70 }}>
           {/* Logo */}
           <a
             href="/"
             onClick={e => { e.preventDefault(); navigate("/"); }}
-            style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0 }}
+            style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
           >
-            <div style={{ filter: "drop-shadow(0 0 10px rgba(0,174,239,0.45))" }}>
-              <AELogo />
-            </div>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.3px", lineHeight: 1.1 }}>AI Edge</div>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#00AEEF", letterSpacing: "1.5px", textTransform: "uppercase" }}>Solutions</div>
-            </div>
+            <img
+              src={logoSrc}
+              alt="AI Edge Solutions"
+              style={{ height: 46, width: "auto", objectFit: "contain" }}
+            />
           </a>
 
           {/* Desktop nav */}
@@ -135,6 +122,7 @@ export default function Nav() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(o => !o)}
+            className="mobile-menu-btn"
             style={{
               display: "none",
               marginLeft: 16,
@@ -146,7 +134,6 @@ export default function Nav() {
               cursor: "pointer",
               fontSize: 18,
             }}
-            className="mobile-menu-btn"
           >
             {mobileOpen ? "✕" : "☰"}
           </button>

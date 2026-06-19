@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -84,6 +85,25 @@ export default function ConnectionsPage() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [googleDebugOpen, setGoogleDebugOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const search = useSearch();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const oauthResult = params.get("oauth");
+    if (!oauthResult) return;
+    if (oauthResult === "success") {
+      const provider = params.get("provider") ?? "platform";
+      toast.success(`${provider.replace("_", " ")} connected successfully!`);
+      qc.invalidateQueries({ queryKey: ["social_connections"] });
+    } else {
+      const reason = params.get("reason") ?? "unknown error";
+      const step = params.get("step") ?? "";
+      toast.error(`Connection failed: ${reason}${step ? ` (${step})` : ""}`);
+    }
+    // Clean the URL
+    navigate("/admin/connections", { replace: true });
+  }, [search]);
 
   const { data: connections = [] } = useQuery<DbConnection[]>({
     queryKey: ["social_connections"],

@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
+import oauthCallbacksRouter from "./routes/oauth-callbacks";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -28,6 +29,10 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// OAuth callbacks must be PUBLIC — mounted before Clerk middleware so Google/Meta
+// redirects are not blocked by auth checks. State tokens verify the user identity.
+app.use("/api", oauthCallbacksRouter);
 
 app.use(
   clerkMiddleware((req) => ({

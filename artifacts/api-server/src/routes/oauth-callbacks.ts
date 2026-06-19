@@ -12,7 +12,7 @@ function getAppBase(): string {
 function redirectWithResult(res: any, status: "success" | "error", opts: Record<string, string> = {}) {
   const base = getAppBase();
   const params = new URLSearchParams({ oauth: status, ...opts });
-  res.redirect(`${base}/connections?${params}`);
+  res.redirect(`${base}/admin/connections?${params}`);
 }
 
 async function exchangeGoogleCode(code: string, redirectUri: string) {

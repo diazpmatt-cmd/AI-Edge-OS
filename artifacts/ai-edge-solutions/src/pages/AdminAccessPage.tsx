@@ -11,49 +11,14 @@ export default function AdminAccessPage() {
   const [digits, setDigits] = useState(["", "", "", ""]);
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
-  const inputRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRefs[0].current?.focus();
+    hiddenInputRef.current?.focus();
   }, []);
 
-  const handleDigit = (index: number, value: string) => {
-    const v = value.replace(/\D/g, "").slice(-1);
-    const next = [...digits];
-    next[index] = v;
-    setDigits(next);
-    setError(false);
-
-    if (v && index < 3) {
-      inputRefs[index + 1].current?.focus();
-    }
-
-    if (v && index === 3) {
-      checkCode(next.join(""));
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !digits[index] && index > 0) {
-      inputRefs[index - 1].current?.focus();
-    }
-    if (e.key === "Enter") {
-      const code = digits.join("");
-      if (code.length === 4) checkCode(code);
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
-    if (pasted.length === 4) {
-      setDigits(pasted.split(""));
-      checkCode(pasted);
-    }
+  const focusInput = () => {
+    hiddenInputRef.current?.focus();
   };
 
   const checkCode = (code: string) => {
@@ -72,18 +37,65 @@ export default function AdminAccessPage() {
       setDigits(["", "", "", ""]);
       setTimeout(() => {
         setShake(false);
-        inputRefs[0].current?.focus();
+        hiddenInputRef.current?.focus();
       }, 600);
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const current = digits.join("");
+
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const next = current.slice(0, -1).split("").concat(["", "", "", ""]).slice(0, 4);
+      setDigits(next);
+      setError(false);
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (current.length === 4) checkCode(current);
+      return;
+    }
+
+    if (/^\d$/.test(e.key) && current.length < 4) {
+      e.preventDefault();
+      const next = [...digits];
+      const idx = digits.findIndex(d => d === "");
+      if (idx !== -1) {
+        next[idx] = e.key;
+        setDigits(next);
+        setError(false);
+        const newCode = next.join("");
+        if (newCode.replace(/\s/g, "").length === 4) {
+          checkCode(newCode);
+        }
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    if (pasted.length === 4) {
+      setDigits(pasted.split(""));
+      setError(false);
+      checkCode(pasted);
+    }
+  };
+
+  const filled = digits.filter(d => d !== "").length;
+
   return (
-    <div style={{
-      minHeight: "100vh", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      background: "radial-gradient(ellipse at 50% 0%, rgba(0,174,239,0.06) 0%, #030612 55%)",
-      padding: 24, position: "relative", overflow: "hidden",
-    }}>
+    <div
+      style={{
+        minHeight: "100vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        background: "radial-gradient(ellipse at 50% 0%, rgba(0,174,239,0.06) 0%, #030612 55%)",
+        padding: 24, position: "relative", overflow: "hidden",
+      }}
+      onClick={focusInput}
+    >
 
       {/* Subtle grid overlay */}
       <div style={{
@@ -92,13 +104,34 @@ export default function AdminAccessPage() {
         backgroundSize: "60px 60px", pointerEvents: "none",
       }} />
 
-      {/* Corner glow */}
+      {/* Top glow */}
       <div style={{
         position: "absolute", top: -120, left: "50%", transform: "translateX(-50%)",
         width: 400, height: 300,
         background: "radial-gradient(ellipse, rgba(0,174,239,0.12) 0%, transparent 70%)",
         pointerEvents: "none",
       }} />
+
+      {/* Hidden real input — captures all keyboard input */}
+      <input
+        ref={hiddenInputRef}
+        type="tel"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        onChange={() => {}}
+        value=""
+        style={{
+          position: "absolute",
+          opacity: 0,
+          width: 1,
+          height: 1,
+          pointerEvents: "none",
+          top: "50%",
+          left: "50%",
+        }}
+      />
 
       {/* Card */}
       <div style={{
@@ -133,31 +166,26 @@ export default function AdminAccessPage() {
         }}>
           Command Center
         </h1>
-        <p style={{ fontSize: 13.5, color: "#4B5563", margin: "0 0 36px", lineHeight: 1.5 }}>
+        <p style={{ fontSize: 13.5, color: "#4B5563", margin: "0 0 32px", lineHeight: 1.5 }}>
           Secure access to AI Edge Command Center.<br />Enter your 4-digit passcode to continue.
         </p>
 
-        {/* Digit inputs */}
+        {/* Visual digit boxes — click anywhere here to activate input */}
         <div
+          onClick={focusInput}
           style={{
             display: "flex", gap: 12, justifyContent: "center", marginBottom: 24,
+            cursor: "text",
             animation: shake ? "shake 0.5s ease" : "none",
           }}
-          onPaste={handlePaste}
         >
           {digits.map((d, i) => (
-            <input
+            <div
               key={i}
-              ref={inputRefs[i]}
-              type="tel"
-              inputMode="numeric"
-              maxLength={1}
-              value={d}
-              onChange={e => handleDigit(i, e.target.value)}
-              onKeyDown={e => handleKeyDown(i, e)}
+              onClick={focusInput}
               style={{
                 width: 58, height: 68,
-                textAlign: "center",
+                display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 26, fontWeight: 800,
                 color: error ? "#EF4444" : "#FFFFFF",
                 background: error
@@ -167,16 +195,19 @@ export default function AdminAccessPage() {
                     : "rgba(255,255,255,0.04)",
                 border: error
                   ? "2px solid rgba(239,68,68,0.5)"
-                  : d
-                    ? "2px solid rgba(0,174,239,0.5)"
-                    : "2px solid rgba(255,255,255,0.1)",
+                  : i === filled && !error
+                    ? "2px solid rgba(0,174,239,0.7)"
+                    : d
+                      ? "2px solid rgba(0,174,239,0.5)"
+                      : "2px solid rgba(255,255,255,0.1)",
                 borderRadius: 12,
-                outline: "none",
-                caretColor: "transparent",
                 transition: "all 0.15s",
-                WebkitTextSecurity: d ? "disc" as any : "none",
-              } as React.CSSProperties}
-            />
+                boxShadow: i === filled && !error ? "0 0 12px rgba(0,174,239,0.2)" : "none",
+                userSelect: "none",
+              }}
+            >
+              {d ? "●" : ""}
+            </div>
           ))}
         </div>
 
@@ -195,31 +226,29 @@ export default function AdminAccessPage() {
             const code = digits.join("");
             if (code.length === 4) checkCode(code);
           }}
-          disabled={digits.join("").length < 4}
+          disabled={filled < 4}
           style={{
             width: "100%", padding: "13px",
             borderRadius: 12,
-            background: digits.join("").length === 4
+            background: filled === 4
               ? "linear-gradient(135deg, #00AEEF, #0077BB)"
               : "rgba(255,255,255,0.05)",
-            border: digits.join("").length === 4
-              ? "none"
-              : "1px solid rgba(255,255,255,0.08)",
-            color: digits.join("").length === 4 ? "#FFFFFF" : "#374151",
+            border: filled === 4 ? "none" : "1px solid rgba(255,255,255,0.08)",
+            color: filled === 4 ? "#FFFFFF" : "#374151",
             fontSize: 14, fontWeight: 700,
-            cursor: digits.join("").length === 4 ? "pointer" : "not-allowed",
+            cursor: filled === 4 ? "pointer" : "not-allowed",
             transition: "all 0.2s",
-            boxShadow: digits.join("").length === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none",
+            boxShadow: filled === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none",
             letterSpacing: "0.3px",
           }}
           onMouseEnter={e => {
-            if (digits.join("").length === 4) {
+            if (filled === 4) {
               (e.currentTarget as HTMLElement).style.boxShadow = "0 0 36px rgba(0,174,239,0.5)";
               (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
             }
           }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.boxShadow = digits.join("").length === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none";
+            (e.currentTarget as HTMLElement).style.boxShadow = filled === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none";
             (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
           }}
         >

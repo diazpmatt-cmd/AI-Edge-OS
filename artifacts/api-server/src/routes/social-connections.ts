@@ -111,6 +111,40 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
     },
+    google_basic: {
+      envKey: "GOOGLE_OAUTH_CLIENT_ID",
+      buildUrl: (base) => {
+        const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+        if (!clientId) return "";
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: `${base}/api/oauth/google/callback`,
+          response_type: "code",
+          scope: "openid email profile",
+          access_type: "offline",
+          prompt: "consent",
+          state: generateState(userId, "google_basic"),
+        });
+        return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+      },
+    },
+    youtube_readonly: {
+      envKey: "GOOGLE_OAUTH_CLIENT_ID",
+      buildUrl: (base) => {
+        const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+        if (!clientId) return "";
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: `${base}/api/oauth/google/callback`,
+          response_type: "code",
+          scope: "https://www.googleapis.com/auth/youtube.readonly openid email profile",
+          access_type: "offline",
+          prompt: "consent",
+          state: generateState(userId, "youtube_readonly"),
+        });
+        return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+      },
+    },
     facebook: {
       envKey: "META_APP_ID",
       buildUrl: (base) => {

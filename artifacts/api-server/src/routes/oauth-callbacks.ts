@@ -15,6 +15,8 @@ function getAppBase(): string {
 const PROVIDER_SLUG: Record<string, string> = {
   google_business: "google",
   youtube: "youtube",
+  google_basic: "google_basic",
+  youtube_readonly: "youtube_readonly",
   facebook: "facebook",
   instagram: "instagram",
   tiktok: "tiktok",
@@ -102,7 +104,7 @@ router.get("/oauth/google/callback", async (req, res) => {
     return;
   }
 
-  const verified = verifyState(state, ["google_business", "youtube"]);
+  const verified = verifyState(state, ["google_business", "youtube", "google_basic", "youtube_readonly"]);
   if (!verified) {
     redirectError(res, "google", "invalid_state", "state_verify", { codeReceived: true, stateValid: false });
     return;

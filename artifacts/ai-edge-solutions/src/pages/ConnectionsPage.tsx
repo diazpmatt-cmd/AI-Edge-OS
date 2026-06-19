@@ -35,20 +35,20 @@ const PLATFORMS = [
 ];
 
 type MigrationState = {
-  status: "needs_reconnect" | "needs_review" | "coming_soon";
+  status: "needs_reconnect" | "needs_review" | "coming_soon" | "blocked";
   accountName?: string;
   note: string;
 };
 
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
-  google_business: { status: "needs_reconnect", note: "Was connected in previous system. Reconnect to restore access." },
+  google_business: { status: "blocked", note: "Blocked by Google Business Profile scope / verification setup. Use the test buttons above to confirm basic Google OAuth works first." },
   youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Was connected as BedBugsand_Beyond. Reconnect to restore." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
   instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
 };
 
-type StatusKind = "connected" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon";
+type StatusKind = "connected" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
   if (dbConn) return "connected";
@@ -72,6 +72,7 @@ const STATUS_META: Record<StatusKind, { label: string; bg: string; color: string
   needs_review:    { label: "Needs Review",       bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
   not_connected:   { label: "Not Connected",      bg: "rgba(148,163,184,0.1)", color: "#94A3B8", dot: "#475569" },
   coming_soon:     { label: "Coming Soon",        bg: "rgba(148,163,184,0.1)", color: "#64748B", dot: "#334155" },
+  blocked:         { label: "Scope Verification Required", bg: "rgba(239,68,68,0.1)", color: "#EF4444", dot: "#EF4444" },
 };
 
 const SOURCE_META: Record<string, { label: string; color: string }> = {
@@ -279,6 +280,108 @@ export default function ConnectionsPage() {
           </div>
         )}
 
+        {/* Google OAuth Testing Panel */}
+        <div style={{
+          background: "rgba(3,6,18,0.85)", border: "1px solid rgba(66,133,244,0.3)",
+          borderRadius: 14, padding: "18px 20px", marginBottom: 24,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <span style={{ fontSize: 16 }}>🔍</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>Google OAuth Testing</span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: "#4285F4",
+              background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.25)",
+              borderRadius: 20, padding: "2px 10px",
+            }}>Isolate the 403</span>
+          </div>
+          <p style={{ fontSize: 12.5, color: "#6B7280", margin: "0 0 16px", lineHeight: 1.5 }}>
+            Test Google OAuth incrementally — start with basic scopes to confirm credentials and redirect URI work, then escalate to sensitive scopes.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Row 1: Test Basic Google */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+              background: "rgba(66,133,244,0.06)", borderRadius: 10, border: "1px solid rgba(66,133,244,0.15)",
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                background: "linear-gradient(135deg, #4285F4, #34A853)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 15, fontWeight: 900, color: "#FFF",
+              }}>G</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 2 }}>Test Basic Google</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Scopes: <code style={{ color: "#94A3B8" }}>openid email profile</code> — no sensitive scopes. Confirms credentials + redirect URI are valid.</div>
+              </div>
+              <button
+                onClick={() => handleConnect("google_basic")}
+                disabled={connecting === "google_basic"}
+                style={{
+                  padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                  background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.45)", color: "#4285F4",
+                  opacity: connecting === "google_basic" ? 0.6 : 1, transition: "all 0.2s",
+                }}
+              >
+                {connecting === "google_basic" ? "Opening…" : "▶ Run Test"}
+              </button>
+            </div>
+
+            {/* Row 2: YouTube Readonly */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+              background: "rgba(255,0,0,0.05)", borderRadius: 10, border: "1px solid rgba(255,0,0,0.13)",
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                background: "linear-gradient(135deg, #FF0000, #CC0000)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 15, color: "#FFF",
+              }}>▶</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 2 }}>Connect YouTube (Readonly)</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Scopes: <code style={{ color: "#94A3B8" }}>youtube.readonly</code> — read-only, no upload. Tests YouTube scope without upload permission.</div>
+              </div>
+              <button
+                onClick={() => handleConnect("youtube_readonly")}
+                disabled={connecting === "youtube_readonly"}
+                style={{
+                  padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                  background: "rgba(255,0,0,0.12)", border: "1px solid rgba(255,60,60,0.4)", color: "#FF5555",
+                  opacity: connecting === "youtube_readonly" ? 0.6 : 1, transition: "all 0.2s",
+                }}
+              >
+                {connecting === "youtube_readonly" ? "Opening…" : "▶ Run Test"}
+              </button>
+            </div>
+
+            {/* Row 3: Google Business — Blocked */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+              background: "rgba(239,68,68,0.04)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.18)",
+              opacity: 0.75,
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                background: "linear-gradient(135deg, #4285F4, #34A853)", filter: "grayscale(0.6)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 15, fontWeight: 900, color: "#FFF",
+              }}>G</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>Connect Google Business Profile</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Requires <code style={{ color: "#6B7280" }}>business.manage</code> — a restricted scope. Blocked pending Google OAuth consent screen verification.</div>
+              </div>
+              <button disabled style={{
+                padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, flexShrink: 0,
+                background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444",
+                cursor: "not-allowed",
+              }}>
+                🚫 Blocked
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Platform Cards Grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 16, marginBottom: 32 }}>
           {PLATFORMS.map(platform => {
@@ -290,6 +393,7 @@ export default function ConnectionsPage() {
             const isConnecting = connecting === platform.id;
             const isDisconnecting = disconnectMut.isPending && disconnectMut.variables === platform.id;
             const isComing = status === "coming_soon";
+            const isBlocked = status === "blocked";
             const isConnected = status === "connected";
 
             return (
@@ -352,10 +456,11 @@ export default function ConnectionsPage() {
 
                     {/* Migration / status note */}
                     {!isConnected && migration && (
-                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#FB923C" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#FB923C" : status === "blocked" ? "#EF4444" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
                         {status === "needs_reconnect" && "🔁 "}
                         {status === "needs_review" && "⚠️ "}
                         {status === "coming_soon" && "🕐 "}
+                        {status === "blocked" && "🚫 "}
                         {migration.note}
                       </p>
                     )}
@@ -386,6 +491,14 @@ export default function ConnectionsPage() {
                           color: "#64748B", cursor: "not-allowed",
                         }}>
                           Coming Soon
+                        </button>
+                      ) : isBlocked ? (
+                        <button disabled style={{
+                          padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                          color: "#EF4444", cursor: "not-allowed",
+                        }}>
+                          🚫 Blocked — See Test Panel
                         </button>
                       ) : (
                         <button

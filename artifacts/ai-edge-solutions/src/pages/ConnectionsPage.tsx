@@ -566,10 +566,96 @@ export default function ConnectionsPage() {
                     )}
                   </DebugRow>
 
-                  <p style={{ fontSize: 11, color: "#374151", margin: 0, lineHeight: 1.6 }}>
-                    Copy the <strong style={{ color: "#00AEEF" }}>redirect_uri</strong> and add it to your Google Cloud Console
-                    under <strong style={{ color: "#C0C0C0" }}>APIs &amp; Services → Credentials → OAuth 2.0 Client → Authorised redirect URIs</strong>.
-                  </p>
+                  {/* ── Google 403 Fix Checklist ── */}
+                  <div style={{
+                    background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.25)",
+                    borderRadius: 8, padding: "12px 14px",
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#EF4444", marginBottom: 10 }}>
+                      🔴 Getting a Google 403? Work through this checklist:
+                    </div>
+                    {[
+                      {
+                        n: "1",
+                        title: "Add the redirect URI in Google Cloud Console",
+                        body: (
+                          <>
+                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
+                              style={{ color: "#4285F4", textDecoration: "underline" }}>
+                              console.cloud.google.com → APIs & Services → Credentials
+                            </a>
+                            {" → click your OAuth 2.0 Client ID → "}
+                            <strong style={{ color: "#C0C0C0" }}>Authorized redirect URIs → Add URI</strong>
+                            <br />
+                            Paste exactly:{" "}
+                            <code style={{ fontSize: 11, color: "#00AEEF", wordBreak: "break-all" }}>
+                              {googleDebug.redirectUri}
+                            </code>
+                            {" → "}
+                            <strong style={{ color: "#C0C0C0" }}>Save</strong>
+                          </>
+                        ),
+                      },
+                      {
+                        n: "2",
+                        title: "Add yourself as a Test User (if app is in Testing mode)",
+                        body: (
+                          <>
+                            <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"
+                              style={{ color: "#4285F4", textDecoration: "underline" }}>
+                              OAuth consent screen
+                            </a>
+                            {" → scroll to "}
+                            <strong style={{ color: "#C0C0C0" }}>Test users → + Add Users</strong>
+                            {" → enter your Google account email → Save."}
+                            <br />
+                            <span style={{ color: "#6B7280" }}>Alternatively, click <strong>Publish App</strong> to move from Testing → Production (safe for personal use).</span>
+                          </>
+                        ),
+                      },
+                      {
+                        n: "3",
+                        title: "Enable the required Google APIs",
+                        body: (
+                          <>
+                            <strong style={{ color: "#C0C0C0" }}>For Google Business Profile:</strong>{" "}
+                            <a href="https://console.cloud.google.com/apis/library/mybusinessaccountmanagement.googleapis.com" target="_blank" rel="noopener noreferrer"
+                              style={{ color: "#4285F4", textDecoration: "underline" }}>Enable Business Profile API</a>
+                            <br />
+                            <strong style={{ color: "#C0C0C0" }}>For YouTube:</strong>{" "}
+                            <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer"
+                              style={{ color: "#4285F4", textDecoration: "underline" }}>Enable YouTube Data API v3</a>
+                          </>
+                        ),
+                      },
+                      {
+                        n: "4",
+                        title: "Verify the OAuth Client type is Web application",
+                        body: (
+                          <>
+                            In Credentials, the client must be type <strong style={{ color: "#C0C0C0" }}>Web application</strong> — not Desktop or Android.
+                            If it is the wrong type, create a new one.
+                          </>
+                        ),
+                      },
+                    ].map(step => (
+                      <div key={step.n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                        <div style={{
+                          width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                          background: "rgba(66,133,244,0.2)", border: "1px solid rgba(66,133,244,0.4)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 800, color: "#4285F4",
+                        }}>{step.n}</div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0", marginBottom: 3 }}>{step.title}</div>
+                          <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.7 }}>{step.body}</div>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
+                      After making changes in Google Cloud Console, wait ~30 seconds then try Reconnect again.
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

@@ -3,12 +3,11 @@ import { useLocation } from "wouter";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
-// Temporarily hardcoded for testing — replace with env var once confirmed working
-const ADMIN_ACCESS_CODE = "1661";
+const ADMIN_ACCESS_CODE = "166168";
 
 export default function AdminAccessPage() {
   const [, navigate] = useLocation();
-  const [digits, setDigits] = useState(["", "", "", ""]);
+  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +33,7 @@ export default function AdminAccessPage() {
     } else {
       setError(true);
       setShake(true);
-      setDigits(["", "", "", ""]);
+      setDigits(["", "", "", "", "", ""]);
       setTimeout(() => {
         setShake(false);
         hiddenInputRef.current?.focus();
@@ -54,11 +53,11 @@ export default function AdminAccessPage() {
     }
 
     if (e.key === "Enter") {
-      if (current.length === 4) checkCode(current);
+      if (current.length === 6) checkCode(current);
       return;
     }
 
-    if (/^\d$/.test(e.key) && current.length < 4) {
+    if (/^\d$/.test(e.key) && current.length < 6) {
       e.preventDefault();
       const next = [...digits];
       const idx = digits.findIndex(d => d === "");
@@ -67,7 +66,7 @@ export default function AdminAccessPage() {
         setDigits(next);
         setError(false);
         const newCode = next.join("");
-        if (newCode.replace(/\s/g, "").length === 4) {
+        if (newCode.replace(/\s/g, "").length === 6) {
           checkCode(newCode);
         }
       }
@@ -76,8 +75,8 @@ export default function AdminAccessPage() {
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
-    if (pasted.length === 4) {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (pasted.length === 6) {
       setDigits(pasted.split(""));
       setError(false);
       checkCode(pasted);
@@ -167,7 +166,7 @@ export default function AdminAccessPage() {
           Command Center
         </h1>
         <p style={{ fontSize: 13.5, color: "#4B5563", margin: "0 0 32px", lineHeight: 1.5 }}>
-          Secure access to AI Edge Command Center.<br />Enter your 4-digit passcode to continue.
+          Secure access to AI Edge Command Center.<br />Enter your 6-digit passcode to continue.
         </p>
 
         {/* Visual digit boxes — click anywhere here to activate input */}
@@ -224,31 +223,31 @@ export default function AdminAccessPage() {
         <button
           onClick={() => {
             const code = digits.join("");
-            if (code.length === 4) checkCode(code);
+            if (code.length === 6) checkCode(code);
           }}
-          disabled={filled < 4}
+          disabled={filled < 6}
           style={{
             width: "100%", padding: "13px",
             borderRadius: 12,
-            background: filled === 4
+            background: filled === 6
               ? "linear-gradient(135deg, #00AEEF, #0077BB)"
               : "rgba(255,255,255,0.05)",
-            border: filled === 4 ? "none" : "1px solid rgba(255,255,255,0.08)",
-            color: filled === 4 ? "#FFFFFF" : "#374151",
+            border: filled === 6 ? "none" : "1px solid rgba(255,255,255,0.08)",
+            color: filled === 6 ? "#FFFFFF" : "#374151",
             fontSize: 14, fontWeight: 700,
-            cursor: filled === 4 ? "pointer" : "not-allowed",
+            cursor: filled === 6 ? "pointer" : "not-allowed",
             transition: "all 0.2s",
-            boxShadow: filled === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none",
+            boxShadow: filled === 6 ? "0 0 24px rgba(0,174,239,0.3)" : "none",
             letterSpacing: "0.3px",
           }}
           onMouseEnter={e => {
-            if (filled === 4) {
+            if (filled === 6) {
               (e.currentTarget as HTMLElement).style.boxShadow = "0 0 36px rgba(0,174,239,0.5)";
               (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
             }
           }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.boxShadow = filled === 4 ? "0 0 24px rgba(0,174,239,0.3)" : "none";
+            (e.currentTarget as HTMLElement).style.boxShadow = filled === 6 ? "0 0 24px rgba(0,174,239,0.3)" : "none";
             (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
           }}
         >

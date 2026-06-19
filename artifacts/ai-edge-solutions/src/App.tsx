@@ -16,8 +16,15 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
-const IndexPage = lazy(() => import("./pages/IndexPage"));
-const LandingPage = lazy(() => import("./pages/LandingPage"));
+// Marketing pages (public)
+const HomePage = lazy(() => import("./pages/marketing/HomePage"));
+const ServicesPage = lazy(() => import("./pages/marketing/ServicesPage"));
+const ProductsPage = lazy(() => import("./pages/marketing/ProductsPage"));
+const CaseStudiesPage = lazy(() => import("./pages/marketing/CaseStudiesPage"));
+const PricingPage = lazy(() => import("./pages/marketing/PricingPage"));
+const ContactPage = lazy(() => import("./pages/marketing/ContactPage"));
+
+// App pages (auth-gated)
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const PublishingPage = lazy(() => import("./pages/PublishingPage"));
@@ -27,8 +34,8 @@ const DistributionPage = lazy(() => import("./pages/DistributionPage"));
 const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
 
 const PageLoader = () => (
-  <div className="flex min-h-screen items-center justify-center bg-background">
-    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+  <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
+    <Loader2 style={{ width: 24, height: 24, color: "#00AEEF", animation: "spin 1s linear infinite" }} />
   </div>
 );
 
@@ -41,24 +48,16 @@ function Authenticated({ children }: { children: React.ReactNode }) {
   );
 }
 
-function HomeRoute() {
-  return (
-    <Suspense fallback={<PageLoader />}>
-      <LandingPage />
-    </Suspense>
-  );
-}
-
 function SignInPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}>
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/dashboard`} />
     </div>
   );
 }
 function SignUpPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}>
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallbackRedirectUrl={`${basePath}/dashboard`} />
     </div>
   );
@@ -66,32 +65,44 @@ function SignUpPage() {
 
 function AppRouter() {
   return (
-    <Switch>
-      <Route path="/sign-in/*?" component={SignInPage} />
-      <Route path="/sign-up/*?" component={SignUpPage} />
-      <Route path="/dashboard">
-        <Authenticated><DashboardPage /></Authenticated>
-      </Route>
-      <Route path="/article/:id">
-        <Authenticated><ArticlePage /></Authenticated>
-      </Route>
-      <Route path="/publishing">
-        <Authenticated><PublishingPage /></Authenticated>
-      </Route>
-      <Route path="/repurpose/:id">
-        <Authenticated><RepurposeDetailPage /></Authenticated>
-      </Route>
-      <Route path="/repurpose">
-        <Authenticated><RepurposePage /></Authenticated>
-      </Route>
-      <Route path="/distribution">
-        <Authenticated><DistributionPage /></Authenticated>
-      </Route>
-      <Route path="/connections">
-        <Authenticated><ConnectionsPage /></Authenticated>
-      </Route>
-      <Route path="/" component={HomeRoute} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        {/* Auth */}
+        <Route path="/sign-in/*?" component={SignInPage} />
+        <Route path="/sign-up/*?" component={SignUpPage} />
+
+        {/* Authenticated app */}
+        <Route path="/dashboard">
+          <Authenticated><DashboardPage /></Authenticated>
+        </Route>
+        <Route path="/article/:id">
+          <Authenticated><ArticlePage /></Authenticated>
+        </Route>
+        <Route path="/publishing">
+          <Authenticated><PublishingPage /></Authenticated>
+        </Route>
+        <Route path="/repurpose/:id">
+          <Authenticated><RepurposeDetailPage /></Authenticated>
+        </Route>
+        <Route path="/repurpose">
+          <Authenticated><RepurposePage /></Authenticated>
+        </Route>
+        <Route path="/distribution">
+          <Authenticated><DistributionPage /></Authenticated>
+        </Route>
+        <Route path="/connections">
+          <Authenticated><ConnectionsPage /></Authenticated>
+        </Route>
+
+        {/* Marketing pages (public) */}
+        <Route path="/services" component={ServicesPage} />
+        <Route path="/products" component={ProductsPage} />
+        <Route path="/case-studies" component={CaseStudiesPage} />
+        <Route path="/pricing" component={PricingPage} />
+        <Route path="/contact" component={ContactPage} />
+        <Route path="/" component={HomePage} />
+      </Switch>
+    </Suspense>
   );
 }
 

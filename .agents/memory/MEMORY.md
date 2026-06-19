@@ -1,0 +1,1 @@
+- [AI Edge Solutions brand](ai-edge-brand.md) — Electric blue #00AEEF, metallic silver #C0C0C0, black/dark navy #030612; AE monogram SVG logo with gradient; all marketing pages use inline styles (no Tailwind).

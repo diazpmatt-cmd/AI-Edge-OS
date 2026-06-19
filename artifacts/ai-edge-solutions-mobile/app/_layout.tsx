@@ -7,6 +7,7 @@ import {
 } from "@expo-google-fonts/inter";
 import { ClerkProvider, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
+import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -14,10 +15,11 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { ActivityIndicator, View } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { setAuthTokenGetter } from "@/lib/api";
+
+// Set the API base URL at module load time so all generated hooks resolve correctly.
+setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 
 SplashScreen.preventAutoHideAsync();
 
@@ -47,6 +49,8 @@ function AuthGate() {
   useEffect(() => {
     if (isSignedIn) {
       setAuthTokenGetter(() => getToken());
+    } else {
+      setAuthTokenGetter(null);
     }
   }, [isSignedIn, getToken]);
 

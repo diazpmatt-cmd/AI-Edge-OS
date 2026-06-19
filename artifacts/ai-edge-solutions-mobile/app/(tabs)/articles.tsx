@@ -1,24 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useListArticles, type ArticleDraft } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   FlatList,
   Platform,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch } from "@/lib/api";
-import type { ArticleDraft, ArticleStatus } from "@/lib/types";
 
-const FILTERS: { label: string; value: ArticleStatus | "all" }[] = [
+const FILTERS: { label: string; value: string }[] = [
   { label: "All", value: "all" },
   { label: "Published", value: "published" },
   { label: "Scheduled", value: "scheduled" },
@@ -38,14 +36,13 @@ export default function ArticlesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [filter, setFilter] = useState<ArticleStatus | "all">("all");
+  const [filter, setFilter] = useState("all");
 
-  const { data: articles = [], isLoading, refetch } = useQuery<ArticleDraft[]>({
-    queryKey: ["articles"],
-    queryFn: () => apiFetch("/articles"),
-  });
+  const { data: articles = [], isLoading, refetch } = useListArticles();
 
-  const filtered = filter === "all" ? articles : articles.filter((a) => a.status === filter);
+  const filtered = filter === "all"
+    ? (articles as ArticleDraft[])
+    : (articles as ArticleDraft[]).filter((a) => a.status === filter);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -126,13 +123,10 @@ export default function ArticlesScreen() {
                 opacity: pressed ? 0.85 : 1,
               }]}
             >
-              {/* Status stripe */}
               <View style={[s.stripe, { backgroundColor: statusColor }]} />
               <View style={{ flex: 1, gap: 6 }}>
                 <Text style={[s.title, { color: colors.foreground }]} numberOfLines={2}>{item.title}</Text>
-                <Text style={[s.keyword, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {item.keyword}
-                </Text>
+                <Text style={[s.keyword, { color: colors.mutedForeground }]} numberOfLines={1}>{item.keyword}</Text>
                 <View style={s.metaRow}>
                   <View style={[s.badge, { backgroundColor: statusColor + "20" }]}>
                     <Text style={[s.badgeText, { color: statusColor }]}>{STATUS_LABELS[item.status] ?? item.status}</Text>
@@ -162,10 +156,7 @@ const s = StyleSheet.create({
   screenTitle: { fontSize: 28, fontWeight: "800" as const, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   count: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
   filterWrap: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1,
-  },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 13, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold" },
   card: {
     flexDirection: "row",

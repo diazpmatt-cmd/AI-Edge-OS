@@ -1,5 +1,9 @@
 import { useUser, useAuth } from "@clerk/expo";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useListArticles,
+  useListKeywords,
+  type ArticleDraft,
+} from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
@@ -15,8 +19,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch } from "@/lib/api";
-import type { ArticleDraft, Keyword } from "@/lib/types";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -53,13 +55,7 @@ const statStyles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   value: { fontSize: 28, fontWeight: "700" as const, letterSpacing: -0.5 },
   label: { fontSize: 12, letterSpacing: 0.1 },
 });
@@ -71,21 +67,13 @@ export default function DashboardScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
 
-  const { data: articles = [], isLoading: articlesLoading, refetch: refetchArticles } = useQuery<ArticleDraft[]>({
-    queryKey: ["articles"],
-    queryFn: () => apiFetch("/articles"),
-  });
-
-  const { data: keywords = [], isLoading: keywordsLoading, refetch: refetchKeywords } = useQuery<Keyword[]>({
-    queryKey: ["keywords"],
-    queryFn: () => apiFetch("/keywords"),
-  });
+  const { data: articles = [], isLoading: articlesLoading, refetch: refetchArticles } = useListArticles();
+  const { data: keywords = [], isLoading: keywordsLoading, refetch: refetchKeywords } = useListKeywords();
 
   const isLoading = articlesLoading || keywordsLoading;
 
-  const published = articles.filter((a) => a.status === "published").length;
-  const scheduled = articles.filter((a) => a.status === "scheduled").length;
-  const ready = articles.filter((a) => a.status === "ready_for_website").length;
+  const published = articles.filter((a: ArticleDraft) => a.status === "published").length;
+  const scheduled = articles.filter((a: ArticleDraft) => a.status === "scheduled").length;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -138,7 +126,7 @@ export default function DashboardScreen() {
           <Text style={[s.emptyText, { color: colors.mutedForeground }]}>No articles yet</Text>
         </View>
       ) : (
-        articles.slice(0, 5).map((article) => (
+        (articles as ArticleDraft[]).slice(0, 5).map((article) => (
           <Pressable
             key={article.id}
             onPress={() => router.push(`/article/${article.id}`)}

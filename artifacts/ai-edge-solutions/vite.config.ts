@@ -70,21 +70,7 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
-        configure: (proxy) => {
-          proxy.on("proxyRes", (proxyRes, req) => {
-            const origin = (req as any).headers?.origin;
-            if (origin) {
-              proxyRes.headers["access-control-allow-origin"] = origin;
-              proxyRes.headers["access-control-allow-credentials"] = "true";
-              proxyRes.headers["vary"] = "Origin";
-            }
-          });
-        },
       },
-    },
-    cors: {
-      origin: true,
-      credentials: true,
     },
   },
   preview: {

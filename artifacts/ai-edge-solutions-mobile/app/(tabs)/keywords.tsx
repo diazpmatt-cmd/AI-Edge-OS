@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useListKeywords, type Keyword } from "@workspace/api-client-react";
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
@@ -13,8 +13,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch } from "@/lib/api";
-import type { Keyword } from "@/lib/types";
 
 const DIFFICULTY_COLOR_KEY: Record<string, "success" | "warning" | "destructive"> = {
   Low: "success",
@@ -22,18 +20,11 @@ const DIFFICULTY_COLOR_KEY: Record<string, "success" | "warning" | "destructive"
   High: "destructive",
 };
 
-const INTENT_BG_KEY: Record<string, string> = {
-  Local: "#3B6FE820",
-  Commercial: "#D9770620",
-  Informational: "#6B789620",
-  Transactional: "#16A34A20",
-};
-
-const INTENT_TEXT_KEY: Record<string, string> = {
-  Local: "#3B6FE8",
-  Commercial: "#D97706",
-  Informational: "#6B7896",
-  Transactional: "#16A34A",
+const INTENT_COLORS: Record<string, { bg: string; text: string }> = {
+  Local:          { bg: "#3B6FE820", text: "#3B6FE8" },
+  Commercial:     { bg: "#D9770620", text: "#D97706" },
+  Informational:  { bg: "#6B789620", text: "#6B7896" },
+  Transactional:  { bg: "#16A34A20", text: "#16A34A" },
 };
 
 export default function KeywordsScreen() {
@@ -41,19 +32,16 @@ export default function KeywordsScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
 
-  const { data: keywords = [], isLoading, refetch } = useQuery<Keyword[]>({
-    queryKey: ["keywords"],
-    queryFn: () => apiFetch("/keywords"),
-  });
+  const { data: keywords = [], isLoading, refetch } = useListKeywords();
 
   const filtered = query.trim()
-    ? keywords.filter(
+    ? (keywords as Keyword[]).filter(
         (k) =>
           k.keyword.toLowerCase().includes(query.toLowerCase()) ||
           k.city?.toLowerCase().includes(query.toLowerCase()) ||
           k.service?.toLowerCase().includes(query.toLowerCase()),
       )
-    : keywords;
+    : (keywords as Keyword[]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 84 : insets.bottom + 84;
@@ -63,9 +51,8 @@ export default function KeywordsScreen() {
       {/* Header */}
       <View style={[s.headerWrap, { paddingTop: topPad + 16, backgroundColor: colors.background }]}>
         <Text style={[s.screenTitle, { color: colors.foreground }]}>Keywords</Text>
-        <Text style={[s.count, { color: colors.mutedForeground }]}>{keywords.length} total</Text>
+        <Text style={[s.count, { color: colors.mutedForeground }]}>{(keywords as Keyword[]).length} total</Text>
 
-        {/* Search */}
         <View style={[s.searchWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
           <Feather name="search" size={16} color={colors.mutedForeground} />
           <TextInput
@@ -100,8 +87,7 @@ export default function KeywordsScreen() {
         }
         renderItem={({ item }) => {
           const diffColor = colors[DIFFICULTY_COLOR_KEY[item.difficulty] ?? "mutedForeground"];
-          const intentBg = INTENT_BG_KEY[item.intent] ?? "#6B789620";
-          const intentText = INTENT_TEXT_KEY[item.intent] ?? colors.mutedForeground;
+          const intentStyle = INTENT_COLORS[item.intent] ?? { bg: "#6B789620", text: colors.mutedForeground };
           return (
             <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={s.cardTop}>
@@ -124,9 +110,11 @@ export default function KeywordsScreen() {
                     <Text style={[s.metaText, { color: colors.mutedForeground }]}>{item.volume.toLocaleString()}/mo</Text>
                   </View>
                 ) : null}
-                <View style={[s.intentBadge, { backgroundColor: intentBg }]}>
-                  <Text style={[s.intentText, { color: intentText }]}>{item.intent}</Text>
-                </View>
+                {item.intent ? (
+                  <View style={[s.intentBadge, { backgroundColor: intentStyle.bg }]}>
+                    <Text style={[s.intentText, { color: intentStyle.text }]}>{item.intent}</Text>
+                  </View>
+                ) : null}
               </View>
 
               {item.service ? (
@@ -145,26 +133,13 @@ const s = StyleSheet.create({
   screenTitle: { fontSize: 28, fontWeight: "800" as const, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
   count: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 2, marginBottom: 14 },
   searchWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-    gap: 8,
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 44, gap: 8,
   },
   searchInput: { flex: 1, fontSize: 15, height: 44 },
   card: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12, gap: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   keyword: { flex: 1, fontSize: 15, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold", lineHeight: 21 },

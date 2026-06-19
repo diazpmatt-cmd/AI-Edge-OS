@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useGetArticle } from "@workspace/api-client-react";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
@@ -15,15 +15,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { apiFetch } from "@/lib/api";
-import type { ArticleDraft } from "@/lib/types";
 
 const STATUS_META: Record<string, { label: string; colorKey: string }> = {
-  draft: { label: "Draft", colorKey: "mutedForeground" },
-  scheduled: { label: "Scheduled", colorKey: "primary" },
-  ready_for_website: { label: "Ready for Website", colorKey: "success" },
-  published: { label: "Published", colorKey: "success" },
-  published_error: { label: "Publish Error", colorKey: "destructive" },
+  draft:             { label: "Draft",               colorKey: "mutedForeground" },
+  scheduled:         { label: "Scheduled",            colorKey: "primary" },
+  ready_for_website: { label: "Ready for Website",    colorKey: "success" },
+  published:         { label: "Published",            colorKey: "success" },
+  published_error:   { label: "Publish Error",        colorKey: "destructive" },
 };
 
 export default function ArticleDetailScreen() {
@@ -32,11 +30,7 @@ export default function ArticleDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
 
-  const { data: article, isLoading, isError, refetch } = useQuery<ArticleDraft>({
-    queryKey: ["article", id],
-    queryFn: () => apiFetch(`/articles/${id}`),
-    enabled: !!id,
-  });
+  const { data: article, isLoading, isError, refetch } = useGetArticle(id ?? "");
 
   useEffect(() => {
     if (article?.title) {
@@ -67,7 +61,7 @@ export default function ArticleDetailScreen() {
   }
 
   const statusMeta = STATUS_META[article.status] ?? { label: article.status, colorKey: "mutedForeground" };
-  const statusColor = colors[statusMeta.colorKey as keyof typeof colors] as string ?? colors.mutedForeground;
+  const statusColor = (colors as any)[statusMeta.colorKey] ?? colors.mutedForeground;
 
   return (
     <ScrollView
@@ -90,10 +84,8 @@ export default function ArticleDetailScreen() {
       </View>
 
       <View style={{ paddingHorizontal: 20, paddingTop: 24, gap: 20 }}>
-        {/* Title */}
         <Text style={[s.title, { color: colors.foreground }]}>{article.title}</Text>
 
-        {/* SEO meta */}
         {article.metaTitle || article.metaDescription ? (
           <View style={[s.seoBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <Text style={[s.seoLabel, { color: colors.mutedForeground }]}>SEO</Text>
@@ -106,7 +98,6 @@ export default function ArticleDetailScreen() {
           </View>
         ) : null}
 
-        {/* Body */}
         {article.body ? (
           <Text style={[s.body, { color: colors.foreground }]}>{article.body}</Text>
         ) : (
@@ -116,7 +107,6 @@ export default function ArticleDetailScreen() {
           </View>
         )}
 
-        {/* Dates */}
         <View style={{ gap: 6 }}>
           {article.generatedAt ? (
             <DateRow icon="zap" label="Generated" date={article.generatedAt} colors={colors} />
@@ -145,11 +135,7 @@ function DateRow({ icon, label, date, colors }: { icon: string; label: string; d
 }
 
 const s = StyleSheet.create({
-  banner: {
-    padding: 20,
-    gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  banner: { padding: 20, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   statusBadge: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText: { fontSize: 12, fontWeight: "700" as const, fontFamily: "Inter_600SemiBold" },
   keyword: { fontSize: 15, fontFamily: "Inter_500Medium" },

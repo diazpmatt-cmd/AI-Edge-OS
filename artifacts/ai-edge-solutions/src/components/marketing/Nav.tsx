@@ -126,6 +126,41 @@ export default function Nav() {
             })}
           </nav>
 
+          {/* Admin — subtle doorway */}
+          <button
+            onClick={() => navigate("/admin-access")}
+            style={{
+              padding: "7px 13px",
+              borderRadius: 8,
+              border: "1px solid rgba(192,192,192,0.2)",
+              background: "rgba(192,192,192,0.05)",
+              color: "rgba(192,192,192,0.6)",
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: "pointer",
+              letterSpacing: "0.2px",
+              transition: "all 0.2s ease",
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget;
+              el.style.color = "#00AEEF";
+              el.style.border = "1px solid rgba(0,174,239,0.4)";
+              el.style.background = "rgba(0,174,239,0.08)";
+              el.style.boxShadow = "0 0 12px rgba(0,174,239,0.2)";
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget;
+              el.style.color = "rgba(192,192,192,0.6)";
+              el.style.border = "1px solid rgba(192,192,192,0.2)";
+              el.style.background = "rgba(192,192,192,0.05)";
+              el.style.boxShadow = "none";
+            }}
+          >
+            Admin
+          </button>
+
           {/* CTA — solid blue */}
           <button
             onClick={() => navigate("/contact")}

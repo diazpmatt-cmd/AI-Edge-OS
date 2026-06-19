@@ -130,6 +130,9 @@ export default function ConnectionsPage() {
     scopeString: string;
     sensitiveScope: boolean;
     sensitiveScopeNote: string | null;
+    requiredApi: string;
+    enableApiUrl: string;
+    apiLibraryId: string;
     callbackRoute: string;
     redirectUri: string;
     successRedirect: string;
@@ -614,6 +617,35 @@ export default function ConnectionsPage() {
                           })}
                         </div>
                       </DebugRow>
+
+                      {/* Required API + Enable button */}
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)",
+                        borderRadius: 6, padding: "7px 10px", gap: 10, flexWrap: "wrap",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+                            Required Google API
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>{prov.requiredApi}</div>
+                          <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{prov.apiLibraryId}</div>
+                        </div>
+                        <a
+                          href={prov.enableApiUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                            background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)",
+                            color: "#10B981", textDecoration: "none", flexShrink: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Enable in Google Cloud Console ↗
+                        </a>
+                      </div>
 
                       {/* Sensitive scope warning */}
                       {prov.sensitiveScope && prov.sensitiveScopeNote && (

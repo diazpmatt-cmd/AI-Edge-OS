@@ -268,6 +268,9 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
       sensitiveScope: true,
       sensitiveScopeNote: "business.manage is a restricted scope — requires the Business Profile API to be enabled AND the user added as a test user (or app published).",
       successSlug: "google",
+      requiredApi: "Business Profile API",
+      enableApiUrl: "https://console.cloud.google.com/apis/library/mybusinessaccountmanagement.googleapis.com",
+      apiLibraryId: "mybusinessaccountmanagement.googleapis.com",
     },
     {
       id: "youtube",
@@ -276,6 +279,9 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
       sensitiveScope: false,
       sensitiveScopeNote: null,
       successSlug: "youtube",
+      requiredApi: "YouTube Data API v3",
+      enableApiUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      apiLibraryId: "youtube.googleapis.com",
     },
   ];
 
@@ -300,6 +306,9 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
       scopeString,
       sensitiveScope: def.sensitiveScope,
       sensitiveScopeNote: def.sensitiveScopeNote,
+      requiredApi: def.requiredApi,
+      enableApiUrl: def.enableApiUrl,
+      apiLibraryId: def.apiLibraryId,
       callbackRoute,
       redirectUri,
       successRedirect: `${appBase}/admin/connections?connected=${def.successSlug}`,

@@ -42,16 +42,16 @@ type MigrationState = {
 
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
   google_business: { status: "blocked", note: "Google Business Profile requires Google app verification before activation." },
-  youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Was connected as BedBugsand_Beyond. Reconnect to restore." },
+  youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Reconnect with readonly access to view channel info, subscribers, and recent videos." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
   instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
 };
 
-type StatusKind = "connected" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
+type StatusKind = "connected" | "connected_readonly" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
-  if (dbConn) return "connected";
+  if (dbConn) return provider === "youtube" ? "connected_readonly" : "connected";
   // Instagram is locked until Facebook is connected in the database
   if (provider === "instagram" && !facebookConnected) return "coming_soon";
   const m = LOVABLE_MIGRATION[provider];
@@ -67,7 +67,8 @@ function getDisplayAccountName(provider: string, dbConn: DbConnection | undefine
 }
 
 const STATUS_META: Record<StatusKind, { label: string; bg: string; color: string; dot: string }> = {
-  connected:       { label: "Connected",          bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" },
+  connected:          { label: "Connected",              bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" },
+  connected_readonly: { label: "Connected (Read Only)",  bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" },
   needs_reconnect: { label: "Needs Reconnection", bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
   needs_review:    { label: "Needs Review",       bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
   not_connected:   { label: "Not Connected",      bg: "rgba(148,163,184,0.1)", color: "#94A3B8", dot: "#475569" },
@@ -195,6 +196,21 @@ export default function ConnectionsPage() {
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
   const debugByProvider = new Map(debugData.map((d) => [d.provider, d]));
   const facebookConnected = connByProvider.has("facebook");
+
+  type YouTubeChannelInfo = {
+    channelId: string | null;
+    channelName: string | null;
+    subscriberCount: string | null;
+    videoCount: string | null;
+    thumbnail: string | null;
+    recentVideos: Array<{ videoId: string; title: string; publishedAt: string; thumbnail: string | null }>;
+  };
+  const { data: ytChannelInfo } = useQuery<YouTubeChannelInfo>({
+    queryKey: ["youtube_channel_info"],
+    queryFn: () => apiFetch<YouTubeChannelInfo>("/social-connections/youtube/channel-info"),
+    enabled: connByProvider.has("youtube"),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const disconnectMut = useMutation({
     mutationFn: (provider: string) => apiFetch(`/social-connections/${provider}`, { method: "DELETE" }),
@@ -394,7 +410,7 @@ export default function ConnectionsPage() {
             const isDisconnecting = disconnectMut.isPending && disconnectMut.variables === platform.id;
             const isComing = status === "coming_soon";
             const isBlocked = status === "blocked";
-            const isConnected = status === "connected";
+            const isConnected = status === "connected" || status === "connected_readonly";
 
             return (
               <div key={platform.id} style={{
@@ -518,6 +534,53 @@ export default function ConnectionsPage() {
                     </div>
                   </div>
                 </div>
+                {/* YouTube channel info — shown when connected with readonly scope */}
+                {platform.id === "youtube" && isConnected && ytChannelInfo && (
+                  <div style={{ marginTop: 14, padding: "12px 14px", background: "rgba(255,0,0,0.05)", borderRadius: 10, border: "1px solid rgba(255,60,60,0.13)" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#FF5555", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                      Channel Info
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 20px", marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#6B7280" }}>Channel Name</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#E5E7EB" }}>{ytChannelInfo.channelName ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#6B7280" }}>Channel ID</div>
+                        <div style={{ fontSize: 10.5, fontWeight: 600, color: "#94A3B8", fontFamily: "monospace", wordBreak: "break-all" }}>{ytChannelInfo.channelId ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#6B7280" }}>Subscribers</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#E5E7EB" }}>
+                          {ytChannelInfo.subscriberCount ? Number(ytChannelInfo.subscriberCount).toLocaleString() : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#6B7280" }}>Total Videos</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#E5E7EB" }}>
+                          {ytChannelInfo.videoCount ? Number(ytChannelInfo.videoCount).toLocaleString() : "—"}
+                        </div>
+                      </div>
+                    </div>
+                    {ytChannelInfo.recentVideos.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 10.5, color: "#6B7280", marginBottom: 6 }}>Recent Videos</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          {ytChannelInfo.recentVideos.map(v => (
+                            <a key={v.videoId} href={`https://www.youtube.com/watch?v=${v.videoId}`} target="_blank" rel="noopener noreferrer"
+                              style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", borderRadius: 6, background: "rgba(255,255,255,0.03)", textDecoration: "none" }}>
+                              {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width: 40, height: 28, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 11.5, color: "#D1D5DB", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
+                                <div style={{ fontSize: 10, color: "#6B7280" }}>{new Date(v.publishedAt).toLocaleDateString()}</div>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

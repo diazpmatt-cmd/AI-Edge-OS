@@ -103,7 +103,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: clientId,
           redirect_uri: `${base}/api/oauth/google/callback`,
           response_type: "code",
-          scope: "https://www.googleapis.com/auth/youtube.upload openid email",
+          scope: "https://www.googleapis.com/auth/youtube.readonly openid email profile",
           access_type: "offline",
           prompt: "consent",
           state: generateState(userId, "youtube"),
@@ -309,7 +309,7 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     {
       id: "youtube",
       label: "YouTube",
-      scopes: ["https://www.googleapis.com/auth/youtube.upload", "openid", "email"],
+      scopes: ["https://www.googleapis.com/auth/youtube.readonly", "openid", "email", "profile"],
       sensitiveScope: false,
       sensitiveScopeNote: null,
       successSlug: "youtube",
@@ -375,6 +375,88 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     providers,
     minimalTestUrl,
   });
+});
+
+router.get("/social-connections/youtube/channel-info", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [conn] = await db.select().from(socialConnectionsTable)
+    .where(and(
+      eq(socialConnectionsTable.userId, userId),
+      eq(socialConnectionsTable.provider, "youtube"),
+    ));
+
+  if (!conn) { res.status(404).json({ error: "YouTube not connected" }); return; }
+
+  let accessToken = conn.accessToken;
+
+  if (conn.expiresAt && conn.expiresAt < new Date() && conn.refreshToken) {
+    try {
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+          client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+          refresh_token: conn.refreshToken,
+          grant_type: "refresh_token",
+        }),
+      });
+      if (r.ok) {
+        const data = await r.json() as { access_token: string; expires_in?: number };
+        accessToken = data.access_token;
+        const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+        await db.update(socialConnectionsTable)
+          .set({ accessToken, expiresAt, updatedAt: new Date() })
+          .where(and(
+            eq(socialConnectionsTable.userId, userId),
+            eq(socialConnectionsTable.provider, "youtube"),
+          ));
+      }
+    } catch { /* continue with existing token */ }
+  }
+
+  try {
+    const [channelRes, videosRes] = await Promise.all([
+      fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true",
+        { headers: { Authorization: `Bearer ${accessToken}` } }),
+      fetch("https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&order=date&maxResults=5",
+        { headers: { Authorization: `Bearer ${accessToken}` } }),
+    ]);
+
+    const channelData = await channelRes.json() as {
+      items?: Array<{
+        id: string;
+        snippet: { title: string; thumbnails?: { default?: { url: string } } };
+        statistics: { subscriberCount?: string; videoCount?: string; viewCount?: string };
+      }>;
+    };
+    const videosData = await videosRes.json() as {
+      items?: Array<{
+        id: { videoId: string };
+        snippet: { title: string; publishedAt: string; thumbnails?: { default?: { url: string } } };
+      }>;
+    };
+
+    const ch = channelData.items?.[0];
+    res.json({
+      channelId: ch?.id ?? null,
+      channelName: ch?.snippet.title ?? conn.accountName,
+      subscriberCount: ch?.statistics.subscriberCount ?? null,
+      videoCount: ch?.statistics.videoCount ?? null,
+      viewCount: ch?.statistics.viewCount ?? null,
+      thumbnail: ch?.snippet.thumbnails?.default?.url ?? null,
+      recentVideos: (videosData.items ?? []).map(v => ({
+        videoId: v.id.videoId,
+        title: v.snippet.title,
+        publishedAt: v.snippet.publishedAt,
+        thumbnail: v.snippet.thumbnails?.default?.url ?? null,
+      })),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? "Failed to fetch YouTube data" });
+  }
 });
 
 export default router;

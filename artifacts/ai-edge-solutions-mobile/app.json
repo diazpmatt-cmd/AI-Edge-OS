@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "AI Edge Solutions Mobile",
+    "name": "AI Edge Solutions",
     "slug": "ai-edge-solutions-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,12 +11,15 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1E2644"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.replit.aiedgesolutionsmobile"
     },
-    "android": {},
+    "android": {
+      "package": "com.replit.aiedgesolutionsmobile"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -28,7 +31,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -17,6 +17,7 @@ const clerkPubKey = publishableKeyFromHost(
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
 const IndexPage = lazy(() => import("./pages/IndexPage"));
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const PublishingPage = lazy(() => import("./pages/PublishingPage"));
@@ -42,10 +43,9 @@ function Authenticated({ children }: { children: React.ReactNode }) {
 
 function HomeRoute() {
   return (
-    <>
-      <Show when="signed-in"><Suspense fallback={<PageLoader />}><IndexPage /></Suspense></Show>
-      <Show when="signed-out"><Redirect to="/sign-in" /></Show>
-    </>
+    <Suspense fallback={<PageLoader />}>
+      <LandingPage />
+    </Suspense>
   );
 }
 

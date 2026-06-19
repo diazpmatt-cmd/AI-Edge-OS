@@ -22,8 +22,23 @@ export default function SignInScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
-  const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
+  // Clerk Expo v3 uses a signal pattern — cast to extract the shape we need at runtime.
+  const signInHook = useSignIn() as unknown as {
+    signIn: { create: (p: { identifier: string; password: string }) => Promise<{ status: string; createdSessionId: string }> };
+    setActive: (p: { session: string }) => Promise<void>;
+    isLoaded: boolean;
+  };
+  const signUpHook = useSignUp() as unknown as {
+    signUp: {
+      create: (p: { emailAddress: string; password: string }) => Promise<void>;
+      prepareEmailAddressVerification: (p: { strategy: string }) => Promise<void>;
+      attemptEmailAddressVerification: (p: { code: string }) => Promise<{ status: string; createdSessionId: string }>;
+    };
+    setActive: (p: { session: string }) => Promise<void>;
+    isLoaded: boolean;
+  };
+  const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = signInHook;
+  const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = signUpHook;
 
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");

@@ -4,6 +4,7 @@ import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { generateState } from "../lib/oauthState";
+import { getCallbackLog } from "../lib/callbackDebugLog";
 
 const router = Router();
 
@@ -241,6 +242,12 @@ router.get("/social-connections/meta-oauth-debug", async (req, res) => {
     permissionsError,
     meAccountsResult,
   });
+});
+
+router.get("/social-connections/callback-debug-log", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  res.json(getCallbackLog());
 });
 
 router.get("/social-connections/google-oauth-debug", async (req, res) => {

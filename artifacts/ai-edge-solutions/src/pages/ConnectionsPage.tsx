@@ -83,6 +83,7 @@ export default function ConnectionsPage() {
   const qc = useQueryClient();
   const [connecting, setConnecting] = useState<string | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [callbackLogOpen, setCallbackLogOpen] = useState(false);
   const [googleDebugOpen, setGoogleDebugOpen] = useState(false);
   const [facebookDebugOpen, setFacebookDebugOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -92,18 +93,20 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(search);
-    const oauthResult = params.get("oauth");
-    if (!oauthResult) return;
-    if (oauthResult === "success") {
-      const provider = params.get("provider") ?? "platform";
-      toast.success(`${provider.replace("_", " ")} connected successfully!`);
+    const connected = params.get("connected");
+    const oauthError = params.get("oauth_error");
+    if (!connected && !oauthError) return;
+
+    if (connected) {
+      const label = connected.charAt(0).toUpperCase() + connected.slice(1);
+      toast.success(`${label} connected successfully!`);
       qc.invalidateQueries({ queryKey: ["social_connections"] });
-    } else {
-      const reason = params.get("reason") ?? "unknown error";
+      qc.invalidateQueries({ queryKey: ["callback_debug_log"] });
+    } else if (oauthError) {
       const step = params.get("step") ?? "";
-      toast.error(`Connection failed: ${reason}${step ? ` (${step})` : ""}`);
+      toast.error(`Connection failed: ${oauthError}${step ? ` (${step})` : ""}`);
+      qc.invalidateQueries({ queryKey: ["callback_debug_log"] });
     }
-    // Clean the URL
     navigate("/admin/connections", { replace: true });
   }, [search]);
 
@@ -151,6 +154,24 @@ export default function ConnectionsPage() {
     enabled: facebookDebugOpen,
   });
 
+  type CallbackEntry = {
+    ts: string;
+    provider: string;
+    callbackReached: boolean;
+    codeReceived: boolean;
+    stateValid: boolean | null;
+    tokenExchangeStatus: string;
+    connectionSaved: boolean;
+    finalRedirectUrl: string;
+    error?: string;
+  };
+  const { data: callbackLog = [], refetch: refetchCallbackLog } = useQuery<CallbackEntry[]>({
+    queryKey: ["callback_debug_log"],
+    queryFn: () => apiFetch<CallbackEntry[]>("/social-connections/callback-debug-log"),
+    enabled: callbackLogOpen,
+    refetchInterval: callbackLogOpen ? 5000 : false,
+  });
+
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
   const debugByProvider = new Map(debugData.map((d) => [d.provider, d]));
 
@@ -170,13 +191,15 @@ export default function ConnectionsPage() {
       const result = await apiFetch<{ url: string; configured: boolean }>(`/social-connections/oauth-start/${provider}`, { method: "POST" });
       if (!result.configured) {
         toast.error(`OAuth not configured. Add the required API credentials to Replit Secrets.`);
+        setConnecting(null);
         return;
       }
-      const opened = window.open(result.url, "_blank", "noopener,noreferrer");
-      if (!opened) toast.error("Popup blocked. Allow popups and try again.");
+      // Navigate the main window directly — preserves Clerk session through the redirect cycle.
+      // Popup approach fails because the popup has no Clerk auth cookies, causing a redirect to
+      // the Clerk sign-in page after the OAuth callback.
+      window.location.href = result.url;
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to start OAuth");
-    } finally {
       setConnecting(null);
     }
   };
@@ -365,6 +388,96 @@ export default function ConnectionsPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Callback Debug Log Panel */}
+        <div style={{
+          background: "rgba(3,6,18,0.8)", border: "1px solid rgba(0,174,239,0.3)",
+          borderRadius: 12, overflow: "hidden", marginBottom: 12,
+        }}>
+          <button
+            onClick={() => setCallbackLogOpen(o => !o)}
+            style={{
+              width: "100%", padding: "12px 18px", background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              color: "#6B7280", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "#00AEEF" }}>⬡</span>
+              <span style={{ color: "#00AEEF" }}>OAuth Callback Debug Log</span>
+              {callbackLog.length > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 800, color: "#030612",
+                  background: "#00AEEF", borderRadius: 10, padding: "1px 7px",
+                }}>{callbackLog.length}</span>
+              )}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+              {callbackLogOpen && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); refetchCallbackLog(); }}
+                  style={{
+                    padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                    background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF",
+                  }}
+                >↺ Refresh</button>
+              )}
+              {callbackLogOpen ? "▲ Hide" : "▼ Show"}
+            </span>
+          </button>
+
+          {callbackLogOpen && (
+            <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(0,174,239,0.15)" }}>
+              {callbackLog.length === 0 ? (
+                <p style={{ fontSize: 12, color: "#475569", marginTop: 12, lineHeight: 1.7 }}>
+                  No callbacks recorded yet. Click <strong style={{ color: "#00AEEF" }}>Connect</strong> or{" "}
+                  <strong style={{ color: "#FB923C" }}>Reconnect</strong> on a platform card above.
+                  This log auto-refreshes every 5 seconds.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                  {callbackLog.map((entry, i) => (
+                    <div key={i} style={{
+                      background: entry.connectionSaved
+                        ? "rgba(16,185,129,0.05)"
+                        : "rgba(239,68,68,0.05)",
+                      border: `1px solid ${entry.connectionSaved ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
+                      borderRadius: 8, padding: "10px 14px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: entry.connectionSaved ? "#10B981" : "#EF4444" }}>
+                          {entry.connectionSaved ? "✓ SUCCESS" : "✗ FAILED"}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#C0C0C0", fontWeight: 600 }}>
+                          {entry.provider}
+                        </span>
+                        <span style={{ fontSize: 10, color: "#475569" }}>
+                          {new Date(entry.ts).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: entry.error ? 8 : 0 }}>
+                        <Tag label={`Callback reached: yes`} color="#10B981" />
+                        <Tag label={`Code received: ${entry.codeReceived ? "yes" : "no"}`} color={entry.codeReceived ? "#10B981" : "#EF4444"} />
+                        <Tag label={`State valid: ${entry.stateValid === null ? "n/a" : entry.stateValid ? "yes" : "no"}`} color={entry.stateValid === false ? "#EF4444" : "#10B981"} />
+                        <Tag label={`Token: ${entry.tokenExchangeStatus}`} color={entry.tokenExchangeStatus === "success" ? "#10B981" : "#EF4444"} />
+                        <Tag label={`Saved to DB: ${entry.connectionSaved ? "yes" : "no"}`} color={entry.connectionSaved ? "#10B981" : "#EF4444"} />
+                      </div>
+                      {entry.error && (
+                        <div style={{ marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: "#EF4444" }}>Error: {entry.error}</span>
+                        </div>
+                      )}
+                      <div style={{ marginTop: 6 }}>
+                        <span style={{ fontSize: 10, color: "#374151" }}>Redirect → </span>
+                        <code style={{ fontSize: 10, color: "#9CA3AF", wordBreak: "break-all" }}>{entry.finalRedirectUrl}</code>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Google OAuth Debug Panel */}

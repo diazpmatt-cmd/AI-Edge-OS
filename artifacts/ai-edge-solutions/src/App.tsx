@@ -25,6 +25,7 @@ const PricingPage     = lazy(() => import("./pages/marketing/PricingPage"));
 const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
 
 // ── Admin / Command Center pages (auth-gated) ───────────────────────────────
+const AdminAccessPage     = lazy(() => import("./pages/AdminAccessPage"));
 const AdminLoginPage      = lazy(() => import("./pages/AdminLoginPage"));
 const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
 const ArticlePage         = lazy(() => import("./pages/ArticlePage"));
@@ -73,7 +74,8 @@ function AppRouter() {
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
 
-        {/* ── Admin login (public entry point for the Command Center) ── */}
+        {/* ── Admin access gate (passcode) + login ── */}
+        <Route path="/admin-access" component={() => <Suspense fallback={<PageLoader />}><AdminAccessPage /></Suspense>} />
         <Route path="/admin/login/*?" component={() => <Suspense fallback={<PageLoader />}><AdminLoginPage /></Suspense>} />
 
         {/* ── Protected admin / Command Center routes ── */}

@@ -146,7 +146,7 @@ export default function Footer() {
           gap: 12,
         }}>
           <p style={{ fontSize: 13, color: "#374151" }}>© {year} AI Edge Solutions. All rights reserved.</p>
-          <div style={{ display: "flex", gap: 24 }}>
+          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
             {["Privacy Policy", "Terms of Service"].map(item => (
               <span key={item} style={{ fontSize: 13, color: "#374151", cursor: "pointer", transition: "color 0.2s" }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#6B7280"}
@@ -155,6 +155,19 @@ export default function Footer() {
                 {item}
               </span>
             ))}
+            <a
+              href="/admin-access"
+              onClick={e => { e.preventDefault(); navigate("/admin-access"); }}
+              style={{
+                fontSize: 11, color: "#1F2937", textDecoration: "none",
+                letterSpacing: "0.5px", transition: "color 0.2s",
+                fontWeight: 500,
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#4B5563"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#1F2937"}
+            >
+              Admin
+            </a>
           </div>
         </div>
       </div>

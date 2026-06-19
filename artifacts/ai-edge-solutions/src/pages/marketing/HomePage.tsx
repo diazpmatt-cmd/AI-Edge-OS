@@ -8,7 +8,7 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const SERVICES = [
   { icon: "📞", title: "Lead Recovery AI", tagline: "Never lose a missed call again", description: "Instant text-back, 2-way SMS, and automated follow-up sequences that convert missed calls into booked jobs — in seconds." },
   { icon: "🤖", title: "AI Receptionist", tagline: "24/7 intelligent call handling", description: "An AI that answers every call, qualifies leads, books appointments, and handles FAQs — so you never miss a customer again." },
-  { icon: "📍", title: "Google Business Profile", tagline: "Dominate local search", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile ranked #1 locally." },
+  { icon: "📍", title: "Google Business Profile", tagline: "Optimize local visibility", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile prominently ranked in local search." },
   { icon: "⭐", title: "Review Generation", tagline: "More 5-star reviews, on autopilot", description: "Automatically request reviews from satisfied customers via SMS. Respond intelligently and build a reputation that sells." },
   { icon: "🔍", title: "Local SEO", tagline: "Rank where it counts", description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need." },
   { icon: "🌐", title: "Website Design", tagline: "Sites that convert visitors", description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand." },
@@ -145,7 +145,7 @@ export default function HomePage() {
       {/* ── SERVICES GRID ── */}
       <section style={{ padding: "96px 24px", maxWidth: 1200, margin: "0 auto" }}>
         <SectionLabel>Services</SectionLabel>
-        <SectionTitle>Everything you need to dominate local search</SectionTitle>
+        <SectionTitle>Everything you need to optimize local visibility</SectionTitle>
         <SectionSub>Eight AI-powered systems, fully managed, delivering results while you sleep.</SectionSub>
 
         <div style={{
@@ -346,7 +346,7 @@ export default function HomePage() {
             background: "linear-gradient(135deg, #FFFFFF, #C0C0C0)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           }}>
-            Ready to Dominate Your Market?
+            Ready to Optimize Your Growth?
           </h2>
           <p style={{ fontSize: 19, color: "#6B7280", lineHeight: 1.65, marginBottom: 44 }}>
             Book a free 30-minute strategy call. We'll analyze your business, identify the biggest opportunities, and show you exactly how AI can transform your growth.

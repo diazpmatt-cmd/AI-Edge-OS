@@ -48,7 +48,7 @@ export default function Footer() {
               />
             </a>
             <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, maxWidth: 240 }}>
-              Helping local businesses win with AI automation, intelligent lead recovery, and digital domination.
+              Helping local businesses grow with AI automation, intelligent lead recovery, and smarter digital strategy.
             </p>
             <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
               {["f", "in", "tw"].map(s => (

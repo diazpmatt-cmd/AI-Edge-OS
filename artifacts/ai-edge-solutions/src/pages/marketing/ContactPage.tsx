@@ -117,7 +117,7 @@ export default function ContactPage() {
             background: "linear-gradient(135deg, #FFFFFF 40%, #C0C0C0)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           }}>
-            Let's Talk About Dominating Your Market
+            Let's Talk About Optimizing Your Growth
           </h1>
           <p style={{ fontSize: 18, color: "#6B7280", lineHeight: 1.65, maxWidth: 500, margin: "0 auto" }}>
             Book your free 30-minute strategy call. No pitch. No pressure. Just a clear plan to grow your business with AI.

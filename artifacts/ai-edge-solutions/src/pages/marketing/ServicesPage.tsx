@@ -71,7 +71,7 @@ const SERVICES = [
     icon: "🔍",
     title: "Local SEO",
     tagline: "Rank #1 where your customers search",
-    description: "Hyper-targeted local SEO that dominates every service + city combination you care about. From on-page optimization to local citation building — we do it all.",
+    description: "Precision local SEO that targets every service + city combination you care about. From on-page optimization to local citation building — we do it all.",
     features: [
       "Keyword research & strategy",
       "On-page & technical SEO",

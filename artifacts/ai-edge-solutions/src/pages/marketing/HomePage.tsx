@@ -2,70 +2,24 @@ import { useLocation } from "wouter";
 import Nav from "@/components/marketing/Nav";
 import Footer from "@/components/marketing/Footer";
 
+const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
+
 const SERVICES = [
-  {
-    icon: "📞",
-    title: "Lead Recovery AI",
-    tagline: "Never lose a missed call again",
-    description: "Instant text-back, 2-way SMS, and automated follow-up sequences that convert missed calls into booked jobs — in seconds.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "🤖",
-    title: "AI Receptionist",
-    tagline: "24/7 intelligent call handling",
-    description: "An AI that answers every call, qualifies leads, books appointments, and handles FAQs — so you never miss a customer again.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "📍",
-    title: "Google Business Profile",
-    tagline: "Dominate local search",
-    description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile ranked #1 locally.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "⭐",
-    title: "Review Generation",
-    tagline: "More 5-star reviews, on autopilot",
-    description: "Automatically request reviews from satisfied customers via SMS. Respond intelligently and build a reputation that sells.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "🔍",
-    title: "Local SEO",
-    tagline: "Rank where it counts",
-    description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "🌐",
-    title: "Website Design",
-    tagline: "Sites that convert visitors",
-    description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "📲",
-    title: "Social Media Distribution",
-    tagline: "AI content across every platform",
-    description: "Repurpose your content into social posts, schedule across platforms, and maintain a consistent presence without lifting a finger.",
-    color: "#00AEEF",
-  },
-  {
-    icon: "🧠",
-    title: "AI Visibility / GEO",
-    tagline: "Get found by AI search",
-    description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery.",
-    color: "#00AEEF",
-  },
+  { icon: "📞", title: "Lead Recovery AI", tagline: "Never lose a missed call again", description: "Instant text-back, 2-way SMS, and automated follow-up sequences that convert missed calls into booked jobs — in seconds." },
+  { icon: "🤖", title: "AI Receptionist", tagline: "24/7 intelligent call handling", description: "An AI that answers every call, qualifies leads, books appointments, and handles FAQs — so you never miss a customer again." },
+  { icon: "📍", title: "Google Business Profile", tagline: "Dominate local search", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile ranked #1 locally." },
+  { icon: "⭐", title: "Review Generation", tagline: "More 5-star reviews, on autopilot", description: "Automatically request reviews from satisfied customers via SMS. Respond intelligently and build a reputation that sells." },
+  { icon: "🔍", title: "Local SEO", tagline: "Rank where it counts", description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need." },
+  { icon: "🌐", title: "Website Design", tagline: "Sites that convert visitors", description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand." },
+  { icon: "📲", title: "Social Media Distribution", tagline: "AI content across every platform", description: "Repurpose your content into social posts, schedule across platforms, and maintain a consistent presence without lifting a finger." },
+  { icon: "🧠", title: "AI Visibility / GEO", tagline: "Get found by AI search", description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery." },
 ];
 
-const STATS = [
-  { value: "94%", label: "Lead recovery rate" },
-  { value: "< 5s", label: "Text-back speed" },
-  { value: "3.8×", label: "Average ROI" },
-  { value: "500+", label: "Local businesses served" },
+const TRUST = [
+  "No Long-Term Contracts",
+  "Personalized Solutions",
+  "Built for Local Businesses",
+  "Proven AI Systems",
 ];
 
 const RESULTS = [
@@ -78,91 +32,109 @@ export default function HomePage() {
   const [, navigate] = useLocation();
 
   return (
-    <div style={{ background: "#030612", minHeight: "100vh", color: "#FFFFFF", fontFamily: "'Inter', -apple-system, sans-serif" }}>
+    <div style={{ background: "#0B1629", minHeight: "100vh", color: "#FFFFFF", fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <Nav />
 
-      {/* Hero */}
-      <section style={{ paddingTop: 148, paddingBottom: 96, paddingLeft: 24, paddingRight: 24, textAlign: "center", position: "relative", overflow: "hidden" }}>
-        {/* Radial glow */}
-        <div style={{
-          position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
-          width: 900, height: 600, borderRadius: "50%",
-          background: "radial-gradient(ellipse at center, rgba(0,174,239,0.1) 0%, rgba(0,100,180,0.04) 40%, transparent 70%)",
-          pointerEvents: "none",
-        }} />
-        {/* Grid overlay */}
+      {/* ── HERO ── */}
+      <section style={{ position: "relative", overflow: "hidden", paddingTop: 80, minHeight: "100vh", display: "flex", alignItems: "center" }}>
+
+        {/* Checkered grid background */}
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
-          backgroundImage: "linear-gradient(rgba(0,174,239,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,174,239,0.04) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
-          maskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 100%)",
+          backgroundImage: `
+            linear-gradient(rgba(0,174,239,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,174,239,0.07) 1px, transparent 1px)
+          `,
+          backgroundSize: "48px 48px",
         }} />
 
-        <div style={{ position: "relative", maxWidth: 860, margin: "0 auto" }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 24,
-            background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)",
-            borderRadius: 100, padding: "6px 18px 6px 10px",
-          }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#00AEEF", boxShadow: "0 0 8px rgba(0,174,239,0.8)" }} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#00AEEF", letterSpacing: "0.4px" }}>AI AUTOMATION FOR LOCAL BUSINESSES</span>
-          </div>
+        {/* Subtle radial vignette so edges fade */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: "radial-gradient(ellipse 80% 80% at 30% 50%, transparent 40%, rgba(11,22,41,0.85) 100%)",
+        }} />
 
-          <h1 style={{
-            fontSize: "clamp(40px, 7vw, 80px)", fontWeight: 900, lineHeight: 1.05,
-            letterSpacing: "-2px", marginBottom: 28,
-          }}>
-            <span style={{
-              background: "linear-gradient(135deg, #FFFFFF 30%, #C0C0C0 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            }}>
-              Dominate Your Market
-            </span>
-            <br />
-            <span style={{
-              background: "linear-gradient(90deg, #00AEEF 0%, #00D4FF 50%, #00AEEF 100%)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              filter: "drop-shadow(0 0 30px rgba(0,174,239,0.4))",
-            }}>
-              With AI Automation
-            </span>
-          </h1>
+        {/* Blue glow behind AE on the right */}
+        <div style={{
+          position: "absolute", right: "5%", top: "50%", transform: "translateY(-50%)",
+          width: 500, height: 500, borderRadius: "50%", pointerEvents: "none",
+          background: "radial-gradient(ellipse, rgba(0,174,239,0.18) 0%, rgba(0,80,160,0.08) 40%, transparent 70%)",
+        }} />
 
-          <p style={{ fontSize: "clamp(17px, 2vw, 21px)", color: "#8B9AB0", lineHeight: 1.65, marginBottom: 44, maxWidth: 620, margin: "0 auto 44px" }}>
-            We deploy intelligent AI systems that capture more leads, answer every call, generate 5-star reviews, and rank your business #1 — while you focus on serving customers.
-          </p>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 40px", width: "100%", position: "relative", zIndex: 2 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
 
-          <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-            <GlowButton onClick={() => navigate("/contact")}>
-              Book Free Strategy Call →
-            </GlowButton>
-            <OutlineButton onClick={() => navigate("/services")}>
-              Explore Services
-            </OutlineButton>
-          </div>
-
-          {/* Trust strip */}
-          <div style={{
-            marginTop: 64,
-            display: "flex", justifyContent: "center", gap: "clamp(24px,4vw,64px)", flexWrap: "wrap",
-          }}>
-            {STATS.map(({ value, label }) => (
-              <div key={label} style={{ textAlign: "center" }}>
-                <div style={{
-                  fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, letterSpacing: "-1px",
-                  background: "linear-gradient(135deg, #00AEEF, #00D4FF)",
-                  WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-                }}>
-                  {value}
-                </div>
-                <div style={{ fontSize: 13, color: "#4B5563", marginTop: 4 }}>{label}</div>
+            {/* LEFT — content */}
+            <div>
+              {/* Badge */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 28,
+                background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.30)",
+                borderRadius: 6, padding: "6px 16px",
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#00AEEF", letterSpacing: "1.2px", textTransform: "uppercase" }}>
+                  Built for Local Service Businesses
+                </span>
               </div>
-            ))}
+
+              {/* Headline */}
+              <h1 style={{
+                fontSize: "clamp(36px, 5vw, 62px)", fontWeight: 900,
+                lineHeight: 1.08, letterSpacing: "-1.5px", marginBottom: 24,
+              }}>
+                AI Automation That Gives<br />
+                Local Businesses{" "}
+                <span style={{ color: "#00AEEF", textShadow: "0 0 30px rgba(0,174,239,0.45)" }}>an Edge</span>
+              </h1>
+
+              {/* Description */}
+              <p style={{ fontSize: "clamp(15px, 1.8vw, 18px)", color: "#8B9AB0", lineHeight: 1.70, marginBottom: 40, maxWidth: 500 }}>
+                We help service businesses capture more leads, automate follow-up, create content, and grow across Google, YouTube, Facebook, and more.
+              </p>
+
+              {/* CTAs */}
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 44 }}>
+                <GlowButton onClick={() => navigate("/contact")}>Book a Free Strategy Call</GlowButton>
+                <OutlineButton onClick={() => navigate("/services")}>See What We Automate</OutlineButton>
+              </div>
+
+              {/* Trust checkmarks */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 32px" }}>
+                {TRUST.map(t => (
+                  <div key={t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%",
+                      border: "1.5px solid rgba(0,174,239,0.5)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      <span style={{ fontSize: 10, color: "#00AEEF", lineHeight: 1 }}>✓</span>
+                    </div>
+                    <span style={{ fontSize: 13, color: "#8B9AB0", fontWeight: 500 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT — AE logo */}
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <img
+                src={logoSrc}
+                alt="AI Edge Solutions"
+                style={{
+                  width: "min(420px, 90%)",
+                  height: "auto",
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 0 60px rgba(0,174,239,0.35)) drop-shadow(0 0 120px rgba(0,80,160,0.2))",
+                }}
+              />
+            </div>
+
           </div>
         </div>
       </section>
 
-      {/* Services grid */}
+      {/* ── SERVICES GRID ── */}
       <section style={{ padding: "96px 24px", maxWidth: 1200, margin: "0 auto" }}>
         <SectionLabel>Services</SectionLabel>
         <SectionTitle>Everything you need to dominate local search</SectionTitle>
@@ -184,7 +156,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Case Study teaser */}
+      {/* ── CASE STUDY TEASER ── */}
       <section style={{
         padding: "96px 24px",
         background: "linear-gradient(180deg, transparent 0%, rgba(0,174,239,0.04) 50%, transparent 100%)",
@@ -200,7 +172,6 @@ export default function HomePage() {
             alignItems: "center",
             marginTop: 24,
           }}>
-            {/* Text */}
             <div>
               <h2 style={{
                 fontSize: "clamp(28px, 4vw, 48px)", fontWeight: 800,
@@ -230,27 +201,20 @@ export default function HomePage() {
               <OutlineButton onClick={() => navigate("/case-studies")}>Read Full Case Study →</OutlineButton>
             </div>
 
-            {/* Visual card */}
             <div style={{ position: "relative" }}>
               <div style={{
                 background: "linear-gradient(135deg, rgba(0,174,239,0.08) 0%, rgba(0,100,180,0.06) 100%)",
                 border: "1px solid rgba(0,174,239,0.2)",
-                borderRadius: 24,
-                padding: 40,
-                position: "relative",
-                overflow: "hidden",
+                borderRadius: 24, padding: 40, position: "relative", overflow: "hidden",
               }}>
                 <div style={{
-                  position: "absolute", top: -40, right: -40,
-                  width: 200, height: 200, borderRadius: "50%",
+                  position: "absolute", top: -40, right: -40, width: 200, height: 200, borderRadius: "50%",
                   background: "radial-gradient(ellipse, rgba(0,174,239,0.15) 0%, transparent 70%)",
                 }} />
                 <div style={{
                   display: "flex", alignItems: "center", gap: 14, marginBottom: 32,
-                  padding: "14px 18px",
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.06)",
+                  padding: "14px 18px", background: "rgba(255,255,255,0.04)",
+                  borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)",
                 }}>
                   <div style={{ fontSize: 28 }}>🪲</div>
                   <div>
@@ -258,15 +222,11 @@ export default function HomePage() {
                     <div style={{ fontSize: 12, color: "#6B7280" }}>Pest Control — Phoenix, AZ</div>
                   </div>
                   <div style={{
-                    marginLeft: "auto",
-                    background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)",
-                    borderRadius: 6, padding: "4px 10px",
-                    fontSize: 11, fontWeight: 700, color: "#00AEEF",
-                  }}>
-                    ACTIVE
-                  </div>
+                    marginLeft: "auto", background: "rgba(0,174,239,0.15)",
+                    border: "1px solid rgba(0,174,239,0.3)", borderRadius: 6,
+                    padding: "4px 10px", fontSize: 11, fontWeight: 700, color: "#00AEEF",
+                  }}>ACTIVE</div>
                 </div>
-
                 {[
                   { label: "Missed calls recovered", value: "94%", bar: 94 },
                   { label: "Review score", value: "4.9★", bar: 98 },
@@ -278,11 +238,7 @@ export default function HomePage() {
                       <span style={{ fontSize: 13, fontWeight: 700, color: "#00AEEF" }}>{value}</span>
                     </div>
                     <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{
-                        height: "100%", width: `${bar}%`, borderRadius: 3,
-                        background: "linear-gradient(90deg, #00AEEF, #00D4FF)",
-                        boxShadow: "0 0 8px rgba(0,174,239,0.5)",
-                      }} />
+                      <div style={{ height: "100%", width: `${bar}%`, borderRadius: 3, background: "linear-gradient(90deg, #00AEEF, #00D4FF)", boxShadow: "0 0 8px rgba(0,174,239,0.5)" }} />
                     </div>
                   </div>
                 ))}
@@ -290,16 +246,13 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-
-        <style>{`@media (max-width: 768px) { .case-grid { grid-template-columns: 1fr !important; } }`}</style>
       </section>
 
-      {/* CTA Section */}
+      {/* ── BOTTOM CTA ── */}
       <section style={{ padding: "96px 24px", textAlign: "center" }}>
         <div style={{ maxWidth: 700, margin: "0 auto" }}>
           <div style={{
-            display: "inline-block", marginBottom: 20,
-            padding: "6px 18px",
+            display: "inline-block", marginBottom: 20, padding: "6px 18px",
             background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)",
             borderRadius: 100, fontSize: 12, fontWeight: 700, color: "#00AEEF", letterSpacing: "1.5px", textTransform: "uppercase",
           }}>
@@ -326,6 +279,14 @@ export default function HomePage() {
       </section>
 
       <Footer />
+
+      <style>{`
+        @media (max-width: 768px) {
+          .hero-grid { grid-template-columns: 1fr !important; }
+          .hero-ae { display: none !important; }
+          .case-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -346,8 +307,7 @@ function SectionTitle({ children }: { children: string }) {
       textAlign: "center",
       fontSize: "clamp(28px, 4vw, 48px)", fontWeight: 800,
       letterSpacing: "-1px", lineHeight: 1.15,
-      background: "linear-gradient(135deg, #FFFFFF, #C0C0C0)",
-      WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+      color: "#FFFFFF",
     }}>
       {children}
     </h2>
@@ -362,37 +322,36 @@ function SectionSub({ children }: { children: string }) {
   );
 }
 
-function ServiceCard({ icon, title, tagline, description, onClick }: { icon: string; title: string; tagline: string; description: string; color: string; onClick: () => void }) {
+function ServiceCard({ icon, title, tagline, description, onClick }: { icon: string; title: string; tagline: string; description: string; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
       style={{
-        background: "rgba(255,255,255,0.025)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 20,
-        padding: "28px 24px",
+        background: "linear-gradient(145deg, #D8E4EF 0%, #C8D8E8 50%, #B8CCDE 100%)",
+        border: "1px solid rgba(255,255,255,0.6)",
+        borderRadius: 18,
+        padding: "26px 22px",
         cursor: "pointer",
         transition: "all 0.3s ease",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.5)",
       }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLElement;
-        el.style.background = "rgba(0,174,239,0.06)";
-        el.style.border = "1px solid rgba(0,174,239,0.25)";
-        el.style.transform = "translateY(-4px)";
-        el.style.boxShadow = "0 16px 48px rgba(0,0,0,0.4), 0 0 30px rgba(0,174,239,0.12)";
+        el.style.transform = "translateY(-5px)";
+        el.style.boxShadow = "0 16px 48px rgba(0,0,0,0.35), 0 0 30px rgba(0,174,239,0.2), inset 0 1px 0 rgba(255,255,255,0.5)";
+        el.style.background = "linear-gradient(145deg, #E4EEF8 0%, #D0E2F2 50%, #C0D4E8 100%)";
       }}
       onMouseLeave={e => {
         const el = e.currentTarget as HTMLElement;
-        el.style.background = "rgba(255,255,255,0.025)";
-        el.style.border = "1px solid rgba(255,255,255,0.06)";
         el.style.transform = "translateY(0)";
-        el.style.boxShadow = "none";
+        el.style.boxShadow = "0 2px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.5)";
+        el.style.background = "linear-gradient(145deg, #D8E4EF 0%, #C8D8E8 50%, #B8CCDE 100%)";
       }}
     >
-      <div style={{ fontSize: 28, marginBottom: 14 }}>{icon}</div>
-      <h3 style={{ fontSize: 16, fontWeight: 700, color: "#FFFFFF", marginBottom: 4, letterSpacing: "-0.2px" }}>{title}</h3>
-      <div style={{ fontSize: 12, color: "#00AEEF", fontWeight: 600, letterSpacing: "0.3px", marginBottom: 12 }}>{tagline}</div>
-      <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7 }}>{description}</p>
+      <div style={{ fontSize: 26, marginBottom: 12 }}>{icon}</div>
+      <h3 style={{ fontSize: 15, fontWeight: 800, color: "#0B1629", marginBottom: 3, letterSpacing: "-0.2px" }}>{title}</h3>
+      <div style={{ fontSize: 11, color: "#1A5FA8", fontWeight: 700, letterSpacing: "0.4px", textTransform: "uppercase", marginBottom: 10 }}>{tagline}</div>
+      <p style={{ fontSize: 13, color: "#2D4A6A", lineHeight: 1.65 }}>{description}</p>
     </div>
   );
 }
@@ -403,7 +362,7 @@ function GlowButton({ onClick, children, large }: { onClick: () => void; childre
       onClick={onClick}
       style={{
         padding: large ? "16px 40px" : "13px 32px",
-        borderRadius: 12,
+        borderRadius: 10,
         background: "#00AEEF",
         border: "none",
         color: "#FFFFFF",
@@ -411,7 +370,7 @@ function GlowButton({ onClick, children, large }: { onClick: () => void; childre
         fontWeight: 700,
         cursor: "pointer",
         letterSpacing: "-0.2px",
-        boxShadow: "0 0 30px rgba(0,174,239,0.3)",
+        boxShadow: "0 0 28px rgba(0,174,239,0.35)",
         transition: "all 0.25s",
       }}
       onMouseEnter={e => {
@@ -423,7 +382,7 @@ function GlowButton({ onClick, children, large }: { onClick: () => void; childre
       onMouseLeave={e => {
         const el = e.currentTarget;
         el.style.background = "#00AEEF";
-        el.style.boxShadow = "0 0 30px rgba(0,174,239,0.3)";
+        el.style.boxShadow = "0 0 28px rgba(0,174,239,0.35)";
         el.style.transform = "translateY(0)";
       }}
     >
@@ -438,9 +397,9 @@ function OutlineButton({ onClick, children }: { onClick: () => void; children: R
       onClick={onClick}
       style={{
         padding: "13px 32px",
-        borderRadius: 12,
-        background: "transparent",
-        border: "1px solid rgba(192,192,192,0.25)",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.07)",
+        border: "1px solid rgba(192,192,192,0.3)",
         color: "#C0C0C0",
         fontSize: 16,
         fontWeight: 600,
@@ -451,13 +410,13 @@ function OutlineButton({ onClick, children }: { onClick: () => void; children: R
         const el = e.currentTarget;
         el.style.borderColor = "rgba(0,174,239,0.5)";
         el.style.color = "#00AEEF";
-        el.style.background = "rgba(0,174,239,0.06)";
+        el.style.background = "rgba(0,174,239,0.08)";
       }}
       onMouseLeave={e => {
         const el = e.currentTarget;
-        el.style.borderColor = "rgba(192,192,192,0.25)";
+        el.style.borderColor = "rgba(192,192,192,0.3)";
         el.style.color = "#C0C0C0";
-        el.style.background = "transparent";
+        el.style.background = "rgba(255,255,255,0.07)";
       }}
     >
       {children}

@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 
-const logoSrc = `${import.meta.env.BASE_URL}logo.png`;
+const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const SERVICES = [
   "Lead Recovery AI",

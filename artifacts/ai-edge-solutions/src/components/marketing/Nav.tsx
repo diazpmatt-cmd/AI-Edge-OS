@@ -9,7 +9,7 @@ const LINKS = [
   { label: "Contact", href: "/contact" },
 ];
 
-const logoSrc = `${import.meta.env.BASE_URL}logo.png`;
+const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 export default function Nav() {
   const [location, navigate] = useLocation();

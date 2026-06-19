@@ -316,6 +316,21 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     };
   });
 
+  // Minimal-scope test URL — openid + email only, no restricted scopes.
+  // If this works but the full URL 403s, the issue is scope declaration on the consent screen.
+  let minimalTestUrl = "";
+  if (clientId) {
+    const p = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email",
+      access_type: "offline",
+      prompt: "consent",
+    });
+    minimalTestUrl = `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+  }
+
   res.json({
     publicAppUrl: appBase,
     callbackRoute,
@@ -324,6 +339,7 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     clientIdSet: !!clientId,
     clientSecretSet,
     providers,
+    minimalTestUrl,
   });
 });
 

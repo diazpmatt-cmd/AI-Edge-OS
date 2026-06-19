@@ -146,6 +146,7 @@ export default function ConnectionsPage() {
     clientIdSet: boolean;
     clientSecretSet: boolean;
     providers: GoogleProviderDebug[];
+    minimalTestUrl: string;
   };
   const { data: googleDebug } = useQuery<GoogleDebug>({
     queryKey: ["google_oauth_debug"],
@@ -685,6 +686,39 @@ export default function ConnectionsPage() {
                     </div>
                   ))}
 
+                  {/* ── Diagnostic: Test basic OAuth ── */}
+                  {googleDebug.minimalTestUrl && (
+                    <div style={{
+                      background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.25)",
+                      borderRadius: 8, padding: "10px 14px",
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#00AEEF", marginBottom: 6 }}>
+                        🔬 Diagnostic: Test Basic OAuth (no restricted scopes)
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8, lineHeight: 1.6 }}>
+                        This URL uses only <code style={{ color: "#C0C0C0" }}>openid email</code> — no restricted scopes.
+                        Click it to see if Google shows a consent screen.
+                        <br />
+                        <strong style={{ color: "#C0C0C0" }}>If this works → redirect URI ✓, test user ✓ — the issue is the scope declaration (Step 3 below).</strong>
+                        <br />
+                        <strong style={{ color: "#EF4444" }}>If this also 403s → redirect URI is wrong or test user is missing (Steps 1 &amp; 2).</strong>
+                      </div>
+                      <a
+                        href={googleDebug.minimalTestUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                          background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)",
+                          color: "#00AEEF", textDecoration: "none",
+                        }}
+                      >
+                        Test basic connection (openid + email only) ↗
+                      </a>
+                    </div>
+                  )}
+
                   {/* ── Google 403 Fix Checklist ── */}
                   <div style={{
                     background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.25)",
@@ -701,7 +735,7 @@ export default function ConnectionsPage() {
                           <>
                             <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
                               style={{ color: "#4285F4", textDecoration: "underline" }}>
-                              console.cloud.google.com → APIs &amp; Services → Credentials
+                              APIs &amp; Services → Credentials
                             </a>
                             {" → click your OAuth 2.0 Client ID → "}
                             <strong style={{ color: "#C0C0C0" }}>Authorized redirect URIs → Add URI</strong>
@@ -717,7 +751,7 @@ export default function ConnectionsPage() {
                       },
                       {
                         n: "2",
-                        title: "Add yourself as a Test User (if app is in Testing mode)",
+                        title: "Add yourself as a Test User",
                         body: (
                           <>
                             <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"
@@ -728,27 +762,53 @@ export default function ConnectionsPage() {
                             <strong style={{ color: "#C0C0C0" }}>Test users → + Add Users</strong>
                             {" → enter your Google account email → Save."}
                             <br />
-                            <span style={{ color: "#6B7280" }}>Or click <strong>Publish App</strong> to move from Testing → Production (safe for personal use).</span>
+                            <span style={{ color: "#6B7280" }}>Or click <strong>Publish App</strong> to switch to Production (safe for personal use).</span>
                           </>
                         ),
                       },
                       {
                         n: "3",
+                        title: "Declare the restricted scopes on the OAuth consent screen ← most missed step",
+                        highlight: true,
+                        body: (
+                          <>
+                            Enabling the API is NOT enough — restricted scopes must also be declared on the consent screen.
+                            <br />
+                            <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"
+                              style={{ color: "#4285F4", textDecoration: "underline" }}>
+                              OAuth consent screen
+                            </a>
+                            {" → "}
+                            <strong style={{ color: "#C0C0C0" }}>Scopes → Add or Remove Scopes</strong>
+                            {" → search for and add:"}
+                            <br />
+                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/business.manage</code>
+                            <br />
+                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/youtube.upload</code>
+                            <br />
+                            Click <strong style={{ color: "#C0C0C0" }}>Update → Save and Continue</strong>.
+                            <br />
+                            <span style={{ color: "#6B7280" }}>Note: these are restricted scopes — Google may mark them as "Sensitive" and require verification for production use, but for testing with a test user they work immediately.</span>
+                          </>
+                        ),
+                      },
+                      {
+                        n: "4",
                         title: "Enable the required Google APIs",
                         body: (
                           <>
-                            <strong style={{ color: "#C0C0C0" }}>For Google Business Profile:</strong>{" "}
+                            <strong style={{ color: "#C0C0C0" }}>Business Profile:</strong>{" "}
                             <a href="https://console.cloud.google.com/apis/library/mybusinessaccountmanagement.googleapis.com" target="_blank" rel="noopener noreferrer"
                               style={{ color: "#4285F4", textDecoration: "underline" }}>Enable Business Profile API</a>
-                            <br />
-                            <strong style={{ color: "#C0C0C0" }}>For YouTube:</strong>{" "}
+                            {"  "}
+                            <strong style={{ color: "#C0C0C0" }}>YouTube:</strong>{" "}
                             <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer"
                               style={{ color: "#4285F4", textDecoration: "underline" }}>Enable YouTube Data API v3</a>
                           </>
                         ),
                       },
                       {
-                        n: "4",
+                        n: "5",
                         title: "Verify the OAuth Client type is Web application",
                         body: (
                           <>
@@ -761,12 +821,17 @@ export default function ConnectionsPage() {
                       <div key={step.n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                         <div style={{
                           width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                          background: "rgba(66,133,244,0.2)", border: "1px solid rgba(66,133,244,0.4)",
+                          background: (step as any).highlight ? "rgba(251,146,60,0.2)" : "rgba(66,133,244,0.2)",
+                          border: `1px solid ${(step as any).highlight ? "rgba(251,146,60,0.5)" : "rgba(66,133,244,0.4)"}`,
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 10, fontWeight: 800, color: "#4285F4",
+                          fontSize: 10, fontWeight: 800,
+                          color: (step as any).highlight ? "#FB923C" : "#4285F4",
                         }}>{step.n}</div>
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0", marginBottom: 3 }}>{step.title}</div>
+                          <div style={{
+                            fontSize: 12, fontWeight: 700, marginBottom: 3,
+                            color: (step as any).highlight ? "#FB923C" : "#C0C0C0",
+                          }}>{step.title}</div>
                           <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.7 }}>{step.body}</div>
                         </div>
                       </div>

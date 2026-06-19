@@ -26,11 +26,11 @@ type DebugInfo = {
 };
 
 const PLATFORMS = [
-  { id: "google_business", label: "Google Business Profile", abbrev: "G", color: "#4285F4", bg: "linear-gradient(135deg, #4285F4, #34A853)", description: "Post updates and manage your Google Business listing." },
-  { id: "facebook",        label: "Facebook Pages",          abbrev: "f", color: "#1877F2", bg: "linear-gradient(135deg, #1877F2, #0C5BC4)", description: "Publish posts directly to your Facebook Business Page." },
+  { id: "facebook",        label: "Facebook Pages",          abbrev: "f",  color: "#1877F2", bg: "linear-gradient(135deg, #1877F2, #0C5BC4)", description: "Publish posts directly to your Facebook Business Page." },
+  { id: "youtube",         label: "YouTube",                 abbrev: "▶",  color: "#FF0000", bg: "linear-gradient(135deg, #FF0000, #CC0000)", description: "Upload Shorts and videos to your YouTube channel." },
+  { id: "tiktok",          label: "TikTok Business",         abbrev: "T",  color: "#010101", bg: "linear-gradient(135deg, #010101, #25F4EE)", description: "Publish videos to your TikTok Business account." },
   { id: "instagram",       label: "Instagram Business",      abbrev: "IG", color: "#E1306C", bg: "linear-gradient(135deg, #833AB4, #E1306C, #F77737)", description: "Publish content to your Instagram Business account." },
-  { id: "youtube",         label: "YouTube",                 abbrev: "▶", color: "#FF0000", bg: "linear-gradient(135deg, #FF0000, #CC0000)", description: "Upload Shorts and videos to your YouTube channel." },
-  { id: "tiktok",          label: "TikTok Business",         abbrev: "T", color: "#010101", bg: "linear-gradient(135deg, #010101, #25F4EE)", description: "Publish videos to your TikTok Business account." },
+  { id: "google_business", label: "Google Business Profile", abbrev: "G",  color: "#4285F4", bg: "linear-gradient(135deg, #4285F4, #34A853)", description: "Post updates and manage your Google Business listing." },
   { id: "linkedin",        label: "LinkedIn Company Pages",  abbrev: "in", color: "#0A66C2", bg: "linear-gradient(135deg, #0A66C2, #004182)", description: "Publish updates to your LinkedIn company page." },
 ];
 
@@ -41,7 +41,7 @@ type MigrationState = {
 };
 
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
-  google_business: { status: "blocked", note: "Blocked by Google Business Profile scope / verification setup. Use the test buttons above to confirm basic Google OAuth works first." },
+  google_business: { status: "blocked", note: "Google Business Profile requires Google app verification before activation." },
   youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Was connected as BedBugsand_Beyond. Reconnect to restore." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
   instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
@@ -72,7 +72,7 @@ const STATUS_META: Record<StatusKind, { label: string; bg: string; color: string
   needs_review:    { label: "Needs Review",       bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
   not_connected:   { label: "Not Connected",      bg: "rgba(148,163,184,0.1)", color: "#94A3B8", dot: "#475569" },
   coming_soon:     { label: "Coming Soon",        bg: "rgba(148,163,184,0.1)", color: "#64748B", dot: "#334155" },
-  blocked:         { label: "Scope Verification Required", bg: "rgba(239,68,68,0.1)", color: "#EF4444", dot: "#EF4444" },
+  blocked:         { label: "Pending Google Verification", bg: "rgba(245,158,11,0.1)", color: "#F59E0B", dot: "#F59E0B" },
 };
 
 const SOURCE_META: Record<string, { label: string; color: string }> = {
@@ -355,28 +355,28 @@ export default function ConnectionsPage() {
               </button>
             </div>
 
-            {/* Row 3: Google Business — Blocked */}
+            {/* Row 3: Google Business — Pending Verification */}
             <div style={{
               display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-              background: "rgba(239,68,68,0.04)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.18)",
-              opacity: 0.75,
+              background: "rgba(245,158,11,0.04)", borderRadius: 10, border: "1px solid rgba(245,158,11,0.18)",
+              opacity: 0.72,
             }}>
               <div style={{
                 width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                background: "linear-gradient(135deg, #4285F4, #34A853)", filter: "grayscale(0.6)",
+                background: "linear-gradient(135deg, #4285F4, #34A853)", filter: "grayscale(0.55)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 15, fontWeight: 900, color: "#FFF",
               }}>G</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>Connect Google Business Profile</div>
-                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Requires <code style={{ color: "#6B7280" }}>business.manage</code> — a restricted scope. Blocked pending Google OAuth consent screen verification.</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>Google Business Profile</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Requires <code style={{ color: "#6B7280" }}>business.manage</code> — pending Google app verification before activation.</div>
               </div>
               <button disabled style={{
                 padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, flexShrink: 0,
-                background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444",
+                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "#F59E0B",
                 cursor: "not-allowed",
               }}>
-                🚫 Blocked
+                ⏳ Pending
               </button>
             </div>
           </div>
@@ -456,11 +456,11 @@ export default function ConnectionsPage() {
 
                     {/* Migration / status note */}
                     {!isConnected && migration && (
-                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#FB923C" : status === "blocked" ? "#EF4444" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#FB923C" : status === "blocked" ? "#F59E0B" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
                         {status === "needs_reconnect" && "🔁 "}
                         {status === "needs_review" && "⚠️ "}
                         {status === "coming_soon" && "🕐 "}
-                        {status === "blocked" && "🚫 "}
+                        {status === "blocked" && "⏳ "}
                         {migration.note}
                       </p>
                     )}
@@ -495,10 +495,10 @@ export default function ConnectionsPage() {
                       ) : isBlocked ? (
                         <button disabled style={{
                           padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
-                          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
-                          color: "#EF4444", cursor: "not-allowed",
+                          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
+                          color: "#F59E0B", cursor: "not-allowed",
                         }}>
-                          🚫 Blocked — See Test Panel
+                          ⏳ Pending Verification
                         </button>
                       ) : (
                         <button

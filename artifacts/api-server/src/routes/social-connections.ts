@@ -255,31 +255,66 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  const redirectUri = `${appBase}/api/oauth/google/callback`;
+  const callbackRoute = "/api/oauth/google/callback";
+  const redirectUri = `${appBase}${callbackRoute}`;
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
-  const clientIdSet = !!clientId;
   const clientSecretSet = !!process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 
-  let fullOAuthUrl = "";
-  if (clientId) {
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "https://www.googleapis.com/auth/business.manage openid email",
-      access_type: "offline",
-      prompt: "consent",
-    });
-    fullOAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-  }
+  const PROVIDER_DEFS = [
+    {
+      id: "google_business",
+      label: "Google Business Profile",
+      scopes: ["https://www.googleapis.com/auth/business.manage", "openid", "email"],
+      sensitiveScope: true,
+      sensitiveScopeNote: "business.manage is a restricted scope — requires the Business Profile API to be enabled AND the user added as a test user (or app published).",
+      successSlug: "google",
+    },
+    {
+      id: "youtube",
+      label: "YouTube",
+      scopes: ["https://www.googleapis.com/auth/youtube.upload", "openid", "email"],
+      sensitiveScope: false,
+      sensitiveScopeNote: null,
+      successSlug: "youtube",
+    },
+  ];
+
+  const providers = PROVIDER_DEFS.map(def => {
+    const scopeString = def.scopes.join(" ");
+    let fullOAuthUrl = "";
+    if (clientId) {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: scopeString,
+        access_type: "offline",
+        prompt: "consent",
+      });
+      fullOAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+    }
+    return {
+      id: def.id,
+      label: def.label,
+      scopes: def.scopes,
+      scopeString,
+      sensitiveScope: def.sensitiveScope,
+      sensitiveScopeNote: def.sensitiveScopeNote,
+      callbackRoute,
+      redirectUri,
+      successRedirect: `${appBase}/admin/connections?connected=${def.successSlug}`,
+      fullOAuthUrl,
+    };
+  });
 
   res.json({
     publicAppUrl: appBase,
+    callbackRoute,
     redirectUri,
-    fullOAuthUrl,
     clientId: clientId || null,
-    clientIdSet,
+    clientIdSet: !!clientId,
     clientSecretSet,
+    providers,
   });
 });
 

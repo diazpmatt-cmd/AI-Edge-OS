@@ -123,13 +123,26 @@ export default function ConnectionsPage() {
     enabled: debugOpen,
   });
 
+  type GoogleProviderDebug = {
+    id: string;
+    label: string;
+    scopes: string[];
+    scopeString: string;
+    sensitiveScope: boolean;
+    sensitiveScopeNote: string | null;
+    callbackRoute: string;
+    redirectUri: string;
+    successRedirect: string;
+    fullOAuthUrl: string;
+  };
   type GoogleDebug = {
     publicAppUrl: string;
+    callbackRoute: string;
     redirectUri: string;
-    fullOAuthUrl: string;
     clientId: string | null;
     clientIdSet: boolean;
     clientSecretSet: boolean;
+    providers: GoogleProviderDebug[];
   };
   const { data: googleDebug } = useQuery<GoogleDebug>({
     queryKey: ["google_oauth_debug"],
@@ -497,8 +510,9 @@ export default function ConnectionsPage() {
             }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13 }}>G</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#4285F4" }}>G</span>
               <span style={{ color: "#4285F4" }}>Google OAuth Debug Panel</span>
+              <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 400 }}>— Business Profile &amp; YouTube</span>
             </span>
             <span style={{ fontSize: 11 }}>{googleDebugOpen ? "▲ Hide" : "▼ Show"}</span>
           </button>
@@ -508,63 +522,136 @@ export default function ConnectionsPage() {
               {!googleDebug ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
 
-                  {/* Credential status */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
-                    <Tag
-                      label={googleDebug.clientSecretSet ? "✓ GOOGLE_OAUTH_CLIENT_SECRET set" : "✗ GOOGLE_OAUTH_CLIENT_SECRET missing"}
-                      color={googleDebug.clientSecretSet ? "#10B981" : "#EF4444"}
-                    />
+                  {/* ── Shared credentials ── */}
+                  <div style={{
+                    background: "rgba(66,133,244,0.05)", border: "1px solid rgba(66,133,244,0.15)",
+                    borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#4285F4", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Shared Credentials (both providers)
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Tag
+                        label={googleDebug.clientIdSet ? "✓ GOOGLE_OAUTH_CLIENT_ID set" : "✗ GOOGLE_OAUTH_CLIENT_ID missing"}
+                        color={googleDebug.clientIdSet ? "#10B981" : "#EF4444"}
+                      />
+                      <Tag
+                        label={googleDebug.clientSecretSet ? "✓ GOOGLE_OAUTH_CLIENT_SECRET set" : "✗ GOOGLE_OAUTH_CLIENT_SECRET missing"}
+                        color={googleDebug.clientSecretSet ? "#10B981" : "#EF4444"}
+                      />
+                    </div>
+                    <DebugRow label="GOOGLE_OAUTH_CLIENT_ID">
+                      {googleDebug.clientId ? (
+                        <code style={{ fontSize: 12, color: "#C0C0C0", wordBreak: "break-all" }}>{googleDebug.clientId}</code>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#EF4444" }}>Not set — add to Replit Secrets</span>
+                      )}
+                    </DebugRow>
+                    <DebugRow label="PUBLIC_APP_URL">
+                      <code style={{ fontSize: 12, color: "#9CA3AF", wordBreak: "break-all" }}>{googleDebug.publicAppUrl}</code>
+                    </DebugRow>
+                    <DebugRow label="Callback Route">
+                      <code style={{ fontSize: 12, color: "#C0C0C0" }}>{googleDebug.callbackRoute}</code>
+                    </DebugRow>
+                    <DebugRow label="redirect_uri (add this to Google Cloud Console)">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <code style={{ fontSize: 12, color: "#00AEEF", wordBreak: "break-all", flex: 1 }}>{googleDebug.redirectUri}</code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(googleDebug.redirectUri);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          style={{
+                            padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            background: copied ? "rgba(16,185,129,0.15)" : "rgba(0,174,239,0.12)",
+                            border: copied ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(0,174,239,0.35)",
+                            color: copied ? "#10B981" : "#00AEEF",
+                            flexShrink: 0, transition: "all 0.2s",
+                          }}
+                        >
+                          {copied ? "✓ Copied" : "Copy"}
+                        </button>
+                      </div>
+                    </DebugRow>
                   </div>
 
-                  {/* Client ID — full value */}
-                  <DebugRow label="GOOGLE_OAUTH_CLIENT_ID">
-                    {googleDebug.clientId ? (
-                      <code style={{ fontSize: 12, color: "#C0C0C0", wordBreak: "break-all" }}>{googleDebug.clientId}</code>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "#EF4444" }}>Not set — add GOOGLE_OAUTH_CLIENT_ID to Replit Secrets</span>
-                    )}
-                  </DebugRow>
+                  {/* ── Per-provider sections ── */}
+                  {(googleDebug.providers ?? []).map(prov => (
+                    <div key={prov.id} style={{
+                      background: "rgba(3,6,18,0.6)", border: `1px solid ${prov.id === "youtube" ? "rgba(255,0,0,0.2)" : "rgba(66,133,244,0.2)"}`,
+                      borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 4, flexShrink: 0,
+                          background: prov.id === "youtube" ? "linear-gradient(135deg,#FF0000,#CC0000)" : "linear-gradient(135deg,#4285F4,#34A853)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 900, color: "#fff",
+                        }}>{prov.id === "youtube" ? "▶" : "G"}</div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>{prov.label}</span>
+                        <span style={{ fontSize: 10, color: "#475569", fontStyle: "italic" }}>provider id: {prov.id}</span>
+                      </div>
 
-                  {/* PUBLIC_APP_URL */}
-                  <DebugRow label="PUBLIC_APP_URL">
-                    <code style={{ fontSize: 12, color: "#C0C0C0", wordBreak: "break-all" }}>{googleDebug.publicAppUrl}</code>
-                  </DebugRow>
+                      {/* Scopes */}
+                      <DebugRow label="Requested Scopes">
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          {prov.scopes.map(s => {
+                            const isSensitive = s.includes("business.manage") || s.includes("youtube.upload");
+                            return (
+                              <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <code style={{ fontSize: 11, color: isSensitive ? "#FB923C" : "#9CA3AF", wordBreak: "break-all" }}>{s}</code>
+                                {isSensitive && (
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
+                                    background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.3)", color: "#FB923C",
+                                  }}>SENSITIVE</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </DebugRow>
 
-                  {/* redirect_uri with Copy button */}
-                  <DebugRow label="redirect_uri">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <code style={{ fontSize: 12, color: "#00AEEF", wordBreak: "break-all", flex: 1 }}>{googleDebug.redirectUri}</code>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(googleDebug.redirectUri);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }}
-                        style={{
-                          padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.15)" : "rgba(0,174,239,0.12)",
-                          border: copied ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(0,174,239,0.35)",
-                          color: copied ? "#10B981" : "#00AEEF",
-                          flexShrink: 0, transition: "all 0.2s",
-                        }}
-                      >
-                        {copied ? "✓ Copied" : "Copy"}
-                      </button>
+                      {/* Sensitive scope warning */}
+                      {prov.sensitiveScope && prov.sensitiveScopeNote && (
+                        <div style={{
+                          fontSize: 11, color: "#FB923C", background: "rgba(251,146,60,0.08)",
+                          border: "1px solid rgba(251,146,60,0.25)", borderRadius: 6, padding: "6px 10px", lineHeight: 1.6,
+                        }}>
+                          ⚠️ {prov.sensitiveScopeNote}
+                        </div>
+                      )}
+
+                      {/* Callback route */}
+                      <DebugRow label="Callback Route">
+                        <code style={{ fontSize: 12, color: "#C0C0C0" }}>{prov.callbackRoute}</code>
+                      </DebugRow>
+
+                      {/* redirect_uri */}
+                      <DebugRow label="redirect_uri">
+                        <code style={{ fontSize: 11, color: "#00AEEF", wordBreak: "break-all" }}>{prov.redirectUri}</code>
+                      </DebugRow>
+
+                      {/* Success redirect */}
+                      <DebugRow label="Success Redirect Target">
+                        <code style={{ fontSize: 11, color: "#10B981", wordBreak: "break-all" }}>{prov.successRedirect}</code>
+                      </DebugRow>
+
+                      {/* Full OAuth URL */}
+                      <DebugRow label="Full Google Authorization URL">
+                        {prov.fullOAuthUrl ? (
+                          <code style={{ fontSize: 10, color: "#9CA3AF", wordBreak: "break-all", lineHeight: 1.7 }}>
+                            {prov.fullOAuthUrl}
+                          </code>
+                        ) : (
+                          <span style={{ fontSize: 11, color: "#EF4444" }}>Cannot generate — GOOGLE_OAUTH_CLIENT_ID missing</span>
+                        )}
+                      </DebugRow>
                     </div>
-                  </DebugRow>
-
-                  {/* Full OAuth URL */}
-                  <DebugRow label="Full OAuth URL">
-                    {googleDebug.fullOAuthUrl ? (
-                      <code style={{ fontSize: 11, color: "#9CA3AF", wordBreak: "break-all", lineHeight: 1.6 }}>
-                        {googleDebug.fullOAuthUrl}
-                      </code>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "#EF4444" }}>Cannot generate — client ID missing</span>
-                    )}
-                  </DebugRow>
+                  ))}
 
                   {/* ── Google 403 Fix Checklist ── */}
                   <div style={{
@@ -582,7 +669,7 @@ export default function ConnectionsPage() {
                           <>
                             <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
                               style={{ color: "#4285F4", textDecoration: "underline" }}>
-                              console.cloud.google.com → APIs & Services → Credentials
+                              console.cloud.google.com → APIs &amp; Services → Credentials
                             </a>
                             {" → click your OAuth 2.0 Client ID → "}
                             <strong style={{ color: "#C0C0C0" }}>Authorized redirect URIs → Add URI</strong>
@@ -609,7 +696,7 @@ export default function ConnectionsPage() {
                             <strong style={{ color: "#C0C0C0" }}>Test users → + Add Users</strong>
                             {" → enter your Google account email → Save."}
                             <br />
-                            <span style={{ color: "#6B7280" }}>Alternatively, click <strong>Publish App</strong> to move from Testing → Production (safe for personal use).</span>
+                            <span style={{ color: "#6B7280" }}>Or click <strong>Publish App</strong> to move from Testing → Production (safe for personal use).</span>
                           </>
                         ),
                       },
@@ -634,7 +721,7 @@ export default function ConnectionsPage() {
                         body: (
                           <>
                             In Credentials, the client must be type <strong style={{ color: "#C0C0C0" }}>Web application</strong> — not Desktop or Android.
-                            If it is the wrong type, create a new one.
+                            If wrong type, create a new OAuth 2.0 Client ID and choose Web application.
                           </>
                         ),
                       },
@@ -656,6 +743,7 @@ export default function ConnectionsPage() {
                       After making changes in Google Cloud Console, wait ~30 seconds then try Reconnect again.
                     </div>
                   </div>
+
                 </div>
               )}
             </div>

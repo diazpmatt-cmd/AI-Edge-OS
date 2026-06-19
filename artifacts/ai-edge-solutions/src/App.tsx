@@ -16,22 +16,24 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
-// Marketing pages (public)
-const HomePage = lazy(() => import("./pages/marketing/HomePage"));
-const ServicesPage = lazy(() => import("./pages/marketing/ServicesPage"));
-const ProductsPage = lazy(() => import("./pages/marketing/ProductsPage"));
+// ── Public marketing pages ──────────────────────────────────────────────────
+const HomePage        = lazy(() => import("./pages/marketing/HomePage"));
+const ServicesPage    = lazy(() => import("./pages/marketing/ServicesPage"));
+const ProductsPage    = lazy(() => import("./pages/marketing/ProductsPage"));
 const CaseStudiesPage = lazy(() => import("./pages/marketing/CaseStudiesPage"));
-const PricingPage = lazy(() => import("./pages/marketing/PricingPage"));
-const ContactPage = lazy(() => import("./pages/marketing/ContactPage"));
+const PricingPage     = lazy(() => import("./pages/marketing/PricingPage"));
+const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
 
-// App pages (auth-gated)
-const DashboardPage = lazy(() => import("./pages/DashboardPage"));
-const ArticlePage = lazy(() => import("./pages/ArticlePage"));
-const PublishingPage = lazy(() => import("./pages/PublishingPage"));
-const RepurposePage = lazy(() => import("./pages/RepurposePage"));
+// ── Admin / Command Center pages (auth-gated) ───────────────────────────────
+const AdminLoginPage      = lazy(() => import("./pages/AdminLoginPage"));
+const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
+const ArticlePage         = lazy(() => import("./pages/ArticlePage"));
+const PublishingPage      = lazy(() => import("./pages/PublishingPage"));
+const RepurposePage       = lazy(() => import("./pages/RepurposePage"));
 const RepurposeDetailPage = lazy(() => import("./pages/RepurposeDetailPage"));
-const DistributionPage = lazy(() => import("./pages/DistributionPage"));
-const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
+const DistributionPage    = lazy(() => import("./pages/DistributionPage"));
+const ConnectionsPage     = lazy(() => import("./pages/ConnectionsPage"));
+const LeadRecoveryPage    = lazy(() => import("./pages/LeadRecoveryPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -43,7 +45,7 @@ function Authenticated({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Show when="signed-in"><Suspense fallback={<PageLoader />}>{children}</Suspense></Show>
-      <Show when="signed-out"><Redirect to="/sign-in" /></Show>
+      <Show when="signed-out"><Redirect to="/admin/login" /></Show>
     </>
   );
 }
@@ -51,14 +53,14 @@ function Authenticated({ children }: { children: React.ReactNode }) {
 function SignInPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}>
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/dashboard`} />
+      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} />
     </div>
   );
 }
 function SignUpPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}>
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallbackRedirectUrl={`${basePath}/dashboard`} />
+      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/admin/login`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} />
     </div>
   );
 }
@@ -67,40 +69,51 @@ function AppRouter() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {/* Auth */}
+        {/* ── Clerk auth routes (keep for OAuth callbacks) ── */}
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
 
-        {/* Authenticated app */}
-        <Route path="/dashboard">
+        {/* ── Admin login (public entry point for the Command Center) ── */}
+        <Route path="/admin/login/*?" component={() => <Suspense fallback={<PageLoader />}><AdminLoginPage /></Suspense>} />
+
+        {/* ── Protected admin / Command Center routes ── */}
+        <Route path="/admin/dashboard">
           <Authenticated><DashboardPage /></Authenticated>
         </Route>
-        <Route path="/article/:id">
+        <Route path="/admin/article/:id">
           <Authenticated><ArticlePage /></Authenticated>
         </Route>
-        <Route path="/publishing">
+        <Route path="/admin/publishing">
           <Authenticated><PublishingPage /></Authenticated>
         </Route>
-        <Route path="/repurpose/:id">
+        <Route path="/admin/repurpose/:id">
           <Authenticated><RepurposeDetailPage /></Authenticated>
         </Route>
-        <Route path="/repurpose">
+        <Route path="/admin/repurpose">
           <Authenticated><RepurposePage /></Authenticated>
         </Route>
-        <Route path="/distribution">
+        <Route path="/admin/distribution">
           <Authenticated><DistributionPage /></Authenticated>
         </Route>
-        <Route path="/connections">
+        <Route path="/admin/connections">
           <Authenticated><ConnectionsPage /></Authenticated>
         </Route>
+        <Route path="/admin/lead-recovery">
+          <Authenticated><LeadRecoveryPage /></Authenticated>
+        </Route>
 
-        {/* Marketing pages (public) */}
-        <Route path="/services" component={ServicesPage} />
-        <Route path="/products" component={ProductsPage} />
+        {/* /admin root → redirect to dashboard */}
+        <Route path="/admin">
+          <Authenticated><Redirect to="/admin/dashboard" /></Authenticated>
+        </Route>
+
+        {/* ── Public marketing pages ── */}
+        <Route path="/services"     component={ServicesPage} />
+        <Route path="/products"     component={ProductsPage} />
         <Route path="/case-studies" component={CaseStudiesPage} />
-        <Route path="/pricing" component={PricingPage} />
-        <Route path="/contact" component={ContactPage} />
-        <Route path="/" component={HomePage} />
+        <Route path="/pricing"      component={PricingPage} />
+        <Route path="/contact"      component={ContactPage} />
+        <Route path="/"             component={HomePage} />
       </Switch>
     </Suspense>
   );

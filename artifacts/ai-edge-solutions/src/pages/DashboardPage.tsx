@@ -91,8 +91,7 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">{profile.industry} · {profile.city}, {profile.state}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button asChild variant="outline"><Link to="/publishing"><Send className="mr-1.5 h-4 w-4" /> Publishing Center</Link></Button>
-          <Button asChild variant="outline"><Link to="/">Edit Profile</Link></Button>
+          <Button asChild variant="outline"><Link to="/admin/publishing"><Send className="mr-1.5 h-4 w-4" /> Publishing Center</Link></Button>
         </div>
       </div>
 
@@ -189,7 +188,7 @@ export default function DashboardPage() {
                     <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><FileText className="h-3.5 w-3.5" />{a.body ? `${a.body.split(/\s+/).length} words` : "Not written"}</span>
                       <Button asChild size="sm" variant={a.status === "published" ? "outline" : "default"}>
-                        <Link to={`/article/${a.id}`}><PenSquare className="mr-1.5 h-3.5 w-3.5" />{a.body ? "Edit" : "Write Article"}</Link>
+                        <Link to={`/admin/article/${a.id}`}><PenSquare className="mr-1.5 h-3.5 w-3.5" />{a.body ? "Edit" : "Write Article"}</Link>
                       </Button>
                     </div>
                   </div>

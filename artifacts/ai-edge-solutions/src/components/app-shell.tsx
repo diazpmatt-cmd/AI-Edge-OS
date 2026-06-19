@@ -7,10 +7,11 @@ import { type ReactNode } from "react";
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const NAV_ITEMS = [
-  { to: "/dashboard",    icon: "⬡", label: "Command Center" },
-  { to: "/connections",  icon: "⚡", label: "Connected Accounts" },
-  { to: "/distribution", icon: "◈", label: "Distribution" },
-  { to: "/repurpose",    icon: "✦", label: "Repurpose" },
+  { to: "/admin/dashboard",      icon: "⬡", label: "Command Center" },
+  { to: "/admin/connections",    icon: "⚡", label: "Connected Accounts" },
+  { to: "/admin/distribution",   icon: "◈", label: "Distribution" },
+  { to: "/admin/repurpose",      icon: "✦", label: "Repurpose" },
+  { to: "/admin/lead-recovery",  icon: "📞", label: "Lead Recovery" },
 ];
 
 const SIDEBAR_W = 240;
@@ -84,10 +85,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "8px 4px" }} />
 
-          <Link to="/" style={{
+          <a href="/" style={{
             display: "flex", alignItems: "center", gap: 10,
             padding: "9px 12px", borderRadius: 9, textDecoration: "none",
-            color: "rgba(148,163,184,0.6)", fontSize: 13, fontWeight: 500,
+            color: "rgba(148,163,184,0.5)", fontSize: 13, fontWeight: 500,
             border: "1px solid transparent", transition: "all 0.15s",
           }}
             onMouseEnter={e => {
@@ -95,13 +96,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.color = "rgba(148,163,184,0.6)";
+              (e.currentTarget as HTMLElement).style.color = "rgba(148,163,184,0.5)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
             <span style={{ fontSize: 13, opacity: 0.6 }}>↩</span>
             Back to Website
-          </Link>
+          </a>
         </nav>
 
         {/* User info + sign out */}

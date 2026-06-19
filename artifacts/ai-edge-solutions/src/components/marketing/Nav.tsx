@@ -126,47 +126,6 @@ export default function Nav() {
             })}
           </nav>
 
-          {/* Command Center link */}
-          <button
-            onClick={() => navigate("/dashboard")}
-            style={{
-              padding: "7px 14px",
-              borderRadius: 8,
-              border: location.startsWith("/dashboard") || location.startsWith("/connections") || location.startsWith("/distribution")
-                ? "1px solid rgba(0,174,239,0.5)"
-                : "1px solid rgba(0,174,239,0.25)",
-              background: location.startsWith("/dashboard") || location.startsWith("/connections") || location.startsWith("/distribution")
-                ? "rgba(0,174,239,0.15)"
-                : "rgba(0,174,239,0.07)",
-              color: "#00AEEF",
-              fontSize: 13.5,
-              fontWeight: 700,
-              cursor: "pointer",
-              letterSpacing: "-0.1px",
-              transition: "all 0.2s",
-              flexShrink: 0,
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-            onMouseEnter={e => {
-              const el = e.currentTarget;
-              el.style.background = "rgba(0,174,239,0.2)";
-              el.style.border = "1px solid rgba(0,174,239,0.6)";
-              el.style.boxShadow = "0 0 14px rgba(0,174,239,0.25)";
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget;
-              el.style.background = "rgba(0,174,239,0.07)";
-              el.style.border = "1px solid rgba(0,174,239,0.25)";
-              el.style.boxShadow = "none";
-            }}
-          >
-            <span style={{ fontSize: 11 }}>⬡</span>
-            Command Center
-          </button>
-
           {/* CTA — solid blue */}
           <button
             onClick={() => navigate("/contact")}

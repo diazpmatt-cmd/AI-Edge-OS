@@ -44,14 +44,16 @@ const LOVABLE_MIGRATION: Record<string, MigrationState> = {
   google_business: { status: "needs_reconnect", note: "Was connected in previous system. Reconnect to restore access." },
   youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Was connected as BedBugsand_Beyond. Reconnect to restore." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
-  instagram:       { status: "needs_review", note: "Requires pages_read_engagement and instagram_basic — advanced Meta permissions pending app review. Facebook must be connected first." },
+  instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
 };
 
 type StatusKind = "connected" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon";
 
-function getStatus(provider: string, dbConn: DbConnection | undefined): StatusKind {
+function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
   if (dbConn) return "connected";
+  // Instagram is locked until Facebook is connected in the database
+  if (provider === "instagram" && !facebookConnected) return "coming_soon";
   const m = LOVABLE_MIGRATION[provider];
   if (m) return m.status;
   return "not_connected";
@@ -174,6 +176,7 @@ export default function ConnectionsPage() {
 
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
   const debugByProvider = new Map(debugData.map((d) => [d.provider, d]));
+  const facebookConnected = connByProvider.has("facebook");
 
   const disconnectMut = useMutation({
     mutationFn: (provider: string) => apiFetch(`/social-connections/${provider}`, { method: "DELETE" }),
@@ -206,7 +209,7 @@ export default function ConnectionsPage() {
 
   const connected = PLATFORMS.filter(p => connByProvider.has(p.id)).length;
   const needsAction = PLATFORMS.filter(p => {
-    const s = getStatus(p.id, connByProvider.get(p.id));
+    const s = getStatus(p.id, connByProvider.get(p.id), facebookConnected);
     return s === "needs_reconnect" || s === "needs_review";
   }).length;
 
@@ -263,7 +266,7 @@ export default function ConnectionsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 16, marginBottom: 32 }}>
           {PLATFORMS.map(platform => {
             const dbConn = connByProvider.get(platform.id);
-            const status = getStatus(platform.id, dbConn);
+            const status = getStatus(platform.id, dbConn, facebookConnected);
             const sm = STATUS_META[status];
             const migration = LOVABLE_MIGRATION[platform.id];
             const accountName = getDisplayAccountName(platform.id, dbConn);
@@ -750,7 +753,7 @@ export default function ConnectionsPage() {
                 {PLATFORMS.map(platform => {
                   const debug = debugByProvider.get(platform.id);
                   const dbConn = connByProvider.get(platform.id);
-                  const status = getStatus(platform.id, dbConn);
+                  const status = getStatus(platform.id, dbConn, facebookConnected);
                   const hasMigration = !!LOVABLE_MIGRATION[platform.id];
 
                   const effectiveSource = debug?.inDatabase

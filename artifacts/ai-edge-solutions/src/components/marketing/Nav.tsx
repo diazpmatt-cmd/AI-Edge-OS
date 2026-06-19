@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 
 const LINKS = [
+  { label: "Home", href: "/", icon: "⌂" },
   { label: "Services", href: "/services", icon: "⚙" },
   { label: "Why Us", href: "/#why-us", icon: "◈", anchor: true },
   { label: "Products", href: "/products", icon: "⬡" },
   { label: "Case Studies", href: "/case-studies", icon: "↗" },
   { label: "Pricing", href: "/pricing", icon: "◇" },
+  { label: "FAQ", href: "/pricing", icon: "?", faqAnchor: true },
 ];
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
@@ -39,6 +41,13 @@ export default function Nav() {
         navigate("/");
         setTimeout(scrollToWhyUs, 300);
       }
+    } else if ((link as any).faqAnchor) {
+      if (location === "/pricing") {
+        document.getElementById("faq")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        navigate("/pricing");
+        setTimeout(() => document.getElementById("faq")?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
+      }
     } else {
       navigate(link.href);
     }
@@ -67,10 +76,10 @@ export default function Nav() {
           {/* Desktop nav — silver pill buttons */}
           <nav style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", marginRight: 20 }}>
             {LINKS.map((link) => {
-              const active = !link.anchor && (location === link.href || location.startsWith(link.href + "/"));
+              const active = !link.anchor && !(link as any).faqAnchor && (location === link.href || location.startsWith(link.href + "/"));
               return (
                 <button
-                  key={link.href}
+                  key={link.label}
                   onClick={() => handleLink(link)}
                   style={{
                     display: "flex",

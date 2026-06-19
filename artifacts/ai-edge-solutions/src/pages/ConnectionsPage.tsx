@@ -82,6 +82,8 @@ export default function ConnectionsPage() {
   const qc = useQueryClient();
   const [connecting, setConnecting] = useState<string | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [googleDebugOpen, setGoogleDebugOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { data: connections = [] } = useQuery<DbConnection[]>({
     queryKey: ["social_connections"],
@@ -92,6 +94,19 @@ export default function ConnectionsPage() {
     queryKey: ["connection_debug"],
     queryFn: () => apiFetch<DebugInfo[]>("/social-connections/debug"),
     enabled: debugOpen,
+  });
+
+  type GoogleDebug = {
+    publicAppUrl: string;
+    redirectUri: string;
+    fullOAuthUrl: string;
+    clientIdSet: boolean;
+    clientSecretSet: boolean;
+  };
+  const { data: googleDebug } = useQuery<GoogleDebug>({
+    queryKey: ["google_oauth_debug"],
+    queryFn: () => apiFetch<GoogleDebug>("/social-connections/google-oauth-debug"),
+    enabled: googleDebugOpen,
   });
 
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
@@ -310,6 +325,94 @@ export default function ConnectionsPage() {
           })}
         </div>
 
+        {/* Google OAuth Debug Panel */}
+        <div style={{
+          background: "rgba(3,6,18,0.8)", border: "1px solid rgba(66,133,244,0.2)",
+          borderRadius: 12, overflow: "hidden", marginBottom: 12,
+        }}>
+          <button
+            onClick={() => setGoogleDebugOpen(o => !o)}
+            style={{
+              width: "100%", padding: "12px 18px", background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              color: "#6B7280", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13 }}>G</span>
+              <span style={{ color: "#4285F4" }}>Google OAuth Debug Panel</span>
+            </span>
+            <span style={{ fontSize: 11 }}>{googleDebugOpen ? "▲ Hide" : "▼ Show"}</span>
+          </button>
+
+          {googleDebugOpen && (
+            <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(66,133,244,0.1)" }}>
+              {!googleDebug ? (
+                <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+
+                  {/* Credential status */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Tag
+                      label={googleDebug.clientIdSet ? "✓ GOOGLE_OAUTH_CLIENT_ID set" : "✗ GOOGLE_OAUTH_CLIENT_ID missing"}
+                      color={googleDebug.clientIdSet ? "#10B981" : "#EF4444"}
+                    />
+                    <Tag
+                      label={googleDebug.clientSecretSet ? "✓ GOOGLE_OAUTH_CLIENT_SECRET set" : "✗ GOOGLE_OAUTH_CLIENT_SECRET missing"}
+                      color={googleDebug.clientSecretSet ? "#10B981" : "#EF4444"}
+                    />
+                  </div>
+
+                  {/* PUBLIC_APP_URL */}
+                  <DebugRow label="PUBLIC_APP_URL">
+                    <code style={{ fontSize: 12, color: "#C0C0C0", wordBreak: "break-all" }}>{googleDebug.publicAppUrl}</code>
+                  </DebugRow>
+
+                  {/* redirect_uri with Copy button */}
+                  <DebugRow label="redirect_uri">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <code style={{ fontSize: 12, color: "#00AEEF", wordBreak: "break-all", flex: 1 }}>{googleDebug.redirectUri}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(googleDebug.redirectUri);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                        style={{
+                          padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.15)" : "rgba(0,174,239,0.12)",
+                          border: copied ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(0,174,239,0.35)",
+                          color: copied ? "#10B981" : "#00AEEF",
+                          flexShrink: 0, transition: "all 0.2s",
+                        }}
+                      >
+                        {copied ? "✓ Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </DebugRow>
+
+                  {/* Full OAuth URL */}
+                  <DebugRow label="Full OAuth URL">
+                    {googleDebug.fullOAuthUrl ? (
+                      <code style={{ fontSize: 11, color: "#9CA3AF", wordBreak: "break-all", lineHeight: 1.6 }}>
+                        {googleDebug.fullOAuthUrl}
+                      </code>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#EF4444" }}>Cannot generate — client ID missing</span>
+                    )}
+                  </DebugRow>
+
+                  <p style={{ fontSize: 11, color: "#374151", margin: 0, lineHeight: 1.6 }}>
+                    Copy the <strong style={{ color: "#00AEEF" }}>redirect_uri</strong> and add it to your Google Cloud Console
+                    under <strong style={{ color: "#C0C0C0" }}>APIs &amp; Services → Credentials → OAuth 2.0 Client → Authorised redirect URIs</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Debug Panel */}
         <div style={{
           background: "rgba(3,6,18,0.8)", border: "1px solid rgba(0,174,239,0.12)",
@@ -410,6 +513,20 @@ function StatPill({ value, label, color }: { value: number; label: string; color
     }}>
       <span style={{ fontSize: 18, fontWeight: 800, color }}>{value}</span>
       <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{label}</span>
+    </div>
+  );
+}
+
+function DebugRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)",
+      borderRadius: 8, padding: "8px 12px",
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 4 }}>
+        {label}
+      </div>
+      {children}
     </div>
   );
 }

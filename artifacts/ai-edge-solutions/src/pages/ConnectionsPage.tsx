@@ -43,8 +43,8 @@ type MigrationState = {
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
   google_business: { status: "needs_reconnect", note: "Was connected in previous system. Reconnect to restore access." },
   youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Was connected as BedBugsand_Beyond. Reconnect to restore." },
-  facebook:        { status: "needs_reconnect", note: "Was connected in previous system. Reconnect to restore access." },
-  instagram:       { status: "needs_review", note: "Meta denied pages_read_engagement permission. App review required before reconnecting." },
+  facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
+  instagram:       { status: "needs_review", note: "Requires pages_read_engagement and instagram_basic — advanced Meta permissions pending app review. Facebook must be connected first." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
 };
 
@@ -84,7 +84,9 @@ export default function ConnectionsPage() {
   const [connecting, setConnecting] = useState<string | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
   const [googleDebugOpen, setGoogleDebugOpen] = useState(false);
+  const [facebookDebugOpen, setFacebookDebugOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedFb, setCopiedFb] = useState(false);
   const search = useSearch();
   const [, navigate] = useLocation();
 
@@ -128,6 +130,25 @@ export default function ConnectionsPage() {
     queryKey: ["google_oauth_debug"],
     queryFn: () => apiFetch<GoogleDebug>("/social-connections/google-oauth-debug"),
     enabled: googleDebugOpen,
+  });
+
+  type MetaDebug = {
+    appId: string | null;
+    appIdSet: boolean;
+    appSecretSet: boolean;
+    redirectUri: string;
+    requestedScopes: string;
+    connected: boolean;
+    accountName: string | null;
+    grantedScopes: string[];
+    declinedScopes: string[];
+    permissionsError: string | null;
+    meAccountsResult: any;
+  };
+  const { data: metaDebug, refetch: refetchMetaDebug } = useQuery<MetaDebug>({
+    queryKey: ["meta_oauth_debug"],
+    queryFn: () => apiFetch<MetaDebug>("/social-connections/meta-oauth-debug"),
+    enabled: facebookDebugOpen,
   });
 
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
@@ -432,6 +453,153 @@ export default function ConnectionsPage() {
                   <p style={{ fontSize: 11, color: "#374151", margin: 0, lineHeight: 1.6 }}>
                     Copy the <strong style={{ color: "#00AEEF" }}>redirect_uri</strong> and add it to your Google Cloud Console
                     under <strong style={{ color: "#C0C0C0" }}>APIs &amp; Services → Credentials → OAuth 2.0 Client → Authorised redirect URIs</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Facebook OAuth Debug Panel */}
+        <div style={{
+          background: "rgba(3,6,18,0.8)", border: "1px solid rgba(24,119,242,0.2)",
+          borderRadius: 12, overflow: "hidden", marginBottom: 12,
+        }}>
+          <button
+            onClick={() => setFacebookDebugOpen(o => !o)}
+            style={{
+              width: "100%", padding: "12px 18px", background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              color: "#6B7280", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#1877F2" }}>f</span>
+              <span style={{ color: "#1877F2" }}>Facebook OAuth Debug Panel</span>
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+              {facebookDebugOpen && metaDebug && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); refetchMetaDebug(); }}
+                  style={{
+                    padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                    background: "rgba(24,119,242,0.12)", border: "1px solid rgba(24,119,242,0.35)",
+                    color: "#1877F2",
+                  }}
+                >
+                  ↺ Refresh
+                </button>
+              )}
+              {facebookDebugOpen ? "▲ Hide" : "▼ Show"}
+            </span>
+          </button>
+
+          {facebookDebugOpen && (
+            <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(24,119,242,0.1)" }}>
+              {!metaDebug ? (
+                <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+
+                  {/* Credential badges */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Tag
+                      label={metaDebug.appIdSet ? "✓ META_APP_ID set" : "✗ META_APP_ID missing"}
+                      color={metaDebug.appIdSet ? "#10B981" : "#EF4444"}
+                    />
+                    <Tag
+                      label={metaDebug.appSecretSet ? "✓ META_APP_SECRET set" : "✗ META_APP_SECRET missing"}
+                      color={metaDebug.appSecretSet ? "#10B981" : "#EF4444"}
+                    />
+                    <Tag
+                      label={metaDebug.connected ? `✓ Connected as ${metaDebug.accountName ?? "unknown"}` : "✗ Not yet connected"}
+                      color={metaDebug.connected ? "#10B981" : "#FB923C"}
+                    />
+                  </div>
+
+                  {/* Redirect URI */}
+                  <DebugRow label="redirect_uri">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <code style={{ fontSize: 12, color: "#00AEEF", wordBreak: "break-all", flex: 1 }}>{metaDebug.redirectUri}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(metaDebug.redirectUri);
+                          setCopiedFb(true);
+                          setTimeout(() => setCopiedFb(false), 2000);
+                        }}
+                        style={{
+                          padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copiedFb ? "rgba(16,185,129,0.15)" : "rgba(24,119,242,0.12)",
+                          border: copiedFb ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(24,119,242,0.35)",
+                          color: copiedFb ? "#10B981" : "#1877F2",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {copiedFb ? "✓ Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </DebugRow>
+
+                  {/* Requested scopes */}
+                  <DebugRow label="Requested Scopes">
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                      {metaDebug.requestedScopes.split(",").map(s => (
+                        <Tag key={s} label={s.trim()} color="#1877F2" />
+                      ))}
+                    </div>
+                  </DebugRow>
+
+                  {/* Granted / Declined scopes */}
+                  {metaDebug.connected && (
+                    <>
+                      <DebugRow label="Granted Scopes">
+                        {metaDebug.permissionsError ? (
+                          <span style={{ fontSize: 12, color: "#EF4444" }}>Error: {metaDebug.permissionsError}</span>
+                        ) : metaDebug.grantedScopes.length === 0 ? (
+                          <span style={{ fontSize: 12, color: "#475569" }}>None returned</span>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                            {metaDebug.grantedScopes.map(s => (
+                              <Tag key={s} label={`✓ ${s}`} color="#10B981" />
+                            ))}
+                          </div>
+                        )}
+                      </DebugRow>
+
+                      <DebugRow label="Declined Scopes">
+                        {metaDebug.declinedScopes.length === 0 ? (
+                          <span style={{ fontSize: 12, color: "#10B981" }}>None declined ✓</span>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                            {metaDebug.declinedScopes.map(s => (
+                              <Tag key={s} label={`✗ ${s}`} color="#EF4444" />
+                            ))}
+                          </div>
+                        )}
+                      </DebugRow>
+
+                      <DebugRow label="/me/accounts (Pages)">
+                        {!metaDebug.meAccountsResult ? (
+                          <span style={{ fontSize: 12, color: "#475569" }}>Not fetched</span>
+                        ) : metaDebug.meAccountsResult.error ? (
+                          <span style={{ fontSize: 12, color: "#EF4444" }}>Error: {metaDebug.meAccountsResult.error}</span>
+                        ) : (
+                          <pre style={{
+                            fontSize: 11, color: "#9CA3AF", margin: 0, whiteSpace: "pre-wrap",
+                            wordBreak: "break-all", lineHeight: 1.6, maxHeight: 200, overflow: "auto",
+                          }}>
+                            {JSON.stringify(metaDebug.meAccountsResult, null, 2)}
+                          </pre>
+                        )}
+                      </DebugRow>
+                    </>
+                  )}
+
+                  <p style={{ fontSize: 11, color: "#374151", margin: 0, lineHeight: 1.6 }}>
+                    Copy the <strong style={{ color: "#00AEEF" }}>redirect_uri</strong> and add it to your Meta App under{" "}
+                    <strong style={{ color: "#C0C0C0" }}>Facebook Login → Settings → Valid OAuth Redirect URIs</strong>.
+                    Current scopes: <strong style={{ color: "#1877F2" }}>public_profile, pages_show_list</strong> only.
+                    Advanced posting permissions require Meta app review.
                   </p>
                 </div>
               )}

@@ -119,7 +119,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: appId,
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
-          scope: "pages_manage_posts,pages_read_engagement,instagram_basic",
+          scope: "public_profile,pages_show_list",
           state: generateState(userId, "facebook"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
@@ -184,6 +184,63 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
   const url = cfg.buildUrl(appBase);
   res.json({ configured: true, url });
+});
+
+router.get("/social-connections/meta-oauth-debug", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  const redirectUri = `${appBase}/api/oauth/meta/callback`;
+  const appId = process.env.META_APP_ID ?? "";
+  const appSecretSet = !!process.env.META_APP_SECRET;
+  const requestedScopes = "public_profile,pages_show_list";
+
+  // Check for existing FB connection
+  const [fbRow] = await db.select().from(socialConnectionsTable).where(
+    and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "facebook"))
+  );
+
+  let grantedScopes: string[] = [];
+  let declinedScopes: string[] = [];
+  let meAccountsResult: any = null;
+  let permissionsError: string | null = null;
+
+  if (fbRow?.accessToken) {
+    try {
+      const permR = await fetch(`https://graph.facebook.com/me/permissions?access_token=${fbRow.accessToken}`);
+      if (permR.ok) {
+        const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
+        grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
+        declinedScopes = permData.data.filter(p => p.status === "declined").map(p => p.permission);
+      } else {
+        permissionsError = `permissions API ${permR.status}`;
+      }
+    } catch (e: any) {
+      permissionsError = e?.message ?? "unknown error";
+    }
+
+    try {
+      const acctR = await fetch(`https://graph.facebook.com/me/accounts?access_token=${fbRow.accessToken}`);
+      meAccountsResult = acctR.ok ? await acctR.json() : { error: `accounts API ${acctR.status}` };
+    } catch (e: any) {
+      meAccountsResult = { error: e?.message ?? "unknown error" };
+    }
+  }
+
+  res.json({
+    appId: appId || null,
+    appIdSet: !!appId,
+    appSecretSet,
+    redirectUri,
+    requestedScopes,
+    connected: !!fbRow,
+    accountName: fbRow?.accountName ?? null,
+    grantedScopes,
+    declinedScopes,
+    permissionsError,
+    meAccountsResult,
+  });
 });
 
 router.get("/social-connections/google-oauth-debug", async (req, res) => {

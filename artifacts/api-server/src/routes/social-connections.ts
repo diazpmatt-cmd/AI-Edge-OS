@@ -184,7 +184,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_key: clientKey,
           redirect_uri: `${base}/api/oauth/tiktok/callback`,
           response_type: "code",
-          scope: "user.info.basic,video.publish",
+          scope: "user.info.basic,user.info.profile,video.list",
           state: generateState(userId, "tiktok"),
         });
         return `https://www.tiktok.com/v2/auth/authorize?${params}`;

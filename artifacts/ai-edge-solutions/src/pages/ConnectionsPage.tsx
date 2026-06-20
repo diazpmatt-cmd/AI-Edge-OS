@@ -51,7 +51,7 @@ const LOVABLE_MIGRATION: Record<string, MigrationState> = {
 type StatusKind = "connected" | "connected_readonly" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
-  if (dbConn) return provider === "youtube" ? "connected_readonly" : "connected";
+  if (dbConn) return (provider === "youtube" || provider === "tiktok") ? "connected_readonly" : "connected";
   // Instagram is locked until Facebook is connected in the database
   if (provider === "instagram" && !facebookConnected) return "coming_soon";
   const m = LOVABLE_MIGRATION[provider];

@@ -23,6 +23,8 @@ const ProductsPage    = lazy(() => import("./pages/marketing/ProductsPage"));
 const CaseStudiesPage = lazy(() => import("./pages/marketing/CaseStudiesPage"));
 const PricingPage     = lazy(() => import("./pages/marketing/PricingPage"));
 const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
+const PrivacyPage     = lazy(() => import("./pages/marketing/PrivacyPage"));
+const TermsPage       = lazy(() => import("./pages/marketing/TermsPage"));
 
 // ── Admin / Command Center pages (auth-gated) ───────────────────────────────
 const AdminAccessPage     = lazy(() => import("./pages/AdminAccessPage"));
@@ -115,6 +117,8 @@ function AppRouter() {
         <Route path="/case-studies" component={CaseStudiesPage} />
         <Route path="/pricing"      component={PricingPage} />
         <Route path="/contact"      component={ContactPage} />
+        <Route path="/privacy"      component={PrivacyPage} />
+        <Route path="/terms"        component={TermsPage} />
         <Route path="/"             component={HomePage} />
       </Switch>
     </Suspense>

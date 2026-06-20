@@ -147,13 +147,17 @@ export default function Footer() {
         }}>
           <p style={{ fontSize: 13, color: "#374151" }}>© {year} AI Edge Solutions. All rights reserved.</p>
           <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-            {["Privacy Policy", "Terms of Service"].map(item => (
-              <span key={item} style={{ fontSize: 13, color: "#374151", cursor: "pointer", transition: "color 0.2s" }}
+            {[
+              { label: "Privacy Policy", href: "/privacy" },
+              { label: "Terms of Service", href: "/terms" },
+            ].map(({ label, href }) => (
+              <a key={label} href={href}
+                style={{ fontSize: 13, color: "#374151", textDecoration: "none", transition: "color 0.2s" }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#6B7280"}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#374151"}
               >
-                {item}
-              </span>
+                {label}
+              </a>
             ))}
             <a
               href="/admin-access"

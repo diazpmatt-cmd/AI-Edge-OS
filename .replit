@@ -41,6 +41,11 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-PUBLIC_APP_URL = "https://6834056c-51c0-48e3-8ef3-126264bc68f4-00-1m60vl6oh6p5u.riker.replit.dev"
 TIKTOK_CLIENT_KEY = "aw9vmhcwzpyr5i0w"
 TIKTOK_CLIENT_SECRET = " jSKQnf78zlRllqylsbvrUBuYaiyUw9Mm"
+
+[userenv.development]
+PUBLIC_APP_URL = "https://6834056c-51c0-48e3-8ef3-126264bc68f4-00-1m60vl6oh6p5u.riker.replit.dev"
+
+[userenv.production]
+PUBLIC_APP_URL = "https://replit-exportzip-diazpmatt.replit.app"

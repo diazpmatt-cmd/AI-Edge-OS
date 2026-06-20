@@ -317,6 +317,17 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
       enableApiUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
       apiLibraryId: "youtube.googleapis.com",
     },
+    {
+      id: "youtube_readonly",
+      label: "YouTube Readonly (Testing Panel)",
+      scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/youtube.readonly"],
+      sensitiveScope: true,
+      sensitiveScopeNote: "Same as YouTube above — only openid email profile youtube.readonly. No business.manage. No youtube.upload.",
+      successSlug: "youtube",
+      requiredApi: "YouTube Data API v3",
+      enableApiUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
+      apiLibraryId: "youtube.googleapis.com",
+    },
   ];
 
   const providers = PROVIDER_DEFS.map(def => {

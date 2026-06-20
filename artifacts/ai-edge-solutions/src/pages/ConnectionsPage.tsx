@@ -509,6 +509,22 @@ export default function ConnectionsPage() {
                       </p>
                     )}
 
+                    {/* YouTube-specific 403 pre-connect warning */}
+                    {platform.id === "youtube" && !isConnected && (
+                      <div style={{
+                        fontSize: 11, color: "#FB923C",
+                        background: "rgba(251,146,60,0.07)", border: "1px solid rgba(251,146,60,0.25)",
+                        borderRadius: 7, padding: "7px 10px", marginBottom: 10, lineHeight: 1.6,
+                      }}>
+                        <strong>⚠️ Getting a Google 403?</strong> Google's consent screen blocks accounts that aren't in your project's test-user list.
+                        {" "}<a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"
+                          style={{ color: "#4285F4", textDecoration: "underline" }}>OAuth consent screen</a>
+                        {" → Test users → + Add Users → add your Google account email."}
+                        {" Or set Publishing status to "}
+                        <strong>Production</strong>.
+                      </div>
+                    )}
+
                     {/* Action buttons */}
                     <div style={{ display: "flex", gap: 8 }}>
                       {isConnected ? (
@@ -992,11 +1008,11 @@ export default function ConnectionsPage() {
                             <br />
                             <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/business.manage</code>
                             <br />
-                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/youtube.upload</code>
+                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/youtube.readonly</code>
                             <br />
                             Click <strong style={{ color: "#C0C0C0" }}>Update → Save and Continue</strong>.
                             <br />
-                            <span style={{ color: "#6B7280" }}>Note: these are restricted scopes — Google may mark them as "Sensitive" and require verification for production use, but for testing with a test user they work immediately.</span>
+                            <span style={{ color: "#6B7280" }}>Note: these are Sensitive scopes — Google may require app verification for production use, but for testing they work immediately once a test user is added.</span>
                           </>
                         ),
                       },

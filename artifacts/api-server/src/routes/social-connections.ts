@@ -377,6 +377,41 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
   });
 });
 
+router.get("/social-connections/tiktok-oauth-debug", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  const callbackRoute = "/api/oauth/tiktok/callback";
+  const redirectUri = `${appBase}${callbackRoute}`;
+  const clientKey = process.env.TIKTOK_CLIENT_KEY ?? "";
+  const clientSecretSet = !!process.env.TIKTOK_CLIENT_SECRET;
+  const scopes = "user.info.basic,user.info.profile,video.list";
+
+  let authUrl = "";
+  if (clientKey) {
+    const params = new URLSearchParams({
+      client_key: clientKey,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: scopes,
+      state: "debug_preview",
+    });
+    authUrl = `https://www.tiktok.com/v2/auth/authorize?${params}`;
+  }
+
+  res.json({
+    publicAppUrl: appBase,
+    callbackRoute,
+    redirectUri,
+    clientKeySet: !!clientKey,
+    clientKeyPrefix: clientKey ? clientKey.slice(0, 8) + "…" : null,
+    clientSecretSet,
+    scopes,
+    authUrl,
+  });
+});
+
 router.get("/social-connections/youtube/channel-info", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }

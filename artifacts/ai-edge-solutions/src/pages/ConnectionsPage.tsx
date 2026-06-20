@@ -90,8 +90,10 @@ export default function ConnectionsPage() {
   const [callbackLogOpen, setCallbackLogOpen] = useState(false);
   const [googleDebugOpen, setGoogleDebugOpen] = useState(false);
   const [facebookDebugOpen, setFacebookDebugOpen] = useState(false);
+  const [tiktokDebugOpen, setTiktokDebugOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedFb, setCopiedFb] = useState(false);
+  const [copiedTt, setCopiedTt] = useState(false);
   const search = useSearch();
   const [, navigate] = useLocation();
 
@@ -173,6 +175,22 @@ export default function ConnectionsPage() {
     queryKey: ["meta_oauth_debug"],
     queryFn: () => apiFetch<MetaDebug>("/social-connections/meta-oauth-debug"),
     enabled: facebookDebugOpen,
+  });
+
+  type TikTokDebug = {
+    publicAppUrl: string;
+    callbackRoute: string;
+    redirectUri: string;
+    clientKeySet: boolean;
+    clientKeyPrefix: string | null;
+    clientSecretSet: boolean;
+    scopes: string;
+    authUrl: string;
+  };
+  const { data: tiktokDebug, refetch: refetchTiktokDebug } = useQuery<TikTokDebug>({
+    queryKey: ["tiktok_oauth_debug"],
+    queryFn: () => apiFetch<TikTokDebug>("/social-connections/tiktok-oauth-debug"),
+    enabled: tiktokDebugOpen,
   });
 
   type CallbackEntry = {
@@ -1015,6 +1033,184 @@ export default function ConnectionsPage() {
                     <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 8 }}>
                       After making changes in Google Cloud Console, wait ~30 seconds then try Reconnect again.
                     </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* TikTok OAuth Setup Panel */}
+        <div style={{
+          background: "rgba(3,6,18,0.8)", border: "1px solid rgba(37,244,238,0.18)",
+          borderRadius: 12, overflow: "hidden", marginBottom: 12,
+        }}>
+          <button
+            onClick={() => setTiktokDebugOpen(o => !o)}
+            style={{
+              width: "100%", padding: "12px 18px", background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              color: "#6B7280", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#25F4EE" }}>T</span>
+              <span style={{ color: "#25F4EE" }}>TikTok OAuth Setup Panel</span>
+              <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 400 }}>— client key, secret &amp; redirect URI</span>
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+              {tiktokDebugOpen && tiktokDebug && (
+                <button
+                  onClick={e => { e.stopPropagation(); refetchTiktokDebug(); }}
+                  style={{
+                    padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                    background: "rgba(37,244,238,0.1)", border: "1px solid rgba(37,244,238,0.3)", color: "#25F4EE",
+                  }}
+                >↺ Refresh</button>
+              )}
+              {tiktokDebugOpen ? "▲ Hide" : "▼ Show"}
+            </span>
+          </button>
+
+          {tiktokDebugOpen && (
+            <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(37,244,238,0.12)" }}>
+              {!tiktokDebug ? (
+                <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
+
+                  {/* ── Credential boxes ── */}
+                  <div style={{
+                    background: "rgba(37,244,238,0.04)", border: "1px solid rgba(37,244,238,0.15)",
+                    borderRadius: 8, padding: "14px 14px", display: "flex", flexDirection: "column", gap: 10,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#25F4EE", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Credentials
+                    </div>
+
+                    {/* TIKTOK_CLIENT_KEY box */}
+                    <div style={{
+                      background: tiktokDebug.clientKeySet ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                      border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                      borderRadius: 8, padding: "10px 12px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <code style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>TIKTOK_CLIENT_KEY</code>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          background: tiktokDebug.clientKeySet ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+                          color: tiktokDebug.clientKeySet ? "#10B981" : "#EF4444",
+                          border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                        }}>
+                          {tiktokDebug.clientKeySet ? "✓ Set" : "✗ Missing"}
+                        </span>
+                      </div>
+                      {tiktokDebug.clientKeyPrefix ? (
+                        <div style={{ fontSize: 11, color: "#6B7280" }}>
+                          Value preview: <code style={{ color: "#94A3B8" }}>{tiktokDebug.clientKeyPrefix}</code>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "#EF4444" }}>
+                          Add to Replit Secrets → <code style={{ color: "#EF4444" }}>TIKTOK_CLIENT_KEY</code>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* TIKTOK_CLIENT_SECRET box */}
+                    <div style={{
+                      background: tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                      border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                      borderRadius: 8, padding: "10px 12px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <code style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>TIKTOK_CLIENT_SECRET</code>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          background: tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+                          color: tiktokDebug.clientSecretSet ? "#10B981" : "#EF4444",
+                          border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                        }}>
+                          {tiktokDebug.clientSecretSet ? "✓ Set" : "✗ Missing"}
+                        </span>
+                      </div>
+                      {!tiktokDebug.clientSecretSet && (
+                        <div style={{ fontSize: 11, color: "#EF4444" }}>
+                          Add to Replit Secrets → <code style={{ color: "#EF4444" }}>TIKTOK_CLIENT_SECRET</code>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Redirect URI box ── */}
+                  <div style={{
+                    background: "rgba(3,6,18,0.6)", border: "1px solid rgba(37,244,238,0.15)",
+                    borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#25F4EE", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Redirect URI — add this in TikTok Developer Portal
+                    </div>
+                    <DebugRow label="Callback Route">
+                      <code style={{ fontSize: 12, color: "#C0C0C0" }}>{tiktokDebug.callbackRoute}</code>
+                    </DebugRow>
+                    <DebugRow label="Full Redirect URI (copy into TikTok app)">
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <code style={{ fontSize: 12, color: "#25F4EE", wordBreak: "break-all", flex: 1 }}>{tiktokDebug.redirectUri}</code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(tiktokDebug.redirectUri);
+                            setCopiedTt(true);
+                            setTimeout(() => setCopiedTt(false), 2000);
+                          }}
+                          style={{
+                            padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            background: copiedTt ? "rgba(16,185,129,0.15)" : "rgba(37,244,238,0.1)",
+                            border: copiedTt ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(37,244,238,0.35)",
+                            color: copiedTt ? "#10B981" : "#25F4EE",
+                            flexShrink: 0, transition: "all 0.2s",
+                          }}
+                        >{copiedTt ? "✓ Copied" : "Copy"}</button>
+                      </div>
+                    </DebugRow>
+                  </div>
+
+                  {/* ── Scopes box ── */}
+                  <div style={{
+                    background: "rgba(3,6,18,0.6)", border: "1px solid rgba(37,244,238,0.12)",
+                    borderRadius: 8, padding: "10px 12px",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#25F4EE", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                      Requested Scopes
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {tiktokDebug.scopes.split(",").map(s => (
+                        <span key={s} style={{
+                          fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+                          background: "rgba(37,244,238,0.08)", border: "1px solid rgba(37,244,238,0.2)", color: "#94A3B8",
+                          fontFamily: "monospace",
+                        }}>{s.trim()}</span>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
+                      Read-only scopes — no publishing. Enable all three in TikTok Developer Portal → Login Kit → Scopes.
+                    </div>
+                  </div>
+
+                  {/* ── Auth URL preview ── */}
+                  <div style={{
+                    background: "rgba(3,6,18,0.6)", border: "1px solid rgba(37,244,238,0.12)",
+                    borderRadius: 8, padding: "10px 12px",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#25F4EE", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                      Full Authorization URL
+                    </div>
+                    {tiktokDebug.authUrl ? (
+                      <code style={{ fontSize: 10, color: "#9CA3AF", wordBreak: "break-all", lineHeight: 1.7, display: "block" }}>
+                        {tiktokDebug.authUrl}
+                      </code>
+                    ) : (
+                      <span style={{ fontSize: 11, color: "#EF4444" }}>Cannot generate — TIKTOK_CLIENT_KEY missing</span>
+                    )}
                   </div>
 
                 </div>

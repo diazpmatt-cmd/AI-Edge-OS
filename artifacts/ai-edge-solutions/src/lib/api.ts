@@ -1,9 +1,15 @@
+import { useAuth } from "@clerk/react";
+
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit, token?: string | null): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers as Record<string, string> | undefined) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
     ...init,
   });
   if (!res.ok) {
@@ -12,4 +18,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export function useApiFetch() {
+  const { getToken } = useAuth();
+  return async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
+    const token = await getToken().catch(() => null);
+    return apiFetch<T>(path, init, token);
+  };
 }

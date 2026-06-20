@@ -1,1 +1,2 @@
 - [AI Edge Solutions brand](ai-edge-brand.md) — Electric blue #00AEEF, metallic silver #C0C0C0, black/dark navy #030612; AE monogram SVG logo with gradient; all marketing pages use inline styles (no Tailwind).
+- [Clerk auth pattern for API calls](clerk-api-auth.md) — All API fetches MUST use `useApiFetch()` hook (Bearer token); cookie-only `apiFetch` never works through the Vite proxy.

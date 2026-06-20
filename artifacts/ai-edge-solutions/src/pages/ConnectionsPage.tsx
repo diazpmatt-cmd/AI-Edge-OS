@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
-import { apiFetch } from "@/lib/api";
+import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
 type DbConnection = {
@@ -84,6 +84,7 @@ const SOURCE_META: Record<string, { label: string; color: string }> = {
 };
 
 export default function ConnectionsPage() {
+  const authFetch = useApiFetch();
   const qc = useQueryClient();
   const [connecting, setConnecting] = useState<string | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
@@ -118,12 +119,12 @@ export default function ConnectionsPage() {
 
   const { data: connections = [] } = useQuery<DbConnection[]>({
     queryKey: ["social_connections"],
-    queryFn: () => apiFetch<DbConnection[]>("/social-connections"),
+    queryFn: () => authFetch<DbConnection[]>("/social-connections"),
   });
 
   const { data: debugData = [] } = useQuery<DebugInfo[]>({
     queryKey: ["connection_debug"],
-    queryFn: () => apiFetch<DebugInfo[]>("/social-connections/debug"),
+    queryFn: () => authFetch<DebugInfo[]>("/social-connections/debug"),
     enabled: debugOpen,
   });
 
@@ -152,10 +153,11 @@ export default function ConnectionsPage() {
     providers: GoogleProviderDebug[];
     minimalTestUrl: string;
   };
-  const { data: googleDebug } = useQuery<GoogleDebug>({
+  const { data: googleDebug, isError: googleDebugError, error: googleDebugErr } = useQuery<GoogleDebug>({
     queryKey: ["google_oauth_debug"],
-    queryFn: () => apiFetch<GoogleDebug>("/social-connections/google-oauth-debug"),
+    queryFn: () => authFetch<GoogleDebug>("/social-connections/google-oauth-debug"),
     enabled: googleDebugOpen,
+    retry: 1,
   });
 
   type MetaDebug = {
@@ -171,10 +173,11 @@ export default function ConnectionsPage() {
     permissionsError: string | null;
     meAccountsResult: any;
   };
-  const { data: metaDebug, refetch: refetchMetaDebug } = useQuery<MetaDebug>({
+  const { data: metaDebug, refetch: refetchMetaDebug, isError: metaDebugError, error: metaDebugErr } = useQuery<MetaDebug>({
     queryKey: ["meta_oauth_debug"],
-    queryFn: () => apiFetch<MetaDebug>("/social-connections/meta-oauth-debug"),
+    queryFn: () => authFetch<MetaDebug>("/social-connections/meta-oauth-debug"),
     enabled: facebookDebugOpen,
+    retry: 1,
   });
 
   type TikTokDebug = {
@@ -187,10 +190,11 @@ export default function ConnectionsPage() {
     scopes: string;
     authUrl: string;
   };
-  const { data: tiktokDebug, refetch: refetchTiktokDebug } = useQuery<TikTokDebug>({
+  const { data: tiktokDebug, refetch: refetchTiktokDebug, isError: tiktokDebugError, error: tiktokDebugErr } = useQuery<TikTokDebug>({
     queryKey: ["tiktok_oauth_debug"],
-    queryFn: () => apiFetch<TikTokDebug>("/social-connections/tiktok-oauth-debug"),
+    queryFn: () => authFetch<TikTokDebug>("/social-connections/tiktok-oauth-debug"),
     enabled: tiktokDebugOpen,
+    retry: 1,
   });
 
   type CallbackEntry = {
@@ -204,11 +208,12 @@ export default function ConnectionsPage() {
     finalRedirectUrl: string;
     error?: string;
   };
-  const { data: callbackLog = [], refetch: refetchCallbackLog } = useQuery<CallbackEntry[]>({
+  const { data: callbackLog = [], refetch: refetchCallbackLog, isError: callbackLogError, error: callbackLogErr } = useQuery<CallbackEntry[]>({
     queryKey: ["callback_debug_log"],
-    queryFn: () => apiFetch<CallbackEntry[]>("/social-connections/callback-debug-log"),
+    queryFn: () => authFetch<CallbackEntry[]>("/social-connections/callback-debug-log"),
     enabled: callbackLogOpen,
     refetchInterval: callbackLogOpen ? 5000 : false,
+    retry: 1,
   });
 
   const connByProvider = new Map(connections.map((c) => [c.provider, c]));
@@ -225,13 +230,13 @@ export default function ConnectionsPage() {
   };
   const { data: ytChannelInfo } = useQuery<YouTubeChannelInfo>({
     queryKey: ["youtube_channel_info"],
-    queryFn: () => apiFetch<YouTubeChannelInfo>("/social-connections/youtube/channel-info"),
+    queryFn: () => authFetch<YouTubeChannelInfo>("/social-connections/youtube/channel-info"),
     enabled: connByProvider.has("youtube"),
     staleTime: 5 * 60 * 1000,
   });
 
   const disconnectMut = useMutation({
-    mutationFn: (provider: string) => apiFetch(`/social-connections/${provider}`, { method: "DELETE" }),
+    mutationFn: (provider: string) => authFetch(`/social-connections/${provider}`, { method: "DELETE" }),
     onSuccess: (_, provider) => {
       toast.success(`Disconnected ${provider.replace("_", " ")}`);
       qc.invalidateQueries({ queryKey: ["social_connections"] });
@@ -243,7 +248,7 @@ export default function ConnectionsPage() {
   const handleConnect = async (provider: string) => {
     setConnecting(provider);
     try {
-      const result = await apiFetch<{ url: string; configured: boolean }>(`/social-connections/oauth-start/${provider}`, { method: "POST" });
+      const result = await authFetch<{ url: string; configured: boolean }>(`/social-connections/oauth-start/${provider}`, { method: "POST" });
       if (!result.configured) {
         toast.error(`OAuth not configured. Add the required API credentials to Replit Secrets.`);
         setConnecting(null);
@@ -629,13 +634,14 @@ export default function ConnectionsPage() {
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
               {callbackLogOpen && (
-                <button
+                <div role="button" tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); refetchCallbackLog(); }}
+                  onKeyDown={e => e.key === "Enter" && refetchCallbackLog()}
                   style={{
                     padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
                     background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF",
                   }}
-                >↺ Refresh</button>
+                >↺ Refresh</div>
               )}
               {callbackLogOpen ? "▲ Hide" : "▼ Show"}
             </span>
@@ -643,7 +649,11 @@ export default function ConnectionsPage() {
 
           {callbackLogOpen && (
             <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(0,174,239,0.15)" }}>
-              {callbackLog.length === 0 ? (
+              {callbackLogError ? (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 12, fontFamily: "monospace" }}>
+                  ✗ {(callbackLogErr as Error)?.message ?? "Failed to load"}
+                </p>
+              ) : callbackLog.length === 0 ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12, lineHeight: 1.7 }}>
                   No callbacks recorded yet. Click <strong style={{ color: "#00AEEF" }}>Connect</strong> or{" "}
                   <strong style={{ color: "#FB923C" }}>Reconnect</strong> on a platform card above.
@@ -717,7 +727,11 @@ export default function ConnectionsPage() {
 
           {googleDebugOpen && (
             <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(66,133,244,0.1)" }}>
-              {!googleDebug ? (
+              {googleDebugError ? (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 12, fontFamily: "monospace" }}>
+                  ✗ {(googleDebugErr as Error)?.message ?? "Failed to load"}
+                </p>
+              ) : !googleDebug ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
@@ -1060,14 +1074,15 @@ export default function ConnectionsPage() {
               <span style={{ fontSize: 10, color: "#6B7280", fontWeight: 400 }}>— client key, secret &amp; redirect URI</span>
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
-              {tiktokDebugOpen && tiktokDebug && (
-                <button
+              {tiktokDebugOpen && (
+                <div role="button" tabIndex={0}
                   onClick={e => { e.stopPropagation(); refetchTiktokDebug(); }}
+                  onKeyDown={e => e.key === "Enter" && refetchTiktokDebug()}
                   style={{
                     padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
                     background: "rgba(37,244,238,0.1)", border: "1px solid rgba(37,244,238,0.3)", color: "#25F4EE",
                   }}
-                >↺ Refresh</button>
+                >↺ Refresh</div>
               )}
               {tiktokDebugOpen ? "▲ Hide" : "▼ Show"}
             </span>
@@ -1075,7 +1090,11 @@ export default function ConnectionsPage() {
 
           {tiktokDebugOpen && (
             <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(37,244,238,0.12)" }}>
-              {!tiktokDebug ? (
+              {tiktokDebugError ? (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 12, fontFamily: "monospace" }}>
+                  ✗ {(tiktokDebugErr as Error)?.message ?? "Failed to load"}
+                </p>
+              ) : !tiktokDebug ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 14 }}>
@@ -1237,17 +1256,16 @@ export default function ConnectionsPage() {
               <span style={{ color: "#1877F2" }}>Facebook OAuth Debug Panel</span>
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
-              {facebookDebugOpen && metaDebug && (
-                <button
+              {facebookDebugOpen && (
+                <div role="button" tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); refetchMetaDebug(); }}
+                  onKeyDown={e => e.key === "Enter" && refetchMetaDebug()}
                   style={{
                     padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: "pointer",
                     background: "rgba(24,119,242,0.12)", border: "1px solid rgba(24,119,242,0.35)",
                     color: "#1877F2",
                   }}
-                >
-                  ↺ Refresh
-                </button>
+                >↺ Refresh</div>
               )}
               {facebookDebugOpen ? "▲ Hide" : "▼ Show"}
             </span>
@@ -1255,7 +1273,11 @@ export default function ConnectionsPage() {
 
           {facebookDebugOpen && (
             <div style={{ padding: "0 18px 18px", borderTop: "1px solid rgba(24,119,242,0.1)" }}>
-              {!metaDebug ? (
+              {metaDebugError ? (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 12, fontFamily: "monospace" }}>
+                  ✗ {(metaDebugErr as Error)?.message ?? "Failed to load"}
+                </p>
+              ) : !metaDebug ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12 }}>Loading…</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>

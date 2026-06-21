@@ -26,7 +26,9 @@ const PROVIDER_SLUG: Record<string, string> = {
 function redirectSuccess(res: any, provider: string) {
   const base = getAppBase();
   const slug = PROVIDER_SLUG[provider] ?? provider;
-  const url = `${base}/admin/connections?connected=${slug}`;
+  // Redirect to /oauth-close which handles both popup (postMessage + close)
+  // and top-level navigation (redirects to /admin/connections) automatically.
+  const url = `${base}/oauth-close?connected=${slug}`;
   logCallback({
     ts: new Date().toISOString(),
     provider,

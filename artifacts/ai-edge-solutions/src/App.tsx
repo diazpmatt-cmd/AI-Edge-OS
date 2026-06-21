@@ -16,6 +16,9 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
+// ── OAuth popup close page (public — no auth, used by popup OAuth flows) ────
+const OAuthClosePage  = lazy(() => import("./pages/OAuthClosePage"));
+
 // ── Public marketing pages ──────────────────────────────────────────────────
 const HomePage        = lazy(() => import("./pages/marketing/HomePage"));
 const ServicesPage    = lazy(() => import("./pages/marketing/ServicesPage"));
@@ -75,6 +78,7 @@ function AppRouter() {
         {/* ── Clerk auth routes (keep for OAuth callbacks) ── */}
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
+        <Route path="/oauth-close" component={() => <Suspense fallback={<PageLoader />}><OAuthClosePage /></Suspense>} />
 
         {/* ── Admin access gate (passcode) + login ── */}
         <Route path="/admin-access" component={() => <Suspense fallback={<PageLoader />}><AdminAccessPage /></Suspense>} />

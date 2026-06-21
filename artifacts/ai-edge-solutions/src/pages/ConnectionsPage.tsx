@@ -246,29 +246,69 @@ export default function ConnectionsPage() {
   });
 
   const handleConnect = async (provider: string) => {
+    // ── Pre-open a blank popup SYNCHRONOUSLY within the click handler ──────────
+    // Popup blockers only fire for window.open() calls that happen asynchronously
+    // (after a setTimeout or async/await). Opening here — before any async work —
+    // keeps us inside the original user-gesture context so the browser allows it.
+    // We then navigate it to the OAuth URL once the API call returns.
+    const popup = window.open("", "_blank", "width=600,height=700,left=200,top=100");
+
     setConnecting(provider);
+
+    // Listen for the postMessage from /oauth-close (fires when OAuth succeeds or fails in popup)
+    const msgHandler = (e: MessageEvent) => {
+      if (e.data?.type === "oauth_success" || e.data?.type === "oauth_error") {
+        window.removeEventListener("message", msgHandler);
+        clearInterval(pollTimer);
+        setConnecting(null);
+        qc.invalidateQueries({ queryKey: ["social_connections"] });
+        qc.invalidateQueries({ queryKey: ["connection_debug"] });
+        if (e.data.type === "oauth_error") {
+          toast.error(`OAuth failed: ${e.data.reason ?? "unknown error"}`);
+        }
+      }
+    };
+    window.addEventListener("message", msgHandler);
+
+    // Also poll the popup's closed state as a fallback (in case postMessage doesn't arrive)
+    const pollTimer = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(pollTimer);
+        window.removeEventListener("message", msgHandler);
+        setConnecting(null);
+        qc.invalidateQueries({ queryKey: ["social_connections"] });
+        qc.invalidateQueries({ queryKey: ["connection_debug"] });
+      }
+    }, 800);
+
     try {
-      const result = await authFetch<{ url: string; configured: boolean }>(`/social-connections/oauth-start/${provider}`, { method: "POST" });
+      const result = await authFetch<{ url: string; configured: boolean }>(
+        `/social-connections/oauth-start/${provider}`,
+        { method: "POST" },
+      );
+
       if (!result.configured) {
+        popup?.close();
+        clearInterval(pollTimer);
+        window.removeEventListener("message", msgHandler);
         toast.error(`OAuth not configured. Add the required API credentials to Replit Secrets.`);
         setConnecting(null);
         return;
       }
-      // DIAGNOSTIC — log full OAuth URL before redirect so it's visible in browser console
-      try {
-        const u = new URL(result.url);
-        console.log("[OAUTH-REDIRECT] About to navigate to Google OAuth");
-        console.log("  client_id   :", u.searchParams.get("client_id"));
-        console.log("  redirect_uri:", u.searchParams.get("redirect_uri"));
-        console.log("  scope       :", u.searchParams.get("scope"));
-        console.log("  full url    :", result.url.replace(/state=[^&]+/, "state=<redacted>"));
-      } catch { /* ignore */ }
-      // Navigate the top-level window, not the iframe.
-      // When running inside the Replit editor preview (which wraps the app in an iframe),
-      // navigating window.location stays inside the iframe and Google blocks OAuth in iframes.
-      // window.top breaks out to the real browser tab so Google's consent screen loads correctly.
-      (window.top ?? window).location.href = result.url;
+
+      if (popup && !popup.closed) {
+        // Navigate the pre-opened popup to the OAuth provider URL
+        popup.location.href = result.url;
+      } else {
+        // Popup was blocked — fall back to navigating the top frame
+        clearInterval(pollTimer);
+        window.removeEventListener("message", msgHandler);
+        (window.top ?? window).location.href = result.url;
+      }
     } catch (e: any) {
+      popup?.close();
+      clearInterval(pollTimer);
+      window.removeEventListener("message", msgHandler);
       toast.error(e?.message ?? "Failed to start OAuth");
       setConnecting(null);
     }

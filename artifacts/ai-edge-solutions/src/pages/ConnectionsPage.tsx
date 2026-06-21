@@ -42,7 +42,6 @@ type MigrationState = {
 
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
   google_business: { status: "blocked", note: "Google Business Profile requires Google app verification before activation." },
-  youtube:         { status: "needs_reconnect", accountName: "BedBugsand_Beyond", note: "Reconnect with readonly access to view channel info, subscribers, and recent videos." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
   instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
@@ -557,22 +556,6 @@ export default function ConnectionsPage() {
                       <p style={{ fontSize: 11.5, color: "#475569", margin: "0 0 10px" }}>
                         Connection needs to be set up in Replit.
                       </p>
-                    )}
-
-                    {/* YouTube-specific 403 pre-connect warning */}
-                    {platform.id === "youtube" && !isConnected && (
-                      <div style={{
-                        fontSize: 11, color: "#FB923C",
-                        background: "rgba(251,146,60,0.07)", border: "1px solid rgba(251,146,60,0.25)",
-                        borderRadius: 7, padding: "7px 10px", marginBottom: 10, lineHeight: 1.6,
-                      }}>
-                        <strong>⚠️ Getting a Google 403?</strong> Google's consent screen blocks accounts that aren't in your project's test-user list.
-                        {" "}<a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"
-                          style={{ color: "#4285F4", textDecoration: "underline" }}>OAuth consent screen</a>
-                        {" → Test users → + Add Users → add your Google account email."}
-                        {" Or set Publishing status to "}
-                        <strong>Production</strong>.
-                      </div>
                     )}
 
                     {/* Action buttons */}

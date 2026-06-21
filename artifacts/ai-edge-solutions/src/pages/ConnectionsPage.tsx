@@ -245,12 +245,20 @@ export default function ConnectionsPage() {
   });
 
   const handleConnect = async (provider: string) => {
+    console.log(`[OAuth] handleConnect called for: ${provider}`);
+
     // ── Pre-open a blank popup SYNCHRONOUSLY within the click handler ──────────
     // Popup blockers only fire for window.open() calls that happen asynchronously
     // (after a setTimeout or async/await). Opening here — before any async work —
     // keeps us inside the original user-gesture context so the browser allows it.
     // We then navigate it to the OAuth URL once the API call returns.
     const popup = window.open("", "_blank", "width=600,height=700,left=200,top=100");
+    const popupBlocked = !popup || popup.closed;
+    console.log(`[OAuth] popup opened: ${!popupBlocked}`);
+
+    if (popupBlocked) {
+      toast.error("Pop-ups are blocked. Please allow pop-ups for this site in your browser, then try again.", { duration: 6000 });
+    }
 
     setConnecting(provider);
 
@@ -269,14 +277,18 @@ export default function ConnectionsPage() {
     };
     window.addEventListener("message", msgHandler);
 
-    // Also poll the popup's closed state as a fallback (in case postMessage doesn't arrive)
+    // Poll the popup's closed state as a fallback (in case postMessage doesn't arrive)
+    // Only poll if popup actually opened — if blocked we rely on the catch/configured path.
     const pollTimer = setInterval(() => {
-      if (!popup || popup.closed) {
+      if (popupBlocked || !popup || popup.closed) {
         clearInterval(pollTimer);
         window.removeEventListener("message", msgHandler);
-        setConnecting(null);
-        qc.invalidateQueries({ queryKey: ["social_connections"] });
-        qc.invalidateQueries({ queryKey: ["connection_debug"] });
+        if (!popupBlocked) {
+          // Only reset connecting when the real popup was closed by the user
+          setConnecting(null);
+          qc.invalidateQueries({ queryKey: ["social_connections"] });
+          qc.invalidateQueries({ queryKey: ["connection_debug"] });
+        }
       }
     }, 800);
 
@@ -285,29 +297,34 @@ export default function ConnectionsPage() {
         `/social-connections/oauth-start/${provider}`,
         { method: "POST" },
       );
+      console.log(`[OAuth] oauth-start response: configured=${result.configured}, url=${result.url?.slice(0, 80)}…`);
 
       if (!result.configured) {
         popup?.close();
         clearInterval(pollTimer);
         window.removeEventListener("message", msgHandler);
-        toast.error(`OAuth not configured. Add the required API credentials to Replit Secrets.`);
+        toast.error(`${provider} OAuth is not configured. Add the required API credentials in Replit Secrets.`, { duration: 8000 });
         setConnecting(null);
         return;
       }
 
-      if (popup && !popup.closed) {
-        // Navigate the pre-opened popup to the OAuth provider URL
+      if (!popupBlocked && popup && !popup.closed) {
+        // Navigate the pre-opened popup to the OAuth provider URL, then bring it to front
         popup.location.href = result.url;
+        try { popup.focus(); } catch { /* browsers may block focus() */ }
       } else {
-        // Popup was blocked — fall back to navigating the top frame
+        // Popup was blocked — navigate the current tab directly
         clearInterval(pollTimer);
         window.removeEventListener("message", msgHandler);
-        (window.top ?? window).location.href = result.url;
+        setConnecting(null);
+        console.log("[OAuth] Popup blocked — navigating current tab to OAuth URL");
+        window.location.href = result.url;
       }
     } catch (e: any) {
       popup?.close();
       clearInterval(pollTimer);
       window.removeEventListener("message", msgHandler);
+      console.error("[OAuth] Error in handleConnect:", e);
       toast.error(e?.message ?? "Failed to start OAuth");
       setConnecting(null);
     }

@@ -21,12 +21,7 @@ export default function AdminAccessPage() {
   };
 
   const checkCode = (code: string) => {
-    const entered = code.trim();
-    const expected = ADMIN_ACCESS_CODE.trim();
-    const match = entered === expected;
-    console.log("[AdminAccess] entered:", entered);
-    console.log("[AdminAccess] expected:", expected);
-    console.log("[AdminAccess] match:", match);
+    const match = code.trim() === ADMIN_ACCESS_CODE;
 
     if (match) {
       navigate("/admin/login");

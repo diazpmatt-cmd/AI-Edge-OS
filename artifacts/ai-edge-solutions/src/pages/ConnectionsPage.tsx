@@ -263,10 +263,11 @@ export default function ConnectionsPage() {
         console.log("  scope       :", u.searchParams.get("scope"));
         console.log("  full url    :", result.url.replace(/state=[^&]+/, "state=<redacted>"));
       } catch { /* ignore */ }
-      // Navigate the main window directly — preserves Clerk session through the redirect cycle.
-      // Popup approach fails because the popup has no Clerk auth cookies, causing a redirect to
-      // the Clerk sign-in page after the OAuth callback.
-      window.location.href = result.url;
+      // Navigate the top-level window, not the iframe.
+      // When running inside the Replit editor preview (which wraps the app in an iframe),
+      // navigating window.location stays inside the iframe and Google blocks OAuth in iframes.
+      // window.top breaks out to the real browser tab so Google's consent screen loads correctly.
+      (window.top ?? window).location.href = result.url;
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to start OAuth");
       setConnecting(null);

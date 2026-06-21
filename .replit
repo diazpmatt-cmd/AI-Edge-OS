@@ -42,7 +42,6 @@ externalPort = 3001
 
 [userenv.shared]
 TIKTOK_CLIENT_KEY = "aw9vmhcwzpyr5i0w"
-TIKTOK_CLIENT_SECRET = " jSKQnf78zlRllqylsbvrUBuYaiyUw9Mm"
 
 [userenv.development]
 PUBLIC_APP_URL = "https://replit-exportzip-diazpmatt.replit.app"

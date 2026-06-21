@@ -215,7 +215,12 @@ export default function ConnectionsPage() {
     retry: 1,
   });
 
-  const connByProvider = new Map(connections.map((c) => [c.provider, c]));
+  // Normalize provider aliases so debug-path connections (e.g. "youtube_readonly"
+  // written by the ▶ Run Test button) still map to the canonical PLATFORMS id.
+  const PROVIDER_NORMALIZE: Record<string, string> = { youtube_readonly: "youtube" };
+  const connByProvider = new Map(
+    connections.map((c) => [PROVIDER_NORMALIZE[c.provider] ?? c.provider, c]),
+  );
   const debugByProvider = new Map(debugData.map((d) => [d.provider, d]));
   const facebookConnected = connByProvider.has("facebook");
 

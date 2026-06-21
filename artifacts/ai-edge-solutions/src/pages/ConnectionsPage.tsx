@@ -254,6 +254,15 @@ export default function ConnectionsPage() {
         setConnecting(null);
         return;
       }
+      // DIAGNOSTIC — log full OAuth URL before redirect so it's visible in browser console
+      try {
+        const u = new URL(result.url);
+        console.log("[OAUTH-REDIRECT] About to navigate to Google OAuth");
+        console.log("  client_id   :", u.searchParams.get("client_id"));
+        console.log("  redirect_uri:", u.searchParams.get("redirect_uri"));
+        console.log("  scope       :", u.searchParams.get("scope"));
+        console.log("  full url    :", result.url.replace(/state=[^&]+/, "state=<redacted>"));
+      } catch { /* ignore */ }
       // Navigate the main window directly — preserves Clerk session through the redirect cycle.
       // Popup approach fails because the popup has no Clerk auth cookies, causing a redirect to
       // the Clerk sign-in page after the OAuth callback.

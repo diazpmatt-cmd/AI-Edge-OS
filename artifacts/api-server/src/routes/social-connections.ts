@@ -218,6 +218,17 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
 
   const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
   const url = cfg.buildUrl(appBase);
+
+  // DIAGNOSTIC LOG — parse and print each OAuth param clearly
+  try {
+    const parsed = new URL(url);
+    console.log(`\n[OAUTH-START] provider=${provider}`);
+    console.log(`  client_id   = ${parsed.searchParams.get("client_id")}`);
+    console.log(`  redirect_uri= ${parsed.searchParams.get("redirect_uri")}`);
+    console.log(`  scope       = ${parsed.searchParams.get("scope")}`);
+    console.log(`  full url    = ${url.replace(/state=[^&]+/, "state=<redacted>")}\n`);
+  } catch { /* ignore parse errors */ }
+
   res.json({ configured: true, url });
 });
 

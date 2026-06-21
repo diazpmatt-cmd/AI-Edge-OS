@@ -169,7 +169,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: appId,
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
-          scope: "pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
+          scope: "pages_manage_posts,pages_read_engagement,instagram_basic",
           state: generateState(userId, "instagram"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;

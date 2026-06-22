@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           <p style={P_STYLE}>
             AI Edge Solutions ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains
             how we collect, use, disclose, and safeguard your information when you visit our website
-            (<a href="https://replit-exportzip-diazpmatt.replit.app" style={{ color: "#00AEEF" }}>https://replit-exportzip-diazpmatt.replit.app</a>)
+            (<a href="https://aiedgesolutions.online" style={{ color: "#00AEEF" }}>https://aiedgesolutions.online</a>)
             or use our services, including any social media integrations and automation tools.
           </p>
         </div>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
           <p style={{ fontSize: 15, color: "#9CA3AF", lineHeight: 1.75, margin: 0 }}>
             <strong style={{ color: "#D1D5DB" }}>AI Edge Solutions</strong><br />
             Email: <a href="mailto:privacy@ai-edge-solutions.com" style={{ color: "#00AEEF" }}>privacy@ai-edge-solutions.com</a><br />
-            Website: <a href="https://replit-exportzip-diazpmatt.replit.app/contact" style={{ color: "#00AEEF" }}>replit-exportzip-diazpmatt.replit.app/contact</a>
+            Website: <a href="https://aiedgesolutions.online/contact" style={{ color: "#00AEEF" }}>aiedgesolutions.online/contact</a>
           </p>
         </div>
 

@@ -19,7 +19,7 @@ export default function TermsPage() {
         <div style={SECTION_STYLE}>
           <h2 style={H2_STYLE}>1. Acceptance of Terms</h2>
           <p style={P_STYLE}>
-            By accessing or using the AI Edge Solutions website (<a href="https://replit-exportzip-diazpmatt.replit.app" style={{ color: "#00AEEF" }}>https://replit-exportzip-diazpmatt.replit.app</a>)
+            By accessing or using the AI Edge Solutions website (<a href="https://aiedgesolutions.online" style={{ color: "#00AEEF" }}>https://aiedgesolutions.online</a>)
             or any of our services, you agree to be bound by these Terms of Service. If you do not agree to these terms,
             please do not use our services.
           </p>
@@ -145,7 +145,7 @@ export default function TermsPage() {
           <p style={{ fontSize: 15, color: "#9CA3AF", lineHeight: 1.75, margin: "10px 0 0" }}>
             <strong style={{ color: "#D1D5DB" }}>AI Edge Solutions</strong><br />
             Email: <a href="mailto:legal@ai-edge-solutions.com" style={{ color: "#00AEEF" }}>legal@ai-edge-solutions.com</a><br />
-            Website: <a href="https://replit-exportzip-diazpmatt.replit.app/contact" style={{ color: "#00AEEF" }}>replit-exportzip-diazpmatt.replit.app/contact</a>
+            Website: <a href="https://aiedgesolutions.online/contact" style={{ color: "#00AEEF" }}>aiedgesolutions.online/contact</a>
           </p>
         </div>
       </main>

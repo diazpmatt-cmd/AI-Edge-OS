@@ -121,8 +121,10 @@ function AppRouter() {
         <Route path="/case-studies" component={CaseStudiesPage} />
         <Route path="/pricing"      component={PricingPage} />
         <Route path="/contact"      component={ContactPage} />
-        <Route path="/privacy"      component={PrivacyPage} />
-        <Route path="/terms"        component={TermsPage} />
+        <Route path="/privacy"        component={PrivacyPage} />
+        <Route path="/privacy-policy" component={PrivacyPage} />
+        <Route path="/terms"          component={TermsPage} />
+        <Route path="/terms-of-service" component={TermsPage} />
         <Route path="/"             component={HomePage} />
       </Switch>
     </Suspense>

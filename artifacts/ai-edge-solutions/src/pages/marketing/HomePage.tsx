@@ -88,12 +88,16 @@ export default function HomePage() {
               {/* Headline */}
               <h1 style={{
                 fontSize: "clamp(36px, 5vw, 62px)", fontWeight: 900,
-                lineHeight: 1.08, letterSpacing: "-1.5px", marginBottom: 24,
+                lineHeight: 1.08, letterSpacing: "-1.5px", marginBottom: 16,
               }}>
-                AI Automation That Gives<br />
-                Local Businesses{" "}
-                <span style={{ color: "#00AEEF", textShadow: "0 0 30px rgba(0,174,239,0.45)" }}>an Edge</span>
+                AI Edge{" "}
+                <span style={{ color: "#00AEEF", textShadow: "0 0 30px rgba(0,174,239,0.45)" }}>Solutions</span>
               </h1>
+
+              {/* Subheading */}
+              <p style={{ fontSize: "clamp(18px, 2.2vw, 24px)", fontWeight: 600, color: "#C0C0C0", lineHeight: 1.3, marginBottom: 24 }}>
+                AI Automation That Gives Local Businesses an Edge
+              </p>
 
               {/* Description */}
               <p style={{ fontSize: "clamp(15px, 1.8vw, 18px)", color: "#8B9AB0", lineHeight: 1.70, marginBottom: 40, maxWidth: 500 }}>

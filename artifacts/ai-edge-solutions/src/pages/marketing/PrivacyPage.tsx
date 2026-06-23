@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <div style={{ background: "#030612", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Nav />
       <main style={{ flex: 1, maxWidth: 800, margin: "0 auto", padding: "80px 24px 60px", width: "100%" }}>
-        <h1 style={{ fontSize: 36, fontWeight: 800, color: "#E5E7EB", marginBottom: 8, marginTop: 0 }}>Privacy Policy</h1>
+        <h1 style={{ fontSize: 36, fontWeight: 800, color: "#E5E7EB", marginBottom: 8, marginTop: 0 }}>AI Edge Solutions Privacy Policy</h1>
         <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 48, marginTop: 0 }}>
           Last updated: June 20, 2025
         </p>

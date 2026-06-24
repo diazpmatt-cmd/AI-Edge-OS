@@ -41,7 +41,6 @@ type MigrationState = {
 };
 
 const LOVABLE_MIGRATION: Record<string, MigrationState> = {
-  google_business: { status: "blocked", note: "Google Business Profile requires Google app verification before activation." },
   facebook:        { status: "needs_reconnect", note: "Reconnect with basic permissions (public_profile + pages_show_list). Page posting remains disabled until advanced Meta permissions are approved." },
   instagram:       { status: "needs_review", note: "Connect Facebook first, then request advanced Meta permissions (pages_read_engagement, instagram_basic) after app review." },
   linkedin:        { status: "coming_soon", note: "LinkedIn integration is on the roadmap." },
@@ -465,28 +464,31 @@ export default function ConnectionsPage() {
               </button>
             </div>
 
-            {/* Row 3: Google Business — Pending Verification */}
+            {/* Row 3: Google Business Profile — Verified, ready to connect */}
             <div style={{
               display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-              background: "rgba(245,158,11,0.04)", borderRadius: 10, border: "1px solid rgba(245,158,11,0.18)",
-              opacity: 0.72,
+              background: "rgba(66,133,244,0.06)", borderRadius: 10, border: "1px solid rgba(66,133,244,0.15)",
             }}>
               <div style={{
                 width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                background: "linear-gradient(135deg, #4285F4, #34A853)", filter: "grayscale(0.55)",
+                background: "linear-gradient(135deg, #4285F4, #34A853)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 15, fontWeight: 900, color: "#FFF",
               }}>G</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", marginBottom: 2 }}>Google Business Profile</div>
-                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Requires <code style={{ color: "#6B7280" }}>business.manage</code> — pending Google app verification before activation.</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 2 }}>Connect Google Business Profile</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280" }}>Scope: <code style={{ color: "#94A3B8" }}>business.manage</code> — Google verification complete. Manage your Business listing.</div>
               </div>
-              <button disabled style={{
-                padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, flexShrink: 0,
-                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "#F59E0B",
-                cursor: "not-allowed",
-              }}>
-                ⏳ Pending
+              <button
+                onClick={() => handleConnect("google_business")}
+                disabled={connecting === "google_business"}
+                style={{
+                  padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+                  background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.45)", color: "#4285F4",
+                  opacity: connecting === "google_business" ? 0.6 : 1, transition: "all 0.2s",
+                }}
+              >
+                {connecting === "google_business" ? "Opening…" : "▶ Connect"}
               </button>
             </div>
           </div>

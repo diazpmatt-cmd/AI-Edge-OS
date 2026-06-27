@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import oauthCallbacksRouter from "./routes/oauth-callbacks";
+import telnyxRouter from "./routes/telnyx";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -30,9 +31,11 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// OAuth callbacks must be PUBLIC — mounted before Clerk middleware so Google/Meta
-// redirects are not blocked by auth checks. State tokens verify the user identity.
+// PUBLIC routes — mounted before Clerk middleware (no auth required)
+// OAuth callbacks: Google/Meta/TikTok redirects verified via state tokens
+// Telnyx webhooks: incoming SMS/calls from Telnyx servers (verified by source IP / payload)
 app.use("/api", oauthCallbacksRouter);
+app.use("/api", telnyxRouter);
 
 app.use(
   clerkMiddleware((req) => ({

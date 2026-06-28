@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { verifyState } from "../lib/oauthState";
@@ -10,6 +11,13 @@ const router = Router();
 
 function getAppBase(): string {
   return process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
+}
+
+// Prefer the dev origin embedded in the signed state so the popup window ends
+// up on the same origin as the opener (avoids cross-origin postMessage issues
+// between deployed callback and dev parent window).
+function getRedirectBase(devOrigin?: string): string {
+  return devOrigin ?? getAppBase();
 }
 
 // Map internal provider IDs to short URL-friendly names
@@ -24,12 +32,12 @@ const PROVIDER_SLUG: Record<string, string> = {
   linkedin: "linkedin",
 };
 
-function redirectSuccess(res: any, provider: string) {
-  const base = getAppBase();
+function redirectSuccess(res: any, provider: string, devOrigin?: string, returnTo?: string) {
+  const base = getRedirectBase(devOrigin);
   const slug = PROVIDER_SLUG[provider] ?? provider;
-  // Redirect to /oauth-close which handles both popup (postMessage + close)
-  // and top-level navigation (redirects to /admin/connections) automatically.
-  const url = `${base}/oauth-close?connected=${slug}`;
+  const returnToParam = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
+  const url = `${base}/oauth-close?connected=${slug}${returnToParam}`;
+  console.log(`[OAUTH-CALLBACK] redirectSuccess provider=${provider} devOrigin=${devOrigin ?? "none"} url=${url}`);
   logCallback({
     ts: new Date().toISOString(),
     provider,
@@ -43,9 +51,12 @@ function redirectSuccess(res: any, provider: string) {
   res.redirect(url);
 }
 
-function redirectError(res: any, provider: string, reason: string, step: string, extra: Partial<{ codeReceived: boolean; stateValid: boolean | null }> = {}) {
-  const base = getAppBase();
-  const url = `${base}/admin/connections?oauth_error=${encodeURIComponent(reason)}&step=${encodeURIComponent(step)}&provider=${provider}`;
+function redirectError(res: any, provider: string, reason: string, step: string, devOrigin?: string, extra: Partial<{ codeReceived: boolean; stateValid: boolean | null }> = {}) {
+  const base = getRedirectBase(devOrigin);
+  // Always go to /oauth-close (not /admin/connections) so the popup window can
+  // fire window.opener.postMessage({type:"oauth_error",...}) back to the parent.
+  const url = `${base}/oauth-close?oauth_error=${encodeURIComponent(reason)}&step=${encodeURIComponent(step)}&provider=${provider}`;
+  console.error(`[OAUTH-CALLBACK] redirectError provider=${provider} reason=${reason} step=${step} devOrigin=${devOrigin ?? "none"} url=${url}`);
   logCallback({
     ts: new Date().toISOString(),
     provider,
@@ -99,20 +110,20 @@ router.get("/oauth/google/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
 
   if (error) {
-    redirectError(res, "google", error, "google_callback", { codeReceived: false });
+    redirectError(res, "google", error, "google_callback", undefined, { codeReceived: false });
     return;
   }
   if (!code || !state) {
-    redirectError(res, "google", "missing_params", "google_callback", { codeReceived: !!code });
+    redirectError(res, "google", "missing_params", "google_callback", undefined, { codeReceived: !!code });
     return;
   }
 
   const verified = verifyState(state, ["google_business", "youtube", "google_basic", "youtube_readonly"]);
   if (!verified) {
-    redirectError(res, "google", "invalid_state", "state_verify", { codeReceived: true, stateValid: false });
+    redirectError(res, "google", "invalid_state", "state_verify", undefined, { codeReceived: true, stateValid: false });
     return;
   }
-  const { userId, provider } = verified;
+  const { userId, provider, devOrigin } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/google/callback`;
@@ -139,9 +150,9 @@ router.get("/oauth/google/callback", async (req, res) => {
       },
     });
 
-    redirectSuccess(res, provider);
+    redirectSuccess(res, provider, devOrigin);
   } catch (e: any) {
-    redirectError(res, provider, e?.message ?? "token_exchange_failed", "google_token", { codeReceived: true, stateValid: true });
+    redirectError(res, provider, e?.message ?? "token_exchange_failed", "google_token", devOrigin, { codeReceived: true, stateValid: true });
   }
 });
 
@@ -175,61 +186,78 @@ const META_REQUIRED_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_re
 router.get("/oauth/meta/callback", async (req, res) => {
   const { code, state, error, error_reason } = req.query as Record<string, string>;
 
+  console.log(`[META-CALLBACK] hit: hasCode=${!!code} hasState=${!!state} error=${error ?? "none"}`);
+
   if (error) {
+    console.error(`[META-CALLBACK] facebook denied: ${error_reason ?? error}`);
     logger.warn({ provider: "meta", error, error_reason }, "Meta OAuth callback error from Facebook");
-    redirectError(res, "facebook", error_reason ?? error, "meta_callback", { codeReceived: false });
+    redirectError(res, "facebook", error_reason ?? error, "meta_callback", undefined, { codeReceived: false });
     return;
   }
   if (!code || !state) {
+    console.error(`[META-CALLBACK] missing params: code=${!!code} state=${!!state}`);
     logger.warn({ provider: "meta", hasCode: !!code, hasState: !!state }, "Meta OAuth callback missing params");
-    redirectError(res, "facebook", "missing_params", "meta_callback", { codeReceived: !!code });
+    redirectError(res, "facebook", "missing_params", "meta_callback", undefined, { codeReceived: !!code });
     return;
   }
 
   const verified = verifyState(state, ["facebook", "instagram"]);
   if (!verified) {
-    logger.warn({ provider: "meta" }, "Meta OAuth callback invalid state");
-    redirectError(res, "facebook", "invalid_state", "state_verify", { codeReceived: true, stateValid: false });
+    console.error(`[META-CALLBACK] invalid_state — HMAC mismatch or expired. OAUTH_STATE_SECRET set=${!!process.env.OAUTH_STATE_SECRET} CLERK_SECRET_KEY set=${!!process.env.CLERK_SECRET_KEY}`);
+    logger.warn({ provider: "meta", oauthSecretSet: !!process.env.OAUTH_STATE_SECRET }, "Meta OAuth callback invalid state");
+    redirectError(res, "facebook", "invalid_state", "state_verify", undefined, { codeReceived: true, stateValid: false });
     return;
   }
-  const { userId, provider, returnTo } = verified;
-  logger.info({ provider, userId, returnTo }, "Meta OAuth callback: code received, state valid — exchanging token");
+  const { userId, provider, returnTo, devOrigin } = verified;
+  console.log(`[META-CALLBACK] state OK: provider=${provider} userId=${userId} returnTo=${returnTo ?? "none"} devOrigin=${devOrigin ?? "none"}`);
+  logger.info({ provider, userId, returnTo, devOrigin }, "Meta OAuth callback: state valid, exchanging token");
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/meta/callback`;
+    console.log(`[META-CALLBACK] exchanging code, redirect_uri=${redirectUri}`);
 
     // ── 1. Exchange code for access token ──
     let tokens: { access_token: string; token_type: string };
     try {
       tokens = await exchangeMetaCode(code, redirectUri);
+      console.log(`[META-CALLBACK] token exchange OK, token_type=${tokens.token_type}`);
       logger.info({ provider, userId }, "Meta token exchange succeeded");
     } catch (e: any) {
+      console.error(`[META-CALLBACK] token exchange FAILED: ${e?.message}`);
       logger.error({ provider, userId, error: e?.message }, "Meta token exchange FAILED");
       throw e;
     }
 
     // ── 2. Get user info ──
     const userInfo = await getMetaUserInfo(tokens.access_token);
+    console.log(`[META-CALLBACK] user info: name=${userInfo.name} id=${userInfo.id}`);
     logger.info({ provider, userId, accountName: userInfo.name, accountId: userInfo.id }, "Meta user info fetched");
 
     // ── 3. Save token to DB ──
-    await db.insert(socialConnectionsTable).values({
-      userId, provider,
-      accountName: userInfo.name,
-      accountId: userInfo.id,
-      accessToken: tokens.access_token,
-      refreshToken: null,
-      expiresAt: null,
-    }).onConflictDoUpdate({
-      target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
-      set: {
+    try {
+      await db.insert(socialConnectionsTable).values({
+        userId, provider,
         accountName: userInfo.name,
         accountId: userInfo.id,
         accessToken: tokens.access_token,
-        updatedAt: new Date(),
-      },
-    });
-    logger.info({ provider, userId }, "Meta token saved to DB");
+        refreshToken: null,
+        expiresAt: null,
+      }).onConflictDoUpdate({
+        target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
+        set: {
+          accountName: userInfo.name,
+          accountId: userInfo.id,
+          accessToken: tokens.access_token,
+          updatedAt: new Date(),
+        },
+      });
+      console.log(`[META-CALLBACK] DB save OK: provider=${provider} userId=${userId}`);
+      logger.info({ provider, userId }, "Meta token saved to DB");
+    } catch (dbErr: any) {
+      console.error(`[META-CALLBACK] DB save FAILED: ${dbErr?.message}`);
+      logger.error({ provider, userId, error: dbErr?.message }, "Meta DB save FAILED");
+      throw dbErr;
+    }
 
     // ── 4. Fetch /me/accounts — store first page token in metadata ──
     let pagesFound = 0;
@@ -241,6 +269,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
         const acctData = await acctR.json() as { data?: Array<{ id: string; name: string; access_token: string }> };
         pagesFound = acctData.data?.length ?? 0;
         pageNames = (acctData.data ?? []).map(p => p.name);
+        console.log(`[META-CALLBACK] /me/accounts: pagesFound=${pagesFound} pages=${pageNames.join(",")}`);
         logger.info({ provider, userId, pagesFound, pageNames }, "Meta /me/accounts OK");
 
         const firstPage = acctData.data?.[0];
@@ -248,7 +277,6 @@ router.get("/oauth/meta/callback", async (req, res) => {
           storedMetadata.pageId = firstPage.id;
           storedMetadata.pageName = firstPage.name;
           storedMetadata.pageAccessToken = firstPage.access_token;
-          logger.info({ provider, userId, pageId: firstPage.id, pageName: firstPage.name }, "Stored page token from first page");
 
           // Try to get connected Instagram business account
           try {
@@ -257,28 +285,27 @@ router.get("/oauth/meta/callback", async (req, res) => {
               const igData = await igR.json() as { instagram_business_account?: { id: string } };
               if (igData.instagram_business_account?.id) {
                 storedMetadata.instagramBusinessAccountId = igData.instagram_business_account.id;
-                logger.info({ provider, userId, igAccountId: igData.instagram_business_account.id }, "Instagram business account found");
-              } else {
-                logger.info({ provider, userId }, "No Instagram business account linked to this Page");
               }
             }
-          } catch (igErr: any) {
-            logger.warn({ provider, userId, error: igErr?.message }, "IG business account fetch exception");
-          }
+          } catch { /* ignore */ }
 
           // Update metadata in DB
           await db.update(socialConnectionsTable)
             .set({ metadata: JSON.stringify(storedMetadata), updatedAt: new Date() })
             .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider)));
-          logger.info({ provider, userId, metadata: { pageId: storedMetadata.pageId, pageName: storedMetadata.pageName, hasIg: !!storedMetadata.instagramBusinessAccountId } }, "Metadata stored in DB");
+          console.log(`[META-CALLBACK] metadata saved: pageId=${firstPage.id} pageName=${firstPage.name}`);
+          logger.info({ provider, userId, pageId: firstPage.id, pageName: firstPage.name }, "Metadata stored in DB");
         } else {
-          logger.warn({ provider, userId }, "Meta /me/accounts returned 0 pages — user may have no Pages or declined pages_show_list");
+          console.log(`[META-CALLBACK] /me/accounts: 0 pages (user may have no Pages or declined pages_show_list)`);
+          logger.warn({ provider, userId }, "Meta /me/accounts returned 0 pages");
         }
       } else {
         const errBody = await acctR.text().catch(() => "");
+        console.error(`[META-CALLBACK] /me/accounts FAILED: status=${acctR.status} body=${errBody}`);
         logger.error({ provider, userId, status: acctR.status, body: errBody }, "Meta /me/accounts FAILED");
       }
     } catch (pageErr: any) {
+      console.error(`[META-CALLBACK] /me/accounts exception: ${pageErr?.message}`);
       logger.warn({ provider, userId, error: pageErr?.message }, "Meta /me/accounts exception");
     }
 
@@ -292,9 +319,11 @@ router.get("/oauth/meta/callback", async (req, res) => {
         grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
         missingScopes = META_REQUIRED_SCOPES.filter(s => !grantedScopes.includes(s));
         if (missingScopes.length > 0) {
-          logger.warn({ provider, userId, missingScopes, grantedScopes }, "Meta OAuth: MISSING required scopes for publishing");
+          console.log(`[META-CALLBACK] missing scopes: ${missingScopes.join(",")}`);
+          logger.warn({ provider, userId, missingScopes, grantedScopes }, "Meta OAuth: MISSING required scopes");
         } else {
-          logger.info({ provider, userId, grantedScopes }, "Meta OAuth: all required publishing scopes granted");
+          console.log(`[META-CALLBACK] all required scopes granted: ${grantedScopes.join(",")}`);
+          logger.info({ provider, userId, grantedScopes }, "Meta OAuth: all required scopes granted");
         }
       }
     } catch (permErr: any) {
@@ -302,10 +331,6 @@ router.get("/oauth/meta/callback", async (req, res) => {
     }
 
     // ── 6. Log and redirect ──
-    const base = getAppBase();
-    const slug = PROVIDER_SLUG[provider] ?? provider;
-    const returnToParam = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
-    const finalRedirectUrl = `${base}/oauth-close?connected=${slug}${returnToParam}`;
     logCallback({
       ts: new Date().toISOString(),
       provider,
@@ -314,16 +339,16 @@ router.get("/oauth/meta/callback", async (req, res) => {
       stateValid: true,
       tokenExchangeStatus: "success",
       connectionSaved: true,
-      finalRedirectUrl,
+      finalRedirectUrl: "pending",
       pagesFound,
       pageNames,
       grantedScopes,
       missingScopes,
     });
-    res.redirect(finalRedirectUrl);
+    redirectSuccess(res, provider, devOrigin, returnTo);
 
   } catch (e: any) {
-    redirectError(res, provider, e?.message ?? "token_exchange_failed", "meta_token", { codeReceived: true, stateValid: true });
+    redirectError(res, provider, e?.message ?? "token_exchange_failed", "meta_token", devOrigin, { codeReceived: true, stateValid: true });
   }
 });
 
@@ -331,11 +356,11 @@ router.get("/oauth/meta/callback", async (req, res) => {
 router.get("/oauth/tiktok/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectError(res, "tiktok", error, "tiktok_callback"); return; }
-  if (!code || !state) { redirectError(res, "tiktok", "missing_params", "tiktok_callback", { codeReceived: !!code }); return; }
+  if (!code || !state) { redirectError(res, "tiktok", "missing_params", "tiktok_callback", undefined, { codeReceived: !!code }); return; }
 
   const verified = verifyState(state, ["tiktok"]);
-  if (!verified) { redirectError(res, "tiktok", "invalid_state", "state_verify", { codeReceived: true, stateValid: false }); return; }
-  const { userId } = verified;
+  if (!verified) { redirectError(res, "tiktok", "invalid_state", "state_verify", undefined, { codeReceived: true, stateValid: false }); return; }
+  const { userId, devOrigin } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/tiktok/callback`;
@@ -368,9 +393,9 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
       },
     });
 
-    redirectSuccess(res, "tiktok");
+    redirectSuccess(res, "tiktok", devOrigin);
   } catch (e: any) {
-    redirectError(res, "tiktok", e?.message ?? "token_exchange_failed", "tiktok_token", { codeReceived: true, stateValid: true });
+    redirectError(res, "tiktok", e?.message ?? "token_exchange_failed", "tiktok_token", devOrigin, { codeReceived: true, stateValid: true });
   }
 });
 
@@ -378,11 +403,11 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
 router.get("/oauth/linkedin/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectError(res, "linkedin", error, "linkedin_callback"); return; }
-  if (!code || !state) { redirectError(res, "linkedin", "missing_params", "linkedin_callback", { codeReceived: !!code }); return; }
+  if (!code || !state) { redirectError(res, "linkedin", "missing_params", "linkedin_callback", undefined, { codeReceived: !!code }); return; }
 
   const verified = verifyState(state, ["linkedin"]);
-  if (!verified) { redirectError(res, "linkedin", "invalid_state", "state_verify", { codeReceived: true, stateValid: false }); return; }
-  const { userId } = verified;
+  if (!verified) { redirectError(res, "linkedin", "invalid_state", "state_verify", undefined, { codeReceived: true, stateValid: false }); return; }
+  const { userId, devOrigin } = verified;
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/linkedin/callback`;
@@ -420,9 +445,9 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
       },
     });
 
-    redirectSuccess(res, "linkedin");
+    redirectSuccess(res, "linkedin", devOrigin);
   } catch (e: any) {
-    redirectError(res, "linkedin", e?.message ?? "token_exchange_failed", "linkedin_token", { codeReceived: true, stateValid: true });
+    redirectError(res, "linkedin", e?.message ?? "token_exchange_failed", "linkedin_token", devOrigin, { codeReceived: true, stateValid: true });
   }
 });
 

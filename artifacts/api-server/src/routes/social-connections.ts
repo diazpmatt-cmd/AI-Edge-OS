@@ -76,6 +76,12 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const { provider } = req.params;
   const returnTo: string | undefined = req.body?.returnTo;
+  // Pass the current dev-server origin into the signed state so the deployed
+  // callback can redirect the popup window back to the dev server's /oauth-close
+  // (same origin as the opener → postMessage works even cross-deployment).
+  const devOrigin: string | undefined = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : undefined;
 
   const OAUTH_CONFIG: Record<string, { envKey: string; buildUrl: (baseUrl: string) => string }> = {
     google_business: {
@@ -157,7 +163,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           response_type: "code",
           // pages_manage_posts + pages_read_engagement are required to publish posts
           scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement",
-          state: generateState(userId, "facebook", returnTo),
+          state: generateState(userId, "facebook", returnTo, devOrigin),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },
@@ -173,7 +179,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           response_type: "code",
           // Full set: pages needed for FB publishing + instagram for IG publishing
           scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
-          state: generateState(userId, "instagram", returnTo),
+          state: generateState(userId, "instagram", returnTo, devOrigin),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },

@@ -248,6 +248,35 @@ export default function ConnectionsPage() {
     retry: 1,
   });
 
+  type GBPStatus = {
+    connected: boolean;
+    statusLabel: string;
+    failureReason:
+      | "token_not_found_in_dev"
+      | "token_saved_but_no_refresh_token"
+      | "missing_business_manage_scope"
+      | "no_gbp_accounts_found"
+      | "no_gbp_locations_found"
+      | "google_api_error"
+      | null;
+    tokenExists: boolean;
+    refreshTokenExists: boolean;
+    accountName: string | null;
+    businessManageScopeGranted: boolean;
+    gbpAccountsFound: number;
+    gbpLocationsFound: number;
+    locationNames: string[];
+    selectedLocationName: string | null;
+    apiError: string | null;
+  };
+  const { refetch: refetchGBPStatus } = useQuery<GBPStatus>({
+    queryKey: ["google_business_status"],
+    queryFn: () => authFetch<GBPStatus>("/social-connections/google-business-status"),
+    staleTime: 60 * 1000,
+    retry: 1,
+    enabled: false,
+  });
+
   // Normalize provider aliases so debug-path connections (e.g. "youtube_readonly"
   // written by the ▶ Run Test button) still map to the canonical PLATFORMS id.
   const PROVIDER_NORMALIZE: Record<string, string> = { youtube_readonly: "youtube" };
@@ -394,9 +423,8 @@ export default function ConnectionsPage() {
           }
         } else {
           // Non-Meta provider (Google, LinkedIn, etc.)
-          // The OAuth callback saves to prod DB using the full provider key
-          // (e.g. "google_business"), but the popup slug is shortened (e.g. "google").
-          // Resolve the full key before pulling.
+          // Slug→provider key: the popup URL uses a short slug (e.g. "google")
+          // but the DB row uses the full key (e.g. "google_business").
           const SLUG_TO_PROVIDER: Record<string, string> = {
             google:   "google_business",
             youtube:  "youtube",
@@ -404,12 +432,13 @@ export default function ConnectionsPage() {
             linkedin: "linkedin",
           };
           const pullProvider = SLUG_TO_PROVIDER[receivedProvider] ?? receivedProvider;
-          const label = (pullProvider).replace(/_/g, " ");
+          const label = pullProvider.replace(/_/g, " ");
           const cap = label.charAt(0).toUpperCase() + label.slice(1);
 
           console.log(`[OAuth] non-Meta verification: receivedProvider=${receivedProvider} pullProvider=${pullProvider}`);
 
-          // Pull token from prod DB → dev DB (same Replit dev/prod split as Meta)
+          // Pull token from prod DB → dev DB (backup path — the callback's
+          // syncToDevServer should have already done this, but pull as a safety net)
           try {
             const pullResult = await authFetch<{ synced: boolean; reason?: string }>(
               "/social-connections/pull-from-prod",
@@ -420,24 +449,66 @@ export default function ConnectionsPage() {
             console.warn(`[OAuth] pull-from-prod (${pullProvider}) failed (non-fatal):`, pullErr);
           }
 
-          // Now refetch and confirm the row landed
-          try {
-            const { data: freshConns } = await refetchConnections();
-            const found = freshConns?.some(
-              (c) => c.provider === pullProvider
-                  || c.provider === receivedProvider
-                  || c.provider.startsWith(receivedProvider),
-            );
-            if (found) {
-              toast.success(`${cap} connected successfully!`);
-            } else {
-              toast.error(
-                `${cap} login completed but the connection could not be verified. The token may not have been saved — please try reconnecting.`,
-                { duration: 10000 },
-              );
+          qc.invalidateQueries({ queryKey: ["google_business_status"] });
+
+          if (pullProvider === "google_business") {
+            // Use the detailed GBP status endpoint (mirrors Meta flow)
+            try {
+              const { data: gbpStatus } = await refetchGBPStatus();
+              if (!gbpStatus) {
+                toast.error("Google Business status check failed — please try again.", { duration: 8000 });
+              } else if (gbpStatus.connected) {
+                const loc = gbpStatus.selectedLocationName;
+                toast.success(
+                  loc
+                    ? `Google Business Profile connected! Location: "${loc}"`
+                    : `Google Business Profile connected!`,
+                );
+              } else {
+                let msg = "Google Business login completed, but verification failed.";
+                switch (gbpStatus.failureReason) {
+                  case "token_not_found_in_dev":
+                    msg = "Google token could not be saved — please try again.";
+                    break;
+                  case "token_saved_but_no_refresh_token":
+                    msg = "Google token saved but no refresh token received. Please reconnect and confirm the consent screen.";
+                    break;
+                  case "missing_business_manage_scope":
+                    msg = "Missing the business.manage scope. Please reconnect and approve all requested permissions.";
+                    break;
+                  case "no_gbp_accounts_found":
+                    msg = "No Google Business Profile accounts found. Make sure your Google account has a GBP account set up.";
+                    break;
+                  case "no_gbp_locations_found":
+                    msg = "Google account connected but no business locations found. Add at least one location in Google Business Profile.";
+                    break;
+                  case "google_api_error":
+                    msg = `Google API error: ${gbpStatus.apiError ?? "unknown"}. Check that the Business Profile API is enabled in Google Cloud Console.`;
+                    break;
+                }
+                toast(msg, { icon: "⚠️", duration: 12000 });
+              }
+            } catch {
+              toast("Google Business login completed. Checking connection status…", { icon: "⏳", duration: 5000 });
             }
-          } catch {
-            toast.success(`${cap} connected!`);
+          } else {
+            // LinkedIn, TikTok, YouTube etc — simple connection check
+            try {
+              const { data: freshConns } = await refetchConnections();
+              const found = freshConns?.some(
+                (c) => c.provider === pullProvider || c.provider === receivedProvider || c.provider.startsWith(receivedProvider),
+              );
+              if (found) {
+                toast.success(`${cap} connected successfully!`);
+              } else {
+                toast.error(
+                  `${cap} login completed but the connection could not be verified — please try reconnecting.`,
+                  { duration: 10000 },
+                );
+              }
+            } catch {
+              toast.success(`${cap} connected!`);
+            }
           }
         }
       }

@@ -279,7 +279,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/business.manage openid email",
           access_type: "offline",
           prompt: "consent",
-          state: generateState(userId, "google_business"),
+          state: generateState(userId, "google_business", undefined, devOrigin),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -296,7 +296,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/youtube.readonly openid email profile",
           access_type: "offline",
           prompt: "consent",
-          state: generateState(userId, "youtube"),
+          state: generateState(userId, "youtube", undefined, devOrigin),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -313,7 +313,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "openid email profile",
           access_type: "offline",
           prompt: "consent",
-          state: generateState(userId, "google_basic"),
+          state: generateState(userId, "google_basic", undefined, devOrigin),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -330,7 +330,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/youtube.readonly openid email profile",
           access_type: "offline",
           prompt: "consent",
-          state: generateState(userId, "youtube_readonly"),
+          state: generateState(userId, "youtube_readonly", undefined, devOrigin),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
       },
@@ -571,6 +571,166 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
     instagramBusinessFound,
     instagramBusinessAccountId: metadata.instagramBusinessAccountId ?? null,
     permissionsError,
+  });
+});
+
+// ── Google Business Profile status (detailed, mirrors meta-publish-status) ────
+router.get("/social-connections/google-business-status", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  type GBPFailureReason =
+    | "token_not_found_in_dev"
+    | "token_saved_but_no_refresh_token"
+    | "missing_business_manage_scope"
+    | "no_gbp_accounts_found"
+    | "no_gbp_locations_found"
+    | "google_api_error"
+    | null;
+
+  const [row] = await db.select().from(socialConnectionsTable).where(
+    and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business"))
+  );
+
+  console.log(`[GBP-STATUS] userId=${userId} row=${row ? "found" : "NOT FOUND"}`);
+  console.log(`[GOOGLE-VERIFY-LOOKUP] provider=google_business userId=${userId} found=${!!row}`);
+
+  if (!row?.accessToken) {
+    console.log(`[GBP-STATUS] token_not_found_in_dev — no google_business row in DB for this user`);
+    res.json({
+      connected: false,
+      statusLabel: "not_connected",
+      failureReason: "token_not_found_in_dev" as GBPFailureReason,
+      tokenExists: false,
+      refreshTokenExists: false,
+      accountName: null,
+      businessManageScopeGranted: false,
+      gbpAccountsFound: 0,
+      gbpLocationsFound: 0,
+      locationNames: [],
+      selectedLocationName: null,
+      apiError: null,
+    });
+    return;
+  }
+
+  let metadata: Record<string, any> = {};
+  try { if (row.metadata) metadata = JSON.parse(row.metadata); } catch {}
+
+  console.log(`[GBP-STATUS] metadata keys=${Object.keys(metadata).join(",") || "(empty)"}`);
+
+  const refreshTokenExists = !!(row.refreshToken);
+  let gbpAccountsFound = 0;
+  let gbpLocationsFound = 0;
+  let locationNames: string[] = [];
+  let selectedLocationName: string | null = metadata.primaryLocationTitle ?? null;
+  let businessManageScopeGranted = false;
+  let apiError: string | null = null;
+  let failureReason: GBPFailureReason = null;
+
+  // ── Fetch GBP accounts ──
+  console.log(`[GOOGLE-VERIFY] fetching GBP accounts...`);
+  try {
+    const acctR = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      headers: { Authorization: `Bearer ${row.accessToken}` },
+      signal: AbortSignal.timeout(8000),
+    });
+    const acctBody = await acctR.text();
+    console.log(`[GOOGLE-VERIFY] accounts API status=${acctR.status} body=${acctBody.slice(0, 400)}`);
+
+    if (acctR.ok) {
+      const acctData = JSON.parse(acctBody) as { accounts?: Array<{ name: string; accountName: string }> };
+      gbpAccountsFound = acctData.accounts?.length ?? 0;
+      businessManageScopeGranted = true;
+      console.log(`[GOOGLE-VERIFY] accounts found = ${gbpAccountsFound}`);
+
+      if (gbpAccountsFound === 0) {
+        failureReason = "no_gbp_accounts_found";
+      } else {
+        // ── Fetch locations ──
+        const firstAccount = acctData.accounts![0];
+        try {
+          const locR = await fetch(
+            `https://mybusinessbusinessinformation.googleapis.com/v1/${firstAccount.name}/locations?readMask=name,title`,
+            { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(8000) }
+          );
+          const locBody = await locR.text();
+          console.log(`[GOOGLE-VERIFY] locations API status=${locR.status} body=${locBody.slice(0, 500)}`);
+
+          if (locR.ok) {
+            const locData = JSON.parse(locBody) as { locations?: Array<{ name: string; title: string }> };
+            const locs = locData.locations ?? [];
+            gbpLocationsFound = locs.length;
+            locationNames = locs.map(l => l.title);
+            console.log(`[GOOGLE-VERIFY] locations found = ${gbpLocationsFound} names=${JSON.stringify(locationNames)}`);
+
+            if (gbpLocationsFound === 0) {
+              failureReason = "no_gbp_locations_found";
+            } else {
+              const match = locs.find(l =>
+                l.title?.toLowerCase().includes("bed bug") || l.title?.toLowerCase().includes("beyond")
+              );
+              selectedLocationName = match ? match.title : locs[0].title;
+              console.log(`[GOOGLE-VERIFY] selectedLocationName="${selectedLocationName}"`);
+
+              // Update metadata with latest location info
+              try {
+                const updatedMeta = { ...metadata, primaryLocationTitle: selectedLocationName, locationNames, gbpAccountsFound, gbpLocationsFound };
+                await db.update(socialConnectionsTable)
+                  .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+                  .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+              } catch { /* non-fatal */ }
+            }
+          } else {
+            const errJson = JSON.parse(locBody) as any;
+            apiError = `Locations API: HTTP ${locR.status} — ${errJson?.error?.message ?? locBody.slice(0, 120)}`;
+            console.warn(`[GOOGLE-VERIFY] locations API failed: ${apiError}`);
+            failureReason = "google_api_error";
+          }
+        } catch (locErr: any) {
+          apiError = `Locations fetch error: ${locErr?.message}`;
+          console.warn(`[GOOGLE-VERIFY] ${apiError}`);
+          failureReason = "google_api_error";
+        }
+      }
+    } else {
+      let errMsg = acctBody.slice(0, 200);
+      try { errMsg = (JSON.parse(acctBody) as any)?.error?.message ?? errMsg; } catch {}
+      console.warn(`[GOOGLE-VERIFY] accounts API failed HTTP ${acctR.status}: ${errMsg}`);
+      if (acctR.status === 403 || acctR.status === 401) {
+        failureReason = "missing_business_manage_scope";
+        apiError = `Accounts API: HTTP ${acctR.status} — ${errMsg}`;
+      } else {
+        failureReason = "google_api_error";
+        apiError = `Accounts API: HTTP ${acctR.status} — ${errMsg}`;
+      }
+    }
+  } catch (acctErr: any) {
+    apiError = `Accounts fetch error: ${acctErr?.message}`;
+    console.warn(`[GOOGLE-VERIFY] ${apiError}`);
+    failureReason = "google_api_error";
+  }
+
+  if (!refreshTokenExists && !failureReason) {
+    failureReason = "token_saved_but_no_refresh_token";
+  }
+
+  const statusLabel = !failureReason ? "connected" : failureReason;
+  console.log(`[GBP-STATUS] → statusLabel=${statusLabel} failureReason=${failureReason ?? "null (success)"} accounts=${gbpAccountsFound} locations=${gbpLocationsFound} location="${selectedLocationName ?? "none"}"`);
+
+  res.json({
+    connected: !failureReason,
+    statusLabel,
+    failureReason,
+    tokenExists: true,
+    refreshTokenExists,
+    accountName: row.accountName,
+    businessManageScopeGranted,
+    gbpAccountsFound,
+    gbpLocationsFound,
+    locationNames,
+    selectedLocationName,
+    apiError,
   });
 });
 

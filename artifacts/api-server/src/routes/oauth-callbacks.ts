@@ -224,7 +224,29 @@ router.get("/oauth/google/callback", async (req, res) => {
       throw dbErr;
     }
 
-    // ── 4. Verify GBP accounts + locations (google_business only) ──
+    // ── 4. Sync to dev server (bridges Replit dev/prod DB split) ──
+    // devOrigin is now embedded in the signed state (same as Meta).
+    // This fires BEFORE the popup redirect so the dev DB has the token
+    // by the time the frontend verification runs.
+    if (devOrigin) {
+      console.log(`[GOOGLE-CALLBACK] dev-sync → ${devOrigin}`);
+      try {
+        await syncToDevServer(devOrigin, {
+          provider, userId,
+          accountName: userInfo.name ?? userInfo.email,
+          accountId: userInfo.id,
+          accessToken: tokens.access_token,
+          metadata: null,
+        });
+        console.log(`[GOOGLE-CALLBACK] ✓ dev-sync OK`);
+      } catch (syncErr: any) {
+        console.warn(`[GOOGLE-CALLBACK] ✗ dev-sync FAILED (non-fatal): ${syncErr?.message}`);
+      }
+    } else {
+      console.warn(`[GOOGLE-CALLBACK] devOrigin missing — dev DB will not receive token until pull-from-prod runs`);
+    }
+
+    // ── 5. Verify GBP accounts + locations (google_business only) ──
     if (provider === "google_business") {
       console.log(`[GOOGLE-VERIFY] starting GBP account + location check...`);
       const gbpMeta: Record<string, any> = {};

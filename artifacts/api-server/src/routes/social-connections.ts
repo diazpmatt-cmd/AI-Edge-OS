@@ -366,19 +366,20 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
 
     // ── /me/accounts ─────────────────────────────────────────────────────────
     try {
-      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name&access_token=${fbRow.accessToken}`);
-      if (acctR.ok) {
-        const acctData = await acctR.json() as { data?: Array<{ id: string; name: string }>; error?: { message: string; code: number } };
-        if (acctData.error) {
-          console.error(`[META-STATUS] /me/accounts API error code=${acctData.error.code}: ${acctData.error.message}`);
-        } else {
-          pagesFound = acctData.data?.length ?? 0;
-          pageNames = (acctData.data ?? []).map(p => p.name);
-          console.log(`[META-STATUS] /me/accounts OK — pagesFound=${pagesFound} pageNames=[${pageNames.join(", ")}]`);
-        }
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${fbRow.accessToken}`);
+      const rawText = await acctR.text();
+      console.log(`[META-STATUS] /me/accounts HTTP ${acctR.status} raw: ${rawText.slice(0, 500)}`);
+      let acctData: { data?: Array<{ id: string; name: string; access_token?: string }>; error?: { message: string; code: number } } = {};
+      try { acctData = JSON.parse(rawText); } catch { console.error(`[META-STATUS] /me/accounts JSON parse failed`); }
+      if (acctData.error) {
+        console.error(`[META-STATUS] /me/accounts Graph error code=${acctData.error.code}: ${acctData.error.message}`);
       } else {
-        const body = await acctR.text().catch(() => "");
-        console.error(`[META-STATUS] /me/accounts FAILED ${acctR.status}: ${body.slice(0, 200)}`);
+        pagesFound = acctData.data?.length ?? 0;
+        pageNames = (acctData.data ?? []).map(p => p.name);
+        console.log(`[META-STATUS] /me/accounts → pagesFound=${pagesFound} pageNames=[${pageNames.join(", ")}]`);
+        (acctData.data ?? []).forEach((p, i) => {
+          console.log(`[META-STATUS]   page[${i}]: id=${p.id} name="${p.name}" hasAccessToken=${!!p.access_token}`);
+        });
       }
     } catch (e: any) {
       console.error(`[META-STATUS] /me/accounts exception: ${e?.message}`);
@@ -455,25 +456,70 @@ router.get("/social-connections/meta-oauth-debug", async (req, res) => {
   let meAccountsResult: any = null;
   let permissionsError: string | null = null;
 
+  let meIdentity: any = null;
+
   if (fbRow?.accessToken) {
+    const tok = fbRow.accessToken;
+
+    // ── /me — confirm token identity ──────────────────────────────────────────
     try {
-      const permR = await fetch(`https://graph.facebook.com/me/permissions?access_token=${fbRow.accessToken}`);
+      const meR = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tok}`);
+      const meBody = await meR.json();
+      meIdentity = { httpStatus: meR.status, ...meBody };
+      console.log(`[META-DEBUG] /me → status=${meR.status} id=${meBody.id ?? "?"} name="${meBody.name ?? "?"}"`);
+      if (meBody.error) console.error(`[META-DEBUG] /me error code=${meBody.error.code}: ${meBody.error.message}`);
+    } catch (e: any) {
+      meIdentity = { error: e?.message };
+      console.error(`[META-DEBUG] /me exception: ${e?.message}`);
+    }
+
+    // ── /me/permissions ───────────────────────────────────────────────────────
+    try {
+      const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${tok}`);
       if (permR.ok) {
         const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
         grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
         declinedScopes = permData.data.filter(p => p.status === "declined").map(p => p.permission);
+        console.log(`[META-DEBUG] /me/permissions → granted=[${grantedScopes.join(",")}] declined=[${declinedScopes.join(",")}]`);
       } else {
-        permissionsError = `permissions API ${permR.status}`;
+        const body = await permR.text().catch(() => "");
+        permissionsError = `HTTP ${permR.status}: ${body.slice(0, 120)}`;
+        console.error(`[META-DEBUG] /me/permissions FAILED ${permR.status}: ${body.slice(0, 200)}`);
       }
     } catch (e: any) {
       permissionsError = e?.message ?? "unknown error";
+      console.error(`[META-DEBUG] /me/permissions exception: ${e?.message}`);
     }
 
+    // ── /me/accounts — request ALL fields including per-page access_token ─────
     try {
-      const acctR = await fetch(`https://graph.facebook.com/me/accounts?access_token=${fbRow.accessToken}`);
-      meAccountsResult = acctR.ok ? await acctR.json() : { error: `accounts API ${acctR.status}` };
+      const acctR = await fetch(
+        `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,tasks,category&access_token=${tok}`
+      );
+      const rawText = await acctR.text();
+      console.log(`[META-DEBUG] /me/accounts HTTP ${acctR.status} raw:\n${rawText}`);
+      try {
+        meAccountsResult = JSON.parse(rawText);
+      } catch {
+        meAccountsResult = { parseError: "could not parse JSON", raw: rawText };
+      }
+      const pages: any[] = meAccountsResult?.data ?? [];
+      console.log(`[META-DEBUG] /me/accounts → pagesFound=${pages.length}`);
+      pages.forEach((p: any, i: number) => {
+        console.log(
+          `[META-DEBUG]   page[${i}]: id=${p.id} name="${p.name}" ` +
+          `hasAccessToken=${!!p.access_token} tasks=${JSON.stringify(p.tasks ?? [])} category=${p.category ?? "?"}`
+        );
+      });
+      if (meAccountsResult?.error) {
+        console.error(
+          `[META-DEBUG] /me/accounts Graph error — code=${meAccountsResult.error.code} ` +
+          `type=${meAccountsResult.error.type} msg="${meAccountsResult.error.message}"`
+        );
+      }
     } catch (e: any) {
       meAccountsResult = { error: e?.message ?? "unknown error" };
+      console.error(`[META-DEBUG] /me/accounts exception: ${e?.message}`);
     }
   }
 
@@ -485,6 +531,8 @@ router.get("/social-connections/meta-oauth-debug", async (req, res) => {
     requestedScopes,
     connected: !!fbRow,
     accountName: fbRow?.accountName ?? null,
+    tokenLength: fbRow?.accessToken?.length ?? 0,
+    meIdentity,
     grantedScopes,
     declinedScopes,
     permissionsError,

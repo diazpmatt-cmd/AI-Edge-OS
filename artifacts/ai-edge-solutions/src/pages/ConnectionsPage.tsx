@@ -166,6 +166,8 @@ export default function ConnectionsPage() {
     requestedScopes: string;
     connected: boolean;
     accountName: string | null;
+    tokenLength: number;
+    meIdentity: { httpStatus?: number; id?: string; name?: string; error?: any } | null;
     grantedScopes: string[];
     declinedScopes: string[];
     permissionsError: string | null;
@@ -1583,9 +1585,45 @@ export default function ConnectionsPage() {
                     </div>
                   </DebugRow>
 
-                  {/* Granted / Declined scopes */}
+                  {/* Token identity + accounts raw output */}
                   {metaDebug.connected && (
                     <>
+                      <DebugRow label="Token">
+                        <span style={{ fontSize: 12, color: "#9CA3AF" }}>
+                          {metaDebug.tokenLength} chars
+                          {metaDebug.meIdentity?.error ? (
+                            <span style={{ color: "#EF4444" }}> — /me failed: {String(metaDebug.meIdentity.error)}</span>
+                          ) : metaDebug.meIdentity?.id ? (
+                            <span style={{ color: "#10B981" }}> — /me OK: {metaDebug.meIdentity.name} (id {metaDebug.meIdentity.id})</span>
+                          ) : null}
+                        </span>
+                      </DebugRow>
+
+                      <DebugRow label="/me/accounts (raw)">
+                        {!metaDebug.meAccountsResult ? (
+                          <span style={{ fontSize: 12, color: "#475569" }}>Not fetched yet — click Refresh</span>
+                        ) : metaDebug.meAccountsResult.error ? (
+                          <span style={{ fontSize: 12, color: "#EF4444" }}>
+                            Graph error: {metaDebug.meAccountsResult.error?.message ?? JSON.stringify(metaDebug.meAccountsResult.error)}
+                          </span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: 12, color: (metaDebug.meAccountsResult.data?.length ?? 0) > 0 ? "#10B981" : "#EF4444" }}>
+                              {(metaDebug.meAccountsResult.data?.length ?? 0) === 0
+                                ? "⚠ 0 pages returned — token holder has no managed Pages"
+                                : `✓ ${metaDebug.meAccountsResult.data.length} page(s) found`}
+                            </span>
+                            <pre style={{
+                              fontSize: 11, color: "#9CA3AF", margin: "6px 0 0", whiteSpace: "pre-wrap",
+                              wordBreak: "break-all", lineHeight: 1.6, maxHeight: 320, overflow: "auto",
+                              background: "#0a0f1e", padding: 8, borderRadius: 4,
+                            }}>
+                              {JSON.stringify(metaDebug.meAccountsResult, null, 2)}
+                            </pre>
+                          </>
+                        )}
+                      </DebugRow>
+
                       <DebugRow label="Granted Scopes">
                         {metaDebug.permissionsError ? (
                           <span style={{ fontSize: 12, color: "#EF4444" }}>Error: {metaDebug.permissionsError}</span>
@@ -1612,20 +1650,6 @@ export default function ConnectionsPage() {
                         )}
                       </DebugRow>
 
-                      <DebugRow label="/me/accounts (Pages)">
-                        {!metaDebug.meAccountsResult ? (
-                          <span style={{ fontSize: 12, color: "#475569" }}>Not fetched</span>
-                        ) : metaDebug.meAccountsResult.error ? (
-                          <span style={{ fontSize: 12, color: "#EF4444" }}>Error: {metaDebug.meAccountsResult.error}</span>
-                        ) : (
-                          <pre style={{
-                            fontSize: 11, color: "#9CA3AF", margin: 0, whiteSpace: "pre-wrap",
-                            wordBreak: "break-all", lineHeight: 1.6, maxHeight: 200, overflow: "auto",
-                          }}>
-                            {JSON.stringify(metaDebug.meAccountsResult, null, 2)}
-                          </pre>
-                        )}
-                      </DebugRow>
                     </>
                   )}
 

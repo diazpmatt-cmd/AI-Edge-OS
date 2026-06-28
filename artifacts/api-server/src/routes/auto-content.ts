@@ -27,7 +27,7 @@ const DEFAULT_SERVICE_AREAS = [
 
 const DEFAULT_TOPICS = [
   "Bed bugs", "Roaches", "Ants", "Fleas", "Ticks",
-  "Rats", "Wasps", "Spiders", "Mosquitoes", "Moles",
+  "Mice", "Rats", "Wasps", "Spiders", "Mosquitoes", "Moles",
 ];
 
 function parseJson<T>(raw: string, fallback: T): T {

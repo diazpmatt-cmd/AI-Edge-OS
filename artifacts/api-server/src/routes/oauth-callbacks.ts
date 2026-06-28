@@ -18,18 +18,33 @@ async function syncToDevServer(devOrigin: string, payload: {
   const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
   const sig = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
   const syncUrl = `${devOrigin}/api/social-connections/oauth-sync`;
-  console.log(`[DEV-SYNC] → POST ${syncUrl} provider=${payload.provider} userId=${payload.userId} secretUsed=${secret.slice(0,8)}...`);
-  const r = await fetch(syncUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...payload, sig }),
-    signal: AbortSignal.timeout(8000),
+
+  console.log("[DEV-SYNC ATTEMPT]", {
+    url: syncUrl,
+    payloadUserId: payload.userId,
+    provider: payload.provider,
+    signaturePrefix: sig.slice(0, 12),
   });
+
+  let r: Response;
+  try {
+    r = await fetch(syncUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, sig }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (fetchErr: any) {
+    console.error("[DEV-SYNC ERROR]", { error: fetchErr?.message ?? String(fetchErr) });
+    throw fetchErr;
+  }
+
   const body = await r.text().catch(() => "(could not read body)");
   if (!r.ok) {
+    console.error("[DEV-SYNC FAILED]", { status: r.status, body: body.slice(0, 400) });
     throw new Error(`DEV-SYNC HTTP ${r.status}: ${body.slice(0, 300)}`);
   }
-  console.log(`[DEV-SYNC] ✓ ${r.status} body=${body.slice(0, 200)}`);
+  console.log("[DEV-SYNC SUCCESS]", { status: r.status, body: body.slice(0, 300) });
 }
 
 const router = Router();
@@ -234,8 +249,15 @@ router.get("/oauth/meta/callback", async (req, res) => {
     return;
   }
   const { userId, provider, returnTo, devOrigin } = verified;
-  console.log(`[META-CALLBACK] state OK: provider=${provider} userId=${userId ?? "NULL"} returnTo=${returnTo ?? "none"} devOrigin=${devOrigin ?? "NONE — dev-sync will be skipped"}`);
-  console.log(`[META-CALLBACK] env: NODE_ENV=${process.env.NODE_ENV ?? "unset"} DATABASE_URL_set=${!!process.env.DATABASE_URL} DATABASE_URL_prefix=${process.env.DATABASE_URL?.slice(0,30) ?? "unset"}`);
+  console.log("[META-CALLBACK STATE]", {
+    provider,
+    userId: userId ?? "NULL",
+    devOrigin: devOrigin ?? "NULL",
+    returnTo: returnTo ?? "none",
+    nodeEnv: process.env.NODE_ENV ?? "unset",
+    databaseUrlSet: !!process.env.DATABASE_URL,
+    databaseUrlPrefix: process.env.DATABASE_URL?.slice(0, 30) ?? "unset",
+  });
   logger.info({ provider, userId, returnTo, devOrigin }, "Meta OAuth callback: state valid, exchanging token");
 
   try {
@@ -385,8 +407,12 @@ router.get("/oauth/meta/callback", async (req, res) => {
         logger.warn({ provider, userId, devOrigin, error: syncErr?.message }, "Dev-sync failed (non-fatal)");
       }
     } else {
-      console.warn(`[META-CALLBACK] ⚠ dev-sync SKIPPED — devOrigin is null/empty. Dev DB will NOT have this token.`);
-      console.warn(`[META-CALLBACK]   REPLIT_DEV_DOMAIN=${process.env.REPLIT_DEV_DOMAIN ?? "unset"}`);
+      console.warn("[DEV-SYNC SKIPPED]", {
+        reason: "devOrigin missing — REPLIT_DEV_DOMAIN was unset when oauth-start ran on dev server",
+        replitDevDomain: process.env.REPLIT_DEV_DOMAIN ?? "unset",
+        publicAppUrl: process.env.PUBLIC_APP_URL ?? "unset",
+        note: "Dev DB will NOT receive this token. User will see no_token error.",
+      });
     }
 
     // ── 5. Check granted permissions ──

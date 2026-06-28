@@ -298,13 +298,15 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   // DIAGNOSTIC LOG — parse and print each OAuth param clearly
   try {
     const parsed = new URL(url);
-    console.log(`\n[OAUTH-START] provider=${provider}`);
-    console.log(`  client_id   = ${parsed.searchParams.get("client_id")}`);
-    console.log(`  redirect_uri= ${parsed.searchParams.get("redirect_uri")}`);
-    console.log(`  scope       = ${parsed.searchParams.get("scope")}`);
-    console.log(`  devOrigin   = ${devOrigin ?? "NULL — REPLIT_DEV_DOMAIN is unset, dev-sync will be skipped by deployed callback"}`);
-    console.log(`  REPLIT_DEV_DOMAIN raw = ${process.env.REPLIT_DEV_DOMAIN ?? "unset"}`);
-    console.log(`  full url    = ${url.replace(/state=[^&]+/, "state=<redacted>")}\n`);
+    console.log("[OAUTH-START]", {
+      provider,
+      nodeEnv: process.env.NODE_ENV ?? "unset",
+      publicAppUrl: process.env.PUBLIC_APP_URL ?? "unset",
+      replitDevDomain: process.env.REPLIT_DEV_DOMAIN ?? "unset",
+      devOrigin: devOrigin ?? "NULL",
+      returnTo: returnTo ?? "none",
+      redirectUri: parsed.searchParams.get("redirect_uri"),
+    });
   } catch { /* ignore parse errors */ }
 
   res.json({ configured: true, url });

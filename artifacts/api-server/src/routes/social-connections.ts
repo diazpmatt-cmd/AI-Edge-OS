@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -80,28 +80,45 @@ router.delete("/social-connections/:provider", async (req, res) => {
 // (the same key the deployed server signs its state JWTs with), so no
 // Clerk session is required — the caller is our own deployed server.
 // ── dev-export: returns a connection row so the dev server can pull it ────────
-// Called by pull-from-prod (below) via server-to-server with the user's Clerk
-// bearer token forwarded verbatim. Works on both dev and deployed servers.
+// Auth: HMAC-signed request (userId + provider + nonce signed with OAUTH_STATE_SECRET).
+// This avoids forwarding Clerk JWTs cross-environment, which fails because the
+// deployed Clerk instance rejects JWTs issued by the dev frontend (azp mismatch).
 router.get("/social-connections/dev-export", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { provider, userId, nonce, sig } = req.query as Record<string, string>;
 
-  const { provider } = req.query as Record<string, string>;
-  if (!provider) { res.status(400).json({ error: "Missing provider" }); return; }
+  if (!provider || !userId || !nonce || !sig) {
+    console.error(`[DEV-EXPORT] missing params: provider=${!!provider} userId=${!!userId} nonce=${!!nonce} sig=${!!sig}`);
+    res.status(400).json({ error: "Missing required params (provider, userId, nonce, sig)" });
+    return;
+  }
 
-  console.log(`[DEV-EXPORT] userId=${userId} provider=${provider} NODE_ENV=${process.env.NODE_ENV}`);
+  const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
+  if (!secret) {
+    console.error(`[DEV-EXPORT] no signing secret — OAUTH_STATE_SECRET and CLERK_SECRET_KEY both unset`);
+    res.status(500).json({ error: "No signing secret configured" });
+    return;
+  }
+
+  const expected = createHmac("sha256", secret).update(`${userId}:${provider}:${nonce}`).digest("hex");
+  if (sig !== expected) {
+    console.error(`[DEV-EXPORT] ✗ HMAC mismatch for userId=${userId} provider=${provider}`);
+    res.status(401).json({ error: "Invalid signature" });
+    return;
+  }
+
+  console.log(`[DEV-EXPORT] ✓ HMAC OK: userId=${userId} provider=${provider} NODE_ENV=${process.env.NODE_ENV}`);
 
   const [row] = await db.select().from(socialConnectionsTable).where(
     and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider))
   );
 
   if (!row?.accessToken) {
-    console.log(`[DEV-EXPORT] not found`);
+    console.log(`[DEV-EXPORT] not found in DB`);
     res.json({ found: false, provider, userId });
     return;
   }
 
-  console.log(`[DEV-EXPORT] ✓ found accountName=${row.accountName} tokenLen=${row.accessToken.length}`);
+  console.log(`[DEV-EXPORT] ✓ found: accountName=${row.accountName} tokenLen=${row.accessToken.length}`);
   res.json({
     found: true,
     provider: row.provider,
@@ -109,14 +126,14 @@ router.get("/social-connections/dev-export", async (req, res) => {
     accountName: row.accountName,
     accountId: row.accountId,
     accessToken: row.accessToken,
+    refreshToken: row.refreshToken ?? null,
     metadata: row.metadata ?? null,
   });
 });
 
 // ── pull-from-prod: dev server pulls a connection row from the deployed server ─
-// The deployed server is reachable from anywhere (public URL).
-// The dev server is NOT reachable from deployed (Replit auth wall).
-// This reverses the sync direction: dev pulls instead of prod pushing.
+// Uses HMAC-signed requests to avoid Clerk JWT forwarding (which fails cross-env
+// because the deployed Clerk instance rejects JWTs issued by the dev frontend).
 router.post("/social-connections/pull-from-prod", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -127,20 +144,21 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
   const prodUrl = process.env.PUBLIC_APP_URL;
   if (!prodUrl) { res.status(500).json({ error: "PUBLIC_APP_URL not set" }); return; }
 
-  // Forward the user's Clerk bearer token — same Clerk instance, valid on deployed server
-  const authHeader = req.headers.authorization;
-  if (!authHeader) { res.status(401).json({ error: "No Authorization header to forward" }); return; }
+  const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
+  if (!secret) { res.status(500).json({ error: "No signing secret configured" }); return; }
 
-  console.log(`[PULL-FROM-PROD] userId=${userId} provider=${provider} → ${prodUrl}`);
+  const nonce = randomBytes(8).toString("hex");
+  const sig = createHmac("sha256", secret).update(`${userId}:${provider}:${nonce}`).digest("hex");
+
+  console.log(`[PULL-FROM-PROD] userId=${userId} provider=${provider} → ${prodUrl} (HMAC auth)`);
 
   try {
-    const exportUrl = `${prodUrl}/api/social-connections/dev-export?provider=${encodeURIComponent(provider)}`;
+    const exportUrl = `${prodUrl}/api/social-connections/dev-export?` +
+      `provider=${encodeURIComponent(provider)}&userId=${encodeURIComponent(userId)}&nonce=${nonce}&sig=${sig}`;
+
     let exportRes: Response;
     try {
-      exportRes = await fetch(exportUrl, {
-        headers: { Authorization: authHeader },
-        signal: AbortSignal.timeout(10000),
-      });
+      exportRes = await fetch(exportUrl, { signal: AbortSignal.timeout(10000) });
     } catch (fetchErr: any) {
       console.error(`[PULL-FROM-PROD] fetch error: ${fetchErr?.message}`);
       res.status(502).json({ error: "fetch_failed", message: fetchErr?.message });
@@ -148,14 +166,14 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
     }
 
     const rawBody = await exportRes.text().catch(() => "");
-    console.log(`[PULL-FROM-PROD] export response: status=${exportRes.status} body=${rawBody.slice(0, 200)}`);
+    console.log(`[PULL-FROM-PROD] export response: status=${exportRes.status} body=${rawBody.slice(0, 300)}`);
 
     if (!exportRes.ok) {
       res.status(502).json({ error: "prod_export_failed", status: exportRes.status, body: rawBody.slice(0, 200) });
       return;
     }
 
-    let data: { found: boolean; provider?: string; accountName?: string; accountId?: string; accessToken?: string; metadata?: string | null };
+    let data: { found: boolean; provider?: string; accountName?: string; accountId?: string; accessToken?: string; refreshToken?: string | null; metadata?: string | null };
     try { data = JSON.parse(rawBody); } catch {
       res.status(502).json({ error: "parse_failed", raw: rawBody.slice(0, 200) });
       return;
@@ -173,7 +191,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
       accountName: data.accountName ?? null,
       accountId: data.accountId ?? null,
       accessToken: data.accessToken,
-      refreshToken: null,
+      refreshToken: data.refreshToken ?? null,
       expiresAt: null,
       metadata: data.metadata ?? null,
     }).onConflictDoUpdate({
@@ -182,6 +200,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
         accountName: data.accountName ?? null,
         accountId: data.accountId ?? null,
         accessToken: data.accessToken,
+        refreshToken: data.refreshToken ?? null,
         metadata: data.metadata ?? null,
         updatedAt: new Date(),
       },

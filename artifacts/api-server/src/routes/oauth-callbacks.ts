@@ -192,8 +192,8 @@ router.get("/oauth/meta/callback", async (req, res) => {
     redirectError(res, "facebook", "invalid_state", "state_verify", { codeReceived: true, stateValid: false });
     return;
   }
-  const { userId, provider } = verified;
-  logger.info({ provider, userId }, "Meta OAuth callback: code received, state valid — exchanging token");
+  const { userId, provider, returnTo } = verified;
+  logger.info({ provider, userId, returnTo }, "Meta OAuth callback: code received, state valid — exchanging token");
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/meta/callback`;
@@ -231,17 +231,47 @@ router.get("/oauth/meta/callback", async (req, res) => {
     });
     logger.info({ provider, userId }, "Meta token saved to DB");
 
-    // ── 4. Verify /me/accounts (page access tokens) ──
+    // ── 4. Fetch /me/accounts — store first page token in metadata ──
     let pagesFound = 0;
     let pageNames: string[] = [];
+    let storedMetadata: Record<string, any> = {};
     try {
-      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${tokens.access_token}`);
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${tokens.access_token}`);
       if (acctR.ok) {
         const acctData = await acctR.json() as { data?: Array<{ id: string; name: string; access_token: string }> };
         pagesFound = acctData.data?.length ?? 0;
         pageNames = (acctData.data ?? []).map(p => p.name);
         logger.info({ provider, userId, pagesFound, pageNames }, "Meta /me/accounts OK");
-        if (pagesFound === 0) {
+
+        const firstPage = acctData.data?.[0];
+        if (firstPage) {
+          storedMetadata.pageId = firstPage.id;
+          storedMetadata.pageName = firstPage.name;
+          storedMetadata.pageAccessToken = firstPage.access_token;
+          logger.info({ provider, userId, pageId: firstPage.id, pageName: firstPage.name }, "Stored page token from first page");
+
+          // Try to get connected Instagram business account
+          try {
+            const igR = await fetch(`https://graph.facebook.com/v19.0/${firstPage.id}?fields=instagram_business_account&access_token=${firstPage.access_token}`);
+            if (igR.ok) {
+              const igData = await igR.json() as { instagram_business_account?: { id: string } };
+              if (igData.instagram_business_account?.id) {
+                storedMetadata.instagramBusinessAccountId = igData.instagram_business_account.id;
+                logger.info({ provider, userId, igAccountId: igData.instagram_business_account.id }, "Instagram business account found");
+              } else {
+                logger.info({ provider, userId }, "No Instagram business account linked to this Page");
+              }
+            }
+          } catch (igErr: any) {
+            logger.warn({ provider, userId, error: igErr?.message }, "IG business account fetch exception");
+          }
+
+          // Update metadata in DB
+          await db.update(socialConnectionsTable)
+            .set({ metadata: JSON.stringify(storedMetadata), updatedAt: new Date() })
+            .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider)));
+          logger.info({ provider, userId, metadata: { pageId: storedMetadata.pageId, pageName: storedMetadata.pageName, hasIg: !!storedMetadata.instagramBusinessAccountId } }, "Metadata stored in DB");
+        } else {
           logger.warn({ provider, userId }, "Meta /me/accounts returned 0 pages — user may have no Pages or declined pages_show_list");
         }
       } else {
@@ -274,7 +304,8 @@ router.get("/oauth/meta/callback", async (req, res) => {
     // ── 6. Log and redirect ──
     const base = getAppBase();
     const slug = PROVIDER_SLUG[provider] ?? provider;
-    const finalRedirectUrl = `${base}/oauth-close?connected=${slug}`;
+    const returnToParam = returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
+    const finalRedirectUrl = `${base}/oauth-close?connected=${slug}${returnToParam}`;
     logCallback({
       ts: new Date().toISOString(),
       provider,

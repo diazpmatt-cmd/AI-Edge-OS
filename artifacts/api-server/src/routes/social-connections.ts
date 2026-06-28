@@ -75,6 +75,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const { provider } = req.params;
+  const returnTo: string | undefined = req.body?.returnTo;
 
   const OAUTH_CONFIG: Record<string, { envKey: string; buildUrl: (baseUrl: string) => string }> = {
     google_business: {
@@ -156,7 +157,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           response_type: "code",
           // pages_manage_posts + pages_read_engagement are required to publish posts
           scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement",
-          state: generateState(userId, "facebook"),
+          state: generateState(userId, "facebook", returnTo),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },
@@ -172,7 +173,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           response_type: "code",
           // Full set: pages needed for FB publishing + instagram for IG publishing
           scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
-          state: generateState(userId, "instagram"),
+          state: generateState(userId, "instagram", returnTo),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
       },
@@ -232,6 +233,94 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   } catch { /* ignore parse errors */ }
 
   res.json({ configured: true, url });
+});
+
+router.get("/social-connections/meta-publish-status", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const REQUIRED_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement"];
+
+  const [fbRow] = await db.select().from(socialConnectionsTable).where(
+    and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "facebook"))
+  );
+
+  if (!fbRow) {
+    res.json({
+      statusLabel: "not_connected",
+      userTokenExists: false,
+      accountName: null,
+      grantedScopes: [],
+      missingScopes: REQUIRED_SCOPES,
+      hasPublishPermissions: false,
+      pagesFound: 0,
+      pageNames: [],
+      pageTokenStored: false,
+      pageName: null,
+      pageId: null,
+      instagramBusinessAccountId: null,
+      permissionsError: null,
+    });
+    return;
+  }
+
+  let metadata: Record<string, any> = {};
+  try { if (fbRow.metadata) metadata = JSON.parse(fbRow.metadata); } catch {}
+
+  let grantedScopes: string[] = [];
+  let permissionsError: string | null = null;
+  let pagesFound = 0;
+  let pageNames: string[] = [];
+
+  if (fbRow.accessToken) {
+    try {
+      const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${fbRow.accessToken}`);
+      if (permR.ok) {
+        const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
+        grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
+      } else {
+        permissionsError = `permissions API ${permR.status}`;
+      }
+    } catch (e: any) {
+      permissionsError = e?.message ?? "unknown";
+    }
+
+    try {
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${fbRow.accessToken}`);
+      if (acctR.ok) {
+        const acctData = await acctR.json() as { data?: Array<{ id: string; name: string }> };
+        pagesFound = acctData.data?.length ?? 0;
+        pageNames = (acctData.data ?? []).map(p => p.name);
+      }
+    } catch {}
+  }
+
+  const missingScopes = REQUIRED_SCOPES.filter(s => !grantedScopes.includes(s));
+  const hasPublishPermissions = missingScopes.length === 0;
+  const pageTokenStored = !!(metadata.pageAccessToken);
+
+  let statusLabel: "not_connected" | "missing_permissions" | "ready_to_publish";
+  if (!hasPublishPermissions || (pagesFound === 0 && !pageTokenStored)) {
+    statusLabel = "missing_permissions";
+  } else {
+    statusLabel = "ready_to_publish";
+  }
+
+  res.json({
+    statusLabel,
+    userTokenExists: true,
+    accountName: fbRow.accountName,
+    grantedScopes,
+    missingScopes,
+    hasPublishPermissions,
+    pagesFound,
+    pageNames,
+    pageTokenStored,
+    pageName: metadata.pageName ?? (pageNames[0] ?? null),
+    pageId: metadata.pageId ?? null,
+    instagramBusinessAccountId: metadata.instagramBusinessAccountId ?? null,
+    permissionsError,
+  });
 });
 
 router.get("/social-connections/meta-oauth-debug", async (req, res) => {

@@ -10,6 +10,7 @@ export default function OAuthClosePage() {
     const oauthError = params.get("oauth_error") ?? "";
     const step = params.get("step") ?? "";
     const provider = params.get("provider") ?? connected;
+    const returnTo = params.get("returnTo") ?? "";
 
     if (window.opener) {
       // Opened as a popup — notify parent and close.
@@ -17,16 +18,21 @@ export default function OAuthClosePage() {
         window.opener.postMessage(
           oauthError
             ? { type: "oauth_error", provider, reason: oauthError, step }
-            : { type: "oauth_success", provider: connected || provider },
+            : { type: "oauth_success", provider: connected || provider, returnTo },
           "*"
         );
       } catch { /* cross-origin opener — message may not arrive, parent polls anyway */ }
       window.close();
     } else {
-      // Opened via top-level navigation (not a popup) — redirect to connections.
-      const dest = oauthError
-        ? `/admin/connections?oauth_error=${encodeURIComponent(oauthError)}&step=${encodeURIComponent(step)}&provider=${provider}`
-        : `/admin/connections?connected=${connected}`;
+      // Opened via top-level navigation (not a popup) — redirect appropriately.
+      let dest: string;
+      if (oauthError) {
+        dest = `/admin/connections?oauth_error=${encodeURIComponent(oauthError)}&step=${encodeURIComponent(step)}&provider=${provider}`;
+      } else if (returnTo === "publishing") {
+        dest = `/admin/social-publishing?connected=${connected}&status=success`;
+      } else {
+        dest = `/admin/connections?connected=${connected}`;
+      }
       window.location.replace(dest);
     }
   }, []);

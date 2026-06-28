@@ -6,10 +6,10 @@ function getSecret(): string {
   return s;
 }
 
-export function generateState(userId: string, provider: string): string {
+export function generateState(userId: string, provider: string, returnTo?: string): string {
   const nonce = randomBytes(16).toString("hex");
   const exp = Date.now() + 10 * 60 * 1000;
-  const payload = Buffer.from(JSON.stringify({ userId, provider, nonce, exp })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ userId, provider, nonce, exp, ...(returnTo ? { returnTo } : {}) })).toString("base64url");
   const sig = createHmac("sha256", getSecret()).update(payload).digest("hex");
   return `${payload}.${sig}`;
 }
@@ -17,7 +17,7 @@ export function generateState(userId: string, provider: string): string {
 export function verifyState(
   state: string,
   allowedProviders: string[],
-): { userId: string; provider: string } | null {
+): { userId: string; provider: string; returnTo?: string } | null {
   const dotIdx = state.lastIndexOf(".");
   if (dotIdx === -1) return null;
   const payload = state.slice(0, dotIdx);
@@ -30,7 +30,7 @@ export function verifyState(
   if (sigBuf.length !== expBuf.length) return null;
   if (!timingSafeEqual(sigBuf, expBuf)) return null;
 
-  let parsed: { userId?: string; provider?: string; nonce?: string; exp?: number };
+  let parsed: { userId?: string; provider?: string; nonce?: string; exp?: number; returnTo?: string };
   try {
     parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
   } catch {
@@ -41,5 +41,5 @@ export function verifyState(
   if (Date.now() > parsed.exp) return null;
   if (!allowedProviders.includes(parsed.provider)) return null;
 
-  return { userId: parsed.userId, provider: parsed.provider };
+  return { userId: parsed.userId, provider: parsed.provider, returnTo: parsed.returnTo };
 }

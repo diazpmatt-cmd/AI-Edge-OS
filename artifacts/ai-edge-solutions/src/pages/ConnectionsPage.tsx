@@ -214,6 +214,28 @@ export default function ConnectionsPage() {
     retry: 1,
   });
 
+  type MetaPublishStatus = {
+    statusLabel: "not_connected" | "missing_permissions" | "ready_to_publish";
+    userTokenExists: boolean;
+    accountName: string | null;
+    grantedScopes: string[];
+    missingScopes: string[];
+    hasPublishPermissions: boolean;
+    pagesFound: number;
+    pageNames: string[];
+    pageTokenStored: boolean;
+    pageName: string | null;
+    pageId: string | null;
+    instagramBusinessAccountId: string | null;
+    permissionsError: string | null;
+  };
+  const { data: metaPublishStatus, refetch: refetchMetaPublishStatus } = useQuery<MetaPublishStatus>({
+    queryKey: ["meta_publish_status"],
+    queryFn: () => authFetch<MetaPublishStatus>("/social-connections/meta-publish-status"),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
   // Normalize provider aliases so debug-path connections (e.g. "youtube_readonly"
   // written by the ▶ Run Test button) still map to the canonical PLATFORMS id.
   const PROVIDER_NORMALIZE: Record<string, string> = { youtube_readonly: "youtube" };
@@ -248,8 +270,8 @@ export default function ConnectionsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Failed to disconnect"),
   });
 
-  const handleConnect = async (provider: string) => {
-    console.log(`[OAuth] handleConnect called for: ${provider}`);
+  const handleConnect = async (provider: string, opts?: { returnTo?: string }) => {
+    console.log(`[OAuth] handleConnect called for: ${provider}`, opts ?? "");
 
     // ── Pre-open a blank popup SYNCHRONOUSLY within the click handler ──────────
     // Popup blockers only fire for window.open() calls that happen asynchronously
@@ -274,8 +296,17 @@ export default function ConnectionsPage() {
         setConnecting(null);
         qc.invalidateQueries({ queryKey: ["social_connections"] });
         qc.invalidateQueries({ queryKey: ["connection_debug"] });
+        qc.invalidateQueries({ queryKey: ["meta_publish_status"] });
         if (e.data.type === "oauth_error") {
           toast.error(`OAuth failed: ${e.data.reason ?? "unknown error"}`);
+        } else if (e.data.type === "oauth_success") {
+          if (e.data.returnTo === "publishing") {
+            const prov = e.data.provider ?? "";
+            navigate(`/admin/social-publishing?connected=${prov}&status=success`);
+          } else {
+            const label = (e.data.provider ?? provider).replace(/_/g, " ");
+            toast.success(`${label.charAt(0).toUpperCase() + label.slice(1)} connected successfully!`);
+          }
         }
       }
     };
@@ -299,7 +330,12 @@ export default function ConnectionsPage() {
     try {
       const result = await authFetch<{ url: string; configured: boolean }>(
         `/social-connections/oauth-start/${provider}`,
-        { method: "POST" },
+        {
+          method: "POST",
+          ...(opts?.returnTo
+            ? { body: JSON.stringify({ returnTo: opts.returnTo }), headers: { "Content-Type": "application/json" } }
+            : {}),
+        },
       );
       console.log(`[OAuth] oauth-start response: configured=${result.configured}, url=${result.url?.slice(0, 80)}…`);
 
@@ -508,6 +544,18 @@ export default function ConnectionsPage() {
             const isBlocked = status === "blocked";
             const isConnected = status === "connected" || status === "connected_readonly";
 
+            // Facebook-specific publish-readiness status
+            const isFacebook = platform.id === "facebook";
+            const fbStat = isFacebook ? metaPublishStatus : undefined;
+            const fbNeedsUpgrade = isFacebook && isConnected && fbStat?.statusLabel === "missing_permissions";
+            const fbReadyToPublish = isFacebook && isConnected && fbStat?.statusLabel === "ready_to_publish";
+            const fbSmOverride = fbNeedsUpgrade
+              ? { label: "Missing Publish Permissions", bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" }
+              : fbReadyToPublish
+                ? { label: "Ready to Publish", bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" }
+                : null;
+            const displaySm = (isFacebook && isConnected && fbSmOverride) ? fbSmOverride : sm;
+
             return (
               <div key={platform.id} style={{
                 background: isConnected
@@ -541,12 +589,12 @@ export default function ConnectionsPage() {
                       {/* Status badge */}
                       <span style={{
                         display: "inline-flex", alignItems: "center", gap: 5,
-                        background: sm.bg, color: sm.color,
+                        background: displaySm.bg, color: displaySm.color,
                         fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20,
-                        border: `1px solid ${sm.color}33`,
+                        border: `1px solid ${displaySm.color}33`,
                       }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: sm.dot, display: "inline-block" }} />
-                        {sm.label}
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: displaySm.dot, display: "inline-block" }} />
+                        {displaySm.label}
                       </span>
                     </div>
 
@@ -582,20 +630,60 @@ export default function ConnectionsPage() {
                       </p>
                     )}
 
+                    {/* Facebook: page info when stored */}
+                    {isFacebook && isConnected && fbStat?.pageName && (
+                      <div style={{
+                        fontSize: 12, color: "#C0C0C0", fontWeight: 600,
+                        background: "rgba(24,119,242,0.08)", borderRadius: 6,
+                        padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 8,
+                        border: "1px solid rgba(24,119,242,0.2)",
+                      }}>
+                        <span>📄 {fbStat.pageName}</span>
+                        {fbStat.instagramBusinessAccountId && (
+                          <span style={{ color: "#E1306C" }}>· IG linked</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Facebook: missing scopes list */}
+                    {fbNeedsUpgrade && fbStat && fbStat.missingScopes.length > 0 && (
+                      <p style={{ fontSize: 11.5, color: "#FB923C", margin: "0 0 8px", lineHeight: 1.6 }}>
+                        ⚠️ Missing permissions for publishing:{" "}
+                        <code style={{ fontSize: 11, color: "#FCD34D" }}>
+                          {fbStat.missingScopes.join(", ")}
+                        </code>
+                      </p>
+                    )}
+
                     {/* Action buttons */}
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {isConnected ? (
-                        <button
-                          onClick={() => disconnectMut.mutate(platform.id)}
-                          disabled={isDisconnecting}
-                          style={{
-                            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                            background: "transparent", border: "1px solid rgba(239,68,68,0.4)", color: "#EF4444",
-                            opacity: isDisconnecting ? 0.5 : 1, transition: "all 0.2s",
-                          }}
-                        >
-                          {isDisconnecting ? "Disconnecting…" : "↩ Disconnect"}
-                        </button>
+                        <>
+                          {fbNeedsUpgrade && (
+                            <button
+                              onClick={() => handleConnect(platform.id, { returnTo: "publishing" })}
+                              disabled={isConnecting}
+                              style={{
+                                padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)",
+                                color: "#FB923C", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
+                              }}
+                            >
+                              {isConnecting ? "Opening…" : "⬆ Upgrade Permissions"}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => disconnectMut.mutate(platform.id)}
+                            disabled={isDisconnecting}
+                            style={{
+                              padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                              background: "transparent", border: "1px solid rgba(239,68,68,0.4)", color: "#EF4444",
+                              opacity: isDisconnecting ? 0.5 : 1, transition: "all 0.2s",
+                            }}
+                          >
+                            {isDisconnecting ? "Disconnecting…" : "↩ Disconnect"}
+                          </button>
+                        </>
                       ) : isComing ? (
                         <button disabled style={{
                           padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,

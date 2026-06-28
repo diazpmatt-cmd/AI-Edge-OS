@@ -1,8 +1,10 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
+import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
+import { toast } from "sonner";
 
 type Platform = "facebook" | "instagram" | "google";
 
@@ -82,19 +84,36 @@ const EMPTY_FORM = {
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+type MetaPublishStatus = {
+  statusLabel: "not_connected" | "missing_permissions" | "ready_to_publish";
+  userTokenExists: boolean;
+  accountName: string | null;
+  grantedScopes: string[];
+  missingScopes: string[];
+  hasPublishPermissions: boolean;
+  pagesFound: number;
+  pageTokenStored: boolean;
+  pageName: string | null;
+  instagramBusinessAccountId: string | null;
+  permissionsError: string | null;
+};
+
 export default function SocialPublishingPage() {
   const authFetch  = useApiFetch();
   const { getToken } = useAuth();
   const qc         = useQueryClient();
   const fileRef    = useRef<HTMLInputElement>(null);
+  const search     = useSearch();
+  const [, navigate] = useLocation();
 
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
   const [form,          setForm]          = useState({ ...EMPTY_FORM });
   const [uploadState,   setUploadState]   = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [uploadError,   setUploadError]   = useState<string | null>(null);
-  const [publishingId,  setPublishingId]  = useState<string | null>(null);
-  const [publishResult, setPublishResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [publishingId,      setPublishingId]      = useState<string | null>(null);
+  const [publishResult,     setPublishResult]     = useState<{ ok: boolean; msg: string } | null>(null);
+  const [publishStatusOpen, setPublishStatusOpen] = useState(false);
 
   const { data: posts = [], isLoading } = useQuery<SocialPost[]>({
     queryKey: ["social-posts"],
@@ -130,6 +149,26 @@ export default function SocialPublishingPage() {
     },
     onError: () => setPublishingId(null),
   });
+
+  // Meta publish-status (live permission + page token check)
+  const { data: fbStatus } = useQuery<MetaPublishStatus>({
+    queryKey: ["meta_publish_status"],
+    queryFn: () => authFetch<MetaPublishStatus>("/social-connections/meta-publish-status"),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
+  // Handle ?connected=facebook&status=success redirect from OAuth upgrade flow
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const connected = params.get("connected");
+    const status = params.get("status");
+    if (connected && status === "success") {
+      qc.invalidateQueries({ queryKey: ["meta_publish_status"] });
+      toast.success(`${connected.charAt(0).toUpperCase() + connected.slice(1)} permissions upgraded — ready to publish!`);
+      navigate("/admin/social-publishing", { replace: true });
+    }
+  }, [search]);
 
   const resetForm = () => {
     setShowForm(false);
@@ -270,6 +309,89 @@ export default function SocialPublishingPage() {
             {publishResult.ok ? "✓" : "✗"} {publishResult.msg}
           </div>
         )}
+
+        {/* ── Facebook Publishing Status Panel ── */}
+        {(() => {
+          const sl = fbStatus?.statusLabel;
+          const panelColor = sl === "ready_to_publish" ? "#10B981" : sl === "missing_permissions" ? "#FB923C" : "#64748B";
+          const panelBg = sl === "ready_to_publish" ? "rgba(16,185,129,0.06)" : sl === "missing_permissions" ? "rgba(251,146,60,0.06)" : "rgba(100,116,139,0.06)";
+          const panelBorder = sl === "ready_to_publish" ? "rgba(16,185,129,0.2)" : sl === "missing_permissions" ? "rgba(251,146,60,0.2)" : "rgba(100,116,139,0.15)";
+          const checks = [
+            {
+              label: "Facebook user token",
+              ok: fbStatus?.userTokenExists ?? false,
+              detail: fbStatus?.accountName ? `Connected as ${fbStatus.accountName}` : undefined,
+            },
+            {
+              label: "Page access token stored",
+              ok: fbStatus?.pageTokenStored ?? false,
+              detail: fbStatus?.pageName ? `Page: ${fbStatus.pageName}` : fbStatus?.pagesFound ? `${fbStatus.pagesFound} page(s) found — upgrade to store token` : "Re-authenticate to grant page access",
+            },
+            {
+              label: "Publish permissions granted",
+              ok: fbStatus?.hasPublishPermissions ?? false,
+              detail: fbStatus?.missingScopes && fbStatus.missingScopes.length > 0 ? `Missing: ${fbStatus.missingScopes.join(", ")}` : fbStatus?.grantedScopes && fbStatus.grantedScopes.length > 0 ? `Granted: ${fbStatus.grantedScopes.filter(s => ["pages_show_list","pages_manage_posts","pages_read_engagement"].includes(s)).join(", ")}` : undefined,
+            },
+            {
+              label: "Instagram business account",
+              ok: !!(fbStatus?.instagramBusinessAccountId),
+              detail: fbStatus?.instagramBusinessAccountId ? `ID: ${fbStatus.instagramBusinessAccountId}` : "No IG business account linked to page",
+            },
+          ];
+
+          return (
+            <div style={{ marginBottom: 24, background: panelBg, border: `1px solid ${panelBorder}`, borderRadius: 12, overflow: "hidden" }}>
+              <button
+                onClick={() => setPublishStatusOpen(o => !o)}
+                style={{ width: "100%", padding: "12px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: panelColor }}>
+                    {sl === "ready_to_publish" ? "✓ Facebook Ready to Publish" : sl === "missing_permissions" ? "⚠️ Facebook Needs Permission Upgrade" : "○ Facebook Not Connected"}
+                  </span>
+                  {sl === "missing_permissions" && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#030612", background: "#FB923C", borderRadius: 10, padding: "1px 8px" }}>
+                      Action Required
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 11, color: "#475569" }}>{publishStatusOpen ? "▲ Hide" : "▼ Details"}</span>
+              </button>
+
+              {publishStatusOpen && (
+                <div style={{ padding: "0 18px 16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 8, marginBottom: sl === "missing_permissions" ? 14 : 0 }}>
+                    {checks.map(c => (
+                      <div key={c.label} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, background: c.ok ? "rgba(16,185,129,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${c.ok ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)"}` }}>
+                        <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{c.ok ? "✓" : "✗"}</span>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: c.ok ? "#10B981" : "#EF4444" }}>{c.label}</div>
+                          {c.detail && <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, lineHeight: 1.4 }}>{c.detail}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {sl === "missing_permissions" && (
+                    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <p style={{ fontSize: 12.5, color: "#9CA3AF", margin: 0, lineHeight: 1.5 }}>
+                        Your existing Facebook connection is missing publishing permissions. Click <strong style={{ color: "#FB923C" }}>Upgrade Permissions</strong> to grant them without reconnecting from scratch.
+                      </p>
+                      <a href="/admin/connections" style={{ flexShrink: 0, padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)", color: "#FB923C", textDecoration: "none" }}>
+                        ⬆ Upgrade Permissions →
+                      </a>
+                    </div>
+                  )}
+                  {fbStatus?.permissionsError && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: "#EF4444" }}>
+                      ⚠️ Could not fetch permissions from Facebook: {fbStatus.permissionsError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Compose form ── */}
         {showForm && (

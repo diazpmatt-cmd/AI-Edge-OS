@@ -277,6 +277,24 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     }
   }
 
+  // ── Google Business Profile ──
+  if (platforms.includes("google")) {
+    const gbpConn = await getConnection("google_business");
+    if (!gbpConn?.accessToken) {
+      errors.push("Google Business Profile not connected");
+      results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };
+    } else {
+      try {
+        const token = await getGoogleAccessToken(gbpConn);
+        const gbpResult = await publishToGBP(token, post.caption, post.ctaType, post.ctaValue, post.imageData ?? null);
+        results.google = { ok: true, postId: gbpResult.id };
+      } catch (e: any) {
+        results.google = { ok: false, error: e.message };
+        errors.push(`Google: ${e.message}`);
+      }
+    }
+  }
+
   const allOk = platforms.every(p => results[p]?.ok === true);
   const anyOk = platforms.some(p => results[p]?.ok === true);
   const newStatus = allOk ? "published" : anyOk ? "partial" : "failed";
@@ -290,6 +308,91 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 
   res.json({ ok: allOk, results, status: newStatus, post: rowToDto(updated) });
 });
+
+// ── Google Business Profile ───────────────────────────────────────────────────
+
+async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
+  if (!conn.expiresAt || conn.expiresAt > new Date()) return conn.accessToken;
+  if (!conn.refreshToken) return conn.accessToken;
+  try {
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+        refresh_token: conn.refreshToken,
+        grant_type:    "refresh_token",
+      }),
+    });
+    if (!r.ok) return conn.accessToken;
+    const data = await r.json() as { access_token: string; expires_in?: number };
+    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+    await db.update(socialConnectionsTable).set({ accessToken: data.access_token, expiresAt, updatedAt: new Date() })
+      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+    return data.access_token;
+  } catch {
+    return conn.accessToken;
+  }
+}
+
+async function publishToGBP(token: string, caption: string, ctaType: string, ctaValue: string | null, imageData: string | null): Promise<{ id: string }> {
+  // 1 — list accounts
+  const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!acctRes.ok) throw new Error(`GBP accounts error (${acctRes.status}): ${await acctRes.text()}`);
+  const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
+  const account = acctData.accounts?.[0];
+  if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
+
+  // 2 — list locations
+  const locRes = await fetch(
+    `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!locRes.ok) throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
+  const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
+  const location = locData.locations?.[0];
+  if (!location) throw new Error("No Google Business Profile location found. Make sure the account has at least one verified location.");
+
+  // 3 — build post body
+  const GBP_CTA: Record<string, string> = {
+    call_now:   "CALL",
+    learn_more: "LEARN_MORE",
+    book_now:   "BOOK",
+    sign_up:    "SIGN_UP",
+    contact_us: "LEARN_MORE",
+  };
+
+  const body: Record<string, any> = {
+    languageCode: "en-US",
+    summary: caption,
+    topicType: "STANDARD",
+  };
+
+  const gbpAction = ctaType && ctaType !== "none" ? GBP_CTA[ctaType] : null;
+  if (gbpAction) {
+    body.callToAction = { actionType: gbpAction };
+    if (gbpAction !== "CALL" && ctaValue) body.callToAction.url = ctaValue;
+  }
+
+  if (imageData) {
+    const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    const imageUrl = imageData.startsWith("http") ? imageData : `${appBase}${imageData}`;
+    body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
+  }
+
+  // 4 — create local post
+  const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${location.name}/localPosts`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!postRes.ok) throw new Error(`GBP post error (${postRes.status}): ${await postRes.text()}`);
+  const postData = await postRes.json() as { name: string };
+  return { id: postData.name };
+}
 
 function buildCaption(caption: string, ctaType: string, ctaValue: string | null): string {
   const ctaLabels: Record<string, string> = {

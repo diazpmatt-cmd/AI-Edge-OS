@@ -296,13 +296,27 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
 
   const REQUIRED_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement"];
 
+  type FailureReason =
+    | "no_token"
+    | "no_pages_found"
+    | "missing_permissions"
+    | "missing_page_token"
+    | "missing_instagram_business"
+    | "unknown_error"
+    | null;
+
   const [fbRow] = await db.select().from(socialConnectionsTable).where(
     and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "facebook"))
   );
 
+  console.log(`[META-STATUS] userId=${userId} fbRow=${fbRow ? "found" : "NOT FOUND"}`);
+
   if (!fbRow) {
+    console.log(`[META-STATUS] no_token — no facebook row in DB for this user`);
     res.json({
+      connected: false,
       statusLabel: "not_connected",
+      failureReason: "no_token" as FailureReason,
       userTokenExists: false,
       accountName: null,
       grantedScopes: [],
@@ -313,6 +327,7 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
       pageTokenStored: false,
       pageName: null,
       pageId: null,
+      instagramBusinessFound: false,
       instagramBusinessAccountId: null,
       permissionsError: null,
     });
@@ -322,37 +337,74 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
   let metadata: Record<string, any> = {};
   try { if (fbRow.metadata) metadata = JSON.parse(fbRow.metadata); } catch {}
 
+  console.log(`[META-STATUS] metadata keys=${Object.keys(metadata).join(",") || "(empty)"}`);
+  console.log(`[META-STATUS] metadata.pageId=${metadata.pageId ?? "null"} pageName=${metadata.pageName ?? "null"} pageAccessToken=${metadata.pageAccessToken ? "set" : "null"} instagramBusinessAccountId=${metadata.instagramBusinessAccountId ?? "null"}`);
+
   let grantedScopes: string[] = [];
   let permissionsError: string | null = null;
   let pagesFound = 0;
   let pageNames: string[] = [];
 
   if (fbRow.accessToken) {
+    // ── /me/permissions ──────────────────────────────────────────────────────
     try {
       const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${fbRow.accessToken}`);
       if (permR.ok) {
         const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
         grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
+        const declinedScopes = permData.data.filter(p => p.status !== "granted").map(p => p.permission);
+        console.log(`[META-STATUS] /me/permissions OK — granted=${grantedScopes.join(",") || "(none)"} declined=${declinedScopes.join(",") || "(none)"}`);
       } else {
-        permissionsError = `permissions API ${permR.status}`;
+        const body = await permR.text().catch(() => "");
+        permissionsError = `permissions API ${permR.status}: ${body.slice(0, 120)}`;
+        console.error(`[META-STATUS] /me/permissions FAILED ${permR.status}: ${body.slice(0, 200)}`);
       }
     } catch (e: any) {
-      permissionsError = e?.message ?? "unknown";
+      permissionsError = e?.message ?? "unknown error";
+      console.error(`[META-STATUS] /me/permissions exception: ${permissionsError}`);
     }
 
+    // ── /me/accounts ─────────────────────────────────────────────────────────
     try {
-      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${fbRow.accessToken}`);
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name&access_token=${fbRow.accessToken}`);
       if (acctR.ok) {
-        const acctData = await acctR.json() as { data?: Array<{ id: string; name: string }> };
-        pagesFound = acctData.data?.length ?? 0;
-        pageNames = (acctData.data ?? []).map(p => p.name);
+        const acctData = await acctR.json() as { data?: Array<{ id: string; name: string }>; error?: { message: string; code: number } };
+        if (acctData.error) {
+          console.error(`[META-STATUS] /me/accounts API error code=${acctData.error.code}: ${acctData.error.message}`);
+        } else {
+          pagesFound = acctData.data?.length ?? 0;
+          pageNames = (acctData.data ?? []).map(p => p.name);
+          console.log(`[META-STATUS] /me/accounts OK — pagesFound=${pagesFound} pageNames=[${pageNames.join(", ")}]`);
+        }
+      } else {
+        const body = await acctR.text().catch(() => "");
+        console.error(`[META-STATUS] /me/accounts FAILED ${acctR.status}: ${body.slice(0, 200)}`);
       }
-    } catch {}
+    } catch (e: any) {
+      console.error(`[META-STATUS] /me/accounts exception: ${e?.message}`);
+    }
   }
 
   const missingScopes = REQUIRED_SCOPES.filter(s => !grantedScopes.includes(s));
   const hasPublishPermissions = missingScopes.length === 0;
   const pageTokenStored = !!(metadata.pageAccessToken);
+  const instagramBusinessFound = !!(metadata.instagramBusinessAccountId);
+
+  console.log(`[META-STATUS] missingScopes=[${missingScopes.join(",")}] hasPublishPermissions=${hasPublishPermissions} pageTokenStored=${pageTokenStored} pagesFound=${pagesFound} instagramBusinessFound=${instagramBusinessFound}`);
+
+  // ── Determine primary failure reason ─────────────────────────────────────
+  let failureReason: FailureReason = null;
+  if (permissionsError && grantedScopes.length === 0) {
+    failureReason = "unknown_error";
+  } else if (missingScopes.length > 0) {
+    failureReason = "missing_permissions";
+  } else if (pagesFound === 0 && !pageTokenStored) {
+    failureReason = "no_pages_found";
+  } else if (pagesFound > 0 && !pageTokenStored) {
+    failureReason = "missing_page_token";
+  } else if (pageTokenStored && !instagramBusinessFound) {
+    failureReason = "missing_instagram_business";
+  }
 
   let statusLabel: "not_connected" | "missing_permissions" | "ready_to_publish";
   if (!hasPublishPermissions || (pagesFound === 0 && !pageTokenStored)) {
@@ -361,8 +413,12 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
     statusLabel = "ready_to_publish";
   }
 
+  console.log(`[META-STATUS] → statusLabel=${statusLabel} failureReason=${failureReason ?? "null (success)"}`);
+
   res.json({
+    connected: true,
     statusLabel,
+    failureReason,
     userTokenExists: true,
     accountName: fbRow.accountName,
     grantedScopes,
@@ -373,6 +429,7 @@ router.get("/social-connections/meta-publish-status", async (req, res) => {
     pageTokenStored,
     pageName: metadata.pageName ?? (pageNames[0] ?? null),
     pageId: metadata.pageId ?? null,
+    instagramBusinessFound,
     instagramBusinessAccountId: metadata.instagramBusinessAccountId ?? null,
     permissionsError,
   });

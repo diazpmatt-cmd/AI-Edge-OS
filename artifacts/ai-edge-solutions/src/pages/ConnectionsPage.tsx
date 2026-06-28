@@ -215,7 +215,16 @@ export default function ConnectionsPage() {
   });
 
   type MetaPublishStatus = {
+    connected: boolean;
     statusLabel: "not_connected" | "missing_permissions" | "ready_to_publish";
+    failureReason:
+      | "no_token"
+      | "no_pages_found"
+      | "missing_permissions"
+      | "missing_page_token"
+      | "missing_instagram_business"
+      | "unknown_error"
+      | null;
     userTokenExists: boolean;
     accountName: string | null;
     grantedScopes: string[];
@@ -226,6 +235,7 @@ export default function ConnectionsPage() {
     pageTokenStored: boolean;
     pageName: string | null;
     pageId: string | null;
+    instagramBusinessFound: boolean;
     instagramBusinessAccountId: string | null;
     permissionsError: string | null;
   };
@@ -324,13 +334,8 @@ export default function ConnectionsPage() {
           try {
             const { data: freshStatus } = await refetchMetaPublishStatus();
 
-            if (!freshStatus || !freshStatus.userTokenExists) {
-              // Token was not found in the DB — the save either failed or
-              // the dev/prod DB split hasn't synced yet.
-              toast.error(
-                "Facebook connection could not be verified — please try again.",
-                { duration: 8000 },
-              );
+            if (!freshStatus) {
+              toast.error("Facebook status check failed — please try again.", { duration: 8000 });
             } else if (freshStatus.statusLabel === "ready_to_publish") {
               const page = freshStatus.pageName;
               toast.success(
@@ -339,22 +344,31 @@ export default function ConnectionsPage() {
                   : "Facebook connected and ready to publish!",
               );
             } else {
-              // Token saved but publishing isn't fully set up yet.
-              const reasons: string[] = [];
-              if (freshStatus.missingScopes?.length > 0) {
-                reasons.push(`missing permissions: ${freshStatus.missingScopes.join(", ")}`);
+              // Derive a specific human-readable message from failureReason.
+              let msg = "Facebook login completed, but publishing setup is incomplete.";
+              switch (freshStatus.failureReason) {
+                case "no_token":
+                  msg = "Facebook token could not be saved — please try again.";
+                  break;
+                case "no_pages_found":
+                  msg = "No Facebook Pages found for this account. Make sure you manage at least one Facebook Page and granted the pages_show_list permission.";
+                  break;
+                case "missing_permissions": {
+                  const missing = freshStatus.missingScopes?.join(", ") ?? "unknown";
+                  msg = `Missing required permissions: ${missing}. Please reconnect and approve all requested permissions.`;
+                  break;
+                }
+                case "missing_page_token":
+                  msg = "Page token could not be retrieved. Please reconnect your Facebook account.";
+                  break;
+                case "missing_instagram_business":
+                  msg = "No Instagram Business account is linked to your Facebook Page. Link one in Facebook Business Settings.";
+                  break;
+                case "unknown_error":
+                  msg = `Connection check failed: ${freshStatus.permissionsError ?? "unknown error"}. Please try again.`;
+                  break;
               }
-              if (freshStatus.pagesFound === 0 && !freshStatus.pageTokenStored) {
-                reasons.push("no Facebook Pages found on your account");
-              }
-              if (freshStatus.permissionsError) {
-                reasons.push(`permissions check error: ${freshStatus.permissionsError}`);
-              }
-              const detail = reasons.length ? ` (${reasons.join("; ")})` : "";
-              toast(
-                `Facebook login completed, but publishing setup is incomplete${detail}.`,
-                { icon: "⚠️", duration: 10000 },
-              );
+              toast(msg, { icon: "⚠️", duration: 12000 });
             }
           } catch {
             // Network/auth failure on the status check — show a neutral message.

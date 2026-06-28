@@ -1,2 +1,3 @@
 - [AI Edge Solutions brand](ai-edge-brand.md) — Electric blue #00AEEF, metallic silver #C0C0C0, black/dark navy #030612; AE monogram SVG logo with gradient; all marketing pages use inline styles (no Tailwind).
 - [Clerk auth pattern for API calls](clerk-api-auth.md) — All API fetches MUST use `useApiFetch()` hook (Bearer token); cookie-only `apiFetch` never works through the Vite proxy.
+- [Facebook OAuth DB split + sync](facebook-oauth-db-sync.md) — Replit dev/prod databases are separate; deployed callback saves to prod DB, dev queries dev DB. Bridge: deployed server POSTs signed HMAC payload to dev server's /api/social-connections/oauth-sync before popup redirect.

@@ -298,6 +298,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           scope: "https://www.googleapis.com/auth/business.manage openid email",
           access_type: "offline",
           prompt: "consent",
+          include_granted_scopes: "true",
           state: generateState(userId, "google_business", undefined, devOrigin),
         });
         return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
@@ -602,6 +603,7 @@ router.get("/social-connections/google-business-status", async (req, res) => {
     | "token_not_found_in_dev"
     | "token_saved_but_no_refresh_token"
     | "missing_business_manage_scope"
+    | "google_api_not_enabled"
     | "no_gbp_accounts_found"
     | "no_gbp_locations_found"
     | "google_api_error"
@@ -713,11 +715,20 @@ router.get("/social-connections/google-business-status", async (req, res) => {
         }
       }
     } else {
-      let errMsg = acctBody.slice(0, 200);
+      let errMsg = acctBody.slice(0, 400);
       try { errMsg = (JSON.parse(acctBody) as any)?.error?.message ?? errMsg; } catch {}
       console.warn(`[GOOGLE-VERIFY] accounts API failed HTTP ${acctR.status}: ${errMsg}`);
       if (acctR.status === 403 || acctR.status === 401) {
-        failureReason = "missing_business_manage_scope";
+        // Distinguish "API not enabled in GCP" from "business.manage scope not granted"
+        const isApiDisabled = /has not been used|is disabled|SERVICE_DISABLED|PROJECT_INVALID/i.test(errMsg);
+        const isScopeError = /insufficient.*scope|authError|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(errMsg);
+        if (isApiDisabled) {
+          failureReason = "google_api_not_enabled";
+          console.warn(`[GOOGLE-VERIFY] → google_api_not_enabled (API not enabled in GCP Console)`);
+        } else if (isScopeError || !isApiDisabled) {
+          failureReason = "missing_business_manage_scope";
+          console.warn(`[GOOGLE-VERIFY] → missing_business_manage_scope (scope not granted or insufficient)`);
+        }
         apiError = `Accounts API: HTTP ${acctR.status} — ${errMsg}`;
       } else {
         failureReason = "google_api_error";

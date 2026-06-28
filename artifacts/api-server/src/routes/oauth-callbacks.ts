@@ -246,6 +246,29 @@ router.get("/oauth/google/callback", async (req, res) => {
       console.warn(`[GOOGLE-CALLBACK] devOrigin missing — dev DB will not receive token until pull-from-prod runs`);
     }
 
+    // ── 4b. Verify granted scopes via tokeninfo ──
+    if (provider === "google_business") {
+      try {
+        const tiR = await fetch(
+          `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${tokens.access_token}`,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (tiR.ok) {
+          const ti = await tiR.json() as { scope?: string; email?: string; expires_in?: number };
+          const grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
+          const hasBusinessManage = grantedScopes.some(s => s.includes("business.manage"));
+          console.log(`[GOOGLE-SCOPE] granted=${ti.scope ?? "(none)"} business.manage=${hasBusinessManage} expires_in=${ti.expires_in}`);
+          if (!hasBusinessManage) {
+            console.warn(`[GOOGLE-SCOPE] ⚠️ business.manage NOT in granted scopes — user did not approve it or cached grant is stale`);
+          }
+        } else {
+          console.warn(`[GOOGLE-SCOPE] tokeninfo check HTTP ${tiR.status} — skipping scope verification`);
+        }
+      } catch (tiErr: any) {
+        console.warn(`[GOOGLE-SCOPE] tokeninfo fetch failed (non-fatal): ${tiErr?.message}`);
+      }
+    }
+
     // ── 5. Verify GBP accounts + locations (google_business only) ──
     if (provider === "google_business") {
       console.log(`[GOOGLE-VERIFY] starting GBP account + location check...`);

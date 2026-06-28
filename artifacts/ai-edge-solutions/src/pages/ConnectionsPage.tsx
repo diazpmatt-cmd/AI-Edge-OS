@@ -255,6 +255,7 @@ export default function ConnectionsPage() {
       | "token_not_found_in_dev"
       | "token_saved_but_no_refresh_token"
       | "missing_business_manage_scope"
+      | "google_api_not_enabled"
       | "no_gbp_accounts_found"
       | "no_gbp_locations_found"
       | "google_api_error"
@@ -269,12 +270,12 @@ export default function ConnectionsPage() {
     selectedLocationName: string | null;
     apiError: string | null;
   };
-  const { refetch: refetchGBPStatus } = useQuery<GBPStatus>({
+  const { data: gbpPublishStatus, refetch: refetchGBPStatus } = useQuery<GBPStatus>({
     queryKey: ["google_business_status"],
     queryFn: () => authFetch<GBPStatus>("/social-connections/google-business-status"),
     staleTime: 60 * 1000,
     retry: 1,
-    enabled: false,
+    enabled: true,
   });
 
   // Normalize provider aliases so debug-path connections (e.g. "youtube_readonly"
@@ -474,7 +475,10 @@ export default function ConnectionsPage() {
                     msg = "Google token saved but no refresh token received. Please reconnect and confirm the consent screen.";
                     break;
                   case "missing_business_manage_scope":
-                    msg = "Missing the business.manage scope. Please reconnect and approve all requested permissions.";
+                    msg = "Google connected but the business.manage permission was not approved. Use 'Upgrade Google Permissions' to reconnect and approve all scopes.";
+                    break;
+                  case "google_api_not_enabled":
+                    msg = "Google Business Profile API is not enabled in Google Cloud Console. Enable 'My Business Account Management API' in GCP, then reconnect.";
                     break;
                   case "no_gbp_accounts_found":
                     msg = "No Google Business Profile accounts found. Make sure your Google account has a GBP account set up.";
@@ -747,6 +751,15 @@ export default function ConnectionsPage() {
             const isBlocked = status === "blocked";
             const isConnected = status === "connected" || status === "connected_readonly";
 
+            // Google Business Profile publish-readiness
+            const isGBP = platform.id === "google_business";
+            const gbpStat = isGBP ? gbpPublishStatus : undefined;
+            const gbpNeedsUpgrade = isGBP && isConnected && (
+              gbpStat?.failureReason === "missing_business_manage_scope" ||
+              gbpStat?.failureReason === "google_api_not_enabled"
+            );
+            const gbpApiNotEnabled = isGBP && isConnected && gbpStat?.failureReason === "google_api_not_enabled";
+
             // Facebook-specific publish-readiness status
             const isFacebook = platform.id === "facebook";
             const fbStat = isFacebook ? metaPublishStatus : undefined;
@@ -858,10 +871,32 @@ export default function ConnectionsPage() {
                       </p>
                     )}
 
+                    {/* GBP: scope / API-not-enabled warning */}
+                    {gbpNeedsUpgrade && (
+                      <p style={{ fontSize: 11.5, color: "#FB923C", margin: "0 0 8px", lineHeight: 1.6 }}>
+                        {gbpApiNotEnabled
+                          ? "⚠️ The My Business Account Management API is not enabled in Google Cloud Console. Enable it at console.cloud.google.com → APIs & Services, then reconnect."
+                          : "⚠️ The business.manage permission was not approved. Reconnect and accept all requested permissions on the Google consent screen."}
+                      </p>
+                    )}
+
                     {/* Action buttons */}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {isConnected ? (
                         <>
+                          {gbpNeedsUpgrade && (
+                            <button
+                              onClick={() => handleConnect(platform.id)}
+                              disabled={isConnecting}
+                              style={{
+                                padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)",
+                                color: "#FB923C", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
+                              }}
+                            >
+                              {isConnecting ? "Opening…" : "⬆ Upgrade Google Permissions"}
+                            </button>
+                          )}
                           {fbNeedsUpgrade && (
                             <button
                               onClick={() => handleConnect(platform.id, { returnTo: "publishing" })}

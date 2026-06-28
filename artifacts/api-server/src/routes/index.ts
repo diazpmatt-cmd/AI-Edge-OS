@@ -8,6 +8,7 @@ import contentPackagesRouter from "./content-packages";
 import socialConnectionsRouter from "./social-connections";
 import oauthCallbacksRouter from "./oauth-callbacks";
 import leadsRouter from "./leads";
+import socialPostsRouter from "./social-posts";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(contentPackagesRouter);
 router.use(socialConnectionsRouter);
 router.use(oauthCallbacksRouter);
 router.use(leadsRouter);
+router.use(socialPostsRouter);
 
 export default router;

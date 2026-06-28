@@ -7,11 +7,12 @@ import { type ReactNode } from "react";
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const NAV_ITEMS = [
-  { to: "/admin/dashboard",      icon: "⬡", label: "Command Center" },
-  { to: "/admin/connections",    icon: "⚡", label: "Connected Accounts" },
-  { to: "/admin/distribution",   icon: "◈", label: "Distribution" },
-  { to: "/admin/repurpose",      icon: "✦", label: "Repurpose" },
-  { to: "/admin/lead-recovery",  icon: "📞", label: "Lead Recovery" },
+  { to: "/admin/dashboard",           icon: "⬡",  label: "Command Center" },
+  { to: "/admin/connections",         icon: "⚡",  label: "Connected Accounts" },
+  { to: "/admin/distribution",        icon: "◈",  label: "Distribution" },
+  { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },
+  { to: "/admin/lead-recovery",       icon: "📞", label: "Lead Recovery" },
+  { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
 ];
 
 const SIDEBAR_W = 240;

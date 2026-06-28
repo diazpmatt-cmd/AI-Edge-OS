@@ -8,6 +8,11 @@ export type CallbackDebugEntry = {
   connectionSaved: boolean;
   finalRedirectUrl: string;
   error?: string;
+  // Page / scope verification (Meta only)
+  pagesFound?: number;
+  pageNames?: string[];
+  grantedScopes?: string[];
+  missingScopes?: string[];
 };
 
 const MAX = 20;

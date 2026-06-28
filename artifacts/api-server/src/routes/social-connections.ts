@@ -154,7 +154,8 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: appId,
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
-          scope: "public_profile,pages_show_list",
+          // pages_manage_posts + pages_read_engagement are required to publish posts
+          scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement",
           state: generateState(userId, "facebook"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
@@ -169,7 +170,8 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: appId,
           redirect_uri: `${base}/api/oauth/meta/callback`,
           response_type: "code",
-          scope: "pages_manage_posts,pages_read_engagement,instagram_basic",
+          // Full set: pages needed for FB publishing + instagram for IG publishing
+          scope: "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
           state: generateState(userId, "instagram"),
         });
         return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
@@ -240,7 +242,7 @@ router.get("/social-connections/meta-oauth-debug", async (req, res) => {
   const redirectUri = `${appBase}/api/oauth/meta/callback`;
   const appId = process.env.META_APP_ID ?? "";
   const appSecretSet = !!process.env.META_APP_SECRET;
-  const requestedScopes = "public_profile,pages_show_list";
+  const requestedScopes = "public_profile,pages_show_list,pages_manage_posts,pages_read_engagement";
 
   // Check for existing FB connection
   const [fbRow] = await db.select().from(socialConnectionsTable).where(

@@ -4,6 +4,7 @@ import { socialConnectionsTable } from "@workspace/db/schema";
 import { verifyState } from "../lib/oauthState";
 import { logCallback, getCallbackLog } from "../lib/callbackDebugLog";
 import { getAuth } from "@clerk/express";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -169,30 +170,49 @@ async function getMetaUserInfo(accessToken: string) {
   return r.json() as Promise<{ id: string; name: string }>;
 }
 
+const META_REQUIRED_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement"];
+
 router.get("/oauth/meta/callback", async (req, res) => {
   const { code, state, error, error_reason } = req.query as Record<string, string>;
 
   if (error) {
+    logger.warn({ provider: "meta", error, error_reason }, "Meta OAuth callback error from Facebook");
     redirectError(res, "facebook", error_reason ?? error, "meta_callback", { codeReceived: false });
     return;
   }
   if (!code || !state) {
+    logger.warn({ provider: "meta", hasCode: !!code, hasState: !!state }, "Meta OAuth callback missing params");
     redirectError(res, "facebook", "missing_params", "meta_callback", { codeReceived: !!code });
     return;
   }
 
   const verified = verifyState(state, ["facebook", "instagram"]);
   if (!verified) {
+    logger.warn({ provider: "meta" }, "Meta OAuth callback invalid state");
     redirectError(res, "facebook", "invalid_state", "state_verify", { codeReceived: true, stateValid: false });
     return;
   }
   const { userId, provider } = verified;
+  logger.info({ provider, userId }, "Meta OAuth callback: code received, state valid — exchanging token");
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/meta/callback`;
-    const tokens = await exchangeMetaCode(code, redirectUri);
-    const userInfo = await getMetaUserInfo(tokens.access_token);
 
+    // ── 1. Exchange code for access token ──
+    let tokens: { access_token: string; token_type: string };
+    try {
+      tokens = await exchangeMetaCode(code, redirectUri);
+      logger.info({ provider, userId }, "Meta token exchange succeeded");
+    } catch (e: any) {
+      logger.error({ provider, userId, error: e?.message }, "Meta token exchange FAILED");
+      throw e;
+    }
+
+    // ── 2. Get user info ──
+    const userInfo = await getMetaUserInfo(tokens.access_token);
+    logger.info({ provider, userId, accountName: userInfo.name, accountId: userInfo.id }, "Meta user info fetched");
+
+    // ── 3. Save token to DB ──
     await db.insert(socialConnectionsTable).values({
       userId, provider,
       accountName: userInfo.name,
@@ -209,8 +229,68 @@ router.get("/oauth/meta/callback", async (req, res) => {
         updatedAt: new Date(),
       },
     });
+    logger.info({ provider, userId }, "Meta token saved to DB");
 
-    redirectSuccess(res, provider);
+    // ── 4. Verify /me/accounts (page access tokens) ──
+    let pagesFound = 0;
+    let pageNames: string[] = [];
+    try {
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${tokens.access_token}`);
+      if (acctR.ok) {
+        const acctData = await acctR.json() as { data?: Array<{ id: string; name: string; access_token: string }> };
+        pagesFound = acctData.data?.length ?? 0;
+        pageNames = (acctData.data ?? []).map(p => p.name);
+        logger.info({ provider, userId, pagesFound, pageNames }, "Meta /me/accounts OK");
+        if (pagesFound === 0) {
+          logger.warn({ provider, userId }, "Meta /me/accounts returned 0 pages — user may have no Pages or declined pages_show_list");
+        }
+      } else {
+        const errBody = await acctR.text().catch(() => "");
+        logger.error({ provider, userId, status: acctR.status, body: errBody }, "Meta /me/accounts FAILED");
+      }
+    } catch (pageErr: any) {
+      logger.warn({ provider, userId, error: pageErr?.message }, "Meta /me/accounts exception");
+    }
+
+    // ── 5. Check granted permissions ──
+    let grantedScopes: string[] = [];
+    let missingScopes: string[] = [];
+    try {
+      const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${tokens.access_token}`);
+      if (permR.ok) {
+        const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
+        grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
+        missingScopes = META_REQUIRED_SCOPES.filter(s => !grantedScopes.includes(s));
+        if (missingScopes.length > 0) {
+          logger.warn({ provider, userId, missingScopes, grantedScopes }, "Meta OAuth: MISSING required scopes for publishing");
+        } else {
+          logger.info({ provider, userId, grantedScopes }, "Meta OAuth: all required publishing scopes granted");
+        }
+      }
+    } catch (permErr: any) {
+      logger.warn({ provider, userId, error: permErr?.message }, "Meta /me/permissions exception");
+    }
+
+    // ── 6. Log and redirect ──
+    const base = getAppBase();
+    const slug = PROVIDER_SLUG[provider] ?? provider;
+    const finalRedirectUrl = `${base}/oauth-close?connected=${slug}`;
+    logCallback({
+      ts: new Date().toISOString(),
+      provider,
+      callbackReached: true,
+      codeReceived: true,
+      stateValid: true,
+      tokenExchangeStatus: "success",
+      connectionSaved: true,
+      finalRedirectUrl,
+      pagesFound,
+      pageNames,
+      grantedScopes,
+      missingScopes,
+    });
+    res.redirect(finalRedirectUrl);
+
   } catch (e: any) {
     redirectError(res, provider, e?.message ?? "token_exchange_failed", "meta_token", { codeReceived: true, stateValid: true });
   }

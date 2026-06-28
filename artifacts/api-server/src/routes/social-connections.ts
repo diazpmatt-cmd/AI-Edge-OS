@@ -79,6 +79,122 @@ router.delete("/social-connections/:provider", async (req, res) => {
 // Access is gated by an HMAC-SHA256 signature using OAUTH_STATE_SECRET
 // (the same key the deployed server signs its state JWTs with), so no
 // Clerk session is required — the caller is our own deployed server.
+// ── dev-export: returns a connection row so the dev server can pull it ────────
+// Called by pull-from-prod (below) via server-to-server with the user's Clerk
+// bearer token forwarded verbatim. Works on both dev and deployed servers.
+router.get("/social-connections/dev-export", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { provider } = req.query as Record<string, string>;
+  if (!provider) { res.status(400).json({ error: "Missing provider" }); return; }
+
+  console.log(`[DEV-EXPORT] userId=${userId} provider=${provider} NODE_ENV=${process.env.NODE_ENV}`);
+
+  const [row] = await db.select().from(socialConnectionsTable).where(
+    and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider))
+  );
+
+  if (!row?.accessToken) {
+    console.log(`[DEV-EXPORT] not found`);
+    res.json({ found: false, provider, userId });
+    return;
+  }
+
+  console.log(`[DEV-EXPORT] ✓ found accountName=${row.accountName} tokenLen=${row.accessToken.length}`);
+  res.json({
+    found: true,
+    provider: row.provider,
+    userId: row.userId,
+    accountName: row.accountName,
+    accountId: row.accountId,
+    accessToken: row.accessToken,
+    metadata: row.metadata ?? null,
+  });
+});
+
+// ── pull-from-prod: dev server pulls a connection row from the deployed server ─
+// The deployed server is reachable from anywhere (public URL).
+// The dev server is NOT reachable from deployed (Replit auth wall).
+// This reverses the sync direction: dev pulls instead of prod pushing.
+router.post("/social-connections/pull-from-prod", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { provider } = req.body ?? {};
+  if (!provider) { res.status(400).json({ error: "Missing provider" }); return; }
+
+  const prodUrl = process.env.PUBLIC_APP_URL;
+  if (!prodUrl) { res.status(500).json({ error: "PUBLIC_APP_URL not set" }); return; }
+
+  // Forward the user's Clerk bearer token — same Clerk instance, valid on deployed server
+  const authHeader = req.headers.authorization;
+  if (!authHeader) { res.status(401).json({ error: "No Authorization header to forward" }); return; }
+
+  console.log(`[PULL-FROM-PROD] userId=${userId} provider=${provider} → ${prodUrl}`);
+
+  try {
+    const exportUrl = `${prodUrl}/api/social-connections/dev-export?provider=${encodeURIComponent(provider)}`;
+    let exportRes: Response;
+    try {
+      exportRes = await fetch(exportUrl, {
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (fetchErr: any) {
+      console.error(`[PULL-FROM-PROD] fetch error: ${fetchErr?.message}`);
+      res.status(502).json({ error: "fetch_failed", message: fetchErr?.message });
+      return;
+    }
+
+    const rawBody = await exportRes.text().catch(() => "");
+    console.log(`[PULL-FROM-PROD] export response: status=${exportRes.status} body=${rawBody.slice(0, 200)}`);
+
+    if (!exportRes.ok) {
+      res.status(502).json({ error: "prod_export_failed", status: exportRes.status, body: rawBody.slice(0, 200) });
+      return;
+    }
+
+    let data: { found: boolean; provider?: string; accountName?: string; accountId?: string; accessToken?: string; metadata?: string | null };
+    try { data = JSON.parse(rawBody); } catch {
+      res.status(502).json({ error: "parse_failed", raw: rawBody.slice(0, 200) });
+      return;
+    }
+
+    if (!data.found || !data.accessToken) {
+      console.log(`[PULL-FROM-PROD] not found in prod DB`);
+      res.json({ synced: false, reason: "not_found_in_prod" });
+      return;
+    }
+
+    await db.insert(socialConnectionsTable).values({
+      userId,
+      provider: data.provider ?? provider,
+      accountName: data.accountName ?? null,
+      accountId: data.accountId ?? null,
+      accessToken: data.accessToken,
+      refreshToken: null,
+      expiresAt: null,
+      metadata: data.metadata ?? null,
+    }).onConflictDoUpdate({
+      target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
+      set: {
+        accountName: data.accountName ?? null,
+        accountId: data.accountId ?? null,
+        accessToken: data.accessToken,
+        metadata: data.metadata ?? null,
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log(`[PULL-FROM-PROD] ✓ written to dev DB: provider=${provider} userId=${userId}`);
+    res.json({ synced: true, provider, userId });
+  } catch (e: any) {
+    console.error(`[PULL-FROM-PROD] ✗ unexpected error: ${e?.message}`);
+    res.status(500).json({ error: e?.message });
+  }
+});
+
 router.post("/social-connections/oauth-sync", async (req, res) => {
   const { provider, userId, accountName, accountId, accessToken, metadata, sig } = req.body ?? {};
   console.log(`[OAUTH-SYNC] received: provider=${provider} userId=${userId ?? "NULL"} hasAccessToken=${!!accessToken} hasSig=${!!sig} NODE_ENV=${process.env.NODE_ENV}`);

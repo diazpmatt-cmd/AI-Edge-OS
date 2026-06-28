@@ -331,6 +331,19 @@ export default function ConnectionsPage() {
         qc.invalidateQueries({ queryKey: ["meta_publish_status"] });
 
         if (isMeta) {
+          // Pull the token from prod DB → dev DB before checking status.
+          // The deployed server saves to prod DB; the dev server reads dev DB.
+          // Replit's auth wall blocks server-to-server push, so dev must pull.
+          try {
+            const pullResult = await authFetch<{ synced: boolean; reason?: string }>(
+              "/social-connections/pull-from-prod",
+              { method: "POST", body: JSON.stringify({ provider: receivedProvider }) }
+            );
+            console.log("[OAuth] pull-from-prod result:", pullResult);
+          } catch (pullErr) {
+            console.warn("[OAuth] pull-from-prod failed (non-fatal):", pullErr);
+          }
+
           // For Meta providers the backend queries the FB Graph API on every
           // call, so the fresh response tells us exactly what's missing.
           try {

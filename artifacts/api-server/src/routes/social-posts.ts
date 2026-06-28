@@ -3,15 +3,38 @@ import { db } from "@workspace/db";
 import { socialPostsTable, socialConnectionsTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 const router = Router();
+
+const UPLOADS_DIR = path.join(process.cwd(), "uploads", "social-posts");
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const ALLOWED_MIME = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
+
+const upload = multer({
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WEBP, or GIF files are allowed."));
+  },
+  storage: multer.diskStorage({
+    destination: UPLOADS_DIR,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+});
 
 function rowToDto(r: typeof socialPostsTable.$inferSelect) {
   return {
     id:           r.id,
     clientName:   r.clientName,
     platforms:    JSON.parse(r.platforms || "[]") as string[],
-    imageData:    r.imageData,
+    imageUrl:     r.imageData,
     caption:      r.caption,
     ctaType:      r.ctaType,
     ctaValue:     r.ctaValue,
@@ -24,6 +47,27 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
   };
 }
 
+// ── Image upload ──────────────────────────────────────────────────────────────
+router.post("/social-posts/upload-image", (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  upload.single("image")(req, res, (err: any) => {
+    if (err) {
+      const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+      const msg = err.code === "LIMIT_FILE_SIZE"
+        ? "Image too large. Maximum size is 10 MB."
+        : err.message ?? "Upload failed.";
+      res.status(status).json({ error: msg });
+      return;
+    }
+    if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    const imageUrl = `/api/uploads/social-posts/${req.file.filename}`;
+    res.json({ imageUrl });
+  });
+});
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
 router.get("/social-posts", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -41,7 +85,7 @@ router.post("/social-posts", async (req, res) => {
     userId,
     clientName:  b.clientName  ?? "Bed Bugs & Beyond",
     platforms:   JSON.stringify(b.platforms ?? []),
-    imageData:   b.imageData   ?? null,
+    imageData:   b.imageUrl    ?? null,
     caption:     b.caption     ?? "",
     ctaType:     b.ctaType     ?? "none",
     ctaValue:    b.ctaValue    ?? null,
@@ -58,7 +102,7 @@ router.patch("/social-posts/:id", async (req, res) => {
   const [row] = await db.update(socialPostsTable).set({
     ...(b.clientName  !== undefined && { clientName:  b.clientName }),
     ...(b.platforms   !== undefined && { platforms:   JSON.stringify(b.platforms) }),
-    ...(b.imageData   !== undefined && { imageData:   b.imageData }),
+    ...(b.imageUrl    !== undefined && { imageData:   b.imageUrl }),
     ...(b.caption     !== undefined && { caption:     b.caption }),
     ...(b.ctaType     !== undefined && { ctaType:     b.ctaType }),
     ...(b.ctaValue    !== undefined && { ctaValue:    b.ctaValue }),
@@ -73,11 +117,17 @@ router.patch("/social-posts/:id", async (req, res) => {
 router.delete("/social-posts/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-  await db.delete(socialPostsTable)
-    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+  const [deleted] = await db.delete(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
+    .returning();
+  if (deleted?.imageData && deleted.imageData.startsWith("/api/uploads/")) {
+    const filePath = path.join(process.cwd(), deleted.imageData.replace("/api/", ""));
+    fs.unlink(filePath, () => {});
+  }
   res.status(204).send();
 });
 
+// ── Publish ───────────────────────────────────────────────────────────────────
 router.post("/social-posts/:id/publish", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -104,19 +154,38 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     return data.data;
   };
 
-  const uploadPhotoToFacebook = async (pageId: string, pageToken: string, caption: string, imageData: string | null) => {
-    if (imageData && imageData.startsWith("data:")) {
+  const buildImageForm = async (imageData: string | null): Promise<{ blob: Blob; filename: string } | null> => {
+    if (!imageData) return null;
+    if (imageData.startsWith("/api/uploads/")) {
+      const filePath = path.join(process.cwd(), imageData.replace("/api/", ""));
+      const buf = await fs.promises.readFile(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
+      return { blob: new Blob([buf], { type: mime }), filename: path.basename(filePath) };
+    }
+    if (imageData.startsWith("data:")) {
       const base64 = imageData.replace(/^data:image\/[a-z+]+;base64,/, "");
-      const imgBuffer = Buffer.from(base64, "base64");
+      const buf = Buffer.from(base64, "base64");
+      return { blob: new Blob([buf], { type: "image/jpeg" }), filename: "photo.jpg" };
+    }
+    return null;
+  };
+
+  const uploadPhotoToFacebook = async (
+    pageId: string, pageToken: string, caption: string, imageData: string | null
+  ) => {
+    const imgFile = await buildImageForm(imageData);
+    if (imgFile) {
       const form = new FormData();
       form.append("caption", caption);
       form.append("access_token", pageToken);
-      form.append("source", new Blob([imgBuffer], { type: "image/jpeg" }), "photo.jpg");
+      form.append("source", imgFile.blob, imgFile.filename);
       const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, { method: "POST", body: form });
       const data = await r.json() as any;
       if (!r.ok) throw new Error(data.error?.message ?? "Photo upload failed");
       return data as { id: string; post_id?: string };
-    } else if (imageData && imageData.startsWith("http")) {
+    }
+    if (imageData?.startsWith("http")) {
       const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,16 +194,15 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const data = await r.json() as any;
       if (!r.ok) throw new Error(data.error?.message ?? "Photo URL post failed");
       return data as { id: string; post_id?: string };
-    } else {
-      const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/feed`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: caption, access_token: pageToken }),
-      });
-      const data = await r.json() as any;
-      if (!r.ok) throw new Error(data.error?.message ?? "Feed post failed");
-      return { id: data.id as string };
     }
+    const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/feed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: caption, access_token: pageToken }),
+    });
+    const data = await r.json() as any;
+    if (!r.ok) throw new Error(data.error?.message ?? "Feed post failed");
+    return { id: data.id as string };
   };
 
   const getPhotoUrl = async (photoId: string, pageToken: string): Promise<string | null> => {
@@ -154,7 +222,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     } else {
       try {
         fbPages = await getFbPages(fbConn.accessToken);
-        if (!fbPages.length) throw new Error("No Facebook Pages found. Make sure you have a Page linked to this account.");
+        if (!fbPages.length) throw new Error("No Facebook Pages found. Make sure a Page is linked to your account.");
       } catch (e: any) {
         errors.push(`Facebook: ${e.message}`);
       }
@@ -167,9 +235,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const fullCaption = buildCaption(post.caption, post.ctaType, post.ctaValue);
       const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, post.imageData ?? null);
       results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };
-      if (post.imageData && post.imageData.startsWith("data:")) {
-        fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
-      }
+      fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
     } catch (e: any) {
       results.facebook = { ok: false, error: e.message };
       errors.push(`Facebook: ${e.message}`);
@@ -185,7 +251,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       if (!igAccountId) throw new Error("No Instagram Business Account linked to this Facebook Page.");
 
       const imageUrl = fbPhotoUrl ?? (post.imageData?.startsWith("http") ? post.imageData : null);
-      if (!imageUrl) throw new Error("Instagram requires a public image URL. Post to Facebook first to get a hosted URL, or provide an image URL.");
+      if (!imageUrl) throw new Error("Instagram requires a public image URL. Select both Facebook and Instagram together — the Facebook upload will provide the hosted URL.");
 
       const fullCaption = buildCaption(post.caption, post.ctaType, post.ctaValue);
       const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}/media`, {

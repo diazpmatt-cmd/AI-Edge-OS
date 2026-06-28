@@ -41,6 +41,7 @@ const DistributionPage    = lazy(() => import("./pages/DistributionPage"));
 const ConnectionsPage     = lazy(() => import("./pages/ConnectionsPage"));
 const LeadRecoveryPage        = lazy(() => import("./pages/LeadRecoveryPage"));
 const SocialPublishingPage    = lazy(() => import("./pages/SocialPublishingPage"));
+const AutoContentEnginePage   = lazy(() => import("./pages/AutoContentEnginePage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -112,6 +113,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/social-publishing">
           <Authenticated><SocialPublishingPage /></Authenticated>
+        </Route>
+        <Route path="/admin/auto-content">
+          <Authenticated><AutoContentEnginePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

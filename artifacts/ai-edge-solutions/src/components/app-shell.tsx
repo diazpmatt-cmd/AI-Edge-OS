@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },
   { to: "/admin/lead-recovery",       icon: "📞", label: "Lead Recovery" },
   { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
+  { to: "/admin/auto-content",        icon: "🤖", label: "Auto Content Engine" },
 ];
 
 const SIDEBAR_W = 240;

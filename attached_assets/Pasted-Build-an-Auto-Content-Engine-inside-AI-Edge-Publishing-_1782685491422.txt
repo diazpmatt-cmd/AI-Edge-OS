@@ -1,0 +1,109 @@
+Build an “Auto Content Engine” inside AI Edge Publishing Center.
+
+Goal:
+Allow AI Edge to automatically generate local post ideas, captions, and schedules for a business based on service areas, pest/service topics, and posting frequency.
+
+Add a new section/page:
+Publishing Center → Auto Content Engine
+
+Core fields:
+
+1. Client/business selector
+   Default: Bed Bugs & Beyond
+
+2. Service areas list
+   User can add/edit cities:
+
+* Foley, AL
+* Daphne, AL
+* Loxley, AL
+* Fairhope, AL
+* Gulf Shores, AL
+* Orange Beach, AL
+* Summerdale, AL
+* Spanish Fort, AL
+* Elberta, AL
+* Lillian, AL
+* Perdido Beach, AL
+
+3. Service/topic list
+   User can add/edit topics:
+
+* Bed bugs
+* Roaches
+* Ants
+* Fleas
+* Ticks
+* Rats
+* Wasps
+* Spiders
+* Mosquitoes
+* Moles
+
+4. Posting frequency
+   Options:
+
+* Every day
+* Every other day
+* 3 times per week
+* Custom
+
+5. Time rotation
+   Allow multiple posting times:
+
+* 8:00 AM
+* 12:00 PM
+* 5:00 PM
+
+System should rotate times automatically.
+
+Example:
+Post 1 → 8 AM
+Post 2 → 12 PM
+Post 3 → 5 PM
+Post 4 → 8 AM again
+
+6. Platforms
+   Checkboxes:
+
+* Facebook
+* Instagram
+* Google Business Profile
+
+7. Approval mode
+   Options:
+
+* Draft only
+* Auto schedule
+* Auto publish
+
+Default should be:
+Auto schedule, but not auto publish unless user enables it.
+
+8. AI generation
+   For each post, AI should generate:
+
+* city/topic combination
+* caption
+* suggested image prompt/template
+* CTA
+* hashtags
+* scheduled date/time
+
+9. Duplicate prevention
+   Do not repeat the same city/topic combo until all combinations have been used.
+
+10. Create batch button
+    Button:
+    “Generate Next 14 Days”
+
+This should create posts in the Publishing Center as scheduled drafts/posts.
+
+For Bed Bugs & Beyond default CTA:
+Call Now — (251) 324-9090
+
+Default caption style:
+Local, direct, professional, pest-control focused, not too long.
+
+Important:
+Start with caption + schedule generation first. Image generation/template automation can be Phase 2.

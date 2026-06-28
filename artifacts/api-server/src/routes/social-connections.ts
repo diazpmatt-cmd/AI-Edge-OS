@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHmac } from "node:crypto";
 import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -69,6 +70,54 @@ router.delete("/social-connections/:provider", async (req, res) => {
       eq(socialConnectionsTable.provider, req.params.provider),
     ));
   res.status(204).send();
+});
+
+// ── Dev/prod DB bridge ──────────────────────────────────────────────────────
+// The deployed API server saves OAuth tokens to the PRODUCTION database.
+// This endpoint lets the deployed server mirror a freshly-saved connection
+// into the DEV database so the dev frontend sees it immediately.
+// Access is gated by an HMAC-SHA256 signature using OAUTH_STATE_SECRET
+// (the same key the deployed server signs its state JWTs with), so no
+// Clerk session is required — the caller is our own deployed server.
+router.post("/social-connections/oauth-sync", async (req, res) => {
+  const { provider, userId, accountName, accountId, accessToken, metadata, sig } = req.body ?? {};
+  if (!provider || !userId || !accessToken || !sig) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
+  if (!secret) { res.status(500).json({ error: "No signing secret configured" }); return; }
+
+  const payload = { provider, userId, accountName, accountId, accessToken, metadata: metadata ?? null };
+  const expected = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+  if (sig !== expected) {
+    console.error(`[OAUTH-SYNC] signature mismatch for provider=${provider} userId=${userId}`);
+    res.status(401).json({ error: "Invalid signature" });
+    return;
+  }
+
+  await db.insert(socialConnectionsTable).values({
+    userId, provider,
+    accountName: accountName ?? null,
+    accountId: accountId ?? null,
+    accessToken,
+    refreshToken: null,
+    expiresAt: null,
+    metadata: metadata ?? null,
+  }).onConflictDoUpdate({
+    target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
+    set: {
+      accountName: accountName ?? null,
+      accountId: accountId ?? null,
+      accessToken,
+      metadata: metadata ?? null,
+      updatedAt: new Date(),
+    },
+  });
+
+  console.log(`[OAUTH-SYNC] synced provider=${provider} userId=${userId} metadata=${metadata ? "set" : "null"}`);
+  res.json({ ok: true, provider, userId });
 });
 
 router.post("/social-connections/oauth-start/:provider", async (req, res) => {

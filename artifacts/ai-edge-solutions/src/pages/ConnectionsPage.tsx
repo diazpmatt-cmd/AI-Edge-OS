@@ -115,7 +115,7 @@ export default function ConnectionsPage() {
     navigate("/admin/connections", { replace: true });
   }, [search]);
 
-  const { data: connections = [] } = useQuery<DbConnection[]>({
+  const { data: connections = [], refetch: refetchConnections } = useQuery<DbConnection[]>({
     queryKey: ["social_connections"],
     queryFn: () => authFetch<DbConnection[]>("/social-connections"),
   });
@@ -289,23 +289,101 @@ export default function ConnectionsPage() {
     setConnecting(provider);
 
     // Listen for the postMessage from /oauth-close (fires when OAuth succeeds or fails in popup)
-    const msgHandler = (e: MessageEvent) => {
+    const msgHandler = async (e: MessageEvent) => {
       if (e.data?.type === "oauth_success" || e.data?.type === "oauth_error") {
+        // Tear down listeners synchronously before any awaits to prevent double-fire.
         window.removeEventListener("message", msgHandler);
         clearInterval(pollTimer);
         setConnecting(null);
+
+        if (e.data.type === "oauth_error") {
+          toast.error(`OAuth failed: ${e.data.reason ?? "unknown error"}`);
+          qc.invalidateQueries({ queryKey: ["connection_debug"] });
+          return;
+        }
+
+        // oauth_success: verify with the backend BEFORE showing toast so the
+        // card and the toast always agree (requirement: no false positives).
+        const receivedProvider: string = e.data.provider ?? provider;
+        const isMeta = ["facebook", "instagram"].includes(receivedProvider);
+
+        if (e.data.returnTo === "publishing") {
+          navigate(`/admin/social-publishing?connected=${receivedProvider}&status=success`);
+          return;
+        }
+
+        // Invalidate stale cache entries; the explicit refetch below pulls
+        // fresh data regardless of staleTime.
         qc.invalidateQueries({ queryKey: ["social_connections"] });
         qc.invalidateQueries({ queryKey: ["connection_debug"] });
         qc.invalidateQueries({ queryKey: ["meta_publish_status"] });
-        if (e.data.type === "oauth_error") {
-          toast.error(`OAuth failed: ${e.data.reason ?? "unknown error"}`);
-        } else if (e.data.type === "oauth_success") {
-          if (e.data.returnTo === "publishing") {
-            const prov = e.data.provider ?? "";
-            navigate(`/admin/social-publishing?connected=${prov}&status=success`);
-          } else {
-            const label = (e.data.provider ?? provider).replace(/_/g, " ");
-            toast.success(`${label.charAt(0).toUpperCase() + label.slice(1)} connected successfully!`);
+
+        if (isMeta) {
+          // For Meta providers the backend queries the FB Graph API on every
+          // call, so the fresh response tells us exactly what's missing.
+          try {
+            const { data: freshStatus } = await refetchMetaPublishStatus();
+
+            if (!freshStatus || !freshStatus.userTokenExists) {
+              // Token was not found in the DB — the save either failed or
+              // the dev/prod DB split hasn't synced yet.
+              toast.error(
+                "Facebook connection could not be verified — please try again.",
+                { duration: 8000 },
+              );
+            } else if (freshStatus.statusLabel === "ready_to_publish") {
+              const page = freshStatus.pageName;
+              toast.success(
+                page
+                  ? `Facebook connected! "${page}" is ready to publish.`
+                  : "Facebook connected and ready to publish!",
+              );
+            } else {
+              // Token saved but publishing isn't fully set up yet.
+              const reasons: string[] = [];
+              if (freshStatus.missingScopes?.length > 0) {
+                reasons.push(`missing permissions: ${freshStatus.missingScopes.join(", ")}`);
+              }
+              if (freshStatus.pagesFound === 0 && !freshStatus.pageTokenStored) {
+                reasons.push("no Facebook Pages found on your account");
+              }
+              if (freshStatus.permissionsError) {
+                reasons.push(`permissions check error: ${freshStatus.permissionsError}`);
+              }
+              const detail = reasons.length ? ` (${reasons.join("; ")})` : "";
+              toast(
+                `Facebook login completed, but publishing setup is incomplete${detail}.`,
+                { icon: "⚠️", duration: 10000 },
+              );
+            }
+          } catch {
+            // Network/auth failure on the status check — show a neutral message.
+            toast(
+              "Facebook login completed. Checking connection status…",
+              { icon: "⏳", duration: 5000 },
+            );
+          }
+        } else {
+          // Non-Meta provider: refetch the connections list and confirm it landed.
+          try {
+            const { data: freshConns } = await refetchConnections();
+            const found = freshConns?.some(
+              (c) => c.provider === receivedProvider || c.provider.startsWith(receivedProvider),
+            );
+            const label = receivedProvider.replace(/_/g, " ");
+            const cap = label.charAt(0).toUpperCase() + label.slice(1);
+            if (found) {
+              toast.success(`${cap} connected successfully!`);
+            } else {
+              toast(`${cap} login completed. Verifying connection…`, {
+                icon: "⏳",
+                duration: 5000,
+              });
+            }
+          } catch {
+            const label = receivedProvider.replace(/_/g, " ");
+            const cap = label.charAt(0).toUpperCase() + label.slice(1);
+            toast.success(`${cap} connected successfully!`);
           }
         }
       }

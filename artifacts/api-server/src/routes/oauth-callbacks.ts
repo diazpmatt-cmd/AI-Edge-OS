@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHmac } from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
@@ -6,6 +7,23 @@ import { verifyState } from "../lib/oauthState";
 import { logCallback, getCallbackLog } from "../lib/callbackDebugLog";
 import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
+
+// After saving to the production DB, notify the dev server so it can sync the
+// same row to the dev DB.  This bridges the Replit dev/prod database split so
+// the dev frontend sees the token without requiring Facebook app-settings changes.
+async function syncToDevServer(devOrigin: string, payload: {
+  provider: string; userId: string; accountName: string; accountId: string;
+  accessToken: string; metadata: string | null;
+}) {
+  const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
+  const sig = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+  await fetch(`${devOrigin}/api/social-connections/oauth-sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, sig }),
+    signal: AbortSignal.timeout(5000),
+  });
+}
 
 const router = Router();
 
@@ -307,6 +325,28 @@ router.get("/oauth/meta/callback", async (req, res) => {
     } catch (pageErr: any) {
       console.error(`[META-CALLBACK] /me/accounts exception: ${pageErr?.message}`);
       logger.warn({ provider, userId, error: pageErr?.message }, "Meta /me/accounts exception");
+    }
+
+    // ── 4b. Sync connection to dev server (bridges Replit dev/prod DB split) ──
+    // The deployed server writes to the production DB; the dev server queries
+    // the dev DB.  After saving to prod, we fire a signed POST to the dev
+    // server so it can mirror the row into the dev DB before the popup closes.
+    if (devOrigin) {
+      try {
+        const syncMeta = Object.keys(storedMetadata).length ? JSON.stringify(storedMetadata) : null;
+        await syncToDevServer(devOrigin, {
+          provider, userId,
+          accountName: userInfo.name,
+          accountId: userInfo.id,
+          accessToken: tokens.access_token,
+          metadata: syncMeta,
+        });
+        console.log(`[META-CALLBACK] dev-sync OK → ${devOrigin}`);
+        logger.info({ provider, userId, devOrigin }, "Dev-sync succeeded");
+      } catch (syncErr: any) {
+        console.warn(`[META-CALLBACK] dev-sync failed (non-fatal): ${syncErr?.message}`);
+        logger.warn({ provider, userId, devOrigin, error: syncErr?.message }, "Dev-sync failed (non-fatal)");
+      }
     }
 
     // ── 5. Check granted permissions ──

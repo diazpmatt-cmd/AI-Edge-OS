@@ -149,49 +149,172 @@ async function getGoogleUserInfo(accessToken: string) {
 router.get("/oauth/google/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
 
+  console.log(`[GOOGLE-CALLBACK] hit: hasCode=${!!code} hasState=${!!state} error=${error ?? "none"} NODE_ENV=${process.env.NODE_ENV}`);
+
   if (error) {
+    console.error(`[GOOGLE-CALLBACK] Google denied access: ${error}`);
     redirectError(res, "google", error, "google_callback", undefined, { codeReceived: false });
     return;
   }
   if (!code || !state) {
+    console.error(`[GOOGLE-CALLBACK] missing params: code=${!!code} state=${!!state}`);
     redirectError(res, "google", "missing_params", "google_callback", undefined, { codeReceived: !!code });
     return;
   }
 
   const verified = verifyState(state, ["google_business", "youtube", "google_basic", "youtube_readonly"]);
   if (!verified) {
+    console.error(`[GOOGLE-CALLBACK] invalid_state — HMAC mismatch or expired. OAUTH_STATE_SECRET set=${!!process.env.OAUTH_STATE_SECRET}`);
     redirectError(res, "google", "invalid_state", "state_verify", undefined, { codeReceived: true, stateValid: false });
     return;
   }
   const { userId, provider, devOrigin } = verified;
+  console.log(`[GOOGLE-CALLBACK] state valid: userId=${userId} provider=${provider} devOrigin=${devOrigin ?? "none"}`);
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/google/callback`;
-    const tokens = await exchangeGoogleCode(code, redirectUri);
-    const userInfo = await getGoogleUserInfo(tokens.access_token);
+    console.log(`[GOOGLE-CALLBACK] exchanging code, redirect_uri=${redirectUri}`);
+
+    // ── 1. Token exchange ──
+    let tokens: { access_token: string; refresh_token?: string; expires_in?: number; token_type: string };
+    try {
+      tokens = await exchangeGoogleCode(code, redirectUri);
+      console.log(`[GOOGLE-CALLBACK] token exchange OK: token_type=${tokens.token_type} token_len=${tokens.access_token?.length ?? 0} has_refresh=${!!tokens.refresh_token}`);
+    } catch (tokenErr: any) {
+      console.error(`[GOOGLE-CALLBACK] token exchange FAILED: ${tokenErr?.message}`);
+      throw tokenErr;
+    }
+
+    // ── 2. User info ──
+    let userInfo: { email: string; name?: string; id: string };
+    try {
+      userInfo = await getGoogleUserInfo(tokens.access_token);
+      console.log(`[GOOGLE-CALLBACK] user info: email=${userInfo.email} name=${userInfo.name ?? "n/a"} id=${userInfo.id}`);
+    } catch (uiErr: any) {
+      console.error(`[GOOGLE-CALLBACK] get user info FAILED: ${uiErr?.message}`);
+      throw uiErr;
+    }
+
     const expiresAt = tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000) : null;
 
-    await db.insert(socialConnectionsTable).values({
-      userId, provider,
-      accountName: userInfo.name ?? userInfo.email,
-      accountId: userInfo.id,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token ?? null,
-      expiresAt,
-    }).onConflictDoUpdate({
-      target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
-      set: {
+    // ── 3. Save token to DB ──
+    console.log(`[GOOGLE-SAVE] attempting DB save: userId=${userId} provider=${provider} accountName="${userInfo.name ?? userInfo.email}"`);
+    try {
+      await db.insert(socialConnectionsTable).values({
+        userId, provider,
         accountName: userInfo.name ?? userInfo.email,
         accountId: userInfo.id,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? null,
         expiresAt,
-        updatedAt: new Date(),
-      },
-    });
+      }).onConflictDoUpdate({
+        target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
+        set: {
+          accountName: userInfo.name ?? userInfo.email,
+          accountId: userInfo.id,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token ?? null,
+          expiresAt,
+          updatedAt: new Date(),
+        },
+      });
+      console.log(`[GOOGLE-SAVE] ✓ saved to DB: userId=${userId} provider=${provider}`);
+    } catch (dbErr: any) {
+      console.error(`[GOOGLE-SAVE] ✗ DB save FAILED: ${dbErr?.message} pg.code=${(dbErr as any)?.code ?? "n/a"} constraint=${(dbErr as any)?.constraint ?? "n/a"}`);
+      throw dbErr;
+    }
+
+    // ── 4. Verify GBP accounts + locations (google_business only) ──
+    if (provider === "google_business") {
+      console.log(`[GOOGLE-VERIFY] starting GBP account + location check...`);
+      const gbpMeta: Record<string, any> = {};
+      try {
+        const acctR = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+          signal: AbortSignal.timeout(8000),
+        });
+        const acctBody = await acctR.text();
+        console.log(`[GOOGLE-VERIFY] accounts API: status=${acctR.status} body=${acctBody.slice(0, 400)}`);
+
+        if (acctR.ok) {
+          const acctData = JSON.parse(acctBody) as { accounts?: Array<{ name: string; accountName: string }> };
+          const accounts = acctData.accounts ?? [];
+          console.log(`[GOOGLE-VERIFY] accounts found = ${accounts.length}`);
+
+          if (accounts.length === 0) {
+            console.warn(`[GOOGLE-VERIFY] no_accounts_found — GBP not set up or business.manage scope not granted`);
+            gbpMeta.noAccounts = true;
+          } else {
+            gbpMeta.gbpAccountName = accounts[0].name;
+            gbpMeta.gbpAccountDisplayName = accounts[0].accountName;
+
+            // Fetch locations
+            try {
+              const locR = await fetch(
+                `https://mybusinessbusinessinformation.googleapis.com/v1/${accounts[0].name}/locations?readMask=name,title`,
+                { headers: { Authorization: `Bearer ${tokens.access_token}` }, signal: AbortSignal.timeout(8000) }
+              );
+              const locBody = await locR.text();
+              console.log(`[GOOGLE-VERIFY] locations API: status=${locR.status} body=${locBody.slice(0, 500)}`);
+
+              if (locR.ok) {
+                const locData = JSON.parse(locBody) as { locations?: Array<{ name: string; title: string }> };
+                const locs = locData.locations ?? [];
+                const locationNames = locs.map(l => l.title);
+                console.log(`[GOOGLE-VERIFY] locations found = ${locs.length} names=${JSON.stringify(locationNames)}`);
+                gbpMeta.locationCount = locs.length;
+                gbpMeta.locationNames = locationNames;
+
+                const match = locs.find(l =>
+                  l.title?.toLowerCase().includes("bed bug") || l.title?.toLowerCase().includes("beyond")
+                );
+                if (match) {
+                  console.log(`[GOOGLE-VERIFY] ✓ "Bed Bugs & Beyond" location found: "${match.title}" (${match.name})`);
+                  gbpMeta.primaryLocation = match.name;
+                  gbpMeta.primaryLocationTitle = match.title;
+                } else if (locs.length > 0) {
+                  console.log(`[GOOGLE-VERIFY] "Bed Bugs & Beyond" NOT matched — using first: "${locs[0].title}"`);
+                  gbpMeta.primaryLocation = locs[0].name;
+                  gbpMeta.primaryLocationTitle = locs[0].title;
+                } else {
+                  console.warn(`[GOOGLE-VERIFY] no_locations_found`);
+                  gbpMeta.noLocations = true;
+                }
+              } else {
+                console.warn(`[GOOGLE-VERIFY] locations API failed: ${locBody.slice(0, 200)}`);
+                gbpMeta.locationsError = `HTTP ${locR.status}: ${locBody.slice(0, 100)}`;
+              }
+            } catch (locErr: any) {
+              console.warn(`[GOOGLE-VERIFY] locations fetch exception: ${locErr?.message}`);
+              gbpMeta.locationsError = locErr?.message;
+            }
+          }
+        } else {
+          console.warn(`[GOOGLE-VERIFY] accounts API failed — likely missing business.manage scope or API not enabled: ${acctBody.slice(0, 200)}`);
+          gbpMeta.accountsError = `HTTP ${acctR.status}`;
+          gbpMeta.accountsErrorBody = acctBody.slice(0, 200);
+        }
+      } catch (verifyErr: any) {
+        console.warn(`[GOOGLE-VERIFY] exception: ${verifyErr?.message}`);
+        gbpMeta.verifyError = verifyErr?.message;
+      }
+
+      // Persist whatever we learned into metadata
+      if (Object.keys(gbpMeta).length > 0) {
+        try {
+          await db.update(socialConnectionsTable)
+            .set({ metadata: JSON.stringify(gbpMeta), updatedAt: new Date() })
+            .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider)));
+          console.log(`[GOOGLE-VERIFY] metadata saved: ${JSON.stringify(gbpMeta).slice(0, 200)}`);
+        } catch (metaErr: any) {
+          console.warn(`[GOOGLE-VERIFY] metadata save failed: ${metaErr?.message}`);
+        }
+      }
+    }
 
     redirectSuccess(res, provider, devOrigin);
   } catch (e: any) {
+    console.error(`[GOOGLE-CALLBACK] ✗ fatal: ${e?.message}`);
     redirectError(res, provider, e?.message ?? "token_exchange_failed", "google_token", devOrigin, { codeReceived: true, stateValid: true });
   }
 });

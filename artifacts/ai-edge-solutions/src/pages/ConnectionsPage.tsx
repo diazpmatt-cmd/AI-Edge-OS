@@ -393,26 +393,51 @@ export default function ConnectionsPage() {
             );
           }
         } else {
-          // Non-Meta provider: refetch the connections list and confirm it landed.
+          // Non-Meta provider (Google, LinkedIn, etc.)
+          // The OAuth callback saves to prod DB using the full provider key
+          // (e.g. "google_business"), but the popup slug is shortened (e.g. "google").
+          // Resolve the full key before pulling.
+          const SLUG_TO_PROVIDER: Record<string, string> = {
+            google:   "google_business",
+            youtube:  "youtube",
+            tiktok:   "tiktok",
+            linkedin: "linkedin",
+          };
+          const pullProvider = SLUG_TO_PROVIDER[receivedProvider] ?? receivedProvider;
+          const label = (pullProvider).replace(/_/g, " ");
+          const cap = label.charAt(0).toUpperCase() + label.slice(1);
+
+          console.log(`[OAuth] non-Meta verification: receivedProvider=${receivedProvider} pullProvider=${pullProvider}`);
+
+          // Pull token from prod DB → dev DB (same Replit dev/prod split as Meta)
+          try {
+            const pullResult = await authFetch<{ synced: boolean; reason?: string }>(
+              "/social-connections/pull-from-prod",
+              { method: "POST", body: JSON.stringify({ provider: pullProvider }) }
+            );
+            console.log(`[OAuth] pull-from-prod (${pullProvider}):`, pullResult);
+          } catch (pullErr) {
+            console.warn(`[OAuth] pull-from-prod (${pullProvider}) failed (non-fatal):`, pullErr);
+          }
+
+          // Now refetch and confirm the row landed
           try {
             const { data: freshConns } = await refetchConnections();
             const found = freshConns?.some(
-              (c) => c.provider === receivedProvider || c.provider.startsWith(receivedProvider),
+              (c) => c.provider === pullProvider
+                  || c.provider === receivedProvider
+                  || c.provider.startsWith(receivedProvider),
             );
-            const label = receivedProvider.replace(/_/g, " ");
-            const cap = label.charAt(0).toUpperCase() + label.slice(1);
             if (found) {
               toast.success(`${cap} connected successfully!`);
             } else {
-              toast(`${cap} login completed. Verifying connection…`, {
-                icon: "⏳",
-                duration: 5000,
-              });
+              toast.error(
+                `${cap} login completed but the connection could not be verified. The token may not have been saved — please try reconnecting.`,
+                { duration: 10000 },
+              );
             }
           } catch {
-            const label = receivedProvider.replace(/_/g, " ");
-            const cap = label.charAt(0).toUpperCase() + label.slice(1);
-            toast.success(`${cap} connected successfully!`);
+            toast.success(`${cap} connected!`);
           }
         }
       }

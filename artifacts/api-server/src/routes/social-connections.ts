@@ -302,6 +302,8 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
     console.log(`  client_id   = ${parsed.searchParams.get("client_id")}`);
     console.log(`  redirect_uri= ${parsed.searchParams.get("redirect_uri")}`);
     console.log(`  scope       = ${parsed.searchParams.get("scope")}`);
+    console.log(`  devOrigin   = ${devOrigin ?? "NULL — REPLIT_DEV_DOMAIN is unset, dev-sync will be skipped by deployed callback"}`);
+    console.log(`  REPLIT_DEV_DOMAIN raw = ${process.env.REPLIT_DEV_DOMAIN ?? "unset"}`);
     console.log(`  full url    = ${url.replace(/state=[^&]+/, "state=<redacted>")}\n`);
   } catch { /* ignore parse errors */ }
 

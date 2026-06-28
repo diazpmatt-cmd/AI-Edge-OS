@@ -43,6 +43,12 @@ const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string }
   instagram: { bg: "rgba(225,48,108,0.15)", color: "#FF6B9D", icon: "✦" },
 };
 
+const COMING_SOON_PLATFORMS = [
+  { key: "google",  label: "Google Business Profile", icon: "G", color: "#EA4335", note: "Own publisher — not image-based" },
+  { key: "youtube", label: "YouTube Shorts",           icon: "▶", color: "#FF0000", note: "Video/Shorts uploads only" },
+  { key: "tiktok",  label: "TikTok",                  icon: "♪", color: "#69C9D0", note: "Video + creator integration" },
+];
+
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -285,18 +291,34 @@ export default function SocialPublishingPage() {
 
                 <div style={sectionStyle}>
                   <label style={labelStyle}>Platforms</label>
-                  <div style={{ display: "flex", gap: 10 }}>
+
+                  {/* Active platforms */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                     {(["facebook", "instagram"] as Platform[]).map(p => {
                       const s = PLATFORM_STYLE[p];
                       const checked = form.platforms.includes(p);
                       return (
-                        <button key={p} onClick={() => togglePlatform(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 13 }}>
+                        <button key={p} onClick={() => togglePlatform(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}>
                           <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
                           {p.charAt(0).toUpperCase() + p.slice(1)}
                         </button>
                       );
                     })}
+
+                    {/* Coming soon platforms */}
+                    {COMING_SOON_PLATFORMS.map(p => (
+                      <div key={p.key} title={p.note} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 8, cursor: "not-allowed", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)", color: "#374151", fontWeight: 700, fontSize: 12.5, userSelect: "none", position: "relative" }}>
+                        <span style={{ fontFamily: "monospace", fontWeight: 900, color: p.color, opacity: 0.35 }}>{p.icon}</span>
+                        <span style={{ color: "#374151" }}>{p.label}</span>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: "#4B5563", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "1px 6px", letterSpacing: "0.4px", textTransform: "uppercase", marginLeft: 2 }}>Soon</span>
+                      </div>
+                    ))}
                   </div>
+
+                  {/* Helper text */}
+                  <p style={{ margin: 0, fontSize: 11.5, color: "#4B5563", lineHeight: 1.6 }}>
+                    Facebook and Instagram publishing are active first. Google Business Profile, YouTube Shorts, and TikTok will be added next as separate platform integrations.
+                  </p>
                 </div>
 
                 <div style={sectionStyle}>

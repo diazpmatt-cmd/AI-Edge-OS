@@ -81,43 +81,61 @@ router.delete("/social-connections/:provider", async (req, res) => {
 // Clerk session is required — the caller is our own deployed server.
 router.post("/social-connections/oauth-sync", async (req, res) => {
   const { provider, userId, accountName, accountId, accessToken, metadata, sig } = req.body ?? {};
+  console.log(`[OAUTH-SYNC] received: provider=${provider} userId=${userId ?? "NULL"} hasAccessToken=${!!accessToken} hasSig=${!!sig} NODE_ENV=${process.env.NODE_ENV}`);
+
   if (!provider || !userId || !accessToken || !sig) {
-    res.status(400).json({ error: "Missing required fields" });
+    const missing = ["provider","userId","accessToken","sig"].filter(k => !(req.body ?? {})[k]);
+    console.error(`[OAUTH-SYNC] missing required fields: ${missing.join(",")}`);
+    res.status(400).json({ error: "Missing required fields", missing });
     return;
   }
 
   const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
-  if (!secret) { res.status(500).json({ error: "No signing secret configured" }); return; }
+  if (!secret) {
+    console.error(`[OAUTH-SYNC] no signing secret — OAUTH_STATE_SECRET and CLERK_SECRET_KEY both unset`);
+    res.status(500).json({ error: "No signing secret configured" });
+    return;
+  }
 
   const payload = { provider, userId, accountName, accountId, accessToken, metadata: metadata ?? null };
   const expected = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
   if (sig !== expected) {
-    console.error(`[OAUTH-SYNC] signature mismatch for provider=${provider} userId=${userId}`);
+    console.error(`[OAUTH-SYNC] ✗ signature mismatch provider=${provider} userId=${userId} secretPrefix=${secret.slice(0,8)}...`);
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
+  console.log(`[OAUTH-SYNC] ✓ signature OK, saving to DB (DATABASE_URL_set=${!!process.env.DATABASE_URL})`);
 
-  await db.insert(socialConnectionsTable).values({
-    userId, provider,
-    accountName: accountName ?? null,
-    accountId: accountId ?? null,
-    accessToken,
-    refreshToken: null,
-    expiresAt: null,
-    metadata: metadata ?? null,
-  }).onConflictDoUpdate({
-    target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
-    set: {
+  try {
+    await db.insert(socialConnectionsTable).values({
+      userId, provider,
       accountName: accountName ?? null,
       accountId: accountId ?? null,
       accessToken,
+      refreshToken: null,
+      expiresAt: null,
       metadata: metadata ?? null,
-      updatedAt: new Date(),
-    },
-  });
-
-  console.log(`[OAUTH-SYNC] synced provider=${provider} userId=${userId} metadata=${metadata ? "set" : "null"}`);
-  res.json({ ok: true, provider, userId });
+    }).onConflictDoUpdate({
+      target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
+      set: {
+        accountName: accountName ?? null,
+        accountId: accountId ?? null,
+        accessToken,
+        metadata: metadata ?? null,
+        updatedAt: new Date(),
+      },
+    });
+    console.log(`[OAUTH-SYNC] ✓ DB save OK: provider=${provider} userId=${userId} metadata=${metadata ? "set" : "null"}`);
+    res.json({ ok: true, provider, userId });
+  } catch (dbErr: any) {
+    const pgCode = (dbErr as any)?.code ?? "no_code";
+    const pgDetail = (dbErr as any)?.detail ?? "";
+    const pgConstraint = (dbErr as any)?.constraint ?? "";
+    console.error(
+      `[OAUTH-SYNC] ✗ DB save FAILED: ${dbErr?.message} [pg.code=${pgCode} constraint=${pgConstraint} detail=${pgDetail}]`
+    );
+    res.status(500).json({ error: "db_save_failed", message: dbErr?.message, pgCode, pgConstraint });
+  }
 });
 
 router.post("/social-connections/oauth-start/:provider", async (req, res) => {

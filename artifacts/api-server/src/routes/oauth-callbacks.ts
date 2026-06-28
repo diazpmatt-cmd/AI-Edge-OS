@@ -17,12 +17,19 @@ async function syncToDevServer(devOrigin: string, payload: {
 }) {
   const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
   const sig = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
-  await fetch(`${devOrigin}/api/social-connections/oauth-sync`, {
+  const syncUrl = `${devOrigin}/api/social-connections/oauth-sync`;
+  console.log(`[DEV-SYNC] → POST ${syncUrl} provider=${payload.provider} userId=${payload.userId} secretUsed=${secret.slice(0,8)}...`);
+  const r = await fetch(syncUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, sig }),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(8000),
   });
+  const body = await r.text().catch(() => "(could not read body)");
+  if (!r.ok) {
+    throw new Error(`DEV-SYNC HTTP ${r.status}: ${body.slice(0, 300)}`);
+  }
+  console.log(`[DEV-SYNC] ✓ ${r.status} body=${body.slice(0, 200)}`);
 }
 
 const router = Router();
@@ -227,7 +234,8 @@ router.get("/oauth/meta/callback", async (req, res) => {
     return;
   }
   const { userId, provider, returnTo, devOrigin } = verified;
-  console.log(`[META-CALLBACK] state OK: provider=${provider} userId=${userId} returnTo=${returnTo ?? "none"} devOrigin=${devOrigin ?? "none"}`);
+  console.log(`[META-CALLBACK] state OK: provider=${provider} userId=${userId ?? "NULL"} returnTo=${returnTo ?? "none"} devOrigin=${devOrigin ?? "NONE — dev-sync will be skipped"}`);
+  console.log(`[META-CALLBACK] env: NODE_ENV=${process.env.NODE_ENV ?? "unset"} DATABASE_URL_set=${!!process.env.DATABASE_URL} DATABASE_URL_prefix=${process.env.DATABASE_URL?.slice(0,30) ?? "unset"}`);
   logger.info({ provider, userId, returnTo, devOrigin }, "Meta OAuth callback: state valid, exchanging token");
 
   try {
@@ -238,7 +246,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
     let tokens: { access_token: string; token_type: string };
     try {
       tokens = await exchangeMetaCode(code, redirectUri);
-      console.log(`[META-CALLBACK] token exchange OK, token_type=${tokens.token_type}`);
+      console.log(`[META-CALLBACK] token exchange OK: token_type=${tokens.token_type} token_len=${tokens.access_token?.length ?? 0}`);
       logger.info({ provider, userId }, "Meta token exchange succeeded");
     } catch (e: any) {
       console.error(`[META-CALLBACK] token exchange FAILED: ${e?.message}`);
@@ -252,6 +260,17 @@ router.get("/oauth/meta/callback", async (req, res) => {
     logger.info({ provider, userId, accountName: userInfo.name, accountId: userInfo.id }, "Meta user info fetched");
 
     // ── 3. Save token to DB ──
+    const insertPayload = {
+      userId, provider,
+      accountName: userInfo.name,
+      accountId: userInfo.id,
+      accessToken: "[REDACTED]",
+      refreshToken: null,
+      expiresAt: null,
+    };
+    console.log(`[META-CALLBACK] DB save attempt: table=social_connections payload_keys=[${Object.keys(insertPayload).join(",")}] userId=${userId ?? "NULL"}`);
+    console.log(`[META-CALLBACK] onConflict target: [userId, provider] conflictSet_keys=[accountName,accountId,accessToken,updatedAt]`);
+
     try {
       await db.insert(socialConnectionsTable).values({
         userId, provider,
@@ -269,12 +288,29 @@ router.get("/oauth/meta/callback", async (req, res) => {
           updatedAt: new Date(),
         },
       });
-      console.log(`[META-CALLBACK] DB save OK: provider=${provider} userId=${userId}`);
+      console.log(`[META-CALLBACK] ✓ DB save OK: provider=${provider} userId=${userId}`);
       logger.info({ provider, userId }, "Meta token saved to DB");
     } catch (dbErr: any) {
-      console.error(`[META-CALLBACK] DB save FAILED: ${dbErr?.message}`);
-      logger.error({ provider, userId, error: dbErr?.message }, "Meta DB save FAILED");
-      throw dbErr;
+      const pgCode = (dbErr as any)?.code ?? "no_code";
+      const pgDetail = (dbErr as any)?.detail ?? "";
+      const pgConstraint = (dbErr as any)?.constraint ?? "";
+      const pgTable = (dbErr as any)?.table ?? "";
+      const pgColumn = (dbErr as any)?.column ?? "";
+      const pgSchema = (dbErr as any)?.schema ?? "";
+      console.error(
+        `[META-CALLBACK] ✗ DB save FAILED:\n` +
+        `  message=${dbErr?.message}\n` +
+        `  pg.code=${pgCode}  pg.constraint=${pgConstraint}\n` +
+        `  pg.table=${pgTable}  pg.schema=${pgSchema}  pg.column=${pgColumn}\n` +
+        `  pg.detail=${pgDetail}\n` +
+        `  DATABASE_URL_set=${!!process.env.DATABASE_URL}`
+      );
+      logger.error({ provider, userId, error: dbErr?.message, pgCode, pgConstraint, pgTable }, "Meta DB save FAILED");
+      // Re-throw with enriched message so redirectError carries the real reason
+      const enriched = new Error(
+        `db_save_failed: ${dbErr?.message ?? "unknown"} [pg.code=${pgCode} constraint=${pgConstraint} table=${pgTable}]`
+      );
+      throw enriched;
     }
 
     // ── 4. Fetch /me/accounts — store first page token in metadata ──
@@ -332,6 +368,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
     // the dev DB.  After saving to prod, we fire a signed POST to the dev
     // server so it can mirror the row into the dev DB before the popup closes.
     if (devOrigin) {
+      console.log(`[META-CALLBACK] dev-sync: devOrigin=${devOrigin} secretPrefix=${(process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "").slice(0,8)}...`);
       try {
         const syncMeta = Object.keys(storedMetadata).length ? JSON.stringify(storedMetadata) : null;
         await syncToDevServer(devOrigin, {
@@ -341,12 +378,15 @@ router.get("/oauth/meta/callback", async (req, res) => {
           accessToken: tokens.access_token,
           metadata: syncMeta,
         });
-        console.log(`[META-CALLBACK] dev-sync OK → ${devOrigin}`);
+        console.log(`[META-CALLBACK] ✓ dev-sync OK → ${devOrigin}`);
         logger.info({ provider, userId, devOrigin }, "Dev-sync succeeded");
       } catch (syncErr: any) {
-        console.warn(`[META-CALLBACK] dev-sync failed (non-fatal): ${syncErr?.message}`);
+        console.error(`[META-CALLBACK] ✗ dev-sync FAILED (non-fatal): ${syncErr?.message}`);
         logger.warn({ provider, userId, devOrigin, error: syncErr?.message }, "Dev-sync failed (non-fatal)");
       }
+    } else {
+      console.warn(`[META-CALLBACK] ⚠ dev-sync SKIPPED — devOrigin is null/empty. Dev DB will NOT have this token.`);
+      console.warn(`[META-CALLBACK]   REPLIT_DEV_DOMAIN=${process.env.REPLIT_DEV_DOMAIN ?? "unset"}`);
     }
 
     // ── 5. Check granted permissions ──

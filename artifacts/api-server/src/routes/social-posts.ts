@@ -412,8 +412,27 @@ async function publishToGBP(
   let accountResourceName: string | null = (metadata.accountName as string) ?? null;
   let locationTitle: string | null = (metadata.locationTitle as string) ?? (metadata.primaryLocationTitle as string) ?? null;
 
+  // Check quota cooldown stored in metadata
+  const cooldownUntil = metadata.cooldownUntil ? new Date(metadata.cooldownUntil) : null;
+  const isInQuotaCooldown = !!(cooldownUntil && cooldownUntil > new Date());
+
   if (!locationResourceName || !accountResourceName) {
+    if (isInQuotaCooldown) {
+      const minsLeft = Math.ceil((cooldownUntil!.getTime() - Date.now()) / 60000);
+      throw new Error(`Google quota cooldown active (${minsLeft}m remaining) — no cached location available. Use "Refresh GBP Location" in System Diagnostics when the cooldown expires.`);
+    }
+
     console.log("[GBP-PUBLISH] no cached location — fetching accounts + locations from API");
+
+    const saveQuotaCooldown = async () => {
+      const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      try {
+        await db.update(socialConnectionsTable)
+          .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil: until }), updatedAt: new Date() })
+          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+      } catch {}
+      return until;
+    };
 
     const acctRes = await fetchWithRetry429("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
       headers: { Authorization: `Bearer ${token}` },
@@ -421,7 +440,10 @@ async function publishToGBP(
     if (!acctRes.ok) {
       const acctErrBody = await acctRes.text();
       console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
-      if (acctRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
+      if (acctRes.status === 429) {
+        await saveQuotaCooldown();
+        throw new Error("Google quota exceeded — cooldown activated for 60 minutes. Publishing is blocked until cooldown expires. Use cached GBP location by clicking 'Refresh GBP Location' in System Diagnostics after the cooldown.");
+      }
       throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
     }
     const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
@@ -434,7 +456,10 @@ async function publishToGBP(
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!locRes.ok) {
-      if (locRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
+      if (locRes.status === 429) {
+        await saveQuotaCooldown();
+        throw new Error("Google quota exceeded — cooldown activated for 60 minutes. Use cached GBP location by clicking 'Refresh GBP Location' in System Diagnostics after the cooldown.");
+      }
       throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
     }
     const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
@@ -443,9 +468,16 @@ async function publishToGBP(
     locationResourceName = location.name;
     locationTitle = location.title;
 
-    // Save to cache so future publishes skip the API calls
+    // Save to cache — future publishes will skip the Account Management API entirely
     try {
-      const updatedMeta = { ...metadata, accountName: accountResourceName, locationName: locationResourceName, locationTitle, primaryLocationTitle: locationTitle };
+      const updatedMeta = {
+        ...metadata,
+        accountName: accountResourceName,
+        locationName: locationResourceName,
+        locationTitle,
+        primaryLocationTitle: locationTitle,
+        cachedAt: new Date().toISOString(),
+      };
       await db.update(socialConnectionsTable)
         .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
         .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
@@ -454,7 +486,8 @@ async function publishToGBP(
       console.warn("[GBP-PUBLISH] cache save failed:", cacheErr?.message);
     }
   } else {
-    console.log("[GBP-PUBLISH] using cached location:", locationResourceName, locationTitle);
+    const cachedAt = metadata.cachedAt ? new Date(metadata.cachedAt).toLocaleString() : "unknown";
+    console.log("[GBP-PUBLISH] using cached location: %s (%s) — cached at %s%s", locationResourceName, locationTitle, cachedAt, isInQuotaCooldown ? " [quota cooldown active — cache forced]" : "");
   }
 
   // 2 — build post body

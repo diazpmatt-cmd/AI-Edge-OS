@@ -818,13 +818,62 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
   let metadata: Record<string, any> = {};
   try { if (row.metadata) metadata = JSON.parse(row.metadata); } catch {}
 
+  const now = new Date();
+
+  // ── Cooldown guards ──────────────────────────────────────────────────────────
+  // 1. Quota cooldown (set when Google returns 429) — blocks all refreshes
+  if (metadata.cooldownUntil) {
+    const cd = new Date(metadata.cooldownUntil);
+    if (cd > now) {
+      const minsLeft = Math.ceil((cd.getTime() - now.getTime()) / 60000);
+      res.status(429).json({
+        error: `Google quota cooldown active — try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`,
+        cooldownUntil: cd.toISOString(),
+        minsLeft,
+      });
+      return;
+    }
+    // Expired — clear it
+    delete metadata.cooldownUntil;
+  }
+
+  // 2. Button cooldown (10 min after a successful refresh) — prevents hammering
+  if (metadata.refreshCooldownUntil) {
+    const cd = new Date(metadata.refreshCooldownUntil);
+    if (cd > now) {
+      const minsLeft = Math.ceil((cd.getTime() - now.getTime()) / 60000);
+      res.status(429).json({
+        error: `Refresh recently used — try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`,
+        cooldownUntil: cd.toISOString(),
+        minsLeft,
+        isCooldown: true,
+      });
+      return;
+    }
+    delete metadata.refreshCooldownUntil;
+  }
+
+  const saveQuotaCooldown = async (durationMs = 60 * 60 * 1000) => {
+    const cooldownUntil = new Date(now.getTime() + durationMs).toISOString();
+    try {
+      await db.update(socialConnectionsTable)
+        .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil }), updatedAt: now })
+        .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+    } catch {}
+    return cooldownUntil;
+  };
+
   try {
     const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
       headers: { Authorization: `Bearer ${row.accessToken}` },
       signal: AbortSignal.timeout(10000),
     });
     if (!acctRes.ok) {
-      if (acctRes.status === 429) { res.status(429).json({ error: "Google quota temporarily exceeded — try again in a few minutes." }); return; }
+      if (acctRes.status === 429) {
+        const cooldownUntil = await saveQuotaCooldown();
+        const minsLeft = 60;
+        res.status(429).json({ error: `Google quota exceeded — cooldown active for 60 minutes.`, cooldownUntil, minsLeft }); return;
+      }
       res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status}` }); return;
     }
     const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
@@ -836,7 +885,10 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
       { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(10000) },
     );
     if (!locRes.ok) {
-      if (locRes.status === 429) { res.status(429).json({ error: "Google quota temporarily exceeded — try again in a few minutes." }); return; }
+      if (locRes.status === 429) {
+        const cooldownUntil = await saveQuotaCooldown();
+        res.status(429).json({ error: `Google quota exceeded — cooldown active for 60 minutes.`, cooldownUntil, minsLeft: 60 }); return;
+      }
       res.status(502).json({ error: `Locations API: HTTP ${locRes.status}` }); return;
     }
     const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
@@ -844,6 +896,7 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     if (!locs.length) { res.status(400).json({ error: "No locations found on this Google Business Profile account." }); return; }
 
     const primaryLoc = locs[0];
+    const refreshCooldownUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString(); // 10 min button cooldown
     const updatedMeta = {
       ...metadata,
       accountName: account.name,
@@ -853,13 +906,15 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
       locationNames: locs.map(l => l.title),
       gbpAccountsFound: acctData.accounts!.length,
       gbpLocationsFound: locs.length,
+      cachedAt: now.toISOString(),
+      refreshCooldownUntil,
     };
     await db.update(socialConnectionsTable)
-      .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+      .set({ metadata: JSON.stringify(updatedMeta), updatedAt: now })
       .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
 
-    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title}`);
-    res.json({ ok: true, accountName: account.name, locationName: primaryLoc.name, locationTitle: primaryLoc.title, locationCount: locs.length });
+    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title} refreshCooldownUntil=${refreshCooldownUntil}`);
+    res.json({ ok: true, accountName: account.name, locationName: primaryLoc.name, locationTitle: primaryLoc.title, locationCount: locs.length, refreshCooldownUntil });
   } catch (e: any) {
     console.error("[GBP-REFRESH-LOCATION] error:", e?.message);
     res.status(500).json({ error: e.message });

@@ -147,6 +147,15 @@ router.get("/diagnostics/health", async (req, res) => {
     google_business: {
       ...googleConnHealth("google_business"),
       locationTitle: gbpMeta.locationTitle ?? null,
+      cachedAt: gbpMeta.cachedAt ?? null,
+      cooldownUntil: (() => {
+        const cd = gbpMeta.cooldownUntil ? new Date(gbpMeta.cooldownUntil) : null;
+        return (cd && cd > now) ? cd.toISOString() : null;
+      })(),
+      refreshCooldownUntil: (() => {
+        const cd = gbpMeta.refreshCooldownUntil ? new Date(gbpMeta.refreshCooldownUntil) : null;
+        return (cd && cd > now) ? cd.toISOString() : null;
+      })(),
     },
     tiktok:         connHealth("tiktok"),
     youtube:        connHealth("youtube"),

@@ -425,7 +425,7 @@ async function publishToGBP(
     console.log("[GBP-PUBLISH] no cached location — fetching accounts + locations from API");
 
     const saveQuotaCooldown = async () => {
-      const until = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10-min cooldown
+      const until = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15-min cooldown
       try {
         await db.update(socialConnectionsTable)
           .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil: until }), updatedAt: new Date() })
@@ -538,16 +538,28 @@ async function publishToGBP(
   const postBody = await postRes.text();
   if (!postRes.ok) {
     console.error("[GBP-PUBLISH] post failed", JSON.stringify({ status: postRes.status, body: postBody.slice(0, 500) }));
-    if (postRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
-    // 404 = stale cached location → clear cache so next publish re-fetches
+    if (postRes.status === 429) {
+      // Save cooldown so next publish/refresh is blocked for 15 min
+      const cooldownUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      try {
+        await db.update(socialConnectionsTable)
+          .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil }), updatedAt: new Date() })
+          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+      } catch {}
+      throw new Error(`Google quota cooldown active. Try again in 15 minutes.`);
+    }
+    // 404 = stale cached location → clear all location fields so next publish re-fetches
     if (postRes.status === 404) {
       try {
         const freshMeta = { ...metadata };
-        delete freshMeta.locationName; delete freshMeta.accountName; delete freshMeta.locationTitle;
+        delete freshMeta.locationName; delete freshMeta.locationId;
+        delete freshMeta.accountName; delete freshMeta.accountId;
+        delete freshMeta.locationTitle; delete freshMeta.address;
+        delete freshMeta.cachedAt;
         await db.update(socialConnectionsTable)
           .set({ metadata: JSON.stringify(freshMeta), updatedAt: new Date() })
           .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
-        console.log("[GBP-PUBLISH] cleared stale location cache after 404");
+        console.log("[GBP-PUBLISH] invalidated stale location cache after 404 — next publish will re-fetch");
       } catch {}
     }
     throw new Error(`GBP post error (${postRes.status}): ${postBody}`);

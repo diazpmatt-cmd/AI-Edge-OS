@@ -835,7 +835,7 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     delete metadata.cooldownUntil;
   }
 
-  const saveCooldown = async (durationMs = 10 * 60 * 1000) => {
+  const saveCooldown = async (durationMs = 15 * 60 * 1000) => {
     const cooldownUntil = new Date(now.getTime() + durationMs).toISOString();
     try {
       await db.update(socialConnectionsTable)
@@ -853,27 +853,27 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     if (!acctRes.ok) {
       if (acctRes.status === 429) {
         const cooldownUntil = await saveCooldown();
-        const minsLeft = 10;
-        res.status(429).json({ error: `Google quota cooldown active. Try again in ${minsLeft} minutes.`, cooldownUntil, minsLeft }); return;
+        res.status(429).json({ error: `Google quota cooldown active. Try again in 15 minutes.`, cooldownUntil, minsLeft: 15 }); return;
       }
-      res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status}` }); return;
+      const acctErrText = await acctRes.text();
+      res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status} — ${acctErrText.slice(0, 200)}` }); return;
     }
     const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
     const account = acctData.accounts?.[0];
     if (!account) { res.status(400).json({ error: "No Google Business Profile account found." }); return; }
 
     const locRes = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress`,
       { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(10000) },
     );
     if (!locRes.ok) {
       if (locRes.status === 429) {
         const cooldownUntil = await saveCooldown();
-        res.status(429).json({ error: `Google quota cooldown active. Try again in 10 minutes.`, cooldownUntil, minsLeft: 10 }); return;
+        res.status(429).json({ error: `Google quota cooldown active. Try again in 15 minutes.`, cooldownUntil, minsLeft: 15 }); return;
       }
       res.status(502).json({ error: `Locations API: HTTP ${locRes.status}` }); return;
     }
-    const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
+    const locData = await locRes.json() as { locations?: { name: string; title: string; storefrontAddress?: { addressLines?: string[]; locality?: string; administrativeArea?: string; postalCode?: string } }[] };
     const locs = locData.locations ?? [];
     if (!locs.length) { res.status(400).json({ error: "No locations found on this Google Business Profile account." }); return; }
 
@@ -881,8 +881,17 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     // Extract IDs from resource names (e.g. "accounts/123456789" → "123456789")
     const accountId = account.name.split("/").pop() ?? null;
     const locationId = primaryLoc.name.split("/").pop() ?? null;
-    // Set a 10-min button cooldown after a successful refresh (same window)
-    const cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+    // Format a human-readable address from storefrontAddress
+    const sa = primaryLoc.storefrontAddress;
+    const address = sa
+      ? [
+          ...(sa.addressLines ?? []),
+          [sa.locality, sa.administrativeArea].filter(Boolean).join(", "),
+          sa.postalCode,
+        ].filter(Boolean).join(", ")
+      : null;
+    // 15-min cooldown after a successful refresh (prevents button hammering)
+    const cooldownUntil = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
     const updatedMeta = {
       ...metadata,
       accountName: account.name,
@@ -890,6 +899,7 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
       locationName: primaryLoc.name,
       locationId,
       locationTitle: primaryLoc.title,
+      address,
       primaryLocationTitle: primaryLoc.title,
       locationNames: locs.map((l: { title: string }) => l.title),
       gbpAccountsFound: acctData.accounts!.length,
@@ -901,8 +911,8 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
       .set({ metadata: JSON.stringify(updatedMeta), updatedAt: now })
       .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
 
-    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title} cooldownUntil=${cooldownUntil}`);
-    res.json({ ok: true, accountName: account.name, accountId, locationName: primaryLoc.name, locationId, locationTitle: primaryLoc.title, locationCount: locs.length, cooldownUntil });
+    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} location="${primaryLoc.title}" address="${address}" locationId=${locationId} cooldownUntil=${cooldownUntil}`);
+    res.json({ ok: true, accountName: account.name, accountId, locationName: primaryLoc.name, locationId, locationTitle: primaryLoc.title, address, locationCount: locs.length, cooldownUntil });
   } catch (e: any) {
     console.error("[GBP-REFRESH-LOCATION] error:", e?.message);
     res.status(500).json({ error: e.message });

@@ -15,6 +15,7 @@ type PlatformHealth = {
   locationTitle?: string | null;
   locationId?: string | null;
   accountId?: string | null;
+  address?: string | null;
   cachedAt?: string | null;
   cooldownUntil?: string | null;
 };
@@ -300,9 +301,35 @@ export default function SystemDiagnosticsPage() {
                   <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>
                     {ph?.detail ?? "Not connected"}
                   </div>
-                  {key === "google_business" && ph?.locationTitle && (
-                    <div style={{ fontSize: 10.5, color: "#4285F4", marginTop: 3 }}>📍 {ph.locationTitle}</div>
-                  )}
+                  {key === "google_business" && (() => {
+                    const gbp = ph as PlatformHealth | undefined;
+                    const cd = gbp?.cooldownUntil;
+                    const inCooldown = !!(cd && secsLeft(cd) > 0);
+                    return (
+                      <>
+                        {gbp?.locationTitle && (
+                          <div style={{ marginTop: 5, padding: "5px 8px", borderRadius: 7, background: "rgba(66,133,244,0.08)", border: "1px solid rgba(66,133,244,0.15)" }}>
+                            <div style={{ fontSize: 10, color: "#6B9EFF", fontWeight: 700, marginBottom: 1, textTransform: "uppercase", letterSpacing: "0.04em" }}>Cached Location</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{gbp.locationTitle}</div>
+                            {gbp.address && <div style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>{gbp.address}</div>}
+                            <div style={{ fontSize: 10, color: "#475569", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {gbp.cachedAt && <span>Cached {fmtDate(gbp.cachedAt)}</span>}
+                              {gbp.locationId && <span style={{ color: "#334155" }}>ID: {gbp.locationId}</span>}
+                            </div>
+                          </div>
+                        )}
+                        {inCooldown && (
+                          <div style={{ marginTop: 4, fontSize: 10.5, color: "#EF4444", display: "flex", alignItems: "center", gap: 5 }}>
+                            <span>⛔</span>
+                            <span>Cooldown: {(() => { const s = secsLeft(cd!); return `${Math.floor(s/60)}m ${String(s%60).padStart(2,"0")}s`; })()}</span>
+                          </div>
+                        )}
+                        {gbp?.locationTitle && !inCooldown && (
+                          <div style={{ marginTop: 3, fontSize: 10, color: "#10B981" }}>✓ Publishing uses cache — no API calls</div>
+                        )}
+                      </>
+                    );
+                  })()}
                   {ph?.connectedAt && (
                     <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>
                       Connected {fmtDate(ph.connectedAt)}

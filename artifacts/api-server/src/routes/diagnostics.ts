@@ -149,6 +149,7 @@ router.get("/diagnostics/health", async (req, res) => {
       locationTitle: gbpMeta.locationTitle ?? null,
       locationId: gbpMeta.locationId ?? null,
       accountId: gbpMeta.accountId ?? null,
+      address: gbpMeta.address ?? null,
       cachedAt: gbpMeta.cachedAt ?? null,
       cooldownUntil: (() => {
         const cd = gbpMeta.cooldownUntil ? new Date(gbpMeta.cooldownUntil) : null;

@@ -280,6 +280,15 @@ router.post("/social-posts/:id/publish", async (req, res) => {
   // ── Google Business Profile ──
   if (platforms.includes("google")) {
     const gbpConn = await getConnection("google_business");
+    console.log("[GBP-PUBLISH]", JSON.stringify({
+      provider: "google_business",
+      hasAccessToken: !!gbpConn?.accessToken,
+      hasRefreshToken: !!gbpConn?.refreshToken,
+      accessTokenLength: gbpConn?.accessToken?.length ?? 0,
+      refreshTokenLength: gbpConn?.refreshToken?.length ?? 0,
+      expiresAt: gbpConn?.expiresAt ?? null,
+      tokenExpired: gbpConn?.expiresAt ? new Date(gbpConn.expiresAt) < new Date() : null,
+    }));
     if (!gbpConn?.accessToken) {
       errors.push("Google Business Profile not connected");
       results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };
@@ -312,8 +321,19 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 // ── Google Business Profile ───────────────────────────────────────────────────
 
 async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
+  const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
+  const needsRefresh = isExpired && !!conn.refreshToken;
+  console.log("[GOOGLE-REFRESH]", JSON.stringify({
+    attempt: needsRefresh,
+    reason: !conn.expiresAt ? "no_expiry_stored" : isExpired ? "token_expired" : "token_still_valid",
+    expiresAt: conn.expiresAt ?? null,
+    hasRefreshToken: !!conn.refreshToken,
+  }));
   if (!conn.expiresAt || conn.expiresAt > new Date()) return conn.accessToken;
-  if (!conn.refreshToken) return conn.accessToken;
+  if (!conn.refreshToken) {
+    console.warn("[GOOGLE-REFRESH] skipping — no refresh token stored");
+    return conn.accessToken;
+  }
   try {
     const r = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -325,23 +345,56 @@ async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: 
         grant_type:    "refresh_token",
       }),
     });
-    if (!r.ok) return conn.accessToken;
-    const data = await r.json() as { access_token: string; expires_in?: number };
+    const refreshBody = await r.text();
+    if (!r.ok) {
+      console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, status: r.status, error: refreshBody.slice(0, 300) }));
+      return conn.accessToken;
+    }
+    const data = JSON.parse(refreshBody) as { access_token: string; expires_in?: number; scope?: string };
     const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+    console.log("[GOOGLE-REFRESH]", JSON.stringify({
+      success: true,
+      newAccessTokenLength: data.access_token?.length ?? 0,
+      scope: data.scope ?? "(not returned)",
+      expiresAt,
+    }));
     await db.update(socialConnectionsTable).set({ accessToken: data.access_token, expiresAt, updatedAt: new Date() })
       .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
     return data.access_token;
-  } catch {
+  } catch (e: any) {
+    console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, error: e?.message }));
     return conn.accessToken;
   }
 }
 
 async function publishToGBP(token: string, caption: string, ctaType: string, ctaValue: string | null, imageData: string | null): Promise<{ id: string }> {
+  // 0 — verify token via tokeninfo before any GBP call
+  try {
+    const tiR = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${token}`, { signal: AbortSignal.timeout(5000) });
+    const tiBody = await tiR.text();
+    const ti = tiR.ok ? JSON.parse(tiBody) as { scope?: string; email?: string; expires_in?: number; error?: string } : null;
+    console.log("[TOKENINFO]", JSON.stringify({
+      status: tiR.status,
+      body: tiBody.slice(0, 500),
+      scope: ti?.scope ?? null,
+      hasBusinessManage: ti?.scope ? ti.scope.includes("business.manage") : false,
+      expiresIn: ti?.expires_in ?? null,
+      email: ti?.email ?? null,
+      tokenError: ti?.error ?? null,
+    }));
+  } catch (tiErr: any) {
+    console.warn("[TOKENINFO] fetch failed:", tiErr?.message);
+  }
+
   // 1 — list accounts
   const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!acctRes.ok) throw new Error(`GBP accounts error (${acctRes.status}): ${await acctRes.text()}`);
+  if (!acctRes.ok) {
+    const acctErrBody = await acctRes.text();
+    console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
+    throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
+  }
   const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
   const account = acctData.accounts?.[0];
   if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");

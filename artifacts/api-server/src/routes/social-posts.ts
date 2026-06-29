@@ -295,7 +295,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     } else {
       try {
         const token = await getGoogleAccessToken(gbpConn);
-        const gbpResult = await publishToGBP(token, post.caption, post.ctaType, post.ctaValue, post.imageData ?? null);
+        const gbpResult = await publishToGBP(token, gbpConn, post.caption, post.ctaType, post.ctaValue, post.imageData ?? null);
         results.google = { ok: true, postId: gbpResult.id };
       } catch (e: any) {
         results.google = { ok: false, error: e.message };
@@ -319,6 +319,14 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 });
 
 // ── Google Business Profile ───────────────────────────────────────────────────
+
+async function fetchWithRetry429(url: string, opts: RequestInit, retryDelaySec = 15): Promise<Response> {
+  const r = await fetch(url, opts);
+  if (r.status !== 429) return r;
+  console.warn(`[GBP] 429 quota exceeded — retrying in ${retryDelaySec}s: ${url}`);
+  await new Promise(resolve => setTimeout(resolve, retryDelaySec * 1000));
+  return fetch(url, opts);
+}
 
 async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
   const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
@@ -367,15 +375,21 @@ async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: 
   }
 }
 
-async function publishToGBP(token: string, caption: string, ctaType: string, ctaValue: string | null, imageData: string | null): Promise<{ id: string }> {
-  // 0 — verify token via tokeninfo before any GBP call
+async function publishToGBP(
+  token: string,
+  conn: { userId: string; provider: string },
+  caption: string,
+  ctaType: string,
+  ctaValue: string | null,
+  imageData: string | null,
+): Promise<{ id: string }> {
+  // 0 — verify token via tokeninfo
   try {
     const tiR = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${token}`, { signal: AbortSignal.timeout(5000) });
     const tiBody = await tiR.text();
     const ti = tiR.ok ? JSON.parse(tiBody) as { scope?: string; email?: string; expires_in?: number; error?: string } : null;
     console.log("[TOKENINFO]", JSON.stringify({
       status: tiR.status,
-      body: tiBody.slice(0, 500),
       scope: ti?.scope ?? null,
       hasBusinessManage: ti?.scope ? ti.scope.includes("business.manage") : false,
       expiresIn: ti?.expires_in ?? null,
@@ -386,30 +400,64 @@ async function publishToGBP(token: string, caption: string, ctaType: string, cta
     console.warn("[TOKENINFO] fetch failed:", tiErr?.message);
   }
 
-  // 1 — list accounts
-  const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!acctRes.ok) {
-    const acctErrBody = await acctRes.text();
-    console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
-    throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
+  // 1 — resolve account + location (use DB cache if available)
+  let metadata: Record<string, any> = {};
+  try {
+    const [row] = await db.select().from(socialConnectionsTable)
+      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+    if (row?.metadata) metadata = JSON.parse(row.metadata);
+  } catch {}
+
+  let locationResourceName: string | null = (metadata.locationName as string) ?? null;
+  let accountResourceName: string | null = (metadata.accountName as string) ?? null;
+  let locationTitle: string | null = (metadata.locationTitle as string) ?? (metadata.primaryLocationTitle as string) ?? null;
+
+  if (!locationResourceName || !accountResourceName) {
+    console.log("[GBP-PUBLISH] no cached location — fetching accounts + locations from API");
+
+    const acctRes = await fetchWithRetry429("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!acctRes.ok) {
+      const acctErrBody = await acctRes.text();
+      console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
+      if (acctRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
+      throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
+    }
+    const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
+    const account = acctData.accounts?.[0];
+    if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
+    accountResourceName = account.name;
+
+    const locRes = await fetchWithRetry429(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!locRes.ok) {
+      if (locRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
+      throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
+    }
+    const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
+    const location = locData.locations?.[0];
+    if (!location) throw new Error("No Google Business Profile location found. Make sure the account has at least one verified location.");
+    locationResourceName = location.name;
+    locationTitle = location.title;
+
+    // Save to cache so future publishes skip the API calls
+    try {
+      const updatedMeta = { ...metadata, accountName: accountResourceName, locationName: locationResourceName, locationTitle, primaryLocationTitle: locationTitle };
+      await db.update(socialConnectionsTable)
+        .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+        .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+      console.log("[GBP-PUBLISH] cached accountName=%s locationName=%s locationTitle=%s", accountResourceName, locationResourceName, locationTitle);
+    } catch (cacheErr: any) {
+      console.warn("[GBP-PUBLISH] cache save failed:", cacheErr?.message);
+    }
+  } else {
+    console.log("[GBP-PUBLISH] using cached location:", locationResourceName, locationTitle);
   }
-  const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
-  const account = acctData.accounts?.[0];
-  if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
 
-  // 2 — list locations
-  const locRes = await fetch(
-    `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!locRes.ok) throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
-  const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
-  const location = locData.locations?.[0];
-  if (!location) throw new Error("No Google Business Profile location found. Make sure the account has at least one verified location.");
-
-  // 3 — build post body
+  // 2 — build post body
   const GBP_CTA: Record<string, string> = {
     call_now:   "CALL",
     learn_more: "LEARN_MORE",
@@ -436,10 +484,10 @@ async function publishToGBP(token: string, caption: string, ctaType: string, cta
     body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
   }
 
-  // 4 — create local post (mybusinessposts API v1 — replaces deprecated mybusiness.googleapis.com/v4)
-  const postUrl = `https://mybusinessposts.googleapis.com/v1/${location.name}/localPosts`;
+  // 3 — create local post
+  const postUrl = `https://mybusinessposts.googleapis.com/v1/${locationResourceName}/localPosts`;
   console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));
-  const postRes = await fetch(postUrl, {
+  const postRes = await fetchWithRetry429(postUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -447,6 +495,18 @@ async function publishToGBP(token: string, caption: string, ctaType: string, cta
   const postBody = await postRes.text();
   if (!postRes.ok) {
     console.error("[GBP-PUBLISH] post failed", JSON.stringify({ status: postRes.status, body: postBody.slice(0, 500) }));
+    if (postRes.status === 429) throw new Error("Google quota temporarily exceeded — try again in a few minutes.");
+    // 404 = stale cached location → clear cache so next publish re-fetches
+    if (postRes.status === 404) {
+      try {
+        const freshMeta = { ...metadata };
+        delete freshMeta.locationName; delete freshMeta.accountName; delete freshMeta.locationTitle;
+        await db.update(socialConnectionsTable)
+          .set({ metadata: JSON.stringify(freshMeta), updatedAt: new Date() })
+          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
+        console.log("[GBP-PUBLISH] cleared stale location cache after 404");
+      } catch {}
+    }
     throw new Error(`GBP post error (${postRes.status}): ${postBody}`);
   }
   const postData = JSON.parse(postBody) as { name: string };

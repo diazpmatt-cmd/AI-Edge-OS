@@ -268,6 +268,8 @@ export default function ConnectionsPage() {
     gbpLocationsFound: number;
     locationNames: string[];
     selectedLocationName: string | null;
+    locationTitle: string | null;
+    locationName: string | null;
     apiError: string | null;
   };
   const { data: gbpPublishStatus, refetch: refetchGBPStatus } = useQuery<GBPStatus>({
@@ -310,6 +312,17 @@ export default function ConnectionsPage() {
       qc.invalidateQueries({ queryKey: ["connection_debug"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to disconnect"),
+  });
+
+  const refreshGBPLocationMut = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean; locationTitle: string; locationName: string; locationCount: number }>(
+      "/social-connections/google-business-refresh-location", { method: "POST" }
+    ),
+    onSuccess: (data) => {
+      toast.success(`GBP location updated: ${data.locationTitle}`);
+      qc.invalidateQueries({ queryKey: ["google_business_status"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to refresh GBP location"),
   });
 
   const handleConnect = async (provider: string, opts?: { returnTo?: string }) => {
@@ -880,6 +893,21 @@ export default function ConnectionsPage() {
                       </p>
                     )}
 
+                    {/* GBP: selected location panel */}
+                    {isGBP && isConnected && !gbpNeedsUpgrade && gbpStat?.locationTitle && (
+                      <div style={{
+                        fontSize: 12, color: "#C0C0C0", fontWeight: 600,
+                        background: "rgba(66,133,244,0.08)", borderRadius: 6,
+                        padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 8,
+                        border: "1px solid rgba(66,133,244,0.2)",
+                      }}>
+                        <span>📍 {gbpStat.locationTitle}</span>
+                        {gbpStat.gbpLocationsFound > 1 && (
+                          <span style={{ color: "#6B7280", fontSize: 11 }}>+{gbpStat.gbpLocationsFound - 1} more</span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Action buttons */}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {isConnected ? (
@@ -895,6 +923,19 @@ export default function ConnectionsPage() {
                               }}
                             >
                               {isConnecting ? "Opening…" : "⬆ Upgrade Google Permissions"}
+                            </button>
+                          )}
+                          {isGBP && !gbpNeedsUpgrade && (
+                            <button
+                              onClick={() => refreshGBPLocationMut.mutate()}
+                              disabled={refreshGBPLocationMut.isPending}
+                              style={{
+                                padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.3)",
+                                color: "#4285F4", opacity: refreshGBPLocationMut.isPending ? 0.6 : 1, transition: "all 0.2s",
+                              }}
+                            >
+                              {refreshGBPLocationMut.isPending ? "Refreshing…" : "↻ Refresh Google Locations"}
                             </button>
                           )}
                           {fbNeedsUpgrade && (

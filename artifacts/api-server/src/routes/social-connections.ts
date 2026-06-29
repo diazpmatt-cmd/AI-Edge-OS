@@ -721,15 +721,22 @@ router.get("/social-connections/google-business-status", async (req, res) => {
             if (gbpLocationsFound === 0) {
               failureReason = "no_gbp_locations_found";
             } else {
-              const match = locs.find(l =>
-                l.title?.toLowerCase().includes("bed bug") || l.title?.toLowerCase().includes("beyond")
-              );
-              selectedLocationName = match ? match.title : locs[0].title;
-              console.log(`[GOOGLE-VERIFY] selectedLocationName="${selectedLocationName}"`);
+              const primaryLoc = locs[0];
+              selectedLocationName = primaryLoc.title;
+              console.log(`[GOOGLE-VERIFY] selectedLocationName="${selectedLocationName}" locationName="${primaryLoc.name}"`);
 
-              // Update metadata with latest location info
+              // Update metadata with latest location info (includes resource names for API caching)
               try {
-                const updatedMeta = { ...metadata, primaryLocationTitle: selectedLocationName, locationNames, gbpAccountsFound, gbpLocationsFound };
+                const updatedMeta = {
+                  ...metadata,
+                  accountName: firstAccount.name,
+                  locationName: primaryLoc.name,
+                  locationTitle: primaryLoc.title,
+                  primaryLocationTitle: primaryLoc.title,
+                  locationNames,
+                  gbpAccountsFound,
+                  gbpLocationsFound,
+                };
                 await db.update(socialConnectionsTable)
                   .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
                   .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
@@ -793,8 +800,70 @@ router.get("/social-connections/google-business-status", async (req, res) => {
     gbpLocationsFound,
     locationNames,
     selectedLocationName,
+    locationTitle: metadata.locationTitle ?? selectedLocationName ?? null,
+    locationName: metadata.locationName ?? null,
     apiError,
   });
+});
+
+// ── Google Business Profile: force-refresh cached account + location ──────────
+router.post("/social-connections/google-business-refresh-location", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [row] = await db.select().from(socialConnectionsTable)
+    .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+  if (!row?.accessToken) { res.status(400).json({ error: "Google Business Profile not connected" }); return; }
+
+  let metadata: Record<string, any> = {};
+  try { if (row.metadata) metadata = JSON.parse(row.metadata); } catch {}
+
+  try {
+    const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      headers: { Authorization: `Bearer ${row.accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!acctRes.ok) {
+      if (acctRes.status === 429) { res.status(429).json({ error: "Google quota temporarily exceeded — try again in a few minutes." }); return; }
+      res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status}` }); return;
+    }
+    const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
+    const account = acctData.accounts?.[0];
+    if (!account) { res.status(400).json({ error: "No Google Business Profile account found." }); return; }
+
+    const locRes = await fetch(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+      { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(10000) },
+    );
+    if (!locRes.ok) {
+      if (locRes.status === 429) { res.status(429).json({ error: "Google quota temporarily exceeded — try again in a few minutes." }); return; }
+      res.status(502).json({ error: `Locations API: HTTP ${locRes.status}` }); return;
+    }
+    const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
+    const locs = locData.locations ?? [];
+    if (!locs.length) { res.status(400).json({ error: "No locations found on this Google Business Profile account." }); return; }
+
+    const primaryLoc = locs[0];
+    const updatedMeta = {
+      ...metadata,
+      accountName: account.name,
+      locationName: primaryLoc.name,
+      locationTitle: primaryLoc.title,
+      primaryLocationTitle: primaryLoc.title,
+      locationNames: locs.map(l => l.title),
+      gbpAccountsFound: acctData.accounts!.length,
+      gbpLocationsFound: locs.length,
+    };
+    await db.update(socialConnectionsTable)
+      .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+      .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+
+    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title}`);
+    res.json({ ok: true, accountName: account.name, locationName: primaryLoc.name, locationTitle: primaryLoc.title, locationCount: locs.length });
+  } catch (e: any) {
+    console.error("[GBP-REFRESH-LOCATION] error:", e?.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.get("/social-connections/meta-oauth-debug", async (req, res) => {

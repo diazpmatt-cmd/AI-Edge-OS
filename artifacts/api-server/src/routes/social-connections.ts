@@ -434,15 +434,19 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
   // DIAGNOSTIC LOG — parse and print each OAuth param clearly
   try {
     const parsed = new URL(url);
-    console.log("[OAUTH-START]", {
+    const scopeParam = parsed.searchParams.get("scope") ?? "";
+    const scopes = scopeParam.split(/[ +]/).filter(Boolean);
+    const authUrlIncludesBusinessManage = scopes.some(s => s.includes("business.manage"));
+    console.log("[GOOGLE-OAUTH-START]", JSON.stringify({
       provider,
-      nodeEnv: process.env.NODE_ENV ?? "unset",
-      publicAppUrl: process.env.PUBLIC_APP_URL ?? "unset",
-      replitDevDomain: process.env.REPLIT_DEV_DOMAIN ?? "unset",
-      devOrigin: devOrigin ?? "NULL",
-      returnTo: returnTo ?? "none",
+      scopes,
+      authUrlIncludesBusinessManage,
       redirectUri: parsed.searchParams.get("redirect_uri"),
-    });
+      prompt: parsed.searchParams.get("prompt"),
+      accessType: parsed.searchParams.get("access_type"),
+      includeGrantedScopes: parsed.searchParams.get("include_granted_scopes"),
+      nodeEnv: process.env.NODE_ENV ?? "unset",
+    }));
   } catch { /* ignore parse errors */ }
 
   res.json({ configured: true, url });

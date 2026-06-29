@@ -649,15 +649,44 @@ router.get("/social-connections/google-business-status", async (req, res) => {
   let apiError: string | null = null;
   let failureReason: GBPFailureReason = null;
 
+  // ── Check granted scopes via tokeninfo ──
+  let grantedScopes: string[] = [];
+  let hasBusinessManage = false;
+  try {
+    const tiR = await fetch(
+      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${row.accessToken}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (tiR.ok) {
+      const ti = await tiR.json() as { scope?: string; email?: string; expires_in?: number };
+      grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
+      hasBusinessManage = grantedScopes.some(s => s.includes("business.manage"));
+      console.log("[GOOGLE-VERIFY]", JSON.stringify({
+        grantedScopes,
+        hasBusinessManage,
+        tokenInfoEmail: ti.email,
+        tokenExpiresIn: ti.expires_in,
+      }));
+    } else {
+      const tiBody = await tiR.text();
+      console.warn(`[GOOGLE-VERIFY] tokeninfo HTTP ${tiR.status}: ${tiBody.slice(0, 200)}`);
+    }
+  } catch (tiErr: any) {
+    console.warn(`[GOOGLE-VERIFY] tokeninfo fetch failed: ${tiErr?.message}`);
+  }
+
   // ── Fetch GBP accounts ──
-  console.log(`[GOOGLE-VERIFY] fetching GBP accounts...`);
+  console.log(`[GOOGLE-VERIFY] fetching GBP accounts (hasBusinessManage=${hasBusinessManage})...`);
   try {
     const acctR = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
       headers: { Authorization: `Bearer ${row.accessToken}` },
       signal: AbortSignal.timeout(8000),
     });
     const acctBody = await acctR.text();
-    console.log(`[GOOGLE-VERIFY] accounts API status=${acctR.status} body=${acctBody.slice(0, 400)}`);
+    console.log("[GOOGLE-VERIFY]", JSON.stringify({
+      accountsResponseStatus: acctR.status,
+      accountsResponseBody: acctBody.slice(0, 800),
+    }));
 
     if (acctR.ok) {
       const acctData = JSON.parse(acctBody) as { accounts?: Array<{ name: string; accountName: string }> };

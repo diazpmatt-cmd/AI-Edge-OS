@@ -135,7 +135,7 @@ async function exchangeGoogleCode(code: string, redirectUri: string) {
     const body = await r.text().catch(() => "");
     throw new Error(`Token exchange failed (${r.status}): ${body}`);
   }
-  return r.json() as Promise<{ access_token: string; refresh_token?: string; expires_in?: number; token_type: string }>;
+  return r.json() as Promise<{ access_token: string; refresh_token?: string; expires_in?: number; token_type: string; scope?: string }>;
 }
 
 async function getGoogleUserInfo(accessToken: string) {
@@ -176,10 +176,17 @@ router.get("/oauth/google/callback", async (req, res) => {
     console.log(`[GOOGLE-CALLBACK] exchanging code, redirect_uri=${redirectUri}`);
 
     // ── 1. Token exchange ──
-    let tokens: { access_token: string; refresh_token?: string; expires_in?: number; token_type: string };
+    let tokens: { access_token: string; refresh_token?: string; expires_in?: number; token_type: string; scope?: string };
     try {
       tokens = await exchangeGoogleCode(code, redirectUri);
       console.log(`[GOOGLE-CALLBACK] token exchange OK: token_type=${tokens.token_type} token_len=${tokens.access_token?.length ?? 0} has_refresh=${!!tokens.refresh_token}`);
+      console.log("[GOOGLE-OAUTH]", JSON.stringify({
+        accessTokenPresent: !!tokens.access_token,
+        refreshTokenPresent: !!tokens.refresh_token,
+        scope: tokens.scope ?? "(not returned by Google)",
+        tokenType: tokens.token_type,
+        expiresIn: tokens.expires_in,
+      }));
     } catch (tokenErr: any) {
       console.error(`[GOOGLE-CALLBACK] token exchange FAILED: ${tokenErr?.message}`);
       throw tokenErr;

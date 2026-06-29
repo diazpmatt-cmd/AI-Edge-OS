@@ -425,7 +425,7 @@ async function publishToGBP(
     console.log("[GBP-PUBLISH] no cached location — fetching accounts + locations from API");
 
     const saveQuotaCooldown = async () => {
-      const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const until = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10-min cooldown
       try {
         await db.update(socialConnectionsTable)
           .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil: until }), updatedAt: new Date() })
@@ -434,15 +434,18 @@ async function publishToGBP(
       return until;
     };
 
-    const acctRes = await fetchWithRetry429("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+    // Use plain fetch — fetchWithRetry429 wastes a second quota hit on 429
+    const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10000),
     });
     if (!acctRes.ok) {
       const acctErrBody = await acctRes.text();
       console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
       if (acctRes.status === 429) {
-        await saveQuotaCooldown();
-        throw new Error("Google quota exceeded — cooldown activated for 60 minutes. Publishing is blocked until cooldown expires. Use cached GBP location by clicking 'Refresh GBP Location' in System Diagnostics after the cooldown.");
+        const cooldownUntil = await saveQuotaCooldown();
+        const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
+        throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}. Use "Refresh GBP Location" in System Diagnostics once the cooldown expires.`);
       }
       throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
     }
@@ -451,14 +454,15 @@ async function publishToGBP(
     if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
     accountResourceName = account.name;
 
-    const locRes = await fetchWithRetry429(
+    const locRes = await fetch(
       `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
     );
     if (!locRes.ok) {
       if (locRes.status === 429) {
-        await saveQuotaCooldown();
-        throw new Error("Google quota exceeded — cooldown activated for 60 minutes. Use cached GBP location by clicking 'Refresh GBP Location' in System Diagnostics after the cooldown.");
+        const cooldownUntil = await saveQuotaCooldown();
+        const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
+        throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`);
       }
       throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
     }
@@ -468,12 +472,18 @@ async function publishToGBP(
     locationResourceName = location.name;
     locationTitle = location.title;
 
-    // Save to cache — future publishes will skip the Account Management API entirely
+    // Extract IDs from resource names (e.g. "accounts/123456789" → "123456789")
+    const accountId = accountResourceName?.split("/").pop() ?? null;
+    const locationId = locationResourceName?.split("/").pop() ?? null;
+
+    // Save to cache — future publishes skip the Account Management API entirely
     try {
       const updatedMeta = {
         ...metadata,
         accountName: accountResourceName,
+        accountId,
         locationName: locationResourceName,
+        locationId,
         locationTitle,
         primaryLocationTitle: locationTitle,
         cachedAt: new Date().toISOString(),

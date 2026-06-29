@@ -13,9 +13,10 @@ type PlatformHealth = {
   detail: string;
   connectedAt: string | null;
   locationTitle?: string | null;
+  locationId?: string | null;
+  accountId?: string | null;
   cachedAt?: string | null;
   cooldownUntil?: string | null;
-  refreshCooldownUntil?: string | null;
 };
 
 type HealthData = {
@@ -204,7 +205,18 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Token refresh failed"),
   });
 
-  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending;
+  // "Use Cached Location" — reads cache from DB without any Google API call
+  const useCachedLocation = useMutation({
+    mutationFn: () => authFetch<{ hasCache: boolean; locationTitle: string | null; locationId: string | null; accountId: string | null; cachedAt: string | null }>("/social-connections/google-business-cache"),
+    onSuccess: (d) => {
+      if (!d.hasCache) { toast.warning("No cached GBP location yet — click Refresh Location when cooldown expires."); return; }
+      toast.success(`Using cached GBP location: ${d.locationTitle ?? "unknown"} (ID: ${d.locationId ?? "?"})`);
+      qc.invalidateQueries({ queryKey: ["diagnostics_health"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Cache read failed"),
+  });
+
+  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending;
 
   const SECTION_STYLE: React.CSSProperties = {
     background: "rgba(11,22,41,0.7)",
@@ -307,144 +319,170 @@ export default function SystemDiagnosticsPage() {
       <div style={SECTION_STYLE}>
         <div style={SECTION_TITLE}><span>⚡</span> Quick Actions</div>
 
-        {/* GBP quota cooldown banner */}
+        {/* GBP cache status card */}
         {(() => {
           const gbp = health?.platforms.google_business;
-          const quotaCd = gbp?.cooldownUntil;
-          const refreshCd = gbp?.refreshCooldownUntil;
-          const activeCd = quotaCd ?? refreshCd;
-          if (!activeCd) return null;
-          const isQuota = !!quotaCd;
-          const secs = secsLeft(activeCd);
+          if (!gbp) return null;
+          const cd = gbp.cooldownUntil;
+          const inCooldown = !!(cd && secsLeft(cd) > 0);
+          const hasCache = !!(gbp.locationTitle || gbp.locationId);
+
+          const secs = cd ? secsLeft(cd) : 0;
           const mins = Math.floor(secs / 60);
-          const remainingSecs = secs % 60;
-          const countdown = mins > 0
-            ? `${mins}m ${String(remainingSecs).padStart(2, "0")}s`
-            : `${secs}s`;
+          const remSecs = secs % 60;
+          const countdown = mins > 0 ? `${mins}m ${String(remSecs).padStart(2, "0")}s` : `${secs}s`;
+
           return (
             <div style={{
-              marginBottom: 14, padding: "10px 14px", borderRadius: 10,
-              background: isQuota ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
-              border: `1px solid ${isQuota ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.2)"}`,
-              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+              marginBottom: 16, borderRadius: 12,
+              border: `1px solid ${inCooldown ? "rgba(239,68,68,0.25)" : "rgba(66,133,244,0.2)"}`,
+              background: inCooldown ? "rgba(239,68,68,0.05)" : "rgba(66,133,244,0.05)",
+              overflow: "hidden",
             }}>
-              <span style={{ fontSize: 16 }}>{isQuota ? "⛔" : "⏳"}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: isQuota ? "#EF4444" : "#F59E0B", marginBottom: 2 }}>
-                  {isQuota ? "Google Quota Cooldown Active" : "Refresh GBP Location — Cooldown Active"}
-                </div>
-                <div style={{ fontSize: 11, color: "#64748B" }}>
-                  {isQuota
-                    ? `Google API quota exceeded. Refresh GBP Location is disabled for ${countdown}. Publishing continues using the cached location.`
-                    : `Refresh recently used. Button re-enables in ${countdown}. Publishing uses cached location.`}
-                </div>
-              </div>
+              {/* Top bar */}
               <div style={{
-                fontSize: 20, fontWeight: 900, fontFamily: "monospace",
-                color: isQuota ? "#EF4444" : "#F59E0B", minWidth: 70, textAlign: "right",
+                padding: "10px 14px", display: "flex", alignItems: "center", gap: 10,
+                borderBottom: `1px solid ${inCooldown ? "rgba(239,68,68,0.12)" : "rgba(66,133,244,0.12)"}`,
               }}>
-                {countdown}
+                <span style={{ fontSize: 15 }}>📍</span>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: inCooldown ? "#EF4444" : "#4285F4" }}>
+                    {inCooldown ? "⛔ GBP Quota Cooldown Active" : "Google Business Profile Cache"}
+                  </span>
+                  {inCooldown && (
+                    <span style={{ marginLeft: 10, fontSize: 11, color: "#64748B" }}>
+                      Refresh Location disabled · publishing uses cache below
+                    </span>
+                  )}
+                </div>
+                {inCooldown && (
+                  <span style={{ fontSize: 18, fontWeight: 900, fontFamily: "monospace", color: "#EF4444", minWidth: 64, textAlign: "right" }}>
+                    {countdown}
+                  </span>
+                )}
+              </div>
+
+              {/* Cache details */}
+              <div style={{ padding: "10px 14px", display: "flex", flexWrap: "wrap", gap: "8px 20px" }}>
+                {hasCache ? (
+                  <>
+                    <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                      <span style={{ color: "#64748B", marginRight: 4 }}>Location</span>
+                      <span style={{ color: "#E2E8F0", fontWeight: 600 }}>{gbp.locationTitle ?? "—"}</span>
+                      {gbp.locationId && <span style={{ color: "#475569" }}> (ID: {gbp.locationId})</span>}
+                    </div>
+                    {gbp.accountId && (
+                      <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                        <span style={{ color: "#64748B", marginRight: 4 }}>Account ID</span>
+                        <span style={{ color: "#E2E8F0" }}>{gbp.accountId}</span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                      <span style={{ color: "#64748B", marginRight: 4 }}>Cached</span>
+                      <span style={{ color: "#10B981" }}>{gbp.cachedAt ? fmtDate(gbp.cachedAt) : "unknown"}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#10B981" }}>✓ Publishing uses this cache — no API calls needed</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#F59E0B" }}>
+                    ⚠ No cached location yet. Click "Refresh GBP Location" to fetch from Google.
+                  </div>
+                )}
+              </div>
+
+              {/* Action row */}
+              <div style={{ padding: "8px 14px 10px", display: "flex", gap: 8, borderTop: `1px solid rgba(255,255,255,0.04)` }}>
+                <button
+                  onClick={() => useCachedLocation.mutate()}
+                  disabled={!hasCache || anyMutPending || useCachedLocation.isPending}
+                  style={{
+                    padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                    background: hasCache ? "rgba(16,185,129,0.12)" : "rgba(100,116,139,0.1)",
+                    border: `1px solid ${hasCache ? "rgba(16,185,129,0.3)" : "rgba(100,116,139,0.2)"}`,
+                    color: hasCache ? "#10B981" : "#475569",
+                    cursor: hasCache && !anyMutPending ? "pointer" : "not-allowed",
+                    opacity: (!hasCache || anyMutPending) ? 0.55 : 1,
+                  }}
+                >
+                  {useCachedLocation.isPending ? "Checking…" : "✓ Use Cached Location"}
+                </button>
+                <button
+                  onClick={() => { if (!inCooldown) refreshGBPLoc.mutate(); }}
+                  disabled={inCooldown || anyMutPending || refreshGBPLoc.isPending}
+                  title={inCooldown ? `Cooldown active — ${countdown} remaining` : "Fetch latest GBP account + location from Google"}
+                  style={{
+                    padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                    background: inCooldown ? "rgba(100,116,139,0.08)" : "rgba(66,133,244,0.1)",
+                    border: `1px solid ${inCooldown ? "rgba(100,116,139,0.15)" : "rgba(66,133,244,0.3)"}`,
+                    color: inCooldown ? "#475569" : "#4285F4",
+                    cursor: (inCooldown || anyMutPending) ? "not-allowed" : "pointer",
+                    opacity: (inCooldown || anyMutPending) ? 0.55 : 1,
+                  }}
+                >
+                  {refreshGBPLoc.isPending ? "Fetching…" : inCooldown ? `⏳ Refresh Location (${minsLeft(cd!)}m)` : "↻ Refresh Location"}
+                </button>
               </div>
             </div>
           );
         })()}
 
+        {/* Other action buttons */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {(() => {
-            const gbp = health?.platforms.google_business;
-            const gbpCooldownTs = gbp?.cooldownUntil ?? gbp?.refreshCooldownUntil ?? null;
-            const gbpInCooldown = !!(gbpCooldownTs && secsLeft(gbpCooldownTs) > 0);
-            const cachedAt = gbp?.cachedAt;
-
-            const buttons = [
-              {
-                label: "Refresh Tokens",
-                desc: "Re-check Google auth token",
-                icon: "🔑",
-                color: "#00AEEF",
-                action: () => refreshTokens.mutate(),
-                pending: refreshTokens.isPending,
-                disabled: false,
-              },
-              {
-                label: gbpInCooldown
-                  ? `GBP Cooldown (${minsLeft(gbpCooldownTs!)}m)`
-                  : "Refresh GBP Location",
-                desc: gbpInCooldown
-                  ? (gbp?.cooldownUntil ? "Quota cooldown — try again later" : "Recently used — 10 min cooldown")
-                  : cachedAt
-                    ? `Cached ${fmtDate(cachedAt)} — click to re-fetch`
-                    : "Force-fetch GBP account + location",
-                icon: gbpInCooldown ? "⏳" : "📍",
-                color: gbpInCooldown ? "#64748B" : "#4285F4",
-                action: () => refreshGBPLoc.mutate(),
-                pending: refreshGBPLoc.isPending,
-                disabled: gbpInCooldown,
-              },
-              {
-                label: "Retry Failed Posts",
-                desc: `Reset ${health?.postCounts.failed ?? 0} failed → scheduled`,
-                icon: "🔄",
-                color: "#10B981",
-                action: () => retryFailed.mutate(),
-                pending: retryFailed.isPending,
-                disabled: false,
-              },
-              {
-                label: "Force Health Check",
-                desc: "Re-scan all connections",
-                icon: "🩺",
-                color: "#F59E0B",
-                action: () => forceHealthCheck.mutate(),
-                pending: forceHealthCheck.isPending,
-                disabled: false,
-              },
-              {
-                label: "Clear GBP Cache",
-                desc: "Wipe cached location — next publish re-fetches",
-                icon: "🗑",
-                color: "#EF4444",
-                action: () => clearGBPCache.mutate(),
-                pending: clearGBPCache.isPending,
-                disabled: false,
-              },
-            ];
-
-            return buttons.map(btn => (
-              <button
-                key={btn.label}
-                onClick={btn.disabled ? undefined : btn.action}
-                disabled={btn.pending || anyMutPending || btn.disabled}
-                style={{
-                  flex: "1 1 180px", maxWidth: 220,
-                  padding: "12px 16px", borderRadius: 12, textAlign: "left",
-                  background: `${btn.color}11`, border: `1px solid ${btn.color}33`,
-                  cursor: (btn.pending || anyMutPending || btn.disabled) ? "not-allowed" : "pointer",
-                  opacity: (btn.pending || anyMutPending || btn.disabled) ? 0.55 : 1,
-                  transition: "all 0.18s",
-                }}
-              >
-                <div style={{ fontSize: 18, marginBottom: 5 }}>{btn.icon}</div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: btn.color, marginBottom: 3 }}>
-                  {btn.pending ? "Working…" : btn.label}
-                </div>
-                <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.3 }}>{btn.desc}</div>
-              </button>
-            ));
-          })()}
+          {[
+            {
+              label: "Refresh Tokens",
+              desc: "Re-check Google auth token",
+              icon: "🔑",
+              color: "#00AEEF",
+              action: () => refreshTokens.mutate(),
+              pending: refreshTokens.isPending,
+            },
+            {
+              label: "Retry Failed Posts",
+              desc: `Reset ${health?.postCounts.failed ?? 0} failed → scheduled`,
+              icon: "🔄",
+              color: "#10B981",
+              action: () => retryFailed.mutate(),
+              pending: retryFailed.isPending,
+            },
+            {
+              label: "Force Health Check",
+              desc: "Re-scan all connections",
+              icon: "🩺",
+              color: "#F59E0B",
+              action: () => forceHealthCheck.mutate(),
+              pending: forceHealthCheck.isPending,
+            },
+            {
+              label: "Clear GBP Cache",
+              desc: "Wipe cached location — next publish re-fetches",
+              icon: "🗑",
+              color: "#EF4444",
+              action: () => clearGBPCache.mutate(),
+              pending: clearGBPCache.isPending,
+            },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              onClick={btn.action}
+              disabled={btn.pending || anyMutPending}
+              style={{
+                flex: "1 1 160px", maxWidth: 210,
+                padding: "12px 16px", borderRadius: 12, textAlign: "left",
+                background: `${btn.color}11`, border: `1px solid ${btn.color}33`,
+                cursor: (btn.pending || anyMutPending) ? "not-allowed" : "pointer",
+                opacity: (btn.pending || anyMutPending) ? 0.55 : 1,
+                transition: "all 0.18s",
+              }}
+            >
+              <div style={{ fontSize: 18, marginBottom: 5 }}>{btn.icon}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: btn.color, marginBottom: 3 }}>
+                {btn.pending ? "Working…" : btn.label}
+              </div>
+              <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.3 }}>{btn.desc}</div>
+            </button>
+          ))}
         </div>
-
-        {/* GBP cache age row */}
-        {health?.platforms.google_business?.cachedAt && (
-          <div style={{ marginTop: 12, fontSize: 10.5, color: "#334155", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: "#10B981" }}>●</span>
-            GBP location cached {fmtDate(health.platforms.google_business.cachedAt)}
-            {health.platforms.google_business.locationTitle && (
-              <span style={{ color: "#4285F4" }}>— {health.platforms.google_business.locationTitle}</span>
-            )}
-            · Publishing uses cache automatically
-          </div>
-        )}
       </div>
 
       {/* ── SECTION 2: Error Center ── */}

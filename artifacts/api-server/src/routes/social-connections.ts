@@ -820,8 +820,7 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
 
   const now = new Date();
 
-  // ── Cooldown guards ──────────────────────────────────────────────────────────
-  // 1. Quota cooldown (set when Google returns 429) — blocks all refreshes
+  // ── Single cooldown guard (quota OR button cooldown — same 10-min window) ────
   if (metadata.cooldownUntil) {
     const cd = new Date(metadata.cooldownUntil);
     if (cd > now) {
@@ -833,27 +832,10 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
       });
       return;
     }
-    // Expired — clear it
     delete metadata.cooldownUntil;
   }
 
-  // 2. Button cooldown (10 min after a successful refresh) — prevents hammering
-  if (metadata.refreshCooldownUntil) {
-    const cd = new Date(metadata.refreshCooldownUntil);
-    if (cd > now) {
-      const minsLeft = Math.ceil((cd.getTime() - now.getTime()) / 60000);
-      res.status(429).json({
-        error: `Refresh recently used — try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`,
-        cooldownUntil: cd.toISOString(),
-        minsLeft,
-        isCooldown: true,
-      });
-      return;
-    }
-    delete metadata.refreshCooldownUntil;
-  }
-
-  const saveQuotaCooldown = async (durationMs = 60 * 60 * 1000) => {
+  const saveCooldown = async (durationMs = 10 * 60 * 1000) => {
     const cooldownUntil = new Date(now.getTime() + durationMs).toISOString();
     try {
       await db.update(socialConnectionsTable)
@@ -870,9 +852,9 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     });
     if (!acctRes.ok) {
       if (acctRes.status === 429) {
-        const cooldownUntil = await saveQuotaCooldown();
-        const minsLeft = 60;
-        res.status(429).json({ error: `Google quota exceeded — cooldown active for 60 minutes.`, cooldownUntil, minsLeft }); return;
+        const cooldownUntil = await saveCooldown();
+        const minsLeft = 10;
+        res.status(429).json({ error: `Google quota cooldown active. Try again in ${minsLeft} minutes.`, cooldownUntil, minsLeft }); return;
       }
       res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status}` }); return;
     }
@@ -886,8 +868,8 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     );
     if (!locRes.ok) {
       if (locRes.status === 429) {
-        const cooldownUntil = await saveQuotaCooldown();
-        res.status(429).json({ error: `Google quota exceeded — cooldown active for 60 minutes.`, cooldownUntil, minsLeft: 60 }); return;
+        const cooldownUntil = await saveCooldown();
+        res.status(429).json({ error: `Google quota cooldown active. Try again in 10 minutes.`, cooldownUntil, minsLeft: 10 }); return;
       }
       res.status(502).json({ error: `Locations API: HTTP ${locRes.status}` }); return;
     }
@@ -896,29 +878,65 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     if (!locs.length) { res.status(400).json({ error: "No locations found on this Google Business Profile account." }); return; }
 
     const primaryLoc = locs[0];
-    const refreshCooldownUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString(); // 10 min button cooldown
+    // Extract IDs from resource names (e.g. "accounts/123456789" → "123456789")
+    const accountId = account.name.split("/").pop() ?? null;
+    const locationId = primaryLoc.name.split("/").pop() ?? null;
+    // Set a 10-min button cooldown after a successful refresh (same window)
+    const cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
     const updatedMeta = {
       ...metadata,
       accountName: account.name,
+      accountId,
       locationName: primaryLoc.name,
+      locationId,
       locationTitle: primaryLoc.title,
       primaryLocationTitle: primaryLoc.title,
-      locationNames: locs.map(l => l.title),
+      locationNames: locs.map((l: { title: string }) => l.title),
       gbpAccountsFound: acctData.accounts!.length,
       gbpLocationsFound: locs.length,
       cachedAt: now.toISOString(),
-      refreshCooldownUntil,
+      cooldownUntil,
     };
     await db.update(socialConnectionsTable)
       .set({ metadata: JSON.stringify(updatedMeta), updatedAt: now })
       .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
 
-    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title} refreshCooldownUntil=${refreshCooldownUntil}`);
-    res.json({ ok: true, accountName: account.name, locationName: primaryLoc.name, locationTitle: primaryLoc.title, locationCount: locs.length, refreshCooldownUntil });
+    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} accountName=${account.name} locationName=${primaryLoc.name} locationTitle=${primaryLoc.title} cooldownUntil=${cooldownUntil}`);
+    res.json({ ok: true, accountName: account.name, accountId, locationName: primaryLoc.name, locationId, locationTitle: primaryLoc.title, locationCount: locs.length, cooldownUntil });
   } catch (e: any) {
     console.error("[GBP-REFRESH-LOCATION] error:", e?.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Google Business Profile: read cached location (no API call) ─────────────
+router.get("/social-connections/google-business-cache", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [row] = await db.select().from(socialConnectionsTable)
+    .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+  if (!row?.accessToken) { res.status(400).json({ error: "Google Business Profile not connected" }); return; }
+
+  let metadata: Record<string, any> = {};
+  try { if (row.metadata) metadata = JSON.parse(row.metadata); } catch {}
+
+  const now = new Date();
+  const cd = metadata.cooldownUntil ? new Date(metadata.cooldownUntil) : null;
+  const activeCooldown = (cd && cd > now) ? cd.toISOString() : null;
+  const hasCache = !!(metadata.locationName && metadata.accountName);
+
+  res.json({
+    hasCache,
+    accountName: metadata.accountName ?? null,
+    accountId: metadata.accountId ?? null,
+    locationName: metadata.locationName ?? null,
+    locationId: metadata.locationId ?? null,
+    locationTitle: metadata.locationTitle ?? null,
+    cachedAt: metadata.cachedAt ?? null,
+    cooldownUntil: activeCooldown,
+    minsLeft: activeCooldown ? Math.ceil((new Date(activeCooldown).getTime() - now.getTime()) / 60000) : null,
+  });
 });
 
 router.get("/social-connections/meta-oauth-debug", async (req, res) => {

@@ -68,14 +68,61 @@ router.get("/diagnostics/health", async (req, res) => {
 
   const now = new Date();
 
-  function connHealth(provider: string): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+  // Google-style OAuth: uses refresh tokens for token renewal → flag if missing
+  function googleConnHealth(provider: string): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
     const c = connections.find(r => r.provider === provider);
     if (!c?.accessToken) return { status: "failed", detail: "Not connected", connectedAt: null };
     const exp = c.expiresAt ? new Date(c.expiresAt) : null;
     const expired = exp ? exp < now : false;
     if (expired && !c.refreshToken) return { status: "warning", detail: "Token expired — no refresh token stored", connectedAt: c.createdAt?.toISOString() ?? null };
     if (expired && c.refreshToken) return { status: "warning", detail: "Token expired (auto-refresh on next publish)", connectedAt: c.createdAt?.toISOString() ?? null };
-    if (!c.refreshToken) return { status: "warning", detail: `Connected but no refresh token`, connectedAt: c.createdAt?.toISOString() ?? null };
+    if (!c.refreshToken) return { status: "warning", detail: "Connected but no refresh token — re-authorize to ensure long-term access", connectedAt: c.createdAt?.toISOString() ?? null };
+    return { status: "healthy", detail: c.accountName ? `Connected — ${c.accountName}` : "Connected", connectedAt: c.createdAt?.toISOString() ?? null };
+  }
+
+  // Meta OAuth: does NOT use refresh tokens. Facebook issues long-lived user tokens
+  // (~60 days) and permanent page access tokens. Health is based on:
+  // access token present + not expired + page access token stored + no recent failures.
+  function metaHealth(meta: Record<string, any>): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+    const c = connections.find(r => r.provider === "facebook");
+    if (!c?.accessToken) return { status: "failed", detail: "Not connected", connectedAt: null };
+
+    const exp = c.expiresAt ? new Date(c.expiresAt) : null;
+    if (exp && exp < now) {
+      return { status: "warning", detail: "Access token expired — reconnect Facebook to refresh", connectedAt: c.createdAt?.toISOString() ?? null };
+    }
+
+    if (!meta.pageAccessToken) {
+      return { status: "warning", detail: "No page access token — complete Facebook Page setup in Connected Accounts", connectedAt: c.createdAt?.toISOString() ?? null };
+    }
+
+    // Check recent publish failures on Facebook/Instagram platforms (last 24h)
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const recentFailed = posts.filter(p => {
+      if (p.status !== "failed" && p.status !== "partial") return false;
+      const ts = p.updatedAt ?? p.createdAt;
+      if (new Date(ts) < cutoff) return false;
+      try {
+        const pl: string[] = JSON.parse(p.platforms ?? "[]");
+        return pl.some(x => x === "facebook" || x === "instagram");
+      } catch { return false; }
+    });
+
+    if (recentFailed.length > 0) {
+      return { status: "warning", detail: `Page connected — ${recentFailed.length} failed post(s) in last 24h`, connectedAt: c.createdAt?.toISOString() ?? null };
+    }
+
+    const pageName = meta.pageName ?? c.accountName ?? null;
+    return { status: "healthy", detail: pageName ? `Page connected — ${pageName}` : "Page connected", connectedAt: c.createdAt?.toISOString() ?? null };
+  }
+
+  // Generic OAuth health (for providers like TikTok, YouTube where we store refresh tokens)
+  function connHealth(provider: string): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+    const c = connections.find(r => r.provider === provider);
+    if (!c?.accessToken) return { status: "failed", detail: "Not connected", connectedAt: null };
+    const exp = c.expiresAt ? new Date(c.expiresAt) : null;
+    const expired = exp ? exp < now : false;
+    if (expired) return { status: "warning", detail: "Token expired — reconnect to restore access", connectedAt: c.createdAt?.toISOString() ?? null };
     return { status: "healthy", detail: c.accountName ? `Connected — ${c.accountName}` : "Connected", connectedAt: c.createdAt?.toISOString() ?? null };
   }
 
@@ -88,14 +135,17 @@ router.get("/diagnostics/health", async (req, res) => {
   try { if (gbpConn?.metadata) gbpMeta = JSON.parse(gbpConn.metadata); } catch {}
 
   const platforms = {
-    facebook:       connHealth("facebook"),
+    facebook: metaHealth(fbMeta),
     instagram: (() => {
       if (!fbConn?.accessToken) return { status: "failed" as const, detail: "Requires Facebook connection", connectedAt: null };
+      const exp = fbConn.expiresAt ? new Date(fbConn.expiresAt) : null;
+      if (exp && exp < now) return { status: "warning" as const, detail: "Facebook token expired — reconnect to restore Instagram", connectedAt: fbConn.createdAt?.toISOString() ?? null };
       if (!fbMeta.instagramBusinessAccountId) return { status: "warning" as const, detail: "Facebook connected — no IG Business account linked", connectedAt: fbConn.createdAt?.toISOString() ?? null };
-      return { status: "healthy" as const, detail: "Connected via Facebook Page", connectedAt: fbConn.createdAt?.toISOString() ?? null };
+      const igName = fbMeta.instagramUsername ?? fbMeta.pageName ?? null;
+      return { status: "healthy" as const, detail: igName ? `Connected — ${igName}` : "Connected via Facebook Page", connectedAt: fbConn.createdAt?.toISOString() ?? null };
     })(),
     google_business: {
-      ...connHealth("google_business"),
+      ...googleConnHealth("google_business"),
       locationTitle: gbpMeta.locationTitle ?? null,
     },
     tiktok:         connHealth("tiktok"),

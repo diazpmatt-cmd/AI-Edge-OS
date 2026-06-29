@@ -10,6 +10,7 @@ import oauthCallbacksRouter from "./oauth-callbacks";
 import leadsRouter from "./leads";
 import socialPostsRouter from "./social-posts";
 import autoContentRouter from "./auto-content";
+import diagnosticsRouter from "./diagnostics";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(oauthCallbacksRouter);
 router.use(leadsRouter);
 router.use(socialPostsRouter);
 router.use(autoContentRouter);
+router.use(diagnosticsRouter);
 
 export default router;

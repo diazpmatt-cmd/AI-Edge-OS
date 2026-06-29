@@ -436,14 +436,21 @@ async function publishToGBP(token: string, caption: string, ctaType: string, cta
     body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
   }
 
-  // 4 — create local post
-  const postRes = await fetch(`https://mybusiness.googleapis.com/v4/${location.name}/localPosts`, {
+  // 4 — create local post (mybusinessposts API v1 — replaces deprecated mybusiness.googleapis.com/v4)
+  const postUrl = `https://mybusinessposts.googleapis.com/v1/${location.name}/localPosts`;
+  console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));
+  const postRes = await fetch(postUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!postRes.ok) throw new Error(`GBP post error (${postRes.status}): ${await postRes.text()}`);
-  const postData = await postRes.json() as { name: string };
+  const postBody = await postRes.text();
+  if (!postRes.ok) {
+    console.error("[GBP-PUBLISH] post failed", JSON.stringify({ status: postRes.status, body: postBody.slice(0, 500) }));
+    throw new Error(`GBP post error (${postRes.status}): ${postBody}`);
+  }
+  const postData = JSON.parse(postBody) as { name: string };
+  console.log("[GBP-PUBLISH] success name=", postData.name);
   return { id: postData.name };
 }
 

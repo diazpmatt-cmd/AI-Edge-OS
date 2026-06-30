@@ -11,9 +11,9 @@ export default function TermsPage() {
     <div style={{ background: "#030612", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Nav />
       <main style={{ flex: 1, maxWidth: 800, margin: "0 auto", padding: "80px 24px 60px", width: "100%" }}>
-        <h1 style={{ fontSize: 36, fontWeight: 800, color: "#E5E7EB", marginBottom: 8, marginTop: 0 }}>AI Edge Solutions Terms of Service</h1>
+        <h1 style={{ fontSize: 36, fontWeight: 800, color: "#E5E7EB", marginBottom: 8, marginTop: 0 }}>Terms of Service</h1>
         <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 48, marginTop: 0 }}>
-          Last updated: June 20, 2025
+          Last updated: June 30, 2026
         </p>
 
         <div style={SECTION_STYLE}>
@@ -137,8 +137,36 @@ export default function TermsPage() {
           </p>
         </div>
 
+        <div style={{
+          ...SECTION_STYLE,
+          background: "rgba(0,174,239,0.05)",
+          border: "1px solid rgba(0,174,239,0.2)",
+          borderRadius: 12,
+          padding: "24px 28px",
+        }}>
+          <h2 style={{ ...H2_STYLE, color: "#00AEEF" }}>13. SMS Text Messaging</h2>
+          <p style={P_STYLE}>
+            By providing your phone number and submitting a form on our website, or by calling or texting our
+            business number, you consent to receive SMS text messages from <strong style={{ color: "#D1D5DB" }}>Bed Bugs &amp; Beyond</strong>{" "}
+            (powered by AI Edge Solutions) for the purpose of appointment confirmations, quote notifications,
+            service updates, missed-call follow-ups, and customer-care communications.
+          </p>
+          <ul style={UL_STYLE}>
+            <li><strong style={{ color: "#D1D5DB" }}>No third-party marketing sharing:</strong> SMS opt-in data and consent will not be shared with any third party for marketing purposes.</li>
+            <li><strong style={{ color: "#D1D5DB" }}>Message frequency:</strong> Varies based on your service interactions.</li>
+            <li><strong style={{ color: "#D1D5DB" }}>Rates:</strong> Message and data rates may apply.</li>
+            <li><strong style={{ color: "#D1D5DB" }}>Opt out:</strong> Reply STOP to any message to unsubscribe. You will receive one final confirmation, then no further messages.</li>
+            <li><strong style={{ color: "#D1D5DB" }}>Help:</strong> Reply HELP for assistance or contact us at the address below.</li>
+            <li>Consent is not a condition of purchase of any goods or services.</li>
+          </ul>
+          <p style={{ ...P_STYLE, margin: 0 }}>
+            For full details on how we handle your data, see our{" "}
+            <a href="/privacy-policy" style={{ color: "#00AEEF" }}>Privacy Policy</a>.
+          </p>
+        </div>
+
         <div style={SECTION_STYLE}>
-          <h2 style={H2_STYLE}>13. Contact</h2>
+          <h2 style={H2_STYLE}>14. Contact</h2>
           <p style={{ ...P_STYLE, margin: 0 }}>
             Questions about these Terms? Contact us at:
           </p>

@@ -23,7 +23,7 @@ router.post("/telnyx/sms", async (req, res) => {
     const text   = payload?.text ?? payload?.body ?? "";
     const type   = payload?.type ?? "SMS";
 
-    const clientName = process.env.TELNYX_CLIENT_NAME ?? "AI Edge Solutions";
+    const clientName = process.env.TELNYX_CLIENT_NAME ?? "Bed Bugs & Beyond";
 
     await db.insert(leadsTable).values({
       clientName,
@@ -57,7 +57,7 @@ router.post("/telnyx/webhook", async (req, res) => {
         (hangupCause === "NORMAL_CLEARING" && Number(duration) < 5);
 
       if (isMissed) {
-        const clientName = process.env.TELNYX_CLIENT_NAME ?? "AI Edge Solutions";
+        const clientName = process.env.TELNYX_CLIENT_NAME ?? "Bed Bugs & Beyond";
         await db.insert(leadsTable).values({
           clientName,
           source:    "telnyx_missed_call",
@@ -72,7 +72,7 @@ router.post("/telnyx/webhook", async (req, res) => {
     if (eventType === "message.received") {
       const from    = payload?.from?.phone_number ?? payload?.from ?? "";
       const text    = payload?.text ?? "";
-      const clientName = process.env.TELNYX_CLIENT_NAME ?? "AI Edge Solutions";
+      const clientName = process.env.TELNYX_CLIENT_NAME ?? "Bed Bugs & Beyond";
       await db.insert(leadsTable).values({
         clientName,
         source:    "telnyx_sms",
@@ -92,7 +92,7 @@ router.post("/telnyx/webhook", async (req, res) => {
 
 router.post("/telnyx/test-sms", async (req, res) => {
   try {
-    const { phone = "+10000000001", message = "Test SMS lead", clientName = "AI Edge Solutions" } = req.body ?? {};
+    const { phone = "+10000000001", message = "Test SMS lead", clientName = "Bed Bugs & Beyond" } = req.body ?? {};
     const [row] = await db.insert(leadsTable).values({
       clientName, source: "telnyx_sms", phone, message, eventType: "sms", status: "new",
     }).returning();
@@ -105,7 +105,7 @@ router.post("/telnyx/test-sms", async (req, res) => {
 
 router.post("/telnyx/test-missed-call", async (req, res) => {
   try {
-    const { phone = "+10000000002", clientName = "AI Edge Solutions" } = req.body ?? {};
+    const { phone = "+10000000002", clientName = "Bed Bugs & Beyond" } = req.body ?? {};
     const [row] = await db.insert(leadsTable).values({
       clientName, source: "telnyx_missed_call", phone,
       message: "Missed call — hangup cause: ORIGINATOR_CANCEL",

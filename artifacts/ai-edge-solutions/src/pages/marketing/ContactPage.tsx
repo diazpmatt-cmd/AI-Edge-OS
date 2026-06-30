@@ -266,6 +266,33 @@ export default function ContactPage() {
                 />
               </div>
 
+              {/* ── SMS Consent Disclosure (10DLC required) ── */}
+              <div style={{
+                background: "rgba(0,174,239,0.05)",
+                border: "1px solid rgba(0,174,239,0.18)",
+                borderRadius: 10,
+                padding: "14px 18px",
+                marginBottom: 20,
+              }}>
+                <p style={{
+                  fontSize: 12, color: "#6B7280", lineHeight: 1.7, margin: 0,
+                }}>
+                  <span style={{ color: "#9CA3AF", fontWeight: 600 }}>📱 SMS Consent:</span>{" "}
+                  By submitting this form, you agree to receive text messages from{" "}
+                  <strong style={{ color: "#C0C0C0" }}>Bed Bugs &amp; Beyond</strong> regarding your
+                  quote request, appointment, service updates, and missed-call follow-up.
+                  Message frequency varies. Message and data rates may apply.
+                  Reply <strong style={{ color: "#C0C0C0" }}>STOP</strong> to opt out or{" "}
+                  <strong style={{ color: "#C0C0C0" }}>HELP</strong> for help.
+                  SMS opt-in data is not shared with third parties for marketing.
+                  See our{" "}
+                  <a href="/privacy-policy" style={{ color: "#00AEEF", textDecoration: "underline" }}>
+                    Privacy Policy
+                  </a>
+                  {" "}for details.
+                </p>
+              </div>
+
               <button
                 type="submit"
                 style={{

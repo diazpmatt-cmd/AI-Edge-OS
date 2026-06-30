@@ -2,7 +2,11 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
+
+const BACKUP_DIR = path.resolve(process.cwd(), "backups");
 
 const router = Router();
 
@@ -296,6 +300,95 @@ router.post("/diagnostics/force-health-check", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   console.log(`[DIAGNOSTICS] force-health-check userId=${userId} at ${new Date().toISOString()}`);
   res.json({ ok: true, checkedAt: new Date().toISOString() });
+});
+
+// ── POST /diagnostics/db-backup — export all tables to JSON ─────────────────
+router.post("/diagnostics/db-backup", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+    // Discover all public tables dynamically
+    const tablesResult = await db.execute(sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+
+    const tables: Record<string, unknown[]> = {};
+    const rowCounts: Record<string, number> = {};
+
+    for (const row of tablesResult.rows) {
+      const tbl = row.table_name as string;
+      const rows = await db.execute(sql.raw(`SELECT * FROM "${tbl}"`));
+      tables[tbl] = rows.rows as unknown[];
+      rowCounts[tbl] = rows.rows.length;
+    }
+
+    const exportedAt = new Date().toISOString();
+    const backup = { exportedAt, version: "1.0", tables, rowCounts };
+
+    const ts = exportedAt.replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `backup-${ts}.json`;
+    const filepath = path.join(BACKUP_DIR, filename);
+    fs.writeFileSync(filepath, JSON.stringify(backup, null, 2));
+
+    const totalRows = Object.values(rowCounts).reduce((a, b) => a + b, 0);
+    console.log(`[DIAGNOSTICS] db-backup created ${filename} (${totalRows} rows, ${Object.keys(tables).length} tables)`);
+    res.json({ ok: true, filename, totalRows, rowCounts, exportedAt, tableNames: Object.keys(tables) });
+  } catch (err: any) {
+    console.error("[DIAGNOSTICS] db-backup error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /diagnostics/backups — list saved backup files ──────────────────────
+router.get("/diagnostics/backups", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) { res.json({ backups: [] }); return; }
+    const files = fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith("backup-") && f.endsWith(".json"))
+      .map(filename => {
+        const stat = fs.statSync(path.join(BACKUP_DIR, filename));
+        return { filename, sizeBytes: stat.size, createdAt: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ backups: files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /diagnostics/backups/:filename — download a backup file ──────────────
+router.get("/diagnostics/backups/:filename", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { filename } = req.params;
+  if (!/^backup-[\dT\-]+\.json$/.test(filename)) {
+    res.status(400).json({ error: "Invalid filename" }); return;
+  }
+  const filepath = path.join(BACKUP_DIR, filename);
+  if (!fs.existsSync(filepath)) { res.status(404).json({ error: "Backup not found" }); return; }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  fs.createReadStream(filepath).pipe(res);
+});
+
+// ── DELETE /diagnostics/backups/:filename — delete a backup file ─────────────
+router.delete("/diagnostics/backups/:filename", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { filename } = req.params;
+  if (!/^backup-[\dT\-]+\.json$/.test(filename)) {
+    res.status(400).json({ error: "Invalid filename" }); return;
+  }
+  const filepath = path.join(BACKUP_DIR, filename);
+  if (!fs.existsSync(filepath)) { res.status(404).json({ error: "Not found" }); return; }
+  fs.unlinkSync(filepath);
+  res.json({ ok: true });
 });
 
 export default router;

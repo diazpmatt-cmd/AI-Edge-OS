@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Database backups (large data files — download via the Diagnostics UI)
+artifacts/api-server/backups/*.json

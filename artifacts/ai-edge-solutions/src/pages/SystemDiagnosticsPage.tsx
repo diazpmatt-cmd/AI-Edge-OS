@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -57,6 +58,12 @@ type LogEntry = {
 };
 
 type LogsData = { logs: LogEntry[]; total: number };
+
+type BackupItem = { filename: string; sizeBytes: number; createdAt: string };
+type BackupResult = {
+  ok: boolean; filename: string; totalRows: number;
+  rowCounts: Record<string, number>; exportedAt: string; tableNames: string[];
+};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -142,6 +149,7 @@ function secsLeft(ts: string): number {
 
 export default function SystemDiagnosticsPage() {
   const authFetch = useApiFetch();
+  const { getToken } = useAuth();
   const qc = useQueryClient();
 
   const [logTab, setLogTab] = useState("all");
@@ -149,6 +157,10 @@ export default function SystemDiagnosticsPage() {
   const [newestLogId, setNewestLogId] = useState<string | null>(null);
   const [, setTick] = useState(0); // forces re-render for countdown display
   const logsRef = useRef<HTMLDivElement>(null);
+  const [showRestore, setShowRestore] = useState(false);
+  const [lastBackup, setLastBackup] = useState<BackupResult | null>(null);
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   // Re-render every second so countdown timers stay live
   useEffect(() => {
@@ -283,7 +295,49 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Generate failed"),
   });
 
-  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending || regenQueueMut.isPending || clearQueueDiag.isPending || forceGenerateMut.isPending;
+  // ── Backup queries & mutations ──
+  const { data: backupsData, refetch: refetchBackups } = useQuery<{ backups: BackupItem[] }>({
+    queryKey: ["db_backups"],
+    queryFn: () => authFetch<{ backups: BackupItem[] }>("/diagnostics/backups"),
+    staleTime: 10_000,
+  });
+
+  const createBackupMut = useMutation({
+    mutationFn: () => authFetch<BackupResult>("/diagnostics/db-backup", { method: "POST" }),
+    onSuccess: (d) => {
+      setLastBackup(d);
+      toast.success(`Backup saved: ${d.filename} (${d.totalRows.toLocaleString()} rows)`);
+      refetchBackups();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Backup failed"),
+  });
+
+  const deleteBackupMut = useMutation({
+    mutationFn: (filename: string) => authFetch<{ ok: boolean }>(`/diagnostics/backups/${encodeURIComponent(filename)}`, { method: "DELETE" }),
+    onSuccess: () => { toast.success("Backup deleted"); refetchBackups(); },
+    onError: (e: any) => toast.error(e?.message ?? "Delete failed"),
+  });
+
+  const downloadBackup = async (filename: string) => {
+    try {
+      const token = await getToken().catch(() => null);
+      const res = await fetch(`${BASE}/api/diagnostics/backups/${encodeURIComponent(filename)}`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { toast.error("Download failed"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Download failed");
+    }
+  };
+
+  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending || regenQueueMut.isPending || clearQueueDiag.isPending || forceGenerateMut.isPending || createBackupMut.isPending;
 
   const SECTION_STYLE: React.CSSProperties = {
     background: "rgba(11,22,41,0.7)",
@@ -1043,6 +1097,125 @@ export default function SystemDiagnosticsPage() {
         ) : (
           <div style={{ color: "#334155", fontSize: 12 }}>Loading content performance…</div>
         )}
+      </div>
+
+      {/* ── Section 9: Database Backup ── */}
+      <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 12, padding: "20px 24px", marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#FFFFFF", marginBottom: 4 }}>Section 9 — Database Backup</div>
+        <div style={{ fontSize: 11, color: "#64748B", marginBottom: 18 }}>Export all database tables to a timestamped JSON file. Backups are stored on the server and can be downloaded locally.</div>
+
+        {/* ── Export Button Row ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+          <button
+            onClick={() => createBackupMut.mutate()}
+            disabled={createBackupMut.isPending}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: createBackupMut.isPending ? "rgba(0,174,239,0.3)" : "linear-gradient(135deg,#00AEEF,#0076A8)",
+              color: "#fff", border: "none", borderRadius: 8, padding: "11px 22px",
+              fontSize: 14, fontWeight: 700, cursor: createBackupMut.isPending ? "not-allowed" : "pointer",
+              boxShadow: createBackupMut.isPending ? "none" : "0 4px 16px rgba(0,174,239,0.35)",
+              transition: "all 0.2s",
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{createBackupMut.isPending ? "⏳" : "💾"}</span>
+            {createBackupMut.isPending ? "Exporting…" : "Export Database Backup"}
+          </button>
+
+          {lastBackup && (
+            <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
+              <span style={{ color: "#10B981", fontWeight: 700 }}>✓ Last export:</span>{" "}
+              {new Date(lastBackup.exportedAt).toLocaleString()} &nbsp;·&nbsp;
+              <span style={{ color: "#00AEEF" }}>{lastBackup.totalRows.toLocaleString()} rows</span> across {lastBackup.tableNames.length} tables
+            </div>
+          )}
+        </div>
+
+        {/* ── Backup File List ── */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              Saved Backups ({backupsData?.backups?.length ?? 0})
+            </div>
+          </div>
+
+          {!backupsData || backupsData.backups.length === 0 ? (
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "14px 16px", fontSize: 12, color: "#475569", textAlign: "center" }}>
+              No backups yet — click "Export Database Backup" to create your first one.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {backupsData.backups.map((b) => {
+                const kb = (b.sizeBytes / 1024).toFixed(1);
+                const mb = (b.sizeBytes / 1024 / 1024).toFixed(2);
+                const sizeLabel = b.sizeBytes > 1024 * 1024 ? `${mb} MB` : `${kb} KB`;
+                return (
+                  <div key={b.filename} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ fontSize: 16 }}>🗄️</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.filename}</div>
+                      <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                        {new Date(b.createdAt).toLocaleString()} &nbsp;·&nbsp; {sizeLabel}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => downloadBackup(b.filename)}
+                      style={{ background: "rgba(0,174,239,0.12)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      ⬇ Download
+                    </button>
+                    <button
+                      onClick={() => { if (confirm(`Delete ${b.filename}?`)) deleteBackupMut.mutate(b.filename); }}
+                      disabled={deleteBackupMut.isPending}
+                      style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}
+                    >
+                      🗑
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Restore Instructions ── */}
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 16 }}>
+          <button
+            onClick={() => setShowRestore(r => !r)}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", color: "#94A3B8", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: showRestore ? 14 : 0 }}
+          >
+            <span style={{ fontSize: 16 }}>📋</span>
+            Restore Instructions
+            <span style={{ fontSize: 10, marginLeft: 4 }}>{showRestore ? "▲" : "▼"}</span>
+          </button>
+
+          {showRestore && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, color: "#94A3B8", lineHeight: 1.7 }}>
+              <div style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontWeight: 700, color: "#10B981", marginBottom: 6 }}>Step 1 — Download the backup file</div>
+                Click the <strong style={{ color: "#E2E8F0" }}>⬇ Download</strong> button next to any backup to save the JSON file locally.
+              </div>
+              <div style={{ background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontWeight: 700, color: "#00AEEF", marginBottom: 6 }}>Step 2 — Open the Replit Shell</div>
+                In the Replit editor, open the <strong style={{ color: "#E2E8F0" }}>Shell</strong> tab (bottom panel).
+              </div>
+              <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontWeight: 700, color: "#F59E0B", marginBottom: 6 }}>Step 3 — Run the restore script</div>
+                <div style={{ fontFamily: "monospace", background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "8px 12px", color: "#E2E8F0", fontSize: 11, marginBottom: 6 }}>
+                  node artifacts/api-server/scripts/restore-backup.js &lt;backup-file.json&gt;
+                </div>
+                The script reads each table from the JSON and re-inserts all rows using <code style={{ color: "#00AEEF" }}>INSERT … ON CONFLICT DO NOTHING</code> — safe to run on an existing database without wiping data.
+              </div>
+              <div style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontWeight: 700, color: "#8B5CF6", marginBottom: 6 }}>Step 4 — Verify</div>
+                Return to System Diagnostics and check the Section 1 platform health and Section 8 content performance counts to confirm data is restored correctly.
+              </div>
+              <div style={{ fontSize: 11, color: "#475569", paddingTop: 4 }}>
+                💡 <strong style={{ color: "#64748B" }}>Tip:</strong> Run a fresh backup immediately after any major feature deployment. Backups include all tables: social connections, posts, content engine settings, image assets, keywords, leads, articles, and more.
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
     </AppShell>

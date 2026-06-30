@@ -72,11 +72,14 @@ router.get("/auto-content/settings", async (req, res) => {
     return;
   }
 
+  const parsedAreas = parseJson<string[]>(row.serviceAreas, []);
+  const parsedTopics = parseJson<string[]>(row.topics, []);
+
   res.json({
     clientName: row.clientName,
     industry: row.industry ?? "pest_control",
-    serviceAreas: parseJson<string[]>(row.serviceAreas, []),
-    topics: parseJson<string[]>(row.topics, []),
+    serviceAreas: parsedAreas.length ? parsedAreas : DEFAULT_SERVICE_AREAS,
+    topics: parsedTopics.length ? parsedTopics : DEFAULT_TOPICS,
     frequency: row.frequency,
     postingTimes: parseJson<string[]>(row.postingTimes, ["08:00", "12:00", "17:00"]),
     platforms: parseJson<string[]>(row.platforms, ["facebook"]),
@@ -207,10 +210,54 @@ router.post("/auto-content/generate", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const {
-    clientName, industry, serviceAreas, topics, frequency, postingTimes, platforms,
-    approvalMode, ctaText, ctaPreference, toneStyle, postAngles,
+    clientName: bodyClientName, industry: bodyIndustry,
+    serviceAreas: bodyServiceAreas, topics: bodyTopics,
+    frequency: bodyFrequency, postingTimes: bodyPostingTimes, platforms: bodyPlatforms,
+    approvalMode: bodyApprovalMode, ctaText: bodyCtaText, ctaPreference: bodyCtaPreference,
+    toneStyle: bodyToneStyle, postAngles: bodyPostAngles,
     usedCombos: passedUsedCombos, count,
   } = req.body;
+
+  // If frontend sent empty arrays, fall back to persisted DB settings so that
+  // a poisoned/blank row never blocks generation.
+  let serviceAreas = bodyServiceAreas as string[] | undefined;
+  let topics = bodyTopics as string[] | undefined;
+  let clientName = bodyClientName;
+  let industry = bodyIndustry;
+  let frequency = bodyFrequency;
+  let postingTimes = bodyPostingTimes;
+  let platforms = bodyPlatforms;
+  let approvalMode = bodyApprovalMode;
+  let ctaText = bodyCtaText;
+  let ctaPreference = bodyCtaPreference;
+  let toneStyle = bodyToneStyle;
+  let postAngles = bodyPostAngles;
+
+  if (!serviceAreas?.length || !topics?.length) {
+    const [dbRow] = await db.select().from(autoContentSettingsTable)
+      .where(eq(autoContentSettingsTable.userId, userId));
+    if (dbRow) {
+      const dbAreas = parseJson<string[]>(dbRow.serviceAreas, []);
+      const dbTopics = parseJson<string[]>(dbRow.topics, []);
+      if (!serviceAreas?.length) serviceAreas = dbAreas.length ? dbAreas : DEFAULT_SERVICE_AREAS;
+      if (!topics?.length) topics = dbTopics.length ? dbTopics : DEFAULT_TOPICS;
+      // Fill other fields from DB if body was also missing them
+      if (!clientName) clientName = dbRow.clientName;
+      if (!industry) industry = dbRow.industry ?? "pest_control";
+      if (!frequency) frequency = dbRow.frequency;
+      if (!postingTimes?.length) postingTimes = parseJson<string[]>(dbRow.postingTimes, ["08:00", "12:00", "17:00"]);
+      if (!platforms?.length) platforms = parseJson<string[]>(dbRow.platforms, ["facebook"]);
+      if (!approvalMode) approvalMode = dbRow.approvalMode;
+      if (!ctaText) ctaText = dbRow.ctaText;
+      if (!ctaPreference) ctaPreference = dbRow.ctaPreference ?? "call_now";
+      if (!toneStyle?.length) toneStyle = parseJson<string[]>(dbRow.toneStyle, DEFAULT_TONE);
+      if (!postAngles?.length) postAngles = parseJson<string[]>(dbRow.postAngles, DEFAULT_ANGLES);
+    } else {
+      // No row at all — use hardcoded defaults
+      if (!serviceAreas?.length) serviceAreas = DEFAULT_SERVICE_AREAS;
+      if (!topics?.length) topics = DEFAULT_TOPICS;
+    }
+  }
 
   if (!serviceAreas?.length || !topics?.length) {
     res.status(400).json({ error: "At least one service area and one topic required." });
@@ -400,10 +447,12 @@ router.post("/auto-content/pause", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   await db.insert(autoContentSettingsTable).values({
-    userId, clientName: "Bed Bugs & Beyond", serviceAreas: "[]", topics: "[]",
+    userId, clientName: "Bed Bugs & Beyond",
+    serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
+    topics: JSON.stringify(DEFAULT_TOPICS),
     frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook"]', approvalMode: "auto_schedule",
-    ctaText: "Call Now", usedCombos: "[]", enginePaused: "true",
+    platforms: '["facebook","google"]', approvalMode: "auto_schedule",
+    ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "true",
   }).onConflictDoUpdate({
     target: [autoContentSettingsTable.userId],
     set: { enginePaused: "true", updatedAt: new Date() },
@@ -419,10 +468,12 @@ router.post("/auto-content/resume", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   await db.insert(autoContentSettingsTable).values({
-    userId, clientName: "Bed Bugs & Beyond", serviceAreas: "[]", topics: "[]",
+    userId, clientName: "Bed Bugs & Beyond",
+    serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
+    topics: JSON.stringify(DEFAULT_TOPICS),
     frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook"]', approvalMode: "auto_schedule",
-    ctaText: "Call Now", usedCombos: "[]", enginePaused: "false",
+    platforms: '["facebook","google"]', approvalMode: "auto_schedule",
+    ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "false",
   }).onConflictDoUpdate({
     target: [autoContentSettingsTable.userId],
     set: { enginePaused: "false", updatedAt: new Date() },

@@ -1,0 +1,68 @@
+Let me read the current telnyx.ts and check what's available for the Telnyx REST API:
+
+
+3 actions
+Let me read the rest of telnyx.ts and the leads schema + diagnostics stats pattern simultaneously:
+
+
+4 actions
+I have everything I need. Now I'll write the complete updated telnyx.ts with all text-back logic, then add the diagnostics UI:
+
+
+2 actions
+Now let me add the Missed Call Recovery section to the diagnostics page. First, find the exact insertion points:
+
+
+2 actions
+Now I'll make all three edits to the diagnostics page in one shot — query, mutations, and UI section:
+
+
+3 actions
+Now I'll make all three edits to the diagnostics page in parallel:
+
+
+2 actions
+Now add the test mutations and the JSX section in parallel:
+
+
+2 actions
+Now add the Missed Call Recovery JSX section right after the Voice Receptionist section:
+
+
+2 actions
+Now restart both servers and run tests in parallel:
+
+
+4 actions
+Let me verify all the new endpoints work:
+
+
+3 actions
+All tests pass. Let me verify the dedup logic actually works for successful sends, check for the TELNYX_API_KEY secret, and then wrap up:
+
+
+2 actions
+Everything is verified and working. Let me write the commit message and request the Telnyx API key:
+
+
+3 actions
+Missed Call Text-Back V1 is fully built and tested. Here's a summary of everything that was done:
+
+Backend — artifacts/api-server/src/routes/telnyx.ts
+
+POST /telnyx/webhook — now sends an outbound SMS after every missed call. Includes a 15-minute dedup guard (hasRecentTextBack()) so the same caller never gets spammed. Fails gracefully if TELNYX_API_KEY is missing — logs a warning and writes telnyx_textback_failed to DB without crashing.
+POST /telnyx/sms — upgraded to parse digit replies. 1 → quote_request, 2 → appointment_request, 3 → emergency_request. Non-digit messages fall through as generic SMS leads.
+GET /telnyx/textback-stats — returns live counts: sent, failed, missed calls, quote/appt/emergency requests, response rate.
+POST /telnyx/test-textback — simulates a missed call + text-back. Supports skipDedup: true for force-testing, otherwise respects the 15-min window.
+POST /telnyx/test-textback-reply — simulates a customer replying 1, 2, or 3.
+Frontend — System Diagnostics Page
+
+New Missed Call Recovery — Text-Back V1 section with:
+
+8-stat grid: Missed Calls · Text-Backs Sent · Failed Sends · Response Rate · Quotes · Appointments · Emergencies · Total Replies
+Two send buttons: dedup-aware and force-send
+Three reply simulators (1/2/3)
+Flow reference card
+One thing needed to go live: TELNYX_API_KEY must be added as a secret. All the logic is in place — once the key is set, the webhook will start firing real outbound SMS on every missed call automatically.
+
+You can set it in the Secrets tab in Replit (the lock icon), or I can prompt you for it now if you're ready.

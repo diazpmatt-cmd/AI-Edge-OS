@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 type Settings = {
   clientName: string;
+  industry: string;
   serviceAreas: string[];
   topics: string[];
   frequency: string;
@@ -14,73 +17,125 @@ type Settings = {
   platforms: string[];
   approvalMode: string;
   ctaText: string;
+  ctaPreference: string;
+  toneStyle: string[];
+  postAngles: string[];
+  autoGenerateEnabled: boolean;
+  enginePaused: boolean;
   usedCombos: string[];
+  lastGeneratedAt: string | null;
 };
 
 type GeneratedPost = {
-  id: string;
-  city: string;
-  topic: string;
-  caption: string;
-  hashtags: string[];
-  imagePrompt: string;
-  scheduledAt: string;
-  status: string;
-  aiError?: string | null;
+  id: string; city: string; topic: string; angle: string;
+  caption: string; hashtags: string[]; imagePrompt: string;
+  scheduledAt: string; status: string; aiError?: string | null;
 };
 
 type GenerateResult = {
-  ok: boolean;
-  created: number;
-  posts: GeneratedPost[];
-  updatedUsedCombos: string[];
+  ok: boolean; created: number; posts: GeneratedPost[]; updatedUsedCombos: string[];
 };
+
+type QueuePost = {
+  id: string; city: string | null; topic: string | null; angle: string | null;
+  caption: string; platforms: string[]; scheduledAt: string | null; status: string;
+};
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const FREQUENCY_OPTIONS = [
   { value: "every_day",       label: "Every day",        desc: "14 posts over 14 days" },
   { value: "every_other_day", label: "Every other day",  desc: "7 posts over 14 days"  },
-  { value: "3x_week",         label: "3 times per week", desc: "6 posts over 14 days"  },
-];
-
-const APPROVAL_OPTIONS = [
-  { value: "draft_only",    label: "Draft only",      desc: "All posts saved as drafts for review" },
-  { value: "auto_schedule", label: "Auto schedule",   desc: "Posts saved as scheduled (recommended)" },
+  { value: "3x_week",         label: "3× per week",      desc: "6 posts over 14 days"  },
 ];
 
 const PLATFORM_OPTIONS = [
-  { value: "facebook",  label: "Facebook",                icon: "f",  color: "#6B9EFF" },
-  { value: "instagram", label: "Instagram",               icon: "✦",  color: "#FF6B9D" },
-  { value: "google",    label: "Google Business Profile", icon: "G",  color: "#EA4335" },
+  { value: "facebook",         label: "Facebook",  icon: "f", color: "#6B9EFF" },
+  { value: "instagram",        label: "Instagram", icon: "✦", color: "#FF6B9D" },
+  { value: "google",           label: "Google",    icon: "G", color: "#EA4335" },
 ];
 
-const DEFAULT_TIMES = ["08:00", "12:00", "17:00"];
+const APPROVAL_OPTIONS = [
+  { value: "auto_schedule", label: "Auto schedule", desc: "Posts saved as scheduled (recommended)" },
+  { value: "draft_only",    label: "Draft only",    desc: "All posts saved as drafts for review" },
+];
 
-function formatTime(t: string) {
+const TONE_OPTIONS = [
+  { value: "professional",   label: "Professional" },
+  { value: "educational",    label: "Educational" },
+  { value: "urgent",         label: "Urgent" },
+  { value: "friendly",       label: "Friendly" },
+  { value: "conversational", label: "Conversational" },
+  { value: "humorous",       label: "Humorous" },
+];
+
+const ANGLE_OPTIONS = [
+  { value: "educational", label: "Educational", desc: "Teach about the pest/service" },
+  { value: "warning",     label: "Warning",     desc: "Alert about risks & dangers" },
+  { value: "promotional", label: "Promotional", desc: "Highlight offers or deals" },
+  { value: "seasonal",    label: "Seasonal",    desc: "Tie to season or weather" },
+  { value: "faq",         label: "FAQ",         desc: "Answer common questions" },
+  { value: "testimonial", label: "Testimonial", desc: "Social proof & reviews" },
+  { value: "prevention",  label: "Prevention",  desc: "Tips to avoid problems" },
+  { value: "emergency",   label: "Emergency",   desc: "Urgent call-to-action" },
+];
+
+const INDUSTRY_OPTIONS = [
+  { value: "pest_control",  label: "Pest Control" },
+  { value: "hvac",          label: "HVAC" },
+  { value: "plumbing",      label: "Plumbing" },
+  { value: "cleaning",      label: "Cleaning" },
+  { value: "landscaping",   label: "Landscaping" },
+  { value: "electrical",    label: "Electrical" },
+  { value: "roofing",       label: "Roofing" },
+];
+
+const CTA_OPTIONS = [
+  { value: "call_now",   label: "Call Now",   desc: "Drive phone calls" },
+  { value: "learn_more", label: "Learn More", desc: "Drive website visits" },
+  { value: "book_now",   label: "Book Now",   desc: "Drive appointments" },
+];
+
+const DEFAULT_SETTINGS: Settings = {
+  clientName: "Bed Bugs & Beyond", industry: "pest_control",
+  serviceAreas: [], topics: [], frequency: "every_other_day",
+  postingTimes: ["08:00", "12:00", "17:00"], platforms: ["facebook", "google"],
+  approvalMode: "auto_schedule", ctaText: "Call Now \u2014 (251) 324-9090",
+  ctaPreference: "call_now", toneStyle: ["professional", "friendly"],
+  postAngles: ["educational", "warning", "promotional", "seasonal", "faq", "prevention"],
+  autoGenerateEnabled: true, enginePaused: false, usedCombos: [], lastGeneratedAt: null,
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hr = h % 12 || 12;
-  return `${hr}:${m.toString().padStart(2, "0")} ${ampm}`;
+  return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
-function formatScheduled(iso: string) {
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
   return new Date(iso).toLocaleString(undefined, {
     weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
 }
 
-function TagList({
-  items, onRemove, onAdd, placeholder,
-}: {
-  items: string[];
-  onRemove: (i: number) => void;
-  onAdd: (val: string) => void;
-  placeholder: string;
+function fmtAge(iso: string | null) {
+  if (!iso) return null;
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function TagList({ items, onRemove, onAdd, placeholder }: {
+  items: string[]; onRemove: (i: number) => void; onAdd: (v: string) => void; placeholder: string;
 }) {
   const [input, setInput] = useState("");
-  const add = () => {
-    const v = input.trim();
-    if (v && !items.includes(v)) { onAdd(v); setInput(""); }
-  };
+  const add = () => { const v = input.trim(); if (v && !items.includes(v)) { onAdd(v); setInput(""); } };
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -94,145 +149,146 @@ function TagList({
             <button onClick={() => onRemove(i)} style={{
               background: "none", border: "none", cursor: "pointer",
               color: "rgba(200,232,255,0.5)", fontSize: 14, lineHeight: 1, padding: 0,
-              marginLeft: 2,
             }}>×</button>
           </span>
         ))}
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && add()}
-          placeholder={placeholder}
-          style={{
-            flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 7, padding: "7px 12px", fontSize: 13, color: "#E2E8F0", outline: "none",
-          }}
-        />
-        <button onClick={add} style={{
-          background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)",
-          borderRadius: 7, padding: "7px 14px", fontSize: 13, color: "#00AEEF", cursor: "pointer",
-          fontWeight: 600,
-        }}>+ Add</button>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && add()} placeholder={placeholder}
+          style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, padding: "7px 12px", fontSize: 13, color: "#E2E8F0", outline: "none" }} />
+        <button onClick={add} style={{ background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 7, padding: "7px 14px", fontSize: 13, color: "#00AEEF", cursor: "pointer", fontWeight: 600 }}>+ Add</button>
       </div>
     </div>
   );
 }
 
+function AnglePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+      background: active ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.04)",
+      border: `1px solid ${active ? "rgba(0,174,239,0.4)" : "rgba(255,255,255,0.08)"}`,
+      color: active ? "#00AEEF" : "#475569",
+    }}>{label}</button>
+  );
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  scheduled: "#00AEEF", draft: "#94A3B8", published: "#10B981", failed: "#EF4444", pending: "#F59E0B",
+};
+
+const ANGLE_COLOR: Record<string, string> = {
+  educational: "#6B9EFF", warning: "#F59E0B", promotional: "#10B981", seasonal: "#A78BFA",
+  faq: "#00AEEF", testimonial: "#FF6B9D", prevention: "#34D399", emergency: "#EF4444",
+};
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+
 export default function AutoContentEnginePage() {
   const authFetch = useApiFetch();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
-
-  const [settings, setSettings] = useState<Settings>({
-    clientName: "Bed Bugs & Beyond",
-    serviceAreas: [],
-    topics: [],
-    frequency: "every_other_day",
-    postingTimes: [...DEFAULT_TIMES],
-    platforms: ["facebook"],
-    approvalMode: "auto_schedule",
-    ctaText: "Call Now \u2014 (251) 324-9090",
-    usedCombos: [],
-  });
-
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [newTime, setNewTime] = useState("08:00");
-  const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
 
   const { isLoading } = useQuery<Settings>({
     queryKey: ["auto-content-settings"],
     queryFn: () => authFetch<Settings>("/auto-content/settings"),
-    onSuccess: (data) => setSettings(data),
+    onSuccess: (d: Settings) => setSettings(d),
   } as any);
 
-  const saveMut = useMutation({
-    mutationFn: (s: Settings) => authFetch("/auto-content/settings", {
-      method: "PUT",
-      body: JSON.stringify(s),
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["auto-content-settings"] });
-      toast.success("Settings saved.");
-    },
-    onError: () => toast.error("Failed to save settings."),
+  const queueQuery = useQuery<{ posts: QueuePost[]; total: number }>({
+    queryKey: ["auto-content-queue"],
+    queryFn: () => authFetch<{ posts: QueuePost[]; total: number }>("/auto-content/queue?limit=12"),
+    refetchInterval: 30000,
   });
 
   const set = <K extends keyof Settings>(key: K, val: Settings[K]) =>
     setSettings(prev => ({ ...prev, [key]: val }));
 
-  const togglePlatform = (p: string) =>
-    set("platforms", settings.platforms.includes(p)
-      ? settings.platforms.filter(x => x !== p)
-      : [...settings.platforms, p]);
-
-  const addTime = () => {
-    if (newTime && !settings.postingTimes.includes(newTime)) {
-      const sorted = [...settings.postingTimes, newTime].sort();
-      set("postingTimes", sorted);
-    }
+  const toggleArr = (key: "platforms" | "toneStyle" | "postAngles", v: string) => {
+    const arr = settings[key] as string[];
+    set(key as any, arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
   };
 
-  const removeTime = (t: string) =>
-    set("postingTimes", settings.postingTimes.filter(x => x !== t));
+  const saveMut = useMutation({
+    mutationFn: (s: Settings) => authFetch("/auto-content/settings", { method: "PUT", body: JSON.stringify(s) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["auto-content-settings"] }); toast.success("Settings saved."); },
+    onError: () => toast.error("Failed to save settings."),
+  });
 
-  const handleGenerate = async () => {
-    if (!settings.serviceAreas.length || !settings.topics.length) {
-      toast.error("Add at least one service area and one topic before generating.");
-      return;
-    }
-    if (!settings.platforms.length) {
-      toast.error("Select at least one platform.");
-      return;
-    }
-    setGenerating(true);
-    setResult(null);
-    try {
-      const res = await authFetch<GenerateResult>("/auto-content/generate", {
-        method: "POST",
-        body: JSON.stringify(settings),
-      });
+  const generateMut = useMutation({
+    mutationFn: (payload: Settings & { count?: number }) =>
+      authFetch<GenerateResult>("/auto-content/generate", { method: "POST", body: JSON.stringify(payload) }),
+    onSuccess: (res, vars) => {
       setResult(res);
       setSettings(prev => ({ ...prev, usedCombos: res.updatedUsedCombos }));
       qc.invalidateQueries({ queryKey: ["social-posts"] });
-      toast.success(`${res.created} posts created in Publishing Center!`);
-    } catch (err: any) {
-      toast.error(err?.message ?? "Generation failed.");
-    } finally {
-      setGenerating(false);
-    }
-  };
+      qc.invalidateQueries({ queryKey: ["auto-content-queue"] });
+      const label = vars.count ? `${res.created} posts` : `${res.created} posts (14 days)`;
+      toast.success(`${label} created in Publishing Center!`);
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Generation failed."),
+  });
+
+  const clearQueueMut = useMutation({
+    mutationFn: () => authFetch("/auto-content/queue", { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["auto-content-queue"] }); toast.success("Queue cleared."); },
+    onError: () => toast.error("Failed to clear queue."),
+  });
+
+  const pauseMut = useMutation({
+    mutationFn: () => authFetch("/auto-content/pause", { method: "POST" }),
+    onSuccess: () => { setSettings(p => ({ ...p, enginePaused: true })); toast.success("Engine paused."); },
+  });
+
+  const resumeMut = useMutation({
+    mutationFn: () => authFetch("/auto-content/resume", { method: "POST" }),
+    onSuccess: () => { setSettings(p => ({ ...p, enginePaused: false })); toast.success("Engine resumed."); },
+  });
+
+  const anyPending = generateMut.isPending || clearQueueMut.isPending || pauseMut.isPending || resumeMut.isPending;
 
   const totalCombos = settings.serviceAreas.length * settings.topics.length;
   const usedCount = settings.usedCombos.length;
   const progressPct = totalCombos > 0 ? Math.min(100, Math.round((usedCount / totalCombos) * 100)) : 0;
+  const queueTotal = queueQuery.data?.total ?? 0;
+  const nextPost = queueQuery.data?.posts[0];
 
+  const cardStyle: React.CSSProperties = {
+    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: 14, padding: 20, marginBottom: 16,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase",
+    letterSpacing: "0.5px", marginBottom: 7, display: "block",
+  };
   const inputStyle: React.CSSProperties = {
     background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 7, padding: "9px 12px", fontSize: 13.5, color: "#E2E8F0", outline: "none",
     width: "100%", boxSizing: "border-box",
   };
-  const labelStyle: React.CSSProperties = {
-    fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px",
-    marginBottom: 6, display: "block",
+
+  const engineStatus = !settings.autoGenerateEnabled ? "disabled" : settings.enginePaused ? "paused" : "active";
+  const statusColors = {
+    active:   { dot: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.25)", label: "Active" },
+    paused:   { dot: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)",  label: "Paused" },
+    disabled: { dot: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)",    label: "Disabled" },
   };
-  const cardStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: 14, padding: 24, marginBottom: 20,
-  };
+  const sc = statusColors[engineStatus];
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px" }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: 28 }}>
+        {/* ── Header ── */}
+        <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: "#4A90D9", marginBottom: 6, fontWeight: 600, letterSpacing: "0.3px" }}>
-            <span
-              style={{ cursor: "pointer", opacity: 0.7 }}
-              onClick={() => navigate("/admin/social-publishing")}
-            >Publishing Center</span>
+            <span style={{ cursor: "pointer", opacity: 0.7 }} onClick={() => navigate("/admin/social-publishing")}>
+              Publishing Center
+            </span>
             <span style={{ margin: "0 6px", opacity: 0.4 }}>›</span>
             Auto Content Engine
           </div>
@@ -241,58 +297,141 @@ export default function AutoContentEnginePage() {
               <h1 style={{ fontSize: 26, fontWeight: 800, color: "#FFFFFF", margin: 0, letterSpacing: "-0.3px" }}>
                 🤖 Auto Content Engine
               </h1>
-              <p style={{ fontSize: 14, color: "#64748B", margin: "4px 0 0" }}>
-                Generate AI-written local posts from your service areas, pest topics, and schedule.
+              <p style={{ fontSize: 13.5, color: "#64748B", margin: "4px 0 0" }}>
+                AI-powered local posts — rotating city, topic, and angle automatically.
               </p>
             </div>
-            <button
-              onClick={() => saveMut.mutate(settings)}
-              disabled={saveMut.isPending}
-              style={{
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-                borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#CBD5E1",
-                cursor: "pointer", fontWeight: 600,
-              }}
-            >
-              {saveMut.isPending ? "Saving…" : "Save Settings"}
+            <button onClick={() => saveMut.mutate(settings)} disabled={saveMut.isPending}
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#CBD5E1", cursor: "pointer", fontWeight: 600 }}>
+              {saveMut.isPending ? "Saving…" : "💾 Save Settings"}
             </button>
+          </div>
+        </div>
+
+        {/* ── Engine Status Card ── */}
+        <div style={{
+          marginBottom: 24, borderRadius: 14, padding: "16px 20px",
+          background: sc.bg, border: `1px solid ${sc.border}`,
+          display: "flex", alignItems: "center", flexWrap: "wrap", gap: 16,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: sc.dot, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {sc.label}
+            </span>
+            <span style={{ fontSize: 13, color: "#94A3B8", marginLeft: 4 }}>— {settings.clientName}</span>
+          </div>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#E2E8F0" }}>{queueTotal}</div>
+              <div style={{ fontSize: 10.5, color: "#475569" }}>Queue Size</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>
+                {nextPost?.scheduledAt ? fmtDate(nextPost.scheduledAt) : "None scheduled"}
+              </div>
+              <div style={{ fontSize: 10.5, color: "#475569" }}>Next Post</div>
+            </div>
+            {settings.lastGeneratedAt && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#64748B" }}>{fmtAge(settings.lastGeneratedAt)}</div>
+                <div style={{ fontSize: 10.5, color: "#475569" }}>Last Generated</div>
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {engineStatus !== "paused" ? (
+              <button onClick={() => pauseMut.mutate()} disabled={anyPending}
+                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}>
+                ⏸ Pause
+              </button>
+            ) : (
+              <button onClick={() => resumeMut.mutate()} disabled={anyPending}
+                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}>
+                ▶ Resume
+              </button>
+            )}
           </div>
         </div>
 
         {isLoading ? (
           <div style={{ color: "#4A90D9", fontSize: 14, padding: "40px 0", textAlign: "center" }}>Loading settings…</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, alignItems: "start" }}>
 
-            {/* ── Left column: Settings ── */}
+            {/* ── LEFT: Settings Panel ── */}
             <div>
 
               {/* Client */}
               <div style={cardStyle}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0", marginBottom: 16 }}>Client</div>
-                <label style={labelStyle}>Business Name</label>
-                <input
-                  value={settings.clientName}
-                  onChange={e => set("clientName", e.target.value)}
-                  style={inputStyle}
-                  placeholder="e.g. Bed Bugs & Beyond"
-                />
-                <div style={{ marginTop: 12 }}>
-                  <label style={labelStyle}>Default CTA</label>
-                  <input
-                    value={settings.ctaText}
-                    onChange={e => set("ctaText", e.target.value)}
-                    style={inputStyle}
-                    placeholder="e.g. Call Now — (251) 324-9090"
-                  />
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 14 }}>Client Profile</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Business Name</label>
+                    <input value={settings.clientName} onChange={e => set("clientName", e.target.value)} style={inputStyle} placeholder="e.g. Bed Bugs & Beyond" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Industry</label>
+                    <select value={settings.industry} onChange={e => set("industry", e.target.value)}
+                      style={{ ...inputStyle, cursor: "pointer" }}>
+                      {INDUSTRY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Default CTA Text</label>
+                  <input value={settings.ctaText} onChange={e => set("ctaText", e.target.value)} style={inputStyle} placeholder="e.g. Call Now — (251) 324-9090" />
+                </div>
+              </div>
+
+              {/* Tone Style */}
+              <div style={cardStyle}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 12 }}>Tone Style</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {TONE_OPTIONS.map(t => {
+                    const active = settings.toneStyle.includes(t.value);
+                    return (
+                      <button key={t.value} onClick={() => toggleArr("toneStyle", t.value)} style={{
+                        padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                        background: active ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${active ? "rgba(0,174,239,0.35)" : "rgba(255,255,255,0.08)"}`,
+                        color: active ? "#00AEEF" : "#475569",
+                      }}>{active ? "✓ " : ""}{t.label}</button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CTA Preference */}
+              <div style={cardStyle}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 12 }}>CTA Preference</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {CTA_OPTIONS.map(o => {
+                    const active = settings.ctaPreference === o.value;
+                    return (
+                      <label key={o.value} style={{
+                        flex: "1 1 140px", display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer",
+                        background: active ? "rgba(0,174,239,0.08)" : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${active ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.06)"}`,
+                        borderRadius: 9, padding: "9px 12px",
+                      }}>
+                        <input type="radio" checked={active} onChange={() => set("ctaPreference", o.value)}
+                          style={{ marginTop: 2, accentColor: "#00AEEF" }} />
+                        <div>
+                          <div style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 600 }}>{o.label}</div>
+                          <div style={{ fontSize: 11, color: "#64748B" }}>{o.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Service Areas */}
               <div style={cardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0" }}>Service Areas</div>
-                  <span style={{ fontSize: 12, color: "#64748B" }}>{settings.serviceAreas.length} cities</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0" }}>Service Areas</div>
+                  <span style={{ fontSize: 11.5, color: "#64748B" }}>{settings.serviceAreas.length} cities</span>
                 </div>
                 <TagList
                   items={settings.serviceAreas}
@@ -304,9 +443,9 @@ export default function AutoContentEnginePage() {
 
               {/* Topics */}
               <div style={cardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0" }}>Service / Pest Topics</div>
-                  <span style={{ fontSize: 12, color: "#64748B" }}>{settings.topics.length} topics</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0" }}>Service / Pest Topics</div>
+                  <span style={{ fontSize: 11.5, color: "#64748B" }}>{settings.topics.length} topics</span>
                 </div>
                 <TagList
                   items={settings.topics}
@@ -316,36 +455,54 @@ export default function AutoContentEnginePage() {
                 />
               </div>
 
+              {/* Post Angles */}
+              <div style={cardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0" }}>Post Angles</div>
+                  <span style={{ fontSize: 11.5, color: "#64748B" }}>{settings.postAngles.length} active</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+                  {ANGLE_OPTIONS.map(a => {
+                    const active = settings.postAngles.includes(a.value);
+                    const col = ANGLE_COLOR[a.value] ?? "#94A3B8";
+                    return (
+                      <button key={a.value} onClick={() => toggleArr("postAngles", a.value)} style={{
+                        textAlign: "left", padding: "8px 12px", borderRadius: 9, cursor: "pointer",
+                        background: active ? `${col}14` : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${active ? `${col}44` : "rgba(255,255,255,0.07)"}`,
+                      }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: active ? col : "#475569", marginBottom: 2 }}>
+                          {active ? "✓ " : ""}{a.label}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "#334155" }}>{a.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Schedule */}
               <div style={cardStyle}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0", marginBottom: 16 }}>Posting Schedule</div>
-
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 14 }}>Posting Schedule</div>
                 <label style={labelStyle}>Frequency</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
                   {FREQUENCY_OPTIONS.map(opt => (
                     <label key={opt.value} style={{
                       display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
                       background: settings.frequency === opt.value ? "rgba(0,174,239,0.08)" : "rgba(255,255,255,0.02)",
                       border: `1px solid ${settings.frequency === opt.value ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.06)"}`,
-                      borderRadius: 9, padding: "10px 14px",
+                      borderRadius: 9, padding: "9px 14px",
                     }}>
-                      <input
-                        type="radio"
-                        name="frequency"
-                        value={opt.value}
-                        checked={settings.frequency === opt.value}
-                        onChange={() => set("frequency", opt.value)}
-                        style={{ marginTop: 2, accentColor: "#00AEEF" }}
-                      />
+                      <input type="radio" name="frequency" value={opt.value} checked={settings.frequency === opt.value}
+                        onChange={() => set("frequency", opt.value)} style={{ marginTop: 2, accentColor: "#00AEEF" }} />
                       <div>
-                        <div style={{ fontSize: 13.5, color: "#E2E8F0", fontWeight: 600 }}>{opt.label}</div>
-                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 1 }}>{opt.desc}</div>
+                        <div style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 600 }}>{opt.label}</div>
+                        <div style={{ fontSize: 11.5, color: "#64748B" }}>{opt.desc}</div>
                       </div>
                     </label>
                   ))}
                 </div>
-
-                <label style={labelStyle}>Posting Times (rotate in order)</label>
+                <label style={labelStyle}>Posting Times (rotated in order)</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                   {settings.postingTimes.map(t => (
                     <span key={t} style={{
@@ -353,57 +510,43 @@ export default function AutoContentEnginePage() {
                       background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.25)",
                       borderRadius: 20, padding: "5px 12px", fontSize: 13, color: "#00AEEF", fontWeight: 600,
                     }}>
-                      {formatTime(t)}
+                      {fmtTime(t)}
                       {settings.postingTimes.length > 1 && (
-                        <button onClick={() => removeTime(t)} style={{
-                          background: "none", border: "none", cursor: "pointer",
-                          color: "rgba(0,174,239,0.5)", fontSize: 15, lineHeight: 1, padding: 0,
-                        }}>×</button>
+                        <button onClick={() => set("postingTimes", settings.postingTimes.filter(x => x !== t))}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(0,174,239,0.5)", fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
                       )}
                     </span>
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="time"
-                    value={newTime}
-                    onChange={e => setNewTime(e.target.value)}
-                    style={{ ...inputStyle, width: "auto", flex: 1 }}
-                  />
-                  <button onClick={addTime} style={{
-                    background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)",
-                    borderRadius: 7, padding: "7px 14px", fontSize: 13, color: "#00AEEF", cursor: "pointer", fontWeight: 600,
-                  }}>+ Add Time</button>
+                  <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
+                    style={{ ...inputStyle, width: "auto", flex: 1 }} />
+                  <button onClick={() => {
+                    if (newTime && !settings.postingTimes.includes(newTime)) {
+                      set("postingTimes", [...settings.postingTimes, newTime].sort());
+                    }
+                  }} style={{ background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 7, padding: "7px 14px", fontSize: 13, color: "#00AEEF", cursor: "pointer", fontWeight: 600 }}>
+                    + Add Time
+                  </button>
                 </div>
               </div>
 
               {/* Platforms */}
               <div style={cardStyle}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0", marginBottom: 16 }}>Platforms</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 14 }}>Platforms</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {PLATFORM_OPTIONS.map(p => {
                     const active = settings.platforms.includes(p.value);
                     return (
-                      <button
-                        key={p.value}
-                        onClick={() => togglePlatform(p.value)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
-                          background: active ? `rgba(${p.color === "#6B9EFF" ? "107,158,255" : p.color === "#FF6B9D" ? "255,107,157" : "234,67,53"},0.12)` : "rgba(255,255,255,0.04)",
-                          border: `1px solid ${active ? p.color : "rgba(255,255,255,0.08)"}`,
-                          borderRadius: 10, cursor: "pointer",
-                          color: active ? p.color : "#64748B", fontSize: 13.5, fontWeight: 600,
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        <span style={{
-                          width: 22, height: 22, borderRadius: "50%",
-                          background: active ? `${p.color}22` : "rgba(255,255,255,0.06)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 11, fontWeight: 900, color: active ? p.color : "#64748B",
-                        }}>{p.icon}</span>
-                        {p.label}
-                        {active && <span style={{ fontSize: 12, opacity: 0.7 }}>✓</span>}
+                      <button key={p.value} onClick={() => toggleArr("platforms", p.value)} style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
+                        background: active ? `${p.color}20` : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${active ? p.color : "rgba(255,255,255,0.08)"}`,
+                        borderRadius: 10, cursor: "pointer",
+                        color: active ? p.color : "#64748B", fontSize: 13.5, fontWeight: 600,
+                      }}>
+                        <span style={{ width: 22, height: 22, borderRadius: "50%", background: active ? `${p.color}22` : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: active ? p.color : "#64748B" }}>{p.icon}</span>
+                        {p.label} {active && <span style={{ fontSize: 12, opacity: 0.7 }}>✓</span>}
                       </button>
                     );
                   })}
@@ -412,26 +555,20 @@ export default function AutoContentEnginePage() {
 
               {/* Approval Mode */}
               <div style={cardStyle}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0", marginBottom: 16 }}>Approval Mode</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 12 }}>Approval Mode</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {APPROVAL_OPTIONS.map(opt => (
                     <label key={opt.value} style={{
                       display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
                       background: settings.approvalMode === opt.value ? "rgba(0,174,239,0.08)" : "rgba(255,255,255,0.02)",
                       border: `1px solid ${settings.approvalMode === opt.value ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.06)"}`,
-                      borderRadius: 9, padding: "10px 14px",
+                      borderRadius: 9, padding: "9px 14px",
                     }}>
-                      <input
-                        type="radio"
-                        name="approvalMode"
-                        value={opt.value}
-                        checked={settings.approvalMode === opt.value}
-                        onChange={() => set("approvalMode", opt.value)}
-                        style={{ marginTop: 2, accentColor: "#00AEEF" }}
-                      />
+                      <input type="radio" name="approvalMode" value={opt.value} checked={settings.approvalMode === opt.value}
+                        onChange={() => set("approvalMode", opt.value)} style={{ marginTop: 2, accentColor: "#00AEEF" }} />
                       <div>
-                        <div style={{ fontSize: 13.5, color: "#E2E8F0", fontWeight: 600 }}>{opt.label}</div>
-                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 1 }}>{opt.desc}</div>
+                        <div style={{ fontSize: 13, color: "#E2E8F0", fontWeight: 600 }}>{opt.label}</div>
+                        <div style={{ fontSize: 11.5, color: "#64748B" }}>{opt.desc}</div>
                       </div>
                     </label>
                   ))}
@@ -440,154 +577,177 @@ export default function AutoContentEnginePage() {
 
             </div>
 
-            {/* ── Right column: Generate + stats ── */}
+            {/* ── RIGHT: Controls + Queue ── */}
             <div style={{ position: "sticky", top: 24 }}>
 
-              {/* Combo progress */}
-              <div style={{ ...cardStyle, marginBottom: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 10 }}>Combo Coverage</div>
-                <div style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>
+              {/* Combo Coverage */}
+              <div style={cardStyle}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginBottom: 8 }}>Combo Coverage</div>
+                <div style={{ fontSize: 11.5, color: "#64748B", marginBottom: 8 }}>
                   {usedCount} of {totalCombos} city × topic combinations used
                 </div>
-                <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 100, height: 6, overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%", borderRadius: 100,
-                    width: `${progressPct}%`,
-                    background: "linear-gradient(90deg, #00AEEF, #0070B8)",
-                    transition: "width 0.4s",
-                  }} />
+                <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 100, height: 5, overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: 100, width: `${progressPct}%`, background: "linear-gradient(90deg, #00AEEF, #0070B8)", transition: "width 0.4s" }} />
                 </div>
-                {totalCombos > 0 && (
-                  <div style={{ fontSize: 11, color: "#64748B", marginTop: 6 }}>
-                    {totalCombos - usedCount} remaining before cycle resets
+                {totalCombos > 0 && <div style={{ fontSize: 11, color: "#64748B", marginTop: 6 }}>{totalCombos - usedCount} remaining before cycle resets</div>}
+                {usedCount > 0 && (
+                  <button onClick={() => set("usedCombos", [])}
+                    style={{ marginTop: 8, background: "none", border: "none", cursor: "pointer", fontSize: 11.5, color: "#4A90D9", padding: 0, fontWeight: 600 }}>
+                    ↺ Reset combo history
+                  </button>
+                )}
+              </div>
+
+              {/* Manual Controls */}
+              <div style={{ ...cardStyle, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginBottom: 12 }}>Manual Controls</div>
+
+                <button
+                  onClick={() => generateMut.mutate({ ...settings, count: 5 })}
+                  disabled={generateMut.isPending || anyPending}
+                  style={{
+                    width: "100%", padding: "11px 0", marginBottom: 8,
+                    background: generateMut.isPending ? "rgba(0,174,239,0.15)" : "rgba(0,174,239,0.12)",
+                    border: "1px solid rgba(0,174,239,0.3)", borderRadius: 10,
+                    fontSize: 13.5, fontWeight: 700, color: "#00AEEF", cursor: generateMut.isPending ? "not-allowed" : "pointer",
+                  }}>
+                  {generateMut.isPending ? "⏳ Generating…" : "⚡ Generate Next 5 Posts"}
+                </button>
+
+                <button
+                  onClick={() => generateMut.mutate(settings)}
+                  disabled={generateMut.isPending || anyPending}
+                  style={{
+                    width: "100%", padding: "13px 0", marginBottom: 12,
+                    background: generateMut.isPending ? "rgba(0,174,239,0.2)" : "linear-gradient(135deg, #0070B8 0%, #00AEEF 100%)",
+                    border: "none", borderRadius: 10, cursor: generateMut.isPending ? "not-allowed" : "pointer",
+                    fontSize: 14, fontWeight: 800, color: "#FFFFFF",
+                    boxShadow: generateMut.isPending ? "none" : "0 3px 14px rgba(0,174,239,0.28)",
+                  }}>
+                  {generateMut.isPending ? "⏳ Generating…" : "⚡ Generate Next 14 Days"}
+                </button>
+
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10, display: "flex", gap: 8 }}>
+                  <button onClick={() => clearQueueMut.mutate()} disabled={anyPending}
+                    style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
+                    🗑 Clear Queue
+                  </button>
+                  {settings.enginePaused ? (
+                    <button onClick={() => resumeMut.mutate()} disabled={anyPending}
+                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                      ▶ Resume
+                    </button>
+                  ) : (
+                    <button onClick={() => pauseMut.mutate()} disabled={anyPending}
+                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#F59E0B" }}>
+                      ⏸ Pause
+                    </button>
+                  )}
+                </div>
+
+                <p style={{ fontSize: 11, color: "#475569", textAlign: "center", margin: "10px 0 0" }}>
+                  Posts saved as {settings.approvalMode === "draft_only" ? "drafts" : "scheduled"} · angles rotate automatically
+                </p>
+              </div>
+
+              {/* AI Queue Preview */}
+              <div style={{ ...cardStyle, marginBottom: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>AI Queue Preview</div>
+                  <span style={{ fontSize: 11, color: "#4A90D9", fontWeight: 600 }}>{queueTotal} queued</span>
+                </div>
+                {queueQuery.isLoading ? (
+                  <div style={{ fontSize: 12, color: "#475569", padding: "8px 0" }}>Loading…</div>
+                ) : !queueQuery.data?.posts.length ? (
+                  <div style={{ fontSize: 12, color: "#475569", padding: "8px 0", textAlign: "center" }}>
+                    No posts queued. Click Generate to fill the queue.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {queueQuery.data.posts.slice(0, 10).map(p => {
+                      const anglCol = ANGLE_COLOR[p.angle ?? ""] ?? "#94A3B8";
+                      return (
+                        <div key={p.id} style={{
+                          borderRadius: 9, padding: "8px 10px",
+                          background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                          display: "flex", flexDirection: "column", gap: 4,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                              {p.topic && <span style={{ fontSize: 11, fontWeight: 700, color: "#E2E8F0" }}>{p.topic}</span>}
+                              {p.city && <span style={{ fontSize: 11, color: "#64748B" }}>· {p.city.split(",")[0]}</span>}
+                              {p.angle && (
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 12, background: `${anglCol}18`, color: anglCol, border: `1px solid ${anglCol}33` }}>
+                                  {p.angle}
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 12, background: `${STATUS_COLOR[p.status] ?? "#94A3B8"}18`, color: STATUS_COLOR[p.status] ?? "#94A3B8" }}>
+                              {p.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 10.5, color: "#475569" }}>
+                            {p.scheduledAt ? fmtDate(p.scheduledAt) : "No time set"}
+                            {p.platforms.length > 0 && <span style={{ marginLeft: 8, color: "#334155" }}>· {p.platforms.join(", ")}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {queueTotal > 10 && (
+                      <div style={{ fontSize: 11, color: "#475569", textAlign: "center", padding: "4px 0" }}>
+                        +{queueTotal - 10} more in{" "}
+                        <span style={{ color: "#4A90D9", cursor: "pointer" }} onClick={() => navigate("/admin/social-publishing")}>
+                          Publishing Center
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
-                {usedCount > 0 && (
-                  <button
-                    onClick={() => set("usedCombos", [])}
-                    style={{
-                      marginTop: 10, background: "none", border: "none", cursor: "pointer",
-                      fontSize: 11.5, color: "#4A90D9", padding: 0, fontWeight: 600,
-                    }}
-                  >↺ Reset combo history</button>
-                )}
               </div>
 
-              {/* Generate button */}
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                style={{
-                  width: "100%", padding: "16px 0",
-                  background: generating
-                    ? "rgba(0,174,239,0.2)"
-                    : "linear-gradient(135deg, #0070B8 0%, #00AEEF 100%)",
-                  border: "none", borderRadius: 12, cursor: generating ? "not-allowed" : "pointer",
-                  fontSize: 15.5, fontWeight: 800, color: "#FFFFFF",
-                  letterSpacing: "-0.2px", marginBottom: 12,
-                  boxShadow: generating ? "none" : "0 4px 20px rgba(0,174,239,0.3)",
-                  transition: "all 0.2s",
-                }}
-              >
-                {generating ? "⏳ Generating…" : "⚡ Generate Next 14 Days"}
-              </button>
-
-              <p style={{ fontSize: 11.5, color: "#475569", textAlign: "center", margin: "0 0 20px" }}>
-                Creates {FREQUENCY_OPTIONS.find(f => f.value === settings.frequency)?.desc.split(" ")[0] ?? "?"} posts as{" "}
-                {settings.approvalMode === "draft_only" ? "drafts" : "scheduled"} in Publishing Center
-              </p>
-
-              {/* Info card */}
-              <div style={{
-                background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)",
-                borderRadius: 10, padding: "14px 16px", fontSize: 12.5, color: "#7DBFDF", lineHeight: 1.6,
-              }}>
-                <div style={{ fontWeight: 700, color: "#00AEEF", marginBottom: 6 }}>How it works</div>
-                AI generates unique captions for each city × topic combination. Posts are created with your scheduled times rotating automatically. Duplicate combos are avoided until all have been used, then the cycle resets.
-              </div>
             </div>
-
           </div>
         )}
 
         {/* ── Results ── */}
         {result && (
           <div style={{ marginTop: 32 }}>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: 20, flexWrap: "wrap", gap: 12,
-            }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
               <div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#FFFFFF" }}>
-                  ✅ {result.created} Posts Created
-                </div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#FFFFFF" }}>✅ {result.created} Posts Created</div>
                 <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>
-                  Saved to Publishing Center as{" "}
-                  <span style={{ color: "#00AEEF" }}>
-                    {result.posts[0]?.status === "draft" ? "drafts" : "scheduled posts"}
-                  </span>
+                  Saved as <span style={{ color: "#00AEEF" }}>{result.posts[0]?.status === "draft" ? "drafts" : "scheduled posts"}</span> in Publishing Center
                 </div>
               </div>
-              <button
-                onClick={() => navigate("/admin/social-publishing")}
-                style={{
-                  background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.3)",
-                  borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#00AEEF",
-                  cursor: "pointer", fontWeight: 700,
-                }}
-              >View in Publishing Center →</button>
+              <button onClick={() => navigate("/admin/social-publishing")}
+                style={{ background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.25)", borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#00AEEF", cursor: "pointer", fontWeight: 600 }}>
+                View in Publishing Center →
+              </button>
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {result.posts.map((post, i) => (
-                <div key={post.id ?? i} style={{
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
-                  borderRadius: 12, padding: "16px 20px",
-                  borderLeft: post.aiError ? "3px solid #F59E0B" : "3px solid rgba(0,174,239,0.4)",
-                }}>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{
-                      background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.3)",
-                      borderRadius: 5, padding: "2px 9px", fontSize: 11.5, color: "#00AEEF", fontWeight: 700,
-                    }}>{post.city}</span>
-                    <span style={{
-                      background: "rgba(192,192,192,0.08)", border: "1px solid rgba(192,192,192,0.15)",
-                      borderRadius: 5, padding: "2px 9px", fontSize: 11.5, color: "#C0C0C0", fontWeight: 600,
-                    }}>{post.topic}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 11.5, color: "#64748B" }}>
-                      {formatScheduled(post.scheduledAt)}
-                    </span>
-                    <span style={{
-                      background: post.status === "scheduled" ? "rgba(0,174,239,0.10)" : "rgba(148,163,184,0.10)",
-                      border: `1px solid ${post.status === "scheduled" ? "rgba(0,174,239,0.25)" : "rgba(148,163,184,0.2)"}`,
-                      borderRadius: 5, padding: "2px 8px", fontSize: 11, fontWeight: 700,
-                      color: post.status === "scheduled" ? "#00AEEF" : "#94A3B8",
-                      textTransform: "uppercase", letterSpacing: "0.3px",
-                    }}>{post.status}</span>
+              {result.posts.map((p, i) => {
+                const anglCol = ANGLE_COLOR[p.angle] ?? "#94A3B8";
+                return (
+                  <div key={p.id ?? i} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 12, background: `${anglCol}18`, color: anglCol, border: `1px solid ${anglCol}33` }}>{p.angle}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{p.topic}</span>
+                      <span style={{ fontSize: 12, color: "#64748B" }}>— {p.city}</span>
+                      <span style={{ marginLeft: "auto", fontSize: 11.5, color: "#64748B" }}>{fmtDate(p.scheduledAt)}</span>
+                      {p.aiError && <span style={{ fontSize: 10, color: "#F59E0B", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 10 }}>⚠ fallback</span>}
+                    </div>
+                    <p style={{ fontSize: 13, color: "#CBD5E1", margin: "0 0 8px", lineHeight: 1.5 }}>{p.caption}</p>
+                    {p.hashtags?.length > 0 && (
+                      <p style={{ fontSize: 11, color: "#4A90D9", margin: "0 0 6px" }}>{p.hashtags.join(" ")}</p>
+                    )}
+                    {p.imagePrompt && (
+                      <div style={{ fontSize: 11, color: "#475569", background: "rgba(255,255,255,0.03)", borderRadius: 7, padding: "6px 10px" }}>
+                        📸 {p.imagePrompt}
+                      </div>
+                    )}
                   </div>
-                  <p style={{ fontSize: 13, color: "#CBD5E1", margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                    {post.caption}
-                  </p>
-                  {post.hashtags?.length > 0 && (
-                    <p style={{ fontSize: 12, color: "#4A90D9", margin: "6px 0 0", lineHeight: 1.5 }}>
-                      {post.hashtags.join(" ")}
-                    </p>
-                  )}
-                  {post.imagePrompt && (
-                    <div style={{
-                      marginTop: 8, fontSize: 11.5, color: "#475569", fontStyle: "italic",
-                      borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 6,
-                    }}>
-                      📷 {post.imagePrompt}
-                    </div>
-                  )}
-                  {post.aiError && (
-                    <div style={{ marginTop: 6, fontSize: 11, color: "#F59E0B" }}>
-                      ⚠ Used fallback caption (AI error: {post.aiError})
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

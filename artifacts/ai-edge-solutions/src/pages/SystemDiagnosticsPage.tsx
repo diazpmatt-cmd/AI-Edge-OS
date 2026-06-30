@@ -38,8 +38,12 @@ type HealthData = {
     id: string; ts: string; platform: string; status: string; severity: string; message: string; caption: string;
   }>;
   aiEngine: {
-    active: boolean; clientName: string | null; frequency: string | null; platforms: string[];
-    scheduledCount: number; nextScheduledPost: string | null; totalPosts: number; lastUpdated: string | null;
+    active: boolean; clientName: string | null; industry: string | null;
+    frequency: string | null; platforms: string[]; toneStyle: string[]; postAngles: string[];
+    autoGenerateEnabled: boolean; enginePaused: boolean;
+    scheduledCount: number; draftCount: number;
+    nextScheduledPost: string | null; totalPosts: number;
+    lastGeneratedAt: string | null; lastUpdated: string | null;
   };
   checkedAt: string;
 };
@@ -217,7 +221,25 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Cache read failed"),
   });
 
-  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending;
+  const regenQueueMut = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: (d) => { toast.success(`Queue regenerated: ${d.created} posts created`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Regen failed"),
+  });
+
+  const clearQueueDiag = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean }>("/auto-content/queue", { method: "DELETE" }),
+    onSuccess: () => { toast.success("AI queue cleared."); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Clear failed"),
+  });
+
+  const forceGenerateMut = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({ count: 5 }) }),
+    onSuccess: (d) => { toast.success(`Generated ${d.created} posts now`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Generate failed"),
+  });
+
+  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending || regenQueueMut.isPending || clearQueueDiag.isPending || forceGenerateMut.isPending;
 
   const SECTION_STYLE: React.CSSProperties = {
     background: "rgba(11,22,41,0.7)",
@@ -720,49 +742,85 @@ export default function SystemDiagnosticsPage() {
       <div style={SECTION_STYLE}>
         <div style={SECTION_TITLE}><span>🤖</span> AI Engine Status</div>
         {health?.aiEngine ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-            {[
-              {
-                label: "Engine",
-                value: health.aiEngine.active ? "Active" : "Not Configured",
-                sub: health.aiEngine.clientName ?? "—",
-                color: health.aiEngine.active ? "#10B981" : "#475569",
-              },
-              {
-                label: "Schedule",
-                value: health.aiEngine.frequency?.replace(/_/g, " ") ?? "—",
-                sub: `${health.aiEngine.platforms.join(", ") || "no platforms"}`,
-                color: "#00AEEF",
-              },
-              {
-                label: "Queue Size",
-                value: String(health.aiEngine.scheduledCount),
-                sub: `${health.aiEngine.totalPosts} total posts`,
-                color: "#F59E0B",
-              },
-              {
-                label: "Next Scheduled",
-                value: health.aiEngine.nextScheduledPost ? fmtDate(health.aiEngine.nextScheduledPost) : "None",
-                sub: "upcoming post",
-                color: "#C0C0C0",
-              },
-              {
-                label: "Last Config Update",
-                value: health.aiEngine.lastUpdated ? fmtDate(health.aiEngine.lastUpdated) : "Never",
-                sub: "engine settings",
-                color: "#475569",
-              },
-            ].map(card => (
-              <div key={card.label} style={{
-                background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
-                borderRadius: 12, padding: "14px 16px",
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{card.label}</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: card.color, marginBottom: 3 }}>{card.value}</div>
-                <div style={{ fontSize: 10.5, color: "#334155" }}>{card.sub}</div>
-              </div>
-            ))}
-          </div>
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12, marginBottom: 14 }}>
+              {(() => {
+                const ae = health.aiEngine;
+                const status = !ae.active ? "Not Configured" : ae.enginePaused ? "Paused" : ae.autoGenerateEnabled ? "Active" : "Disabled";
+                const statusColor = !ae.active ? "#475569" : ae.enginePaused ? "#F59E0B" : ae.autoGenerateEnabled ? "#10B981" : "#EF4444";
+                return [
+                  {
+                    label: "Engine",
+                    value: status,
+                    sub: ae.clientName ? `${ae.clientName}${ae.industry ? ` · ${ae.industry.replace(/_/g, " ")}` : ""}` : "—",
+                    color: statusColor,
+                  },
+                  {
+                    label: "Schedule",
+                    value: ae.frequency?.replace(/_/g, " ") ?? "—",
+                    sub: ae.platforms.join(", ") || "no platforms",
+                    color: "#00AEEF",
+                  },
+                  {
+                    label: "Queue Size",
+                    value: String(ae.scheduledCount),
+                    sub: `${ae.draftCount} draft · ${ae.totalPosts} total`,
+                    color: "#F59E0B",
+                  },
+                  {
+                    label: "Next Scheduled",
+                    value: ae.nextScheduledPost ? fmtDate(ae.nextScheduledPost) : "None",
+                    sub: "upcoming post",
+                    color: "#C0C0C0",
+                  },
+                  {
+                    label: "Last Generated",
+                    value: ae.lastGeneratedAt ? fmtDate(ae.lastGeneratedAt) : "Never",
+                    sub: ae.postAngles.length ? `angles: ${ae.postAngles.slice(0, 3).join(", ")}…` : "no angles set",
+                    color: "#6B9EFF",
+                  },
+                  {
+                    label: "Tone Style",
+                    value: ae.toneStyle.length ? ae.toneStyle.join(", ") : "—",
+                    sub: ae.lastUpdated ? `Config updated ${fmtDate(ae.lastUpdated)}` : "engine settings",
+                    color: "#475569",
+                  },
+                ].map(card => (
+                  <div key={card.label} style={{
+                    background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 12, padding: "14px 16px",
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{card.label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: card.color, marginBottom: 3, wordBreak: "break-word" }}>{card.value}</div>
+                    <div style={{ fontSize: 10.5, color: "#334155" }}>{card.sub}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            {/* Diagnostics action buttons */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 14 }}>
+              {[
+                { label: "Regenerate Queue", icon: "🔄", color: "#00AEEF", action: () => regenQueueMut.mutate(), pending: regenQueueMut.isPending, desc: "Rebuild 14-day queue using current settings" },
+                { label: "Clear Queue",       icon: "🗑",  color: "#EF4444", action: () => clearQueueDiag.mutate(), pending: clearQueueDiag.isPending, desc: "Delete all scheduled & draft posts" },
+                { label: "Force Generate Now", icon: "⚡",  color: "#10B981", action: () => forceGenerateMut.mutate(), pending: forceGenerateMut.isPending, desc: "Generate 5 posts immediately" },
+              ].map(btn => (
+                <button key={btn.label} onClick={btn.action} disabled={btn.pending || anyMutPending}
+                  style={{
+                    flex: "1 1 160px", maxWidth: 200, padding: "11px 14px", borderRadius: 10, textAlign: "left",
+                    background: `${btn.color}11`, border: `1px solid ${btn.color}33`,
+                    cursor: (btn.pending || anyMutPending) ? "not-allowed" : "pointer",
+                    opacity: (btn.pending || anyMutPending) ? 0.5 : 1,
+                  }}>
+                  <div style={{ fontSize: 16, marginBottom: 4 }}>{btn.icon}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: btn.color, marginBottom: 2 }}>
+                    {btn.pending ? "Working…" : btn.label}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.3 }}>{btn.desc}</div>
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           <div style={{ color: "#334155", fontSize: 12 }}>Loading…</div>
         )}

@@ -163,8 +163,25 @@ router.get("/diagnostics/health", async (req, res) => {
     tiktok:         connHealth("tiktok"),
     youtube:        connHealth("youtube"),
     telnyx: {
-      status: (process.env.TELNYX_API_KEY ? "healthy" : "warning") as "healthy" | "warning" | "failed",
-      detail: process.env.TELNYX_API_KEY ? "API key configured" : "TELNYX_API_KEY secret not set",
+      status: ((): "healthy" | "warning" | "failed" => {
+        const missing: string[] = [];
+        if (!process.env.TELNYX_API_KEY)            missing.push("TELNYX_API_KEY");
+        if (!process.env.TELNYX_FROM_NUMBER)         missing.push("TELNYX_FROM_NUMBER");
+        if (!process.env.BUSINESS_FORWARD_NUMBER)    missing.push("BUSINESS_FORWARD_NUMBER");
+        if (missing.length === 3) return "failed";
+        if (missing.length > 0)  return "warning";
+        return "healthy";
+      })(),
+      detail: (() => {
+        const missing: string[] = [];
+        if (!process.env.TELNYX_API_KEY)            missing.push("TELNYX_API_KEY");
+        if (!process.env.TELNYX_FROM_NUMBER)         missing.push("TELNYX_FROM_NUMBER");
+        if (!process.env.BUSINESS_FORWARD_NUMBER)    missing.push("BUSINESS_FORWARD_NUMBER");
+        if (missing.length === 0) {
+          return `Configured — from ${process.env.TELNYX_FROM_NUMBER}, forwarding to ${process.env.BUSINESS_FORWARD_NUMBER}`;
+        }
+        return `Missing env vars: ${missing.join(", ")}`;
+      })(),
       connectedAt: null,
     },
   };

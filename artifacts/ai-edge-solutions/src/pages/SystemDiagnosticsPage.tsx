@@ -293,6 +293,28 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Generate failed"),
   });
 
+  const testVoiceCall = useMutation({
+    mutationFn: (selection: string) => authFetch<{ ok: boolean; call: any; followUp: any }>("/telnyx/test-voice-call", { method: "POST", body: JSON.stringify({ phone: "+15550000003", selection }) }),
+    onSuccess: (_, sel) => {
+      const labels: Record<string, string> = { "1": "live transfer", "2": "callback request", "3": "voicemail" };
+      toast.success(`Voice call simulated → option ${sel} (${labels[sel] ?? sel})`);
+      qc.invalidateQueries({ queryKey: ["diagnostics_logs"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Voice test failed"),
+  });
+
+  const testCallbackReq = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-callback-request", { method: "POST", body: JSON.stringify({ phone: "+15550000004" }) }),
+    onSuccess: () => { toast.success("Callback request lead logged"); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Callback test failed"),
+  });
+
+  const testVoicemail = useMutation({
+    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-voicemail", { method: "POST", body: JSON.stringify({ phone: "+15550000005" }) }),
+    onSuccess: () => { toast.success("Voicemail lead logged"); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Voicemail test failed"),
+  });
+
   // ── Backup Center queries & mutations ──
   const { data: bkData, refetch: refetchBk } = useQuery<BkStatusData>({
     queryKey: ["backup_center_status"],
@@ -646,6 +668,77 @@ export default function SystemDiagnosticsPage() {
               <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.3 }}>{btn.desc}</div>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* ── SECTION: Voice Receptionist V1 ── */}
+      <div style={SECTION_STYLE}>
+        <div style={SECTION_TITLE}><span>☎</span> Voice Receptionist V1 — Simulator</div>
+        <div style={{ fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 }}>
+          Simulate inbound calls to test the IVR menu flow and lead logging. All events appear in the Telnyx log tab below.
+          <br />
+          <span style={{ color: "#00AEEF", fontWeight: 600 }}>
+            Webhook URL for Telnyx portal: <code style={{ background: "rgba(0,174,239,0.08)", padding: "1px 6px", borderRadius: 4 }}>POST /api/telnyx/voice</code>
+          </span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+          {[
+            { label: "Simulate Call → Press 1", desc: "Live transfer to business number", icon: "📞", sel: "1", color: "#10B981" },
+            { label: "Simulate Call → Press 2", desc: "Callback request lead logged", icon: "📋", sel: "2", color: "#00AEEF" },
+            { label: "Simulate Call → Press 3", desc: "Voicemail recorded + lead logged", icon: "🎙", sel: "3", color: "#8B5CF6" },
+          ].map(btn => (
+            <button
+              key={btn.sel}
+              onClick={() => testVoiceCall.mutate(btn.sel)}
+              disabled={testVoiceCall.isPending}
+              style={{
+                flex: "1 1 200px", maxWidth: 240, padding: "12px 16px",
+                borderRadius: 12, textAlign: "left", cursor: testVoiceCall.isPending ? "not-allowed" : "pointer",
+                background: `${btn.color}11`, border: `1px solid ${btn.color}33`,
+                opacity: testVoiceCall.isPending ? 0.55 : 1, transition: "all 0.18s",
+              }}
+            >
+              <div style={{ fontSize: 18, marginBottom: 5 }}>{btn.icon}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: btn.color, marginBottom: 3 }}>
+                {testVoiceCall.isPending ? "Simulating…" : btn.label}
+              </div>
+              <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.3 }}>{btn.desc}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {[
+            { label: "Fire Test: Callback Request", icon: "📋", color: "#00AEEF", action: () => testCallbackReq.mutate(), pending: testCallbackReq.isPending },
+            { label: "Fire Test: Voicemail Lead", icon: "🎙", color: "#8B5CF6", action: () => testVoicemail.mutate(), pending: testVoicemail.isPending },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              onClick={btn.action}
+              disabled={btn.pending}
+              style={{
+                flex: "1 1 180px", maxWidth: 220, padding: "10px 14px",
+                borderRadius: 10, textAlign: "left", cursor: btn.pending ? "not-allowed" : "pointer",
+                background: `${btn.color}0D`, border: `1px solid ${btn.color}22`,
+                opacity: btn.pending ? 0.55 : 1, transition: "all 0.18s",
+              }}
+            >
+              <span style={{ fontSize: 14 }}>{btn.icon}</span>
+              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: btn.color }}>
+                {btn.pending ? "Logging…" : btn.label}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)" }}>
+          <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.7 }}>
+            <strong style={{ color: "#94A3B8" }}>IVR Flow:</strong> Caller dials (251) 286-3200 →
+            Greeting plays → Press 1: forward to (254) 324-9090 · Press 2: callback lead logged · Press 3: voicemail recorded
+            <br />
+            <strong style={{ color: "#94A3B8" }}>Event types saved to DB:</strong>{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_voice_call</code> ·{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_callback_request</code> ·{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_voicemail</code>
+          </div>
         </div>
       </div>
 

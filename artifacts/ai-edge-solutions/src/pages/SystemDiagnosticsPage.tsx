@@ -221,6 +221,20 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Cache read failed"),
   });
 
+  type AiAnalytics = {
+    averageContentScore: number | null;
+    duplicateRiskCount: { high: number; medium: number; low: number };
+    queueQuality: "excellent" | "good" | "fair" | "poor" | "empty";
+    totalPostsInQueue: number;
+    bestNextPost: { city: string | null; topic: string | null; angle: string | null; score: number; bestPlatform: string | null } | null;
+  };
+  const { data: aiAnalytics } = useQuery<AiAnalytics>({
+    queryKey: ["ai-analytics-diag"],
+    queryFn: () => authFetch<AiAnalytics>("/auto-content/analytics"),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
   const regenQueueMut = useMutation({
     mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({}) }),
     onSuccess: (d) => { toast.success(`Queue regenerated: ${d.created} posts created`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
@@ -797,6 +811,66 @@ export default function SystemDiagnosticsPage() {
                 ));
               })()}
             </div>
+
+            {/* AI Engine Analytics */}
+            {aiAnalytics && (
+              <div style={{
+                display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                gap: 10, marginBottom: 14, padding: "14px 0",
+                borderTop: "1px solid rgba(0,174,239,0.08)",
+              }}>
+                {(() => {
+                  const qa = aiAnalytics;
+                  const qualityColor: Record<string, string> = {
+                    excellent: "#10B981", good: "#6B9EFF", fair: "#F59E0B", poor: "#EF4444", empty: "#475569",
+                  };
+                  const scoreCol = qa.averageContentScore != null
+                    ? qa.averageContentScore >= 85 ? "#10B981" : qa.averageContentScore >= 70 ? "#6B9EFF" : qa.averageContentScore >= 50 ? "#F59E0B" : "#EF4444"
+                    : "#475569";
+                  return [
+                    {
+                      label: "Avg Content Score",
+                      value: qa.averageContentScore != null ? `${qa.averageContentScore}/100` : "—",
+                      sub: qa.totalPostsInQueue > 0 ? `across ${qa.totalPostsInQueue} queued posts` : "no posts scored yet",
+                      color: scoreCol,
+                      icon: "🎯",
+                    },
+                    {
+                      label: "Queue Quality",
+                      value: qa.queueQuality === "empty" ? "No Posts" : qa.queueQuality.charAt(0).toUpperCase() + qa.queueQuality.slice(1),
+                      sub: qa.duplicateRiskCount.high > 0 ? `${qa.duplicateRiskCount.high} high-risk posts` : `${qa.duplicateRiskCount.low} low-risk posts`,
+                      color: qualityColor[qa.queueQuality] ?? "#475569",
+                      icon: "✦",
+                    },
+                    {
+                      label: "Duplicate Risk",
+                      value: `${qa.duplicateRiskCount.high} High`,
+                      sub: `${qa.duplicateRiskCount.medium} medium · ${qa.duplicateRiskCount.low} low`,
+                      color: qa.duplicateRiskCount.high > 0 ? "#EF4444" : qa.duplicateRiskCount.medium > 0 ? "#F59E0B" : "#10B981",
+                      icon: "⚠",
+                    },
+                    {
+                      label: "Best Next Post",
+                      value: qa.bestNextPost ? `${qa.bestNextPost.city?.split(",")[0] ?? "?"} · ${qa.bestNextPost.topic ?? "?"}` : "—",
+                      sub: qa.bestNextPost ? `${qa.bestNextPost.angle} · ${qa.bestNextPost.bestPlatform ?? "—"} · score ${qa.bestNextPost.score}` : "generate posts to see suggestion",
+                      color: "#00AEEF",
+                      icon: "⚡",
+                    },
+                  ].map(card => (
+                    <div key={card.label} style={{
+                      background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)",
+                      borderRadius: 10, padding: "12px 14px",
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>
+                        {card.icon} {card.label}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: card.color, marginBottom: 3, wordBreak: "break-word" }}>{card.value}</div>
+                      <div style={{ fontSize: 10.5, color: "#334155", lineHeight: 1.4 }}>{card.sub}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
 
             {/* Diagnostics action buttons */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 14 }}>

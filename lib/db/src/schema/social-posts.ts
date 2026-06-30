@@ -20,6 +20,10 @@ export const socialPostsTable = pgTable("social_posts", {
   aiCity:       text("ai_city"),
   aiTopic:      text("ai_topic"),
   aiAngle:      text("ai_angle"),
+  contentScore:        text("content_score"),
+  bestPlatform:        text("best_platform"),
+  imageRecommendation: text("image_recommendation"),
+  duplicateRisk:       text("duplicate_risk"),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -40,6 +40,20 @@ type QueuePost = {
   id: string; city: string | null; topic: string | null; angle: string | null;
   caption: string; captionFacebook: string | null; captionGoogle: string | null;
   platforms: string[]; scheduledAt: string | null; status: string;
+  contentScore: number | null;
+  bestPlatform: string | null;
+  imageRecommendation: string | null;
+  duplicateRisk: "low" | "medium" | "high" | null;
+};
+
+type SuggestionsData = { suggestions: string[] };
+
+type AnalyticsData = {
+  averageContentScore: number | null;
+  duplicateRiskCount: { high: number; medium: number; low: number };
+  queueQuality: "excellent" | "good" | "fair" | "poor" | "empty";
+  totalPostsInQueue: number;
+  bestNextPost: { city: string | null; topic: string | null; angle: string | null; score: number; bestPlatform: string | null } | null;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -210,6 +224,36 @@ const ANGLE_COLOR: Record<string, string> = {
   faq: "#00AEEF", testimonial: "#FF6B9D", prevention: "#34D399", emergency: "#EF4444",
 };
 
+const RISK_STYLE: Record<string, { color: string; bg: string; border: string }> = {
+  low:    { color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.3)"  },
+  medium: { color: "#F59E0B", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)"  },
+  high:   { color: "#EF4444", bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.3)"   },
+};
+
+function scoreColor(score: number): string {
+  if (score >= 85) return "#10B981";
+  if (score >= 70) return "#6B9EFF";
+  if (score >= 50) return "#F59E0B";
+  return "#EF4444";
+}
+
+function whyGenerated(city: string | null, topic: string | null, angle: string | null): string {
+  const c = city?.split(",")[0] ?? "this city";
+  const t = topic ?? "this topic";
+  const a = angle ?? "default";
+  const angleDesc: Record<string, string> = {
+    educational: "educate local customers",
+    warning: "alert residents to urgent risks",
+    promotional: "promote a current offer",
+    seasonal: "tie in to seasonal activity",
+    faq: "answer common questions",
+    testimonial: "build social proof",
+    prevention: "share prevention tips",
+    emergency: "drive urgent action",
+  };
+  return `Generated to ${angleDesc[a] ?? "engage local customers"} in ${c} around ${t}. Part of the city × topic rotation cycle to maximize local reach.`;
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function AutoContentEnginePage() {
@@ -231,6 +275,18 @@ export default function AutoContentEnginePage() {
     queryKey: ["auto-content-queue"],
     queryFn: () => authFetch<{ posts: QueuePost[]; total: number }>("/auto-content/queue?limit=50"),
     refetchInterval: 30000,
+  });
+
+  const suggestionsQuery = useQuery<SuggestionsData>({
+    queryKey: ["auto-content-suggestions"],
+    queryFn: () => authFetch<SuggestionsData>("/auto-content/suggestions"),
+    refetchInterval: 60000,
+  });
+
+  const analyticsQuery = useQuery<AnalyticsData>({
+    queryKey: ["auto-content-analytics"],
+    queryFn: () => authFetch<AnalyticsData>("/auto-content/analytics"),
+    refetchInterval: 60000,
   });
 
   const set = <K extends keyof Settings>(key: K, val: Settings[K]) =>
@@ -682,6 +738,28 @@ export default function AutoContentEnginePage() {
             {/* ── RIGHT: Controls + Queue ── */}
             <div style={{ position: "sticky", top: 24, minWidth: 0 }}>
 
+              {/* AI Suggestions */}
+              <div style={{ ...cardStyle, marginBottom: 16, borderColor: "rgba(0,174,239,0.2)" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginBottom: 10, display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ fontSize: 15 }}>🧠</span> AI Suggestions
+                </div>
+                {suggestionsQuery.isLoading ? (
+                  <div style={{ fontSize: 12, color: "#475569" }}>Analyzing queue…</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {(suggestionsQuery.data?.suggestions ?? ["Generate posts to receive AI strategy suggestions."]).map((s, i) => (
+                      <div key={i} style={{
+                        fontSize: 12, color: "#CBD5E1", lineHeight: 1.5,
+                        background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.12)",
+                        borderRadius: 8, padding: "8px 11px",
+                      }}>
+                        <span style={{ color: "#00AEEF", fontWeight: 800, marginRight: 5 }}>→</span>{s}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Combo Coverage */}
               <div style={cardStyle}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginBottom: 8 }}>Combo Coverage</div>
@@ -789,11 +867,11 @@ export default function AutoContentEnginePage() {
             <>
               {/* Scrollable table wrapper — only this div scrolls, not the page */}
               <div style={{ overflowX: "auto", borderRadius: 10, margin: "0 -2px" }}>
-              <div style={{ minWidth: 860 }}>
+              <div style={{ minWidth: 960 }}>
 
               {/* Table header */}
               <div style={{
-                display: "grid", gridTemplateColumns: "88px 148px 100px 110px 95px 115px 164px",
+                display: "grid", gridTemplateColumns: "80px 135px 88px 100px 75px 54px 118px 82px 148px",
                 gap: 6, padding: "6px 14px 8px",
                 borderBottom: "1px solid rgba(255,255,255,0.07)",
                 fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px",
@@ -803,7 +881,9 @@ export default function AutoContentEnginePage() {
                 <span>City</span>
                 <span>Topic</span>
                 <span>Angle</span>
-                <span>Platforms</span>
+                <span>Score</span>
+                <span>Best Platform</span>
+                <span>Dup Risk</span>
                 <span style={{ textAlign: "right" }}>Actions</span>
               </div>
 
@@ -812,6 +892,7 @@ export default function AutoContentEnginePage() {
                 {queueQuery.data.posts.map((p, idx) => {
                   const anglCol = ANGLE_COLOR[p.angle ?? ""] ?? "#94A3B8";
                   const statCol = STATUS_COLOR[p.status] ?? "#94A3B8";
+                  const riskSt = p.duplicateRisk ? RISK_STYLE[p.duplicateRisk] : null;
                   const isExpanded = expandedPostId === p.id;
                   const isOdd = idx % 2 === 1;
                   return (
@@ -820,7 +901,7 @@ export default function AutoContentEnginePage() {
                       <div
                         onClick={() => setExpandedPostId(isExpanded ? null : p.id)}
                         style={{
-                          display: "grid", gridTemplateColumns: "88px 148px 100px 110px 95px 115px 164px",
+                          display: "grid", gridTemplateColumns: "80px 135px 88px 100px 75px 54px 118px 82px 148px",
                           gap: 6, padding: "10px 14px", cursor: "pointer", alignItems: "center",
                           background: isExpanded
                             ? "rgba(0,174,239,0.06)"
@@ -830,7 +911,7 @@ export default function AutoContentEnginePage() {
                       >
                         {/* Status */}
                         <span style={{
-                          fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
                           background: `${statCol}18`, color: statCol, border: `1px solid ${statCol}30`,
                           whiteSpace: "nowrap", display: "inline-block", textAlign: "center",
                         }}>
@@ -838,7 +919,7 @@ export default function AutoContentEnginePage() {
                         </span>
 
                         {/* Scheduled */}
-                        <span style={{ fontSize: 11.5, color: "#64748B", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 11, color: "#64748B", whiteSpace: "nowrap" }}>
                           {p.scheduledAt ? fmtDate(p.scheduledAt) : "—"}
                         </span>
 
@@ -854,85 +935,146 @@ export default function AutoContentEnginePage() {
 
                         {/* Angle */}
                         <span style={{
-                          fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 20,
                           background: `${anglCol}18`, color: anglCol, border: `1px solid ${anglCol}30`,
                           whiteSpace: "nowrap", display: "inline-block", textAlign: "center",
                         }}>
                           {p.angle ?? "—"}
                         </span>
 
-                        {/* Platforms */}
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {p.platforms.map(pl => {
-                            const opt = PLATFORM_OPTIONS.find(o => o.value === pl);
-                            return opt ? (
-                              <span key={pl} style={{
-                                fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
-                                background: `${opt.color}18`, color: opt.color, border: `1px solid ${opt.color}30`,
-                              }}>{opt.label}</span>
-                            ) : null;
-                          })}
+                        {/* Score */}
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          {p.contentScore != null ? (
+                            <span style={{
+                              fontSize: 12, fontWeight: 800, color: scoreColor(p.contentScore),
+                            }}>
+                              {p.contentScore}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: "#334155" }}>—</span>
+                          )}
+                        </div>
+
+                        {/* Best Platform */}
+                        <div style={{ overflow: "hidden" }}>
+                          {p.bestPlatform ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: "#00AEEF",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              display: "block",
+                            }}>
+                              {p.bestPlatform}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: "#334155" }}>—</span>
+                          )}
+                        </div>
+
+                        {/* Dup Risk */}
+                        <div>
+                          {riskSt && p.duplicateRisk ? (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
+                              background: riskSt.bg, color: riskSt.color, border: `1px solid ${riskSt.border}`,
+                              whiteSpace: "nowrap", display: "inline-block",
+                            }}>
+                              {p.duplicateRisk}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: "#334155" }}>—</span>
+                          )}
                         </div>
 
                         {/* Actions */}
-                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => navigate("/admin/social-publishing")}
-                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(107,158,255,0.1)", border: "1px solid rgba(107,158,255,0.25)", color: "#6B9EFF" }}>
+                            style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(107,158,255,0.1)", border: "1px solid rgba(107,158,255,0.25)", color: "#6B9EFF" }}>
                             Edit
                           </button>
                           <button
                             onClick={() => publishNowMut.mutate(p.id)}
                             disabled={publishNowMut.isPending}
-                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: publishNowMut.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: publishNowMut.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
                             Publish
                           </button>
                           <button
                             onClick={() => { if (confirm("Delete this post?")) deletePostMut.mutate(p.id); }}
                             disabled={deletePostMut.isPending}
-                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: deletePostMut.isPending ? "not-allowed" : "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
+                            style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: deletePostMut.isPending ? "not-allowed" : "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
                             Delete
                           </button>
-                          <span style={{ fontSize: 12, color: "#334155", marginLeft: 4, userSelect: "none" }}>
+                          <span style={{ fontSize: 12, color: "#334155", marginLeft: 2, userSelect: "none" }}>
                             {isExpanded ? "▲" : "▼"}
                           </span>
                         </div>
                       </div>
 
-                      {/* Expanded caption detail */}
+                      {/* Expanded detail */}
                       {isExpanded && (
                         <div style={{
                           padding: "14px 20px 18px",
                           background: "rgba(0,174,239,0.03)",
                           borderTop: "1px solid rgba(0,174,239,0.08)",
                         }}>
-                          {p.captionFacebook || p.captionGoogle ? (
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                              <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-                                  <span style={{ fontSize: 10, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.15)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(107,158,255,0.3)" }}>
-                                    Facebook Caption
-                                  </span>
-                                </div>
-                                <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
-                                  {p.captionFacebook ?? p.caption}
-                                </p>
-                              </div>
-                              <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-                                  <span style={{ fontSize: 10, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.12)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(234,67,53,0.25)" }}>
-                                    Google Business Caption
-                                  </span>
-                                </div>
-                                <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>
-                                  {p.captionGoogle ?? "—"}
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
+                          {/* Captions */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Caption</div>
-                              <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{p.caption}</p>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.15)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(107,158,255,0.3)" }}>
+                                  Facebook Caption
+                                </span>
+                              </div>
+                              <p style={{ fontSize: 12.5, color: "#CBD5E1", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
+                                {p.captionFacebook ?? p.caption}
+                              </p>
+                            </div>
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.12)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(234,67,53,0.25)" }}>
+                                  Google Business Caption
+                                </span>
+                              </div>
+                              <p style={{ fontSize: 12.5, color: "#CBD5E1", lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>
+                                {p.captionGoogle ?? "—"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Image recommendation + Why generated */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                            {p.imageRecommendation && (
+                              <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.15)" }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 5 }}>
+                                  📸 Image Recommendation
+                                </div>
+                                <p style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.5, margin: 0 }}>
+                                  {p.imageRecommendation}
+                                </p>
+                              </div>
+                            )}
+                            <div style={{ background: "rgba(0,174,239,0.04)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(0,174,239,0.1)" }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 5 }}>
+                                🤖 Why This Post
+                              </div>
+                              <p style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.5, margin: 0 }}>
+                                {whyGenerated(p.city, p.topic, p.angle)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Platforms row */}
+                          {p.platforms.length > 0 && (
+                            <div style={{ marginTop: 10, display: "flex", gap: 6, alignItems: "center" }}>
+                              <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px" }}>Targeting:</span>
+                              {p.platforms.map(pl => {
+                                const opt = PLATFORM_OPTIONS.find(o => o.value === pl);
+                                return opt ? (
+                                  <span key={pl} style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: `${opt.color}18`, color: opt.color, border: `1px solid ${opt.color}30` }}>
+                                    {opt.label}
+                                  </span>
+                                ) : null;
+                              })}
                             </div>
                           )}
                         </div>

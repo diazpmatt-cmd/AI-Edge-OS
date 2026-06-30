@@ -41,6 +41,63 @@ function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
 }
 
+// ── V3 Scoring Utilities ───────────────────────────────────────────────────────
+
+function calcDuplicateRisk(
+  city: string, topic: string, angle: string,
+  existing: Array<{ aiCity: string | null; aiTopic: string | null; aiAngle: string | null }>,
+): "low" | "medium" | "high" {
+  const sameCityTopic = existing.filter(p => p.aiCity === city && p.aiTopic === topic).length;
+  const sameAngle = existing.filter(p => p.aiAngle === angle).length;
+  if (sameCityTopic >= 2 || sameAngle >= 4) return "high";
+  if (sameCityTopic === 1 || sameAngle >= 2) return "medium";
+  return "low";
+}
+
+function calcBestPlatform(angle: string, captionLen: number): string {
+  if (["educational", "faq", "prevention", "testimonial"].includes(angle)) return "Facebook";
+  if (["warning", "emergency"].includes(angle)) return "Facebook + Google";
+  if (captionLen < 200) return "Google";
+  return "Facebook + Google";
+}
+
+function calcContentScore(params: {
+  city: string; topic: string; angle: string;
+  captionFacebook: string; duplicateRisk: "low" | "medium" | "high";
+}): number {
+  let score = 0;
+  if (params.city) score += 15;
+  if (params.topic) score += 15;
+  const cap = (params.captionFacebook ?? "").toLowerCase();
+  if (/call|book|contact|visit|schedule|get a quote|reach out/.test(cap)) score += 15;
+  const len = cap.length;
+  if (len >= 100 && len <= 400) score += 15;
+  else if (len >= 50) score += 8;
+  if (params.angle) score += 15;
+  score += 10; // platform fit bonus (always relevant for local service)
+  if (params.duplicateRisk === "low") score += 15;
+  else if (params.duplicateRisk === "medium") score += 7;
+  return Math.min(100, Math.max(0, score));
+}
+
+function calcImageRecommendation(
+  city: string, topic: string, angle: string, clientName: string,
+): string {
+  const cityShort = city.split(",")[0].trim();
+  const angleStyle: Record<string, string> = {
+    warning: "bold warning",
+    educational: "informative",
+    promotional: "promotional offer",
+    seasonal: "seasonal-themed",
+    emergency: "urgent",
+    testimonial: "customer success",
+    prevention: "helpful tips",
+    faq: "Q&A style",
+  };
+  const style = angleStyle[angle] ?? "professional";
+  return `${topic} pest control photo with ${style} headline, "${cityShort}" city text overlay, ${clientName} branding, and Call Now CTA.`;
+}
+
 // ── GET /auto-content/settings ────────────────────────────────────────────────
 
 router.get("/auto-content/settings", async (req, res) => {
@@ -218,8 +275,6 @@ router.post("/auto-content/generate", async (req, res) => {
     usedCombos: passedUsedCombos, count,
   } = req.body;
 
-  // If frontend sent empty arrays, fall back to persisted DB settings so that
-  // a poisoned/blank row never blocks generation.
   let serviceAreas = bodyServiceAreas as string[] | undefined;
   let topics = bodyTopics as string[] | undefined;
   let clientName = bodyClientName;
@@ -241,7 +296,6 @@ router.post("/auto-content/generate", async (req, res) => {
       const dbTopics = parseJson<string[]>(dbRow.topics, []);
       if (!serviceAreas?.length) serviceAreas = dbAreas.length ? dbAreas : DEFAULT_SERVICE_AREAS;
       if (!topics?.length) topics = dbTopics.length ? dbTopics : DEFAULT_TOPICS;
-      // Fill other fields from DB if body was also missing them
       if (!clientName) clientName = dbRow.clientName;
       if (!industry) industry = dbRow.industry ?? "pest_control";
       if (!frequency) frequency = dbRow.frequency;
@@ -253,7 +307,6 @@ router.post("/auto-content/generate", async (req, res) => {
       if (!toneStyle?.length) toneStyle = parseJson<string[]>(dbRow.toneStyle, DEFAULT_TONE);
       if (!postAngles?.length) postAngles = parseJson<string[]>(dbRow.postAngles, DEFAULT_ANGLES);
     } else {
-      // No row at all — use hardcoded defaults
       if (!serviceAreas?.length) serviceAreas = DEFAULT_SERVICE_AREAS;
       if (!topics?.length) topics = DEFAULT_TOPICS;
     }
@@ -308,6 +361,16 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
     })
   );
 
+  // Fetch existing queue to compute duplicate risk
+  const existingPosts = await db.select({
+    aiCity: socialPostsTable.aiCity,
+    aiTopic: socialPostsTable.aiTopic,
+    aiAngle: socialPostsTable.aiAngle,
+  }).from(socialPostsTable).where(and(
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, ["scheduled", "draft"]),
+  ));
+
   const postStatus = approvalMode === "draft_only" ? "draft" : "scheduled";
   const insertedIds: string[] = [];
   const effectiveClient = clientName ?? "Bed Bugs & Beyond";
@@ -318,6 +381,22 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       : post.caption;
 
     const captionGoogle = `${effectiveClient} proudly servicing ${post.city}.`;
+
+    // V3: Compute scoring fields
+    const dupRisk = calcDuplicateRisk(post.city, post.topic, post.angle, [
+      ...existingPosts,
+      ...insertedIds.map((_, i) => ({
+        aiCity: generated[i]?.city ?? null,
+        aiTopic: generated[i]?.topic ?? null,
+        aiAngle: generated[i]?.angle ?? null,
+      })),
+    ]);
+    const bestPlat = calcBestPlatform(post.angle, captionFull.length);
+    const imgRec = calcImageRecommendation(post.city, post.topic, post.angle, effectiveClient);
+    const score = calcContentScore({
+      city: post.city, topic: post.topic, angle: post.angle,
+      captionFacebook: captionFull, duplicateRisk: dupRisk,
+    });
 
     const [ins] = await db.insert(socialPostsTable).values({
       userId,
@@ -333,6 +412,10 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       aiCity: post.city,
       aiTopic: post.topic,
       aiAngle: post.angle,
+      contentScore: String(score),
+      bestPlatform: bestPlat,
+      imageRecommendation: imgRec,
+      duplicateRisk: dupRisk,
     }).returning({ id: socialPostsTable.id });
     insertedIds.push(ins.id);
   }
@@ -415,11 +498,15 @@ router.get("/auto-content/queue", async (req, res) => {
       topic: p.aiTopic ?? null,
       angle: p.aiAngle ?? null,
       caption: (p.captionFacebook ?? p.caption ?? "").slice(0, 120),
-      captionFacebook: p.captionFacebook ? p.captionFacebook.slice(0, 120) : null,
+      captionFacebook: p.captionFacebook ?? null,
       captionGoogle: p.captionGoogle ?? null,
       platforms: parseJson<string[]>(p.platforms, []),
       scheduledAt: p.scheduledAt?.toISOString() ?? null,
       status: p.status,
+      contentScore: p.contentScore ? parseInt(p.contentScore, 10) : null,
+      bestPlatform: p.bestPlatform ?? null,
+      imageRecommendation: p.imageRecommendation ?? null,
+      duplicateRisk: p.duplicateRisk ?? null,
     })),
     total: total.length,
   });
@@ -480,6 +567,138 @@ router.post("/auto-content/resume", async (req, res) => {
   });
 
   res.json({ ok: true, enginePaused: false });
+});
+
+// ── GET /auto-content/suggestions ────────────────────────────────────────────
+
+router.get("/auto-content/suggestions", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [settings] = await db.select().from(autoContentSettingsTable)
+    .where(eq(autoContentSettingsTable.userId, userId));
+
+  const posts = await db.select().from(socialPostsTable).where(and(
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, ["scheduled", "draft"]),
+  )).orderBy(socialPostsTable.scheduledAt).limit(50);
+
+  const suggestions: string[] = [];
+
+  // Topic repetition
+  const topicCounts: Record<string, number> = {};
+  for (const p of posts) {
+    if (p.aiTopic) topicCounts[p.aiTopic] = (topicCounts[p.aiTopic] ?? 0) + 1;
+  }
+  const freqTopics = Object.entries(topicCounts).filter(([, c]) => c >= 3).map(([t]) => t);
+  if (freqTopics.length >= 2) {
+    const configTopics = settings
+      ? parseJson<string[]>(settings.topics, DEFAULT_TOPICS)
+      : DEFAULT_TOPICS;
+    const unusedTopics = configTopics.filter(t => !topicCounts[t]);
+    if (unusedTopics.length > 0) {
+      suggestions.push(
+        `"${freqTopics.slice(0, 2).join('" and "')}" are repeating often — add "${unusedTopics.slice(0, 2).join('" or "')}" posts for more variety.`,
+      );
+    }
+  }
+
+  // Duplicate risk
+  const highRisk = posts.filter(p => p.duplicateRisk === "high").length;
+  if (highRisk >= 2) {
+    suggestions.push(
+      `${highRisk} posts have high duplicate risk — clear queue and regenerate for better city/topic variety.`,
+    );
+  }
+
+  // Queue coverage
+  if (posts.length >= 14) {
+    suggestions.push(`Queue has ${posts.length} posts — engine is well-stocked for the next ${posts.length} days.`);
+  } else if (posts.length < 5) {
+    suggestions.push(`Queue is low (${posts.length} post${posts.length !== 1 ? "s" : ""}) — generate next 14 days to stay ahead.`);
+  }
+
+  // Average content score
+  const scores = posts.map(p => parseInt(p.contentScore ?? "0", 10)).filter(s => s > 0);
+  if (scores.length > 0) {
+    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    if (avg >= 85) {
+      suggestions.push(`Average content score is ${avg}/100 — excellent queue quality.`);
+    } else if (avg < 60) {
+      suggestions.push(`Average content score is ${avg}/100 — regenerate with more complete settings for better scores.`);
+    }
+  }
+
+  // Best next post suggestion
+  if (settings) {
+    const areas = parseJson<string[]>(settings.serviceAreas, DEFAULT_SERVICE_AREAS);
+    const settingsTopics = parseJson<string[]>(settings.topics, DEFAULT_TOPICS);
+    const usedCombos = parseJson<string[]>(settings.usedCombos, []);
+    const unusedCombos = areas
+      .flatMap(c => settingsTopics.map(t => ({ city: c, topic: t, key: `${c}:${t}` })))
+      .filter(({ key }) => !usedCombos.includes(key));
+    if (unusedCombos.length > 0) {
+      const next = unusedCombos[0];
+      const cityShort = next.city.split(",")[0];
+      suggestions.push(
+        `Best next post: ${cityShort} · ${next.topic}, seasonal angle, Facebook + Google.`,
+      );
+    }
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push("Generate your first batch of posts to start receiving AI strategy suggestions.");
+  }
+
+  res.json({ suggestions });
+});
+
+// ── GET /auto-content/analytics ──────────────────────────────────────────────
+
+router.get("/auto-content/analytics", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const posts = await db.select().from(socialPostsTable).where(and(
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, ["scheduled", "draft"]),
+  )).limit(50);
+
+  const scores = posts.map(p => parseInt(p.contentScore ?? "0", 10)).filter(s => s > 0);
+  const averageContentScore = scores.length > 0
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+    : null;
+
+  const highRiskCount = posts.filter(p => p.duplicateRisk === "high").length;
+  const medRiskCount = posts.filter(p => p.duplicateRisk === "medium").length;
+  const lowRiskCount = posts.filter(p => p.duplicateRisk === "low").length;
+
+  let queueQuality: "excellent" | "good" | "fair" | "poor" | "empty" = "empty";
+  if (averageContentScore !== null) {
+    if (averageContentScore >= 85) queueQuality = "excellent";
+    else if (averageContentScore >= 70) queueQuality = "good";
+    else if (averageContentScore >= 50) queueQuality = "fair";
+    else queueQuality = "poor";
+  }
+
+  // Best next post: find first post sorted by score desc
+  const bestPost = posts
+    .filter(p => p.contentScore)
+    .sort((a, b) => parseInt(b.contentScore ?? "0", 10) - parseInt(a.contentScore ?? "0", 10))[0];
+
+  res.json({
+    averageContentScore,
+    duplicateRiskCount: { high: highRiskCount, medium: medRiskCount, low: lowRiskCount },
+    queueQuality,
+    totalPostsInQueue: posts.length,
+    bestNextPost: bestPost ? {
+      city: bestPost.aiCity,
+      topic: bestPost.aiTopic,
+      angle: bestPost.aiAngle,
+      score: parseInt(bestPost.contentScore ?? "0", 10),
+      bestPlatform: bestPost.bestPlatform,
+    } : null,
+  });
 });
 
 export default router;

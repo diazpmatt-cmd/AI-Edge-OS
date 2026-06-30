@@ -1,0 +1,97 @@
+Build Auto Content Engine V3.
+
+Goal:
+Make the Auto Content Engine smarter, more useful, and closer to a true AI marketing strategist.
+
+Add these upgrades:
+
+1. Content Score
+   For every generated post, calculate a 1–100 score based on:
+
+* city included
+* topic included
+* clear CTA
+* platform fit
+* caption length
+* angle quality
+* duplicate risk
+
+Show score in AI Queue Inspector.
+
+2. Best Platform Recommendation
+   For each post, recommend:
+
+* Facebook
+* Google Business
+* Facebook + Google
+
+Rules:
+
+* Google = short local presence post
+* Facebook = fuller educational/promotional post
+* Facebook + Google = best default for local service posts
+
+3. Image Recommendation
+   For each generated post, create an image recommendation:
+
+* suggested image type
+* suggested visual theme
+* suggested text overlay
+
+Example:
+Topic: Roaches
+City: Daphne
+Angle: Warning
+
+Image recommendation:
+“Use roach-focused pest control image with bold warning headline, Daphne AL city text, Bed Bugs & Beyond logo, and Call Now CTA.”
+
+4. Duplicate Protection
+   Add duplicate risk detection:
+
+* same city/topic used recently
+* same angle repeated too often
+* same platform combo repeated too often
+
+Show:
+
+* Low risk
+* Medium risk
+* High risk
+
+5. AI Queue Inspector upgrades
+   Add columns:
+
+* Score
+* Best Platform
+* Duplicate Risk
+* Image Recommendation
+
+Expandable row should show:
+
+* Facebook caption
+* Google caption
+* image recommendation
+* why this post was generated
+
+6. Smart Suggestions Panel
+   Add a panel at top/right:
+   “AI Suggestions”
+
+Examples:
+
+* “Google quota is active, schedule Facebook-only until cooldown ends.”
+* “Roaches and ants are repeating often — add mosquitoes or spiders.”
+* “Best next post: Fairhope Mosquitoes, seasonal angle, Facebook + Google.”
+* “Queue has enough posts for 14 days.”
+
+7. Diagnostics integration
+   System Diagnostics AI Engine section should show:
+
+* average content score
+* duplicate risk count
+* best next post
+* queue quality status
+
+Goal:
+Auto Content Engine should feel like an AI strategist, not just a scheduler.

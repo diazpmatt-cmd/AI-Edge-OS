@@ -275,6 +275,18 @@ export default function SystemDiagnosticsPage() {
     staleTime: 30_000,
   });
 
+  type TextbackStats = {
+    sent: number; failed: number; missedCalls: number;
+    quoteRequests: number; appointmentRequests: number; emergencyRequests: number;
+    totalReplies: number; responseRate: number;
+  };
+  const { data: textbackStats, refetch: refetchTextback } = useQuery<TextbackStats>({
+    queryKey: ["textback-stats-diag"],
+    queryFn: () => authFetch<TextbackStats>("/telnyx/textback-stats"),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+
   const regenQueueMut = useMutation({
     mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({}) }),
     onSuccess: (d) => { toast.success(`Queue regenerated: ${d.created} posts created`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
@@ -313,6 +325,28 @@ export default function SystemDiagnosticsPage() {
     mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-voicemail", { method: "POST", body: JSON.stringify({ phone: "+15550000005" }) }),
     onSuccess: () => { toast.success("Voicemail lead logged"); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
     onError: (e: any) => toast.error(e?.message ?? "Voicemail test failed"),
+  });
+
+  const testTextback = useMutation({
+    mutationFn: (skipDedup: boolean) => authFetch<{ ok: boolean; sent: boolean; skipped?: boolean; reason?: string; messageId?: string; error?: string }>(
+      "/telnyx/test-textback", { method: "POST", body: JSON.stringify({ phone: "+15550000006", skipDedup }) }
+    ),
+    onSuccess: (d) => {
+      if (d.skipped) { toast.info(`Dedup active — ${d.reason}`); return; }
+      if (d.sent) { toast.success(`Text-back sent${d.messageId ? ` — ID: ${d.messageId}` : " (no API key — DB logged only)"}`); }
+      else { toast.warning(`Text-back failed: ${d.error}`); }
+      refetchTextback();
+      qc.invalidateQueries({ queryKey: ["diagnostics_logs"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Text-back test failed"),
+  });
+
+  const testTextbackReply = useMutation({
+    mutationFn: (reply: string) => authFetch<{ ok: boolean; parsed: string }>(
+      "/telnyx/test-textback-reply", { method: "POST", body: JSON.stringify({ phone: "+15550000007", reply }) }
+    ),
+    onSuccess: (d) => { toast.success(`Reply logged: ${d.parsed}`); refetchTextback(); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Reply test failed"),
   });
 
   // ── Backup Center queries & mutations ──
@@ -738,6 +772,93 @@ export default function SystemDiagnosticsPage() {
             <code style={{ color: "#00AEEF" }}>telnyx_voice_call</code> ·{" "}
             <code style={{ color: "#00AEEF" }}>telnyx_callback_request</code> ·{" "}
             <code style={{ color: "#00AEEF" }}>telnyx_voicemail</code>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SECTION: Missed Call Recovery ── */}
+      <div style={SECTION_STYLE}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          <div style={SECTION_TITLE as any}><span>📲</span> Missed Call Recovery — Text-Back V1</div>
+          <button onClick={() => refetchTextback()} style={{ fontSize: 10.5, padding: "3px 10px", borderRadius: 7, cursor: "pointer", background: "rgba(0,174,239,0.07)", border: "1px solid rgba(0,174,239,0.2)", color: "#00AEEF", fontWeight: 700 }}>↻ Refresh</button>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
+          {[
+            { label: "Missed Calls",    value: textbackStats?.missedCalls    ?? "—", color: "#F59E0B", icon: "📵" },
+            { label: "Text-Backs Sent", value: textbackStats?.sent           ?? "—", color: "#10B981", icon: "📤" },
+            { label: "Failed Sends",    value: textbackStats?.failed         ?? "—", color: "#EF4444", icon: "❌" },
+            { label: "Response Rate",   value: textbackStats ? `${textbackStats.responseRate}%` : "—", color: "#00AEEF", icon: "📊" },
+            { label: "Quote Requests",  value: textbackStats?.quoteRequests  ?? "—", color: "#8B5CF6", icon: "💲" },
+            { label: "Appointments",    value: textbackStats?.appointmentRequests ?? "—", color: "#06B6D4", icon: "📅" },
+            { label: "Emergencies",     value: textbackStats?.emergencyRequests   ?? "—", color: "#EF4444", icon: "🚨" },
+            { label: "Total Replies",   value: textbackStats?.totalReplies   ?? "—", color: "#C0C0C0", icon: "💬" },
+          ].map(s => (
+            <div key={s.label} style={{ background: `${s.color}0D`, border: `1px solid ${s.color}22`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 18, marginBottom: 4 }}>{s.icon}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 4, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Test buttons */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>Simulate Text-Back</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button
+              onClick={() => testTextback.mutate(false)}
+              disabled={testTextback.isPending}
+              style={{ padding: "9px 14px", borderRadius: 9, cursor: testTextback.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", opacity: testTextback.isPending ? 0.55 : 1, transition: "all 0.18s" }}
+            >
+              <span style={{ fontSize: 13 }}>📤</span>
+              <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "#10B981" }}>{testTextback.isPending ? "Sending…" : "Send Text-Back (with dedup)"}</span>
+            </button>
+            <button
+              onClick={() => testTextback.mutate(true)}
+              disabled={testTextback.isPending}
+              style={{ padding: "9px 14px", borderRadius: 9, cursor: testTextback.isPending ? "not-allowed" : "pointer", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", opacity: testTextback.isPending ? 0.55 : 1, transition: "all 0.18s" }}
+            >
+              <span style={{ fontSize: 13 }}>⚡</span>
+              <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "#F59E0B" }}>{testTextback.isPending ? "Sending…" : "Force Send (skip dedup)"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>Simulate Customer Reply</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {[
+              { reply: "1", label: "Reply: 1 (Quote)",       color: "#8B5CF6", icon: "💲" },
+              { reply: "2", label: "Reply: 2 (Appointment)", color: "#06B6D4", icon: "📅" },
+              { reply: "3", label: "Reply: 3 (Emergency)",   color: "#EF4444", icon: "🚨" },
+            ].map(btn => (
+              <button
+                key={btn.reply}
+                onClick={() => testTextbackReply.mutate(btn.reply)}
+                disabled={testTextbackReply.isPending}
+                style={{ padding: "9px 14px", borderRadius: 9, cursor: testTextbackReply.isPending ? "not-allowed" : "pointer", background: `${btn.color}0D`, border: `1px solid ${btn.color}22`, opacity: testTextbackReply.isPending ? 0.55 : 1, transition: "all 0.18s" }}
+              >
+                <span style={{ fontSize: 13 }}>{btn.icon}</span>
+                <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: btn.color }}>{testTextbackReply.isPending ? "Logging…" : btn.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Flow reference */}
+        <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 10, background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)" }}>
+          <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.7 }}>
+            <strong style={{ color: "#94A3B8" }}>Flow:</strong> Missed call detected →
+            dedup check (15 min window) → outbound SMS via Telnyx API →
+            customer replies 1/2/3 → lead status updated
+            <br />
+            <strong style={{ color: "#94A3B8" }}>Event types:</strong>{" "}
+            <code style={{ color: "#00AEEF" }}>missed_call</code> ·{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_textback_sent</code> ·{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_textback_failed</code> ·{" "}
+            <code style={{ color: "#00AEEF" }}>telnyx_sms_reply</code>
           </div>
         </div>
       </div>

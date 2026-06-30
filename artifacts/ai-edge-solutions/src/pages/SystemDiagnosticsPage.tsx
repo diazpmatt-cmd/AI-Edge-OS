@@ -1192,20 +1192,39 @@ export default function SystemDiagnosticsPage() {
                         </span>
                       </div>
                     </div>
-                    <button
-                      onClick={() => runBackup(c.key)}
-                      disabled={running}
-                      style={{
-                        marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                        background: running ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg,${c.accent}CC,${c.accent}88)`,
-                        color: running ? "#64748B" : "#fff", border: `1px solid ${running ? "rgba(255,255,255,0.08)" : c.accent + "55"}`,
-                        borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700,
-                        cursor: running ? "not-allowed" : "pointer", transition: "all 0.2s",
-                        boxShadow: running ? "none" : `0 2px 10px ${c.accent}33`,
-                      }}
-                    >
-                      {running ? "⏳ Running…" : `▶ ${c.btnLabel}`}
-                    </button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      <button
+                        onClick={() => runBackup(c.key)}
+                        disabled={running}
+                        style={{
+                          flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                          background: running ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg,${c.accent}CC,${c.accent}88)`,
+                          color: running ? "#64748B" : "#fff", border: `1px solid ${running ? "rgba(255,255,255,0.08)" : c.accent + "55"}`,
+                          borderRadius: 8, padding: "8px 10px", fontSize: 12, fontWeight: 700,
+                          cursor: running ? "not-allowed" : "pointer", transition: "all 0.2s",
+                          boxShadow: running ? "none" : `0 2px 10px ${c.accent}33`,
+                        }}
+                      >
+                        {running ? "⏳ Running…" : `▶ ${c.btnLabel}`}
+                      </button>
+                      {info.filename && (
+                        <button
+                          onClick={() => downloadBkFile(info.filename!)}
+                          title={`Download: ${info.filename}`}
+                          style={{
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            background: "rgba(255,255,255,0.05)", color: "#94A3B8",
+                            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+                            padding: "8px 10px", fontSize: 13, cursor: "pointer", flexShrink: 0,
+                            transition: "all 0.2s",
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,174,239,0.12)"; (e.currentTarget as HTMLButtonElement).style.color = "#00AEEF"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.color = "#94A3B8"; }}
+                        >
+                          ⬇
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

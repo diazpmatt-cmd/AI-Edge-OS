@@ -259,7 +259,7 @@ router.post("/backups/assets", async (req, res) => {
   }
 });
 
-// POST /backups/full — runs all 3 + writes manifest
+// POST /backups/full — runs all 3, bundles into one downloadable ZIP + manifest
 router.post("/backups/full", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -267,19 +267,52 @@ router.post("/backups/full", async (req, res) => {
   const results: Record<string, any> = {};
   const errors: Record<string, string> = {};
 
+  // Run each component backup, saving files to BACKUP_DIR
   try { results.database = await backupDatabase(userId); } catch (e: any) { errors.database = e.message; patchStatus("database", { status: "warning" }); }
   try { results.code     = await backupCode();           } catch (e: any) { errors.code     = e.message; patchStatus("code",     { status: "warning" }); }
   try { results.assets   = await backupAssets(userId);   } catch (e: any) { errors.assets   = e.message; patchStatus("assets",   { status: "warning" }); }
 
   const manifest = { exportedAt, version: "1.0", backups: results, errors };
-  const mFilename = `manifest-${fmtTs(exportedAt)}.json`;
-  ensureDir();
-  fs.writeFileSync(path.join(BACKUP_DIR, mFilename), JSON.stringify(manifest, null, 2));
 
-  const totalSize = Object.values(results).reduce((s: number, r: any) => s + (r?.sizeBytes ?? 0), 0);
-  patchStatus("full", { status: Object.keys(errors).length === 0 ? "healthy" : "warning", lastBackupAt: exportedAt, sizeBytes: totalSize, filename: mFilename });
+  // Bundle everything into one combined ZIP
+  const fullFilename = `full-backup-${fmtTs(exportedAt)}.zip`;
+  const fullFilepath = path.join(BACKUP_DIR, fullFilename);
 
-  res.json({ ok: true, manifest: mFilename, results, errors, exportedAt });
+  await new Promise<void>((resolve, reject) => {
+    const output = fs.createWriteStream(fullFilepath);
+    const arc = archiver("zip", { zlib: { level: 6 } });
+    output.on("close", resolve);
+    arc.on("error", reject);
+    arc.pipe(output);
+
+    // manifest.json at root of ZIP
+    arc.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+
+    // Embed each component file into its own folder inside the ZIP
+    const embed = (key: string, folder: string) => {
+      const fname: string | undefined = results[key]?.filename;
+      if (fname) {
+        const fp = path.join(BACKUP_DIR, fname);
+        if (fs.existsSync(fp)) arc.file(fp, { name: `${folder}/${fname}` });
+      }
+    };
+    embed("database", "database");
+    embed("code",     "code");
+    embed("assets",   "assets");
+
+    arc.finalize();
+  });
+
+  const { size } = fs.statSync(fullFilepath);
+  const totalErrors = Object.keys(errors).length;
+  patchStatus("full", {
+    status: totalErrors === 0 ? "healthy" : "warning",
+    lastBackupAt: exportedAt,
+    sizeBytes: size,
+    filename: fullFilename,
+  });
+
+  res.json({ ok: true, filename: fullFilename, sizeBytes: size, results, errors, exportedAt });
 });
 
 export default router;

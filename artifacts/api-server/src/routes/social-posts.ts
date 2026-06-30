@@ -326,6 +326,91 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     }
   }
 
+  // ── TikTok ────────────────────────────────────────────────────────────────
+  // TikTok Content Posting API only accepts video content.
+  // Posts with no videoUrl are skipped with a clear message rather than failing
+  // silently. When video support is added to the schema, remove the skip guard.
+  if (platforms.includes("tiktok")) {
+    const ttConn = await getConnection("tiktok");
+    console.log("[TIKTOK-PUBLISH]", JSON.stringify({
+      hasConnection: !!ttConn,
+      hasAccessToken: !!ttConn?.accessToken,
+      expiresAt: ttConn?.expiresAt ?? null,
+      tokenExpired: ttConn?.expiresAt ? new Date(ttConn.expiresAt) < new Date() : null,
+    }));
+
+    if (!ttConn?.accessToken) {
+      results.tiktok = { ok: false, error: "TikTok not connected — link your account in Connected Accounts." };
+      errors.push("TikTok: Not connected");
+    } else {
+      // Current post schema has no videoUrl field — all posts are text/image only.
+      const videoUrl: string | null = (post as any).videoUrl ?? null;
+
+      if (!videoUrl) {
+        // Skip gracefully — this is not a connection error, just an unsupported post type.
+        console.log("[TIKTOK-PUBLISH] Skipped — post has no video content (TikTok requires video)");
+        results.tiktok = {
+          ok: false,
+          error: "TikTok publishing requires video content. This post was skipped for TikTok.",
+        };
+        errors.push("TikTok: Video required — post has no video content");
+      } else {
+        // ── Video posting via TikTok Content Posting API ──────────────────
+        // Uses PULL_FROM_URL source: TikTok fetches the video from our URL.
+        // Requires video.publish scope approved in TikTok Developer Portal.
+        // Sandbox mode: token exchange succeeds but Content Posting API returns
+        // error_code 2061 (permission denied) until app review is approved.
+        try {
+          const titleText = (post.caption ?? "").slice(0, 150).replace(/\n/g, " ").trim();
+          const initRes = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ttConn.accessToken}`,
+              "Content-Type": "application/json; charset=UTF-8",
+            },
+            body: JSON.stringify({
+              post_info: {
+                title: titleText || "New post",
+                privacy_level: "PUBLIC_TO_EVERYONE",
+                disable_duet: false,
+                disable_comment: false,
+                disable_stitch: false,
+                video_cover_timestamp_ms: 1000,
+              },
+              source_info: {
+                source: "PULL_FROM_URL",
+                video_url: videoUrl,
+              },
+            }),
+          });
+
+          const initData = await initRes.json() as any;
+          console.log("[TIKTOK-PUBLISH] API response:", JSON.stringify(initData));
+
+          // TikTok wraps success in { data: {...}, error: { code: "ok" } }
+          if (!initRes.ok || (initData.error?.code && initData.error.code !== "ok")) {
+            const code    = initData.error?.code ?? initRes.status;
+            const message = initData.error?.message ?? `TikTok API error ${initRes.status}`;
+            // Translate common error codes to actionable messages
+            const hint =
+              code === 2061 ? " (App lacks video.publish permission — request approval in TikTok Developer Portal)" :
+              code === 2200 ? " (Invalid access token — reconnect TikTok)" :
+              code === 2100 ? " (Video URL unreachable — must be a public HTTPS URL)" :
+              "";
+            throw new Error(`${message}${hint} [code: ${code}]`);
+          }
+
+          const publishId = initData.data?.publish_id ?? null;
+          results.tiktok = { ok: true, postId: publishId ?? undefined };
+        } catch (e: any) {
+          console.error("[TIKTOK-PUBLISH] Error:", e.message);
+          results.tiktok = { ok: false, error: e.message };
+          errors.push(`TikTok: ${e.message}`);
+        }
+      }
+    }
+  }
+
   const allOk = platforms.every(p => results[p]?.ok === true);
   const anyOk = platforms.some(p => results[p]?.ok === true);
   const newStatus = allOk ? "published" : anyOk ? "partial" : "failed";

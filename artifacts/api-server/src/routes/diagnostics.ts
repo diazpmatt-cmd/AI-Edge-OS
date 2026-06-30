@@ -160,7 +160,34 @@ router.get("/diagnostics/health", async (req, res) => {
         return (cd && cd > now) ? cd.toISOString() : null;
       })(),
     },
-    tiktok:         connHealth("tiktok"),
+    tiktok: (() => {
+      const c = connections.find(r => r.provider === "tiktok");
+      const credentialsSet = !!(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
+      const SCOPES = "user.info.basic,user.info.profile,video.list,video.publish";
+
+      if (!credentialsSet) {
+        return { status: "failed" as const, detail: "Missing TIKTOK_CLIENT_KEY or TIKTOK_CLIENT_SECRET", connectedAt: null, scopesRequested: SCOPES, publishReady: false };
+      }
+      if (!c?.accessToken) {
+        return { status: "warning" as const, detail: "Credentials set — OAuth not completed. Connect TikTok in Connected Accounts.", connectedAt: null, scopesRequested: SCOPES, publishReady: false };
+      }
+      const exp     = c.expiresAt ? new Date(c.expiresAt) : null;
+      const expired = exp ? exp < now : false;
+      if (expired) {
+        return { status: "warning" as const, detail: "Token expired — reconnect TikTok to restore access", connectedAt: c.createdAt?.toISOString() ?? null, scopesRequested: SCOPES, publishReady: false };
+      }
+      const name = c.accountName ?? c.accountId ?? null;
+      // Token exists and is not expired — consider connected.
+      // publishReady will only be true once video.publish scope is approved via app review.
+      return {
+        status: "healthy" as const,
+        detail: name ? `Connected — ${name} | Scopes: ${SCOPES}` : `Connected | Scopes: ${SCOPES}`,
+        connectedAt: c.createdAt?.toISOString() ?? null,
+        scopesRequested: SCOPES,
+        publishReady: false, // set to true once TikTok app review approves video.publish
+        publishNote: "video.publish requires TikTok app review — run Test Publish Readiness to check status",
+      };
+    })(),
     youtube:        connHealth("youtube"),
     telnyx: {
       status: ((): "healthy" | "warning" | "failed" => {

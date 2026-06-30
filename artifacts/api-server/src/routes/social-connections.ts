@@ -396,7 +396,12 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_key: clientKey,
           redirect_uri: `${base}/api/oauth/tiktok/callback`,
           response_type: "code",
-          scope: "user.info.basic,user.info.profile,video.list",
+          // video.publish — required for Content Posting API.
+          // NOTE: video.publish requires TikTok app review/approval before it
+          // works in production. In sandbox mode the token exchange will succeed
+          // but the Content Posting API will return error_code 2061 (permission
+          // denied). Request approval in TikTok Developer Portal → Products tab.
+          scope: "user.info.basic,user.info.profile,video.list,video.publish",
           state: generateState(userId, "tiktok"),
         });
         return `https://www.tiktok.com/v2/auth/authorize?${params}`;
@@ -1172,7 +1177,7 @@ router.get("/social-connections/tiktok-oauth-debug", async (req, res) => {
   const redirectUri = `${appBase}${callbackRoute}`;
   const clientKey = process.env.TIKTOK_CLIENT_KEY ?? "";
   const clientSecretSet = !!process.env.TIKTOK_CLIENT_SECRET;
-  const scopes = "user.info.basic,user.info.profile,video.list";
+  const scopes = "user.info.basic,user.info.profile,video.list,video.publish";
 
   let authUrl = "";
   if (clientKey) {
@@ -1195,6 +1200,145 @@ router.get("/social-connections/tiktok-oauth-debug", async (req, res) => {
     clientSecretSet,
     scopes,
     authUrl,
+  });
+});
+
+// ── TikTok publish-readiness test ────────────────────────────────────────────
+// POST /api/social-connections/tiktok-test-publish-readiness
+// Checks credentials, stored token, token validity, and publish capability.
+// Does NOT create a post. Returns exact TikTok API error if any step fails.
+router.post("/social-connections/tiktok-test-publish-readiness", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const clientKey    = process.env.TIKTOK_CLIENT_KEY ?? "";
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET ?? "";
+  const appBase      = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  const redirectUri  = `${appBase}/api/oauth/tiktok/callback`;
+
+  const SCOPES_REQUESTED = "user.info.basic,user.info.profile,video.list,video.publish";
+  const SCOPES_REQUIRED_FOR_PUBLISH = ["video.publish"];
+
+  // ── 1. Credential check ────────────────────────────────────────────────────
+  const credentialsOk = !!clientKey && !!clientSecret;
+
+  // ── 2. Stored connection check ─────────────────────────────────────────────
+  const [conn] = await db
+    .select()
+    .from(socialConnectionsTable)
+    .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "tiktok")));
+
+  const now = new Date();
+  const tokenExists    = !!conn?.accessToken;
+  const tokenExpired   = conn?.expiresAt ? new Date(conn.expiresAt) < now : false;
+  const expiresAt      = conn?.expiresAt?.toISOString() ?? null;
+  const accountId      = conn?.accountId ?? conn?.accountName ?? null;
+
+  // ── 3. Token validity — call TikTok /v2/user/info/ ──────────────────────
+  let tokenValid = false;
+  let tokenError: string | null = null;
+  let tiktokUser: { openId?: string; displayName?: string } | null = null;
+
+  if (tokenExists && !tokenExpired) {
+    try {
+      const r = await fetch(
+        "https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",
+        { headers: { Authorization: `Bearer ${conn!.accessToken}` } }
+      );
+      const data = await r.json() as any;
+      if (r.ok && data.error?.code === "ok") {
+        tokenValid = true;
+        tiktokUser = { openId: data.data?.user?.open_id, displayName: data.data?.user?.display_name };
+      } else {
+        tokenError = data.error?.message ?? `TikTok API ${r.status}`;
+      }
+    } catch (e: any) {
+      tokenError = e.message ?? "Network error calling TikTok API";
+    }
+  }
+
+  // ── 4. Publish capability check — call creator_info endpoint ─────────────
+  // POST /v2/post/publish/creator_info/query/ reveals which privacy levels and
+  // features the connected account actually has access to.
+  let creatorInfoOk = false;
+  let creatorInfoData: any = null;
+  let creatorInfoError: string | null = null;
+
+  if (tokenValid && conn?.accessToken) {
+    try {
+      const r = await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${conn.accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await r.json() as any;
+      console.log("[TIKTOK-READINESS] creator_info:", JSON.stringify(data));
+      if (r.ok && data.error?.code === "ok") {
+        creatorInfoOk = true;
+        creatorInfoData = data.data ?? null;
+      } else {
+        const code = data.error?.code;
+        const msg  = data.error?.message ?? `TikTok API ${r.status}`;
+        creatorInfoError = code === 2061
+          ? `${msg} — video.publish scope not yet approved. Request app review in TikTok Developer Portal → Products tab. [code: ${code}]`
+          : `${msg} [code: ${code}]`;
+      }
+    } catch (e: any) {
+      creatorInfoError = e.message ?? "Network error";
+    }
+  }
+
+  // ── 5. Build overall readiness status ─────────────────────────────────────
+  const blockers: string[] = [];
+  if (!credentialsOk)           blockers.push("TIKTOK_CLIENT_KEY or TIKTOK_CLIENT_SECRET not set");
+  if (!tokenExists)              blockers.push("No stored TikTok connection — user must complete OAuth flow");
+  if (tokenExpired)              blockers.push("Access token expired — reconnect TikTok in Connected Accounts");
+  if (tokenExists && !tokenValid && tokenError) blockers.push(`Token invalid: ${tokenError}`);
+  if (tokenValid && !creatorInfoOk && creatorInfoError) blockers.push(creatorInfoError);
+
+  const publishReady = blockers.length === 0 && creatorInfoOk;
+  const overallStatus =
+    publishReady        ? "ready" :
+    tokenValid          ? "connected_no_publish_permission" :
+    tokenExists         ? "token_invalid" :
+    credentialsOk       ? "not_connected" :
+                          "missing_credentials";
+
+  res.json({
+    overallStatus,
+    publishReady,
+    blockers,
+    credentials: {
+      clientKeySet:    !!clientKey,
+      clientKeyPrefix: clientKey ? clientKey.slice(0, 8) + "…" : null,
+      clientSecretSet: !!clientSecret,
+    },
+    redirectUri,
+    scopesRequested:         SCOPES_REQUESTED,
+    scopesRequiredForPublish: SCOPES_REQUIRED_FOR_PUBLISH,
+    connection: tokenExists ? {
+      accountId,
+      tokenValid,
+      tokenExpired,
+      expiresAt,
+      tokenError,
+      tiktokUser,
+    } : null,
+    creatorInfo: {
+      ok:    creatorInfoOk,
+      data:  creatorInfoData,
+      error: creatorInfoError,
+    },
+    notes: [
+      "video.publish scope requires TikTok app review before it works in production.",
+      "In sandbox/dev mode, creator_info/query returns error_code 2061 (permission denied).",
+      "Redirect URI must exactly match what is registered in TikTok Developer Portal.",
+      `Current redirect URI: ${redirectUri}`,
+      "To switch to custom domain: update PUBLIC_APP_URL env var and re-register the URI in TikTok portal.",
+    ],
   });
 });
 

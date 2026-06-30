@@ -41,7 +41,6 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-TIKTOK_CLIENT_KEY = "aw9vmhcwzpyr5i0w"
 BUSINESS_FORWARD_NUMBER = "+12543249090"
 TELNYX_FROM_NUMBER = "+12512863200"
 TELNYX_CLIENT_NAME = "Bed Bugs & Beyond"

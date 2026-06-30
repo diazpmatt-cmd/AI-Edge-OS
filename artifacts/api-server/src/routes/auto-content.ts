@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { autoContentSettingsTable, socialPostsTable } from "@workspace/db/schema";
+import { autoContentSettingsTable, socialPostsTable, imageAssetsTable } from "@workspace/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -420,6 +420,46 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
     insertedIds.push(ins.id);
   }
 
+  // ── V4: Auto Image Attachment ────────────────────────────────────────────────
+  try {
+    const assets = await db.select().from(imageAssetsTable)
+      .where(eq(imageAssetsTable.userId, userId));
+    if (assets.length > 0) {
+      const ANGLE_TO_CAT: Record<string, string> = {
+        educational: "educational", warning: "warning", promotional: "treatment",
+        seasonal: "seasonal", faq: "educational", testimonial: "branding",
+        prevention: "prevention", emergency: "warning",
+      };
+      for (let i = 0; i < generated.length; i++) {
+        const gp = generated[i];
+        const postId = insertedIds[i];
+        const cityLow  = gp.city.split(",")[0].trim().toLowerCase();
+        const topicLow = gp.topic.toLowerCase();
+        const wantedCat = ANGLE_TO_CAT[gp.angle] ?? "";
+        let bestAsset: typeof assets[0] | null = null;
+        let bestScore = 0;
+        for (const asset of assets) {
+          const tArr = (JSON.parse(asset.topicTags || "[]") as string[]).map(t => t.toLowerCase());
+          const cArr = (JSON.parse(asset.cityTags  || "[]") as string[]).map(c => c.toLowerCase());
+          let s = 0;
+          if (topicLow && tArr.includes(topicLow)) s += 50;
+          if (wantedCat && asset.category.toLowerCase() === wantedCat) s += 30;
+          if (cityLow  && cArr.includes(cityLow))  s += 20;
+          if (s > bestScore) { bestScore = s; bestAsset = asset; }
+        }
+        if (bestScore >= 70 && bestAsset) {
+          await db.update(socialPostsTable).set({
+            matchedImageId:    bestAsset.id,
+            matchedImageUrl:   bestAsset.fileUrl,
+            matchedImageScore: String(bestScore),
+          }).where(eq(socialPostsTable.id, postId));
+        }
+      }
+    }
+  } catch (imgErr) {
+    console.warn("[auto-content] image matching failed:", imgErr);
+  }
+
   const now = new Date();
   const prevUsed: string[] = Array.isArray(passedUsedCombos) ? passedUsedCombos : [];
   const newKeys = slots.map(s => `${s.city}:${s.topic}`);
@@ -507,6 +547,9 @@ router.get("/auto-content/queue", async (req, res) => {
       bestPlatform: p.bestPlatform ?? null,
       imageRecommendation: p.imageRecommendation ?? null,
       duplicateRisk: p.duplicateRisk ?? null,
+      matchedImageId:    p.matchedImageId ?? null,
+      matchedImageUrl:   p.matchedImageUrl ?? null,
+      matchedImageScore: p.matchedImageScore ? parseInt(p.matchedImageScore, 10) : null,
     })),
     total: total.length,
   });
@@ -699,6 +742,164 @@ router.get("/auto-content/analytics", async (req, res) => {
       bestPlatform: bestPost.bestPlatform,
     } : null,
   });
+});
+
+// ── GET /auto-content/insights ────────────────────────────────────────────────
+
+router.get("/auto-content/insights", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const posts = await db.select().from(socialPostsTable)
+    .where(eq(socialPostsTable.userId, userId));
+
+  const perfPosts = posts.filter(p => p.engagementScore);
+
+  function scoreOf(p: typeof posts[0]): number {
+    if (p.engagementScore) return parseFloat(p.engagementScore);
+    if (p.contentScore)    return parseFloat(p.contentScore) * 0.5;
+    return 0;
+  }
+
+  const source = perfPosts.length >= 3 ? perfPosts : posts;
+
+  function topItem(getKey: (p: typeof posts[0]) => string | null): { value: string; score: number } | null {
+    const acc: Record<string, { total: number; count: number }> = {};
+    for (const p of source) {
+      const k = getKey(p);
+      if (!k) continue;
+      acc[k] = acc[k] ?? { total: 0, count: 0 };
+      acc[k].total += scoreOf(p);
+      acc[k].count++;
+    }
+    const sorted = Object.entries(acc)
+      .map(([v, d]) => ({ value: v, score: d.count > 0 ? d.total / d.count : 0 }))
+      .sort((a, b) => b.score - a.score);
+    return sorted[0] ?? null;
+  }
+
+  const topTopic    = topItem(p => p.aiTopic);
+  const topCity     = topItem(p => p.aiCity);
+  const topAngle    = topItem(p => p.aiAngle);
+  const topPlatform = topItem(p => p.bestPlatform);
+
+  const hourAcc: Record<number, { total: number; count: number }> = {};
+  for (const p of source) {
+    const h = p.scheduledAt ? new Date(p.scheduledAt).getHours() : null;
+    if (h === null) continue;
+    hourAcc[h] = hourAcc[h] ?? { total: 0, count: 0 };
+    hourAcc[h].total += scoreOf(p);
+    hourAcc[h].count++;
+  }
+  const bestHourEntry = Object.entries(hourAcc)
+    .map(([h, d]) => ({ hour: parseInt(h), score: d.total / d.count }))
+    .sort((a, b) => b.score - a.score)[0];
+
+  function fmtHour(h: number): string {
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12} ${ampm}`;
+  }
+
+  const bestPostingTime = bestHourEntry ? fmtHour(bestHourEntry.hour) : null;
+
+  const realPerfPosts = posts.filter(p => p.engagementScore);
+  const avgEngagement = realPerfPosts.length > 0
+    ? Math.round(realPerfPosts.reduce((s, p) => s + parseFloat(p.engagementScore!), 0) / realPerfPosts.length * 10) / 10
+    : null;
+
+  const hasRealData = perfPosts.length >= 3;
+  const insights: string[] = [];
+
+  if (posts.length === 0) {
+    insights.push("Generate and publish posts to unlock AI performance insights.");
+  } else if (!hasRealData) {
+    insights.push(`${posts.length} post${posts.length !== 1 ? "s" : ""} tracked — log performance on published posts to unlock personalized insights.`);
+    if (topTopic) insights.push(`Most generated topic: ${topTopic.value}. Performance data needed to rank it.`);
+    if (topAngle) insights.push(`Most used angle: ${topAngle.value}. Log real metrics to see what's resonating.`);
+  } else {
+    if (topTopic)    insights.push(`${topTopic.value} posts perform best — avg engagement ${Math.round(topTopic.score * 10) / 10}%.`);
+    if (topCity)     insights.push(`${topCity.value.split(",")[0]} is your top city — strongest engagement there.`);
+    if (topAngle)    insights.push(`${topAngle.value} angle outperforms others — lean into this style.`);
+    if (topPlatform) insights.push(`${topPlatform.value} delivers the best results — prioritize it.`);
+    if (bestPostingTime) insights.push(`Posts at ${bestPostingTime} outperform other times.`);
+  }
+
+  res.json({
+    hasRealData,
+    avgEngagementScore: avgEngagement,
+    topTopic:       topTopic?.value   ?? null,
+    topCity:        topCity?.value?.split(",")[0] ?? null,
+    topAngle:       topAngle?.value   ?? null,
+    topPlatform:    topPlatform?.value ?? null,
+    bestPostingTime,
+    totalPosts:     posts.length,
+    postsWithPerf:  perfPosts.length,
+    insights,
+  });
+});
+
+// ── GET /auto-content/recommendations ────────────────────────────────────────
+
+router.get("/auto-content/recommendations", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [posts, settingsRow] = await Promise.all([
+    db.select().from(socialPostsTable).where(eq(socialPostsTable.userId, userId)),
+    db.select().from(autoContentSettingsTable).where(eq(autoContentSettingsTable.userId, userId)).then(r => r[0] ?? null),
+  ]);
+
+  const perfPosts = posts.filter(p => p.engagementScore);
+  const hasData   = perfPosts.length >= 3;
+
+  type Rec = { type: string; label: string; value: string; reason: string };
+  const recs: Rec[] = [];
+
+  if (!hasData) {
+    const areas      = settingsRow ? parseJson<string[]>(settingsRow.serviceAreas, DEFAULT_SERVICE_AREAS) : DEFAULT_SERVICE_AREAS;
+    const topics     = settingsRow ? parseJson<string[]>(settingsRow.topics, DEFAULT_TOPICS) : DEFAULT_TOPICS;
+    const usedCombos = settingsRow ? parseJson<string[]>(settingsRow.usedCombos, []) : [];
+    const unused = areas
+      .flatMap(c => topics.map(t => ({ city: c, topic: t, key: `${c}:${t}` })))
+      .filter(x => !usedCombos.includes(x.key));
+    if (unused.length > 0) {
+      const next = unused[0];
+      recs.push({ type: "topic", label: "Recommended Next Topic", value: next.topic, reason: `${next.city.split(",")[0]} hasn't been covered yet` });
+    }
+    recs.push({ type: "angle",    label: "Best Angle to Try",     value: "Warning",    reason: "Warning posts typically generate high urgency engagement" });
+    recs.push({ type: "time",     label: "Optimal Posting Time",  value: "8 AM",       reason: "Morning posts before commute typically see the highest reach" });
+    recs.push({ type: "platform", label: "Priority Platform",     value: "Facebook",   reason: "Local pest control posts perform best on Facebook for Gulf Coast audiences" });
+  } else {
+    function computeTop(getKey: (p: typeof posts[0]) => string | null): { value: string; avg: number } | null {
+      const acc: Record<string, { total: number; count: number }> = {};
+      for (const p of perfPosts) {
+        const k = getKey(p); if (!k) continue;
+        acc[k] = acc[k] ?? { total: 0, count: 0 };
+        acc[k].total += parseFloat(p.engagementScore!); acc[k].count++;
+      }
+      const e = Object.entries(acc).map(([v, d]) => ({ value: v, avg: d.total / d.count })).sort((a, b) => b.avg - a.avg);
+      return e[0] ?? null;
+    }
+    const tAngle    = computeTop(p => p.aiAngle);
+    const tTopic    = computeTop(p => p.aiTopic);
+    const tCity     = computeTop(p => p.aiCity);
+    const hourAcc: Record<number, { total: number; count: number }> = {};
+    for (const p of perfPosts) {
+      const h = p.scheduledAt ? new Date(p.scheduledAt).getHours() : null;
+      if (h === null) continue;
+      hourAcc[h] = hourAcc[h] ?? { total: 0, count: 0 };
+      hourAcc[h].total += parseFloat(p.engagementScore!); hourAcc[h].count++;
+    }
+    const bestH = Object.entries(hourAcc).map(([h, d]) => ({ h: parseInt(h), avg: d.total / d.count })).sort((a, b) => b.avg - a.avg)[0];
+    const fmtH = (h: number) => { const ap = h >= 12 ? "PM" : "AM"; return `${h === 0 ? 12 : h > 12 ? h - 12 : h} ${ap}`; };
+    if (tAngle) recs.push({ type: "angle",  label: "Best Next Post Angle",  value: tAngle.value,                    reason: `${tAngle.value} posts have your highest avg engagement` });
+    if (tTopic) recs.push({ type: "topic",  label: "Best Topic This Week",  value: tTopic.value,                    reason: `${tTopic.value} content drives the most engagement` });
+    if (tCity)  recs.push({ type: "city",   label: "Best City to Target",   value: tCity.value.split(",")[0],        reason: `${tCity.value.split(",")[0]} sees the strongest response rates` });
+    recs.push({            type: "time",   label: "Best Posting Time",     value: bestH ? fmtH(bestH.h) : "8 AM", reason: "Based on your top-performing post schedule" });
+  }
+
+  res.json({ recommendations: recs, hasData });
 });
 
 export default router;

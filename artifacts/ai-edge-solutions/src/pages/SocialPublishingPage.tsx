@@ -22,6 +22,20 @@ type SocialPost = {
   status: string;
   publishedAt: string | null;
   errorMessage: string | null;
+  aiCity: string | null;
+  aiTopic: string | null;
+  aiAngle: string | null;
+  contentScore: number | null;
+  matchedImageId: string | null;
+  matchedImageUrl: string | null;
+  matchedImageScore: number | null;
+  impressions: number | null;
+  reach: number | null;
+  clicks: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  engagementScore: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -116,6 +130,8 @@ export default function SocialPublishingPage() {
   const [publishingId,      setPublishingId]      = useState<string | null>(null);
   const [publishResult,     setPublishResult]     = useState<{ ok: boolean; msg: string } | null>(null);
   const [publishStatusOpen, setPublishStatusOpen] = useState(false);
+  const [perfModalId,  setPerfModalId]  = useState<string | null>(null);
+  const [perfForm,     setPerfForm]     = useState({ impressions: "", reach: "", clicks: "", likes: "", comments: "", shares: "" });
 
   const { data: posts = [], isLoading } = useQuery<SocialPost[]>({
     queryKey: ["social-posts"],
@@ -150,6 +166,25 @@ export default function SocialPublishingPage() {
       setTimeout(() => setPublishResult(null), 7000);
     },
     onError: () => setPublishingId(null),
+  });
+
+  const imageMatchMut = useMutation({
+    mutationFn: (id: string) => authFetch(`/social-posts/${id}/image-match`, { method: "POST", body: "{}" }),
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ["social-posts"] });
+      if (data.matched) toast.success(`Image matched! Score: ${data.score}/100`);
+      else toast.info("No matching image found — upload tagged images first.");
+    },
+  });
+
+  const perfMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, number> }) =>
+      authFetch(`/social-posts/${id}/performance`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["social-posts"] });
+      setPerfModalId(null);
+      toast.success("Performance data saved!");
+    },
   });
 
   // Meta publish-status (live permission + page token check)
@@ -615,11 +650,17 @@ export default function SocialPublishingPage() {
                 return (
                   <div key={post.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 16, padding: "14px 20px", borderBottom: i < posts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "start" }}>
 
-                    <div style={{ width: 64, height: 64, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {post.imageUrl
-                        ? <img src={post.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <span style={{ fontSize: 22 }}>🖼</span>
-                      }
+                    <div style={{ width: 64, height: 64, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                      {post.imageUrl || post.matchedImageUrl ? (
+                        <>
+                          <img src={post.imageUrl ?? `${BASE}/api/storage${post.matchedImageUrl}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          {!post.imageUrl && post.matchedImageUrl && (
+                            <div style={{ position: "absolute", bottom: 2, right: 2, background: "rgba(0,174,239,0.9)", borderRadius: 3, fontSize: 7, fontWeight: 800, color: "#fff", padding: "1px 3px", lineHeight: 1 }}>AI</div>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 22 }}>🖼</span>
+                      )}
                     </div>
 
                     <div style={{ minWidth: 0 }}>
@@ -674,6 +715,27 @@ export default function SocialPublishingPage() {
                           ⚠ {post.errorMessage}
                         </div>
                       )}
+
+                      {/* V4: Performance metrics */}
+                      {(post.status === "published" || post.status === "partial") && (
+                        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          {post.engagementScore != null ? (
+                            <>
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, border: `1px solid ${post.engagementScore >= 5 ? "rgba(16,185,129,0.3)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)"}`, background: post.engagementScore >= 5 ? "rgba(16,185,129,0.1)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)", color: post.engagementScore >= 5 ? "#10B981" : post.engagementScore >= 2 ? "#F59E0B" : "#EF4444" }}>
+                                📊 {post.engagementScore.toFixed(1)}% eng
+                              </span>
+                              {post.impressions != null && <span style={{ fontSize: 10, color: "#64748B" }}>👁 {post.impressions.toLocaleString()}</span>}
+                              {post.likes      != null && <span style={{ fontSize: 10, color: "#64748B" }}>❤ {post.likes}</span>}
+                              {post.shares     != null && <span style={{ fontSize: 10, color: "#64748B" }}>↗ {post.shares}</span>}
+                              <button onClick={() => { setPerfModalId(post.id); setPerfForm({ impressions: String(post.impressions ?? ""), reach: String(post.reach ?? ""), clicks: String(post.clicks ?? ""), likes: String(post.likes ?? ""), comments: String(post.comments ?? ""), shares: String(post.shares ?? "") }); }} style={{ fontSize: 10, color: "#475569", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "1px 8px", cursor: "pointer" }}>edit</button>
+                            </>
+                          ) : (
+                            <button onClick={() => { setPerfModalId(post.id); setPerfForm({ impressions: "", reach: "", clicks: "", likes: "", comments: "", shares: "" }); }} style={{ fontSize: 10, fontWeight: 600, color: "#6B7280", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: "2px 10px", cursor: "pointer" }}>
+                              📊 Log Performance
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "flex-start" }}>
@@ -685,6 +747,14 @@ export default function SocialPublishingPage() {
                         >
                           {isPublishing ? "…" : "🚀 Publish"}
                         </button>
+                      )}
+                      {(post.status === "draft" || post.status === "scheduled") && !post.matchedImageId && (
+                        <button
+                          onClick={() => imageMatchMut.mutate(post.id)}
+                          disabled={imageMatchMut.isPending}
+                          title="Auto-match image from library"
+                          style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(107,158,255,0.08)", border: "1px solid rgba(107,158,255,0.2)", color: "#6B9EFF" }}
+                        >🖼</button>
                       )}
                       <button onClick={() => startEdit(post)} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>✏</button>
                       <button onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(post.id); }} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>🗑</button>
@@ -700,6 +770,60 @@ export default function SocialPublishingPage() {
           <strong>Instagram tip:</strong> Select both Facebook + Instagram together. The image uploads to Facebook first, and that hosted URL is automatically reused for Instagram.
         </div>
       </div>
+
+      {/* ── Performance logging modal ── */}
+      {perfModalId && (() => {
+        const post = posts.find(p => p.id === perfModalId);
+        if (!post) return null;
+        const handleSave = () => {
+          const data: Record<string, number> = {};
+          if (perfForm.impressions) data.impressions = parseInt(perfForm.impressions, 10);
+          if (perfForm.reach)       data.reach       = parseInt(perfForm.reach,       10);
+          if (perfForm.clicks)      data.clicks      = parseInt(perfForm.clicks,      10);
+          if (perfForm.likes)       data.likes       = parseInt(perfForm.likes,       10);
+          if (perfForm.comments)    data.comments    = parseInt(perfForm.comments,    10);
+          if (perfForm.shares)      data.shares      = parseInt(perfForm.shares,      10);
+          perfMut.mutate({ id: perfModalId, data });
+        };
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#0D1829", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 440 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", marginBottom: 4 }}>📊 Log Performance</div>
+              <div style={{ fontSize: 12, color: "#475569", marginBottom: 20, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {post.aiTopic ? `${post.aiTopic}${post.aiCity ? ` · ${post.aiCity.split(",")[0]}` : ""}` : post.caption.slice(0, 50)}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                {([
+                  { key: "impressions" as const, label: "Impressions", icon: "👁" },
+                  { key: "reach"       as const, label: "Reach",       icon: "📡" },
+                  { key: "clicks"      as const, label: "Clicks",      icon: "🔗" },
+                  { key: "likes"       as const, label: "Likes",       icon: "❤" },
+                  { key: "comments"    as const, label: "Comments",    icon: "💬" },
+                  { key: "shares"      as const, label: "Shares",      icon: "↗" },
+                ]).map(f => (
+                  <div key={f.key}>
+                    <label style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 5 }}>{f.icon} {f.label}</label>
+                    <input type="number" min="0" value={perfForm[f.key]}
+                      onChange={e => setPerfForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      placeholder="0"
+                      style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#E5E7EB", fontFamily: "inherit", outline: "none" }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: "#334155", marginBottom: 18 }}>
+                Engagement score is computed automatically: (likes + comments×3 + shares×5 + clicks×2) / reach × 100
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setPerfModalId(null)} style={{ flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>Cancel</button>
+                <button onClick={handleSave} disabled={perfMut.isPending} style={{ flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", background: "linear-gradient(135deg,#00AEEF,#0080CC)", border: "none", color: "#fff", opacity: perfMut.isPending ? 0.7 : 1 }}>
+                  {perfMut.isPending ? "Saving…" : "Save Performance"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </AppShell>
   );
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { socialPostsTable, socialConnectionsTable } from "@workspace/db/schema";
+import { socialPostsTable, socialConnectionsTable, imageAssetsTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import multer from "multer";
@@ -44,6 +44,21 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     status:          r.status,
     publishedAt:     r.publishedAt?.toISOString() ?? null,
     errorMessage:    r.errorMessage,
+    aiCity:          r.aiCity ?? null,
+    aiTopic:         r.aiTopic ?? null,
+    aiAngle:         r.aiAngle ?? null,
+    contentScore:    r.contentScore ? parseInt(r.contentScore, 10) : null,
+    bestPlatform:    r.bestPlatform ?? null,
+    matchedImageId:    r.matchedImageId ?? null,
+    matchedImageUrl:   r.matchedImageUrl ?? null,
+    matchedImageScore: r.matchedImageScore ? parseInt(r.matchedImageScore, 10) : null,
+    impressions:     r.impressions ? parseInt(r.impressions, 10) : null,
+    reach:           r.reach      ? parseInt(r.reach,       10) : null,
+    clicks:          r.clicks     ? parseInt(r.clicks,      10) : null,
+    likes:           r.likes      ? parseInt(r.likes,       10) : null,
+    comments:        r.comments   ? parseInt(r.comments,    10) : null,
+    shares:          r.shares     ? parseInt(r.shares,      10) : null,
+    engagementScore: r.engagementScore ? parseFloat(r.engagementScore) : null,
     createdAt:       r.createdAt.toISOString(),
     updatedAt:       r.updatedAt.toISOString(),
   };
@@ -575,6 +590,83 @@ async function publishToGBP(
   console.log("[GBP-PUBLISH] success name=", postData.name);
   return { id: postData.name };
 }
+
+// ── POST /social-posts/:id/image-match ───────────────────────────────────────
+router.post("/social-posts/:id/image-match", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const post = await db.select().from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
+    .then(r => r[0]);
+  if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+
+  const assets = await db.select().from(imageAssetsTable)
+    .where(eq(imageAssetsTable.userId, userId));
+  if (!assets.length) { res.json({ matched: false, message: "No images in library" }); return; }
+
+  const cityLow  = (post.aiCity  ?? "").split(",")[0].trim().toLowerCase();
+  const topicLow = (post.aiTopic ?? "").toLowerCase();
+  const angle    = post.aiAngle ?? "";
+  const ANGLE_TO_CAT: Record<string, string> = {
+    educational: "educational", warning: "warning", promotional: "treatment",
+    seasonal: "seasonal", faq: "educational", testimonial: "branding",
+    prevention: "prevention", emergency: "warning",
+  };
+  const wantedCat = ANGLE_TO_CAT[angle] ?? "";
+
+  let bestAsset: typeof assets[0] | null = null;
+  let bestScore = 0;
+  for (const asset of assets) {
+    const tArr = (JSON.parse(asset.topicTags || "[]") as string[]).map(t => t.toLowerCase());
+    const cArr = (JSON.parse(asset.cityTags  || "[]") as string[]).map(c => c.toLowerCase());
+    let s = 0;
+    if (topicLow && tArr.includes(topicLow)) s += 50;
+    if (wantedCat && asset.category.toLowerCase() === wantedCat) s += 30;
+    if (cityLow  && cArr.includes(cityLow))  s += 20;
+    if (s > bestScore) { bestScore = s; bestAsset = asset; }
+  }
+
+  if (bestAsset) {
+    const [updated] = await db.update(socialPostsTable).set({
+      matchedImageId:    bestAsset.id,
+      matchedImageUrl:   bestAsset.fileUrl,
+      matchedImageScore: String(bestScore),
+    }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
+    res.json({ matched: true, score: bestScore, imageUrl: bestAsset.fileUrl, post: rowToDto(updated) });
+  } else {
+    res.json({ matched: false, message: "No matching image found in library" });
+  }
+});
+
+// ── POST /social-posts/:id/performance ───────────────────────────────────────
+router.post("/social-posts/:id/performance", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { impressions, reach, clicks, likes, comments, shares } = req.body as {
+    impressions?: number; reach?: number; clicks?: number;
+    likes?: number; comments?: number; shares?: number;
+  };
+
+  const r = Math.max(reach ?? impressions ?? 1, 1);
+  const engScore = Math.min(100, Math.round(
+    ((likes ?? 0) + (comments ?? 0) * 3 + (shares ?? 0) * 5 + (clicks ?? 0) * 2) / r * 100
+  ));
+
+  const updates: Partial<typeof socialPostsTable.$inferInsert> = { engagementScore: String(engScore) };
+  if (impressions != null) updates.impressions = String(impressions);
+  if (reach       != null) updates.reach       = String(reach);
+  if (clicks      != null) updates.clicks      = String(clicks);
+  if (likes       != null) updates.likes       = String(likes);
+  if (comments    != null) updates.comments    = String(comments);
+  if (shares      != null) updates.shares      = String(shares);
+
+  const [updated] = await db.update(socialPostsTable).set(updates)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
+  if (!updated) { res.status(404).json({ error: "Post not found" }); return; }
+  res.json({ ok: true, engagementScore: engScore, post: rowToDto(updated) });
+});
 
 function buildCaption(caption: string, ctaType: string, ctaValue: string | null): string {
   const ctaLabels: Record<string, string> = {

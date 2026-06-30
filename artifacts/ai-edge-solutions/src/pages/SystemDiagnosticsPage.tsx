@@ -246,6 +246,25 @@ export default function SystemDiagnosticsPage() {
     staleTime: 30_000,
   });
 
+  type ContentInsights = {
+    hasRealData: boolean;
+    avgEngagementScore: number | null;
+    topTopic: string | null;
+    topCity: string | null;
+    topAngle: string | null;
+    topPlatform: string | null;
+    bestPostingTime: string | null;
+    totalPosts: number;
+    postsWithPerf: number;
+    insights: string[];
+  };
+  const { data: contentInsights } = useQuery<ContentInsights>({
+    queryKey: ["content-insights-diag"],
+    queryFn: () => authFetch<ContentInsights>("/auto-content/insights"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const regenQueueMut = useMutation({
     mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({}) }),
     onSuccess: (d) => { toast.success(`Queue regenerated: ${d.created} posts created`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
@@ -965,6 +984,64 @@ export default function SystemDiagnosticsPage() {
           </>
         ) : (
           <div style={{ color: "#334155", fontSize: 12 }}>Loading image stats…</div>
+        )}
+      </div>
+
+      {/* ── Section 8: Content Performance ── */}
+      <div style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#FFFFFF", marginBottom: 4 }}>Section 8 — Content Performance</div>
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 16 }}>AI learning loop — engagement scores and top-performing content patterns</div>
+
+        {contentInsights ? (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "Total Posts",       value: contentInsights.totalPosts,                                   color: "#00AEEF", sub: "all statuses" },
+                { label: "With Performance",  value: contentInsights.postsWithPerf,                                 color: "#10B981", sub: "logged metrics" },
+                { label: "Avg Engagement",    value: contentInsights.avgEngagementScore != null ? `${contentInsights.avgEngagementScore}%` : "—", color: contentInsights.avgEngagementScore != null && contentInsights.avgEngagementScore >= 5 ? "#10B981" : "#F59E0B", sub: "real data only" },
+              ].map(card => (
+                <div key={card.label} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{card.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: card.color, marginBottom: 3 }}>{card.value}</div>
+                  <div style={{ fontSize: 10.5, color: "#334155" }}>{card.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "Top Topic",    value: contentInsights.topTopic    ?? "—", icon: "📝" },
+                { label: "Top City",     value: contentInsights.topCity     ?? "—", icon: "📍" },
+                { label: "Top Angle",    value: contentInsights.topAngle    ?? "—", icon: "🎯" },
+                { label: "Top Platform", value: contentInsights.topPlatform ?? "—", icon: "📱" },
+                { label: "Best Time",    value: contentInsights.bestPostingTime ?? "—", icon: "⏰" },
+                { label: "Data Quality", value: contentInsights.hasRealData ? "Real Engagement" : "Content Score Proxy", icon: contentInsights.hasRealData ? "✅" : "⚡" },
+              ].map(item => (
+                <div key={item.label} style={{ display: "flex", gap: 10, alignItems: "center", background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>{item.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginTop: 2 }}>{item.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {contentInsights.insights.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>AI Insights</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {contentInsights.insights.map((s, i) => (
+                    <div key={i} style={{ fontSize: 12, color: "#CBD5E1", lineHeight: 1.5, background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 8, padding: "7px 11px" }}>
+                      <span style={{ color: "#00AEEF", fontWeight: 800, marginRight: 5 }}>→</span>{s}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ color: "#334155", fontSize: 12 }}>Loading content performance…</div>
         )}
       </div>
 

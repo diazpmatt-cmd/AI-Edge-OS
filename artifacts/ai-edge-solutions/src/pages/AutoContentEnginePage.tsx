@@ -44,7 +44,13 @@ type QueuePost = {
   bestPlatform: string | null;
   imageRecommendation: string | null;
   duplicateRisk: "low" | "medium" | "high" | null;
+  matchedImageId: string | null;
+  matchedImageUrl: string | null;
+  matchedImageScore: number | null;
 };
+
+type Recommendation = { type: string; label: string; value: string; reason: string };
+type RecommendationsData = { recommendations: Recommendation[]; hasData: boolean };
 
 type SuggestionsData = { suggestions: string[] };
 
@@ -361,6 +367,13 @@ export default function AutoContentEnginePage() {
     queryKey: ["auto-content-analytics"],
     queryFn: () => authFetch<AnalyticsData>("/auto-content/analytics"),
     refetchInterval: 60000,
+  });
+
+  const recsQuery = useQuery<RecommendationsData>({
+    queryKey: ["auto-content-recommendations"],
+    queryFn: () => authFetch<RecommendationsData>("/auto-content/recommendations"),
+    refetchInterval: 120000,
+    staleTime: 60000,
   });
 
   const set = <K extends keyof Settings>(key: K, val: Settings[K]) =>
@@ -908,6 +921,30 @@ export default function AutoContentEnginePage() {
           </div>
         )}
 
+        {/* ── AI Recommendations Panel ── */}
+        {recsQuery.data?.recommendations && recsQuery.data.recommendations.length > 0 && (
+          <div style={{ marginBottom: 16, background: "rgba(11,22,41,0.7)", border: "1px solid rgba(0,174,239,0.15)", borderRadius: 14, padding: "16px 20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#E2E8F0" }}>🤖 AI Recommendations</div>
+                <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+                  {recsQuery.data.hasData ? "Based on your real engagement data" : "Based on content scoring — log performance to unlock real insights"}
+                </div>
+              </div>
+              <button onClick={() => recsQuery.refetch()} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#6B7280" }}>↺</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              {recsQuery.data.recommendations.map((rec, i) => (
+                <div key={i} style={{ background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.12)", borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{rec.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#00AEEF", marginBottom: 4 }}>{rec.value}</div>
+                  <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{rec.reason}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── AI Queue Inspector (full-width) ── */}
         <div style={{ ...cardStyle, marginTop: 8, marginBottom: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
@@ -1139,7 +1176,26 @@ export default function AutoContentEnginePage() {
 
                           {/* Matched image from library */}
                           <div style={{ marginTop: 12 }}>
-                            <MatchedImageBlock city={p.city} topic={p.topic} angle={p.angle} />
+                            {p.matchedImageId && p.matchedImageUrl ? (
+                              <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.15)" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px" }}>🖼 Auto-Attached Image</div>
+                                  {p.matchedImageScore != null && (
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: p.matchedImageScore >= 80 ? "#10B981" : "#F59E0B", background: p.matchedImageScore >= 80 ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)", border: `1px solid ${p.matchedImageScore >= 80 ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`, padding: "1px 8px", borderRadius: 20 }}>
+                                      {p.matchedImageScore}/100 match
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ display: "flex", gap: 10 }}>
+                                  <div style={{ width: 72, height: 54, borderRadius: 6, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,0.4)" }}>
+                                    <img src={`${BASE_URL}/api/storage${p.matchedImageUrl}`} alt="Matched" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                                  </div>
+                                  <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.5 }}>Image auto-attached at generation. Score ≥ 70 required for auto-attach.</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <MatchedImageBlock city={p.city} topic={p.topic} angle={p.angle} />
+                            )}
                           </div>
 
                           {/* Platforms row */}

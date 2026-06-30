@@ -24,6 +24,18 @@ export const socialPostsTable = pgTable("social_posts", {
   bestPlatform:        text("best_platform"),
   imageRecommendation: text("image_recommendation"),
   duplicateRisk:       text("duplicate_risk"),
+  // V4: Auto Image Attachment
+  matchedImageId:    text("matched_image_id"),
+  matchedImageUrl:   text("matched_image_url"),
+  matchedImageScore: text("matched_image_score"),
+  // V4: Performance Tracking
+  impressions:     text("impressions"),
+  reach:           text("reach"),
+  clicks:          text("clicks"),
+  likes:           text("likes"),
+  comments:        text("comments"),
+  shares:          text("shares"),
+  engagementScore: text("engagement_score"),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

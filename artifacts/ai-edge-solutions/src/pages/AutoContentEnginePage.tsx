@@ -219,6 +219,7 @@ export default function AutoContentEnginePage() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [newTime, setNewTime] = useState("08:00");
   const [result, setResult] = useState<GenerateResult | null>(null);
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
 
   const { isLoading } = useQuery<Settings>({
     queryKey: ["auto-content-settings"],
@@ -228,7 +229,7 @@ export default function AutoContentEnginePage() {
 
   const queueQuery = useQuery<{ posts: QueuePost[]; total: number }>({
     queryKey: ["auto-content-queue"],
-    queryFn: () => authFetch<{ posts: QueuePost[]; total: number }>("/auto-content/queue?limit=12"),
+    queryFn: () => authFetch<{ posts: QueuePost[]; total: number }>("/auto-content/queue?limit=50"),
     refetchInterval: 30000,
   });
 
@@ -291,6 +292,18 @@ export default function AutoContentEnginePage() {
     onSuccess: () => { setSettings(p => ({ ...p, enginePaused: false })); toast.success("Engine resumed."); },
   });
 
+  const deletePostMut = useMutation({
+    mutationFn: (id: string) => authFetch(`/social-posts/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["auto-content-queue"] }); toast.success("Post deleted."); },
+    onError: () => toast.error("Failed to delete post."),
+  });
+
+  const publishNowMut = useMutation({
+    mutationFn: (id: string) => authFetch(`/social-posts/${id}/publish`, { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["auto-content-queue"] }); toast.success("Post published!"); },
+    onError: (e: any) => toast.error(e?.message ?? "Publish failed."),
+  });
+
   const anyPending = generateMut.isPending || clearQueueMut.isPending || pauseMut.isPending || resumeMut.isPending || presetMut.isPending;
 
   const totalCombos = settings.serviceAreas.length * settings.topics.length;
@@ -313,11 +326,22 @@ export default function AutoContentEnginePage() {
     width: "100%", boxSizing: "border-box",
   };
 
-  const engineStatus = !settings.autoGenerateEnabled ? "disabled" : settings.enginePaused ? "paused" : "active";
+  const engineStatus = generateMut.isPending
+    ? "running"
+    : !settings.autoGenerateEnabled
+      ? "disabled"
+      : settings.enginePaused
+        ? "paused"
+        : queueTotal === 0
+          ? "configured"
+          : "active";
+
   const statusColors = {
-    active:   { dot: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.25)", label: "Active" },
-    paused:   { dot: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)",  label: "Paused" },
-    disabled: { dot: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)",    label: "Disabled" },
+    running:    { dot: "#00AEEF", bg: "rgba(0,174,239,0.1)",   border: "rgba(0,174,239,0.3)",    label: "Running",    pulse: true  },
+    active:     { dot: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.25)",  label: "Active",     pulse: false },
+    configured: { dot: "#6B9EFF", bg: "rgba(107,158,255,0.08)",border: "rgba(107,158,255,0.22)", label: "Configured", pulse: false },
+    paused:     { dot: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)",  label: "Paused",     pulse: false },
+    disabled:   { dot: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)",    label: "Disabled",   pulse: false },
   };
   const sc = statusColors[engineStatus];
 
@@ -366,51 +390,71 @@ export default function AutoContentEnginePage() {
           </div>
         </div>
 
-        {/* ── Engine Status Card ── */}
+        {/* ── Engine Status Banner ── */}
         <div style={{
-          marginBottom: 24, borderRadius: 14, padding: "16px 20px",
+          marginBottom: 24, borderRadius: 14, padding: "16px 22px",
           background: sc.bg, border: `1px solid ${sc.border}`,
-          display: "flex", alignItems: "center", flexWrap: "wrap", gap: 16,
+          display: "flex", alignItems: "center", flexWrap: "wrap", gap: 20,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 800, color: sc.dot, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          {/* Status badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}>
+            <div style={{ position: "relative", width: 12, height: 12, flexShrink: 0 }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: sc.dot }} />
+              {sc.pulse && (
+                <div style={{
+                  position: "absolute", inset: 0, borderRadius: "50%", background: sc.dot,
+                  animation: "pulse 1.4s ease-in-out infinite", opacity: 0.5,
+                }} />
+              )}
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 800, color: sc.dot, textTransform: "uppercase", letterSpacing: "0.6px" }}>
               {sc.label}
             </span>
-            <span style={{ fontSize: 13, color: "#94A3B8", marginLeft: 4 }}>— {settings.clientName}</span>
-          </div>
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#E2E8F0" }}>{queueTotal}</div>
-              <div style={{ fontSize: 10.5, color: "#475569" }}>Queue Size</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>
-                {nextPost?.scheduledAt ? fmtDate(nextPost.scheduledAt) : "None scheduled"}
-              </div>
-              <div style={{ fontSize: 10.5, color: "#475569" }}>Next Post</div>
-            </div>
-            {settings.lastGeneratedAt && (
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#64748B" }}>{fmtAge(settings.lastGeneratedAt)}</div>
-                <div style={{ fontSize: 10.5, color: "#475569" }}>Last Generated</div>
-              </div>
+            {settings.clientName && (
+              <span style={{ fontSize: 13, color: "#64748B" }}>— {settings.clientName}</span>
             )}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+
+          {/* Stats row */}
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap", flex: 1, justifyContent: "center" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: queueTotal > 0 ? "#E2E8F0" : "#475569", lineHeight: 1 }}>{queueTotal}</div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px", marginTop: 3 }}>Queued Posts</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: nextPost ? "#E2E8F0" : "#475569" }}>
+                {nextPost?.scheduledAt ? fmtDate(nextPost.scheduledAt) : "None scheduled"}
+              </div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px", marginTop: 3 }}>Next Post</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: settings.lastGeneratedAt ? "#64748B" : "#334155" }}>
+                {settings.lastGeneratedAt ? fmtAge(settings.lastGeneratedAt) : "Never"}
+              </div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px", marginTop: 3 }}>Last Generated</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{settings.frequency.replace(/_/g, " ")}</div>
+              <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px", marginTop: 3 }}>Frequency</div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
             {engineStatus !== "paused" ? (
-              <button onClick={() => pauseMut.mutate()} disabled={anyPending}
-                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}>
+              <button onClick={() => pauseMut.mutate()} disabled={anyPending || engineStatus === "running"}
+                style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: anyPending ? "not-allowed" : "pointer", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B" }}>
                 ⏸ Pause
               </button>
             ) : (
               <button onClick={() => resumeMut.mutate()} disabled={anyPending}
-                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}>
+                style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: anyPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}>
                 ▶ Resume
               </button>
             )}
           </div>
         </div>
+        <style>{`@keyframes pulse { 0%,100%{transform:scale(1);opacity:0.5} 50%{transform:scale(2.2);opacity:0} }`}</style>
 
         {isLoading ? (
           <div style={{ color: "#4A90D9", fontSize: 14, padding: "40px 0", textAlign: "center" }}>Loading settings…</div>
@@ -708,79 +752,203 @@ export default function AutoContentEnginePage() {
                 </p>
               </div>
 
-              {/* AI Queue Preview */}
-              <div style={{ ...cardStyle, marginBottom: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>AI Queue Preview</div>
-                  <span style={{ fontSize: 11, color: "#4A90D9", fontWeight: 600 }}>{queueTotal} queued</span>
-                </div>
-                {queueQuery.isLoading ? (
-                  <div style={{ fontSize: 12, color: "#475569", padding: "8px 0" }}>Loading…</div>
-                ) : !queueQuery.data?.posts.length ? (
-                  <div style={{ fontSize: 12, color: "#475569", padding: "8px 0", textAlign: "center" }}>
-                    No posts queued. Click Generate to fill the queue.
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {queueQuery.data.posts.slice(0, 10).map(p => {
-                      const anglCol = ANGLE_COLOR[p.angle ?? ""] ?? "#94A3B8";
-                      return (
-                        <div key={p.id} style={{
-                          borderRadius: 9, padding: "8px 10px",
-                          background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
-                          display: "flex", flexDirection: "column", gap: 4,
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                              {p.topic && <span style={{ fontSize: 11, fontWeight: 700, color: "#E2E8F0" }}>{p.topic}</span>}
-                              {p.city && <span style={{ fontSize: 11, color: "#64748B" }}>· {p.city.split(",")[0]}</span>}
-                              {p.angle && (
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 12, background: `${anglCol}18`, color: anglCol, border: `1px solid ${anglCol}33` }}>
-                                  {p.angle}
-                                </span>
-                              )}
-                            </div>
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 12, background: `${STATUS_COLOR[p.status] ?? "#94A3B8"}18`, color: STATUS_COLOR[p.status] ?? "#94A3B8" }}>
-                              {p.status}
-                            </span>
-                          </div>
-                          {/* Dual-caption section */}
-                          {p.captionFacebook && p.captionGoogle ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 4 }}>
-                              <div style={{ display: "flex", gap: 5, alignItems: "flex-start" }}>
-                                <span style={{ fontSize: 9, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.1)", borderRadius: 8, padding: "1px 5px", flexShrink: 0, marginTop: 1 }}>FB</span>
-                                <span style={{ fontSize: 10.5, color: "#94A3B8", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.captionFacebook}</span>
-                              </div>
-                              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                                <span style={{ fontSize: 9, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.1)", borderRadius: 8, padding: "1px 5px", flexShrink: 0 }}>GBP</span>
-                                <span style={{ fontSize: 10.5, color: "#64748B", fontStyle: "italic" }}>{p.captionGoogle}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.4 }}>{p.caption}</div>
-                          )}
-                          <div style={{ fontSize: 10.5, color: "#475569" }}>
-                            {p.scheduledAt ? fmtDate(p.scheduledAt) : "No time set"}
-                            {p.platforms.length > 0 && <span style={{ marginLeft: 8, color: "#334155" }}>· {p.platforms.join(", ")}</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {queueTotal > 10 && (
-                      <div style={{ fontSize: 11, color: "#475569", textAlign: "center", padding: "4px 0" }}>
-                        +{queueTotal - 10} more in{" "}
-                        <span style={{ color: "#4A90D9", cursor: "pointer" }} onClick={() => navigate("/admin/social-publishing")}>
-                          Publishing Center
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
             </div>
           </div>
         )}
+
+        {/* ── AI Queue Inspector (full-width) ── */}
+        <div style={{ ...cardStyle, marginTop: 8, marginBottom: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#E2E8F0" }}>AI Queue Inspector</div>
+              <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                {queueTotal} post{queueTotal !== 1 ? "s" : ""} queued — click any row to expand captions
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => queueQuery.refetch()}
+                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>
+                ↺ Refresh
+              </button>
+              <button onClick={() => navigate("/admin/social-publishing")}
+                style={{ padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.25)", color: "#00AEEF" }}>
+                Open Publishing Center →
+              </button>
+            </div>
+          </div>
+
+          {queueQuery.isLoading ? (
+            <div style={{ textAlign: "center", padding: "32px 0", color: "#475569", fontSize: 13 }}>Loading queue…</div>
+          ) : !queueQuery.data?.posts.length ? (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 6 }}>Queue is empty</div>
+              <div style={{ fontSize: 12.5, color: "#334155" }}>Use "Generate Next 5 Posts" or "Generate Next 14 Days" to fill it.</div>
+            </div>
+          ) : (
+            <>
+              {/* Table header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "90px 160px 110px 120px 100px 130px 1fr",
+                gap: 8, padding: "6px 14px 8px",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+                fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px",
+              }}>
+                <span>Status</span>
+                <span>Scheduled</span>
+                <span>City</span>
+                <span>Topic</span>
+                <span>Angle</span>
+                <span>Platforms</span>
+                <span style={{ textAlign: "right" }}>Actions</span>
+              </div>
+
+              {/* Rows */}
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {queueQuery.data.posts.map((p, idx) => {
+                  const anglCol = ANGLE_COLOR[p.angle ?? ""] ?? "#94A3B8";
+                  const statCol = STATUS_COLOR[p.status] ?? "#94A3B8";
+                  const isExpanded = expandedPostId === p.id;
+                  const isOdd = idx % 2 === 1;
+                  return (
+                    <div key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      {/* Main row */}
+                      <div
+                        onClick={() => setExpandedPostId(isExpanded ? null : p.id)}
+                        style={{
+                          display: "grid", gridTemplateColumns: "90px 160px 110px 120px 100px 130px 1fr",
+                          gap: 8, padding: "10px 14px", cursor: "pointer", alignItems: "center",
+                          background: isExpanded
+                            ? "rgba(0,174,239,0.06)"
+                            : isOdd ? "rgba(255,255,255,0.012)" : "transparent",
+                          transition: "background 0.15s",
+                        }}
+                      >
+                        {/* Status */}
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          background: `${statCol}18`, color: statCol, border: `1px solid ${statCol}30`,
+                          whiteSpace: "nowrap", display: "inline-block", textAlign: "center",
+                        }}>
+                          {p.status}
+                        </span>
+
+                        {/* Scheduled */}
+                        <span style={{ fontSize: 11.5, color: "#64748B", whiteSpace: "nowrap" }}>
+                          {p.scheduledAt ? fmtDate(p.scheduledAt) : "—"}
+                        </span>
+
+                        {/* City */}
+                        <span style={{ fontSize: 12, color: "#CBD5E1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.city?.split(",")[0] ?? "—"}
+                        </span>
+
+                        {/* Topic */}
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.topic ?? "—"}
+                        </span>
+
+                        {/* Angle */}
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          background: `${anglCol}18`, color: anglCol, border: `1px solid ${anglCol}30`,
+                          whiteSpace: "nowrap", display: "inline-block", textAlign: "center",
+                        }}>
+                          {p.angle ?? "—"}
+                        </span>
+
+                        {/* Platforms */}
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {p.platforms.map(pl => {
+                            const opt = PLATFORM_OPTIONS.find(o => o.value === pl);
+                            return opt ? (
+                              <span key={pl} style={{
+                                fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
+                                background: `${opt.color}18`, color: opt.color, border: `1px solid ${opt.color}30`,
+                              }}>{opt.label}</span>
+                            ) : null;
+                          })}
+                        </div>
+
+                        {/* Actions */}
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => navigate("/admin/social-publishing")}
+                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(107,158,255,0.1)", border: "1px solid rgba(107,158,255,0.25)", color: "#6B9EFF" }}>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => publishNowMut.mutate(p.id)}
+                            disabled={publishNowMut.isPending}
+                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: publishNowMut.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            Publish
+                          </button>
+                          <button
+                            onClick={() => { if (confirm("Delete this post?")) deletePostMut.mutate(p.id); }}
+                            disabled={deletePostMut.isPending}
+                            style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: deletePostMut.isPending ? "not-allowed" : "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
+                            Delete
+                          </button>
+                          <span style={{ fontSize: 12, color: "#334155", marginLeft: 4, userSelect: "none" }}>
+                            {isExpanded ? "▲" : "▼"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Expanded caption detail */}
+                      {isExpanded && (
+                        <div style={{
+                          padding: "14px 20px 18px",
+                          background: "rgba(0,174,239,0.03)",
+                          borderTop: "1px solid rgba(0,174,239,0.08)",
+                        }}>
+                          {p.captionFacebook || p.captionGoogle ? (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.15)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(107,158,255,0.3)" }}>
+                                    Facebook Caption
+                                  </span>
+                                </div>
+                                <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>
+                                  {p.captionFacebook ?? p.caption}
+                                </p>
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.12)", borderRadius: 8, padding: "2px 8px", border: "1px solid rgba(234,67,53,0.25)" }}>
+                                    Google Business Caption
+                                  </span>
+                                </div>
+                                <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>
+                                  {p.captionGoogle ?? "—"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>Caption</div>
+                              <p style={{ fontSize: 13, color: "#CBD5E1", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{p.caption}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {queueTotal > 50 && (
+                <div style={{ textAlign: "center", padding: "14px 0 4px", fontSize: 12, color: "#475569" }}>
+                  Showing 50 of {queueTotal} — view all in{" "}
+                  <span style={{ color: "#4A90D9", cursor: "pointer" }} onClick={() => navigate("/admin/social-publishing")}>
+                    Publishing Center
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         {/* ── Results ── */}
         {result && (

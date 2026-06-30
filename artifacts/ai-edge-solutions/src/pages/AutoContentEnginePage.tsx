@@ -347,7 +347,7 @@ export default function AutoContentEnginePage() {
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px", overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
 
         {/* ── Header ── */}
         <div style={{ marginBottom: 20 }}>
@@ -459,10 +459,10 @@ export default function AutoContentEnginePage() {
         {isLoading ? (
           <div style={{ color: "#4A90D9", fontSize: 14, padding: "40px 0", textAlign: "center" }}>Loading settings…</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 320px)", gap: 24, alignItems: "start" }}>
 
             {/* ── LEFT: Settings Panel ── */}
-            <div>
+            <div style={{ minWidth: 0 }}>
 
               {/* Client */}
               <div style={cardStyle}>
@@ -680,7 +680,7 @@ export default function AutoContentEnginePage() {
             </div>
 
             {/* ── RIGHT: Controls + Queue ── */}
-            <div style={{ position: "sticky", top: 24 }}>
+            <div style={{ position: "sticky", top: 24, minWidth: 0 }}>
 
               {/* Combo Coverage */}
               <div style={cardStyle}>
@@ -729,9 +729,9 @@ export default function AutoContentEnginePage() {
                   {generateMut.isPending ? "⏳ Generating…" : "⚡ Generate Next 14 Days"}
                 </button>
 
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10, display: "flex", gap: 8 }}>
+                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={() => clearQueueMut.mutate()} disabled={anyPending}
-                    style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
+                    style={{ flex: 1, minWidth: 100, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>
                     🗑 Clear Queue
                   </button>
                   {settings.enginePaused ? (
@@ -787,10 +787,14 @@ export default function AutoContentEnginePage() {
             </div>
           ) : (
             <>
+              {/* Scrollable table wrapper — only this div scrolls, not the page */}
+              <div style={{ overflowX: "auto", borderRadius: 10, margin: "0 -2px" }}>
+              <div style={{ minWidth: 720 }}>
+
               {/* Table header */}
               <div style={{
-                display: "grid", gridTemplateColumns: "90px 160px 110px 120px 100px 130px 1fr",
-                gap: 8, padding: "6px 14px 8px",
+                display: "grid", gridTemplateColumns: "88px 155px 105px 115px 98px 125px 1fr",
+                gap: 6, padding: "6px 14px 8px",
                 borderBottom: "1px solid rgba(255,255,255,0.07)",
                 fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px",
               }}>
@@ -816,8 +820,8 @@ export default function AutoContentEnginePage() {
                       <div
                         onClick={() => setExpandedPostId(isExpanded ? null : p.id)}
                         style={{
-                          display: "grid", gridTemplateColumns: "90px 160px 110px 120px 100px 130px 1fr",
-                          gap: 8, padding: "10px 14px", cursor: "pointer", alignItems: "center",
+                          display: "grid", gridTemplateColumns: "88px 155px 105px 115px 98px 125px 1fr",
+                          gap: 6, padding: "10px 14px", cursor: "pointer", alignItems: "center",
                           background: isExpanded
                             ? "rgba(0,174,239,0.06)"
                             : isOdd ? "rgba(255,255,255,0.012)" : "transparent",
@@ -871,7 +875,7 @@ export default function AutoContentEnginePage() {
                         </div>
 
                         {/* Actions */}
-                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end", flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => navigate("/admin/social-publishing")}
                             style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(107,158,255,0.1)", border: "1px solid rgba(107,158,255,0.25)", color: "#6B9EFF" }}>
@@ -937,6 +941,8 @@ export default function AutoContentEnginePage() {
                   );
                 })}
               </div>
+              </div>{/* end minWidth wrapper */}
+              </div>{/* end overflowX:auto wrapper */}
 
               {queueTotal > 50 && (
                 <div style={{ textAlign: "center", padding: "14px 0 4px", fontSize: 12, color: "#475569" }}>

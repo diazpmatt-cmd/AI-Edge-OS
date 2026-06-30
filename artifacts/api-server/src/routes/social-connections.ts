@@ -658,12 +658,44 @@ router.get("/social-connections/google-business-status", async (req, res) => {
   let apiError: string | null = null;
   let failureReason: GBPFailureReason = null;
 
-  // ── Check granted scopes via tokeninfo ──
+  // ── Refresh helper — exchanges refresh token for a fresh access token ──
+  const tryRefreshAccessToken = async (refreshToken: string): Promise<string | null> => {
+    try {
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID     ?? "",
+          client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+          refresh_token: refreshToken,
+          grant_type:    "refresh_token",
+        }).toString(),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        console.warn(`[GOOGLE-REFRESH] token refresh HTTP ${r.status}: ${body.slice(0, 200)}`);
+        return null;
+      }
+      const data = await r.json() as { access_token?: string; expires_in?: number; scope?: string };
+      if (!data.access_token) { console.warn("[GOOGLE-REFRESH] no access_token in refresh response"); return null; }
+      console.log(`[GOOGLE-REFRESH] refreshed OK — expiresIn=${data.expires_in} scope="${data.scope ?? "(not returned)"}"`);
+      return data.access_token;
+    } catch (e: any) {
+      console.warn(`[GOOGLE-REFRESH] refresh fetch failed: ${e?.message}`);
+      return null;
+    }
+  };
+
+  // ── Check granted scopes via tokeninfo (refresh if expired) ──
   let grantedScopes: string[] = [];
   let hasBusinessManage = false;
+  let activeToken = row.accessToken;   // may be updated after a successful refresh
+  let tokenWasExpired = false;
+
   try {
     const tiR = await fetch(
-      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${row.accessToken}`,
+      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${activeToken}`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (tiR.ok) {
@@ -679,16 +711,55 @@ router.get("/social-connections/google-business-status", async (req, res) => {
     } else {
       const tiBody = await tiR.text();
       console.warn(`[GOOGLE-VERIFY] tokeninfo HTTP ${tiR.status}: ${tiBody.slice(0, 200)}`);
+
+      // Access token is expired — try to refresh it before making API calls.
+      if (tiR.status === 400 || tiR.status === 401) {
+        tokenWasExpired = true;
+        if (row.refreshToken) {
+          console.log("[GOOGLE-REFRESH] access token expired — attempting refresh...");
+          const freshToken = await tryRefreshAccessToken(row.refreshToken);
+          if (freshToken) {
+            activeToken = freshToken;
+            // Persist the fresh access token so future calls skip this path.
+            try {
+              const expiresAt = new Date(Date.now() + 3500 * 1000); // ~58 min
+              await db.update(socialConnectionsTable)
+                .set({ accessToken: freshToken, expiresAt, updatedAt: new Date() })
+                .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+              console.log("[GOOGLE-REFRESH] new access token saved to DB");
+            } catch { /* non-fatal */ }
+
+            // Re-check scopes with the fresh token.
+            try {
+              const ti2R = await fetch(
+                `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${freshToken}`,
+                { signal: AbortSignal.timeout(5000) }
+              );
+              if (ti2R.ok) {
+                const ti2 = await ti2R.json() as { scope?: string; email?: string; expires_in?: number };
+                grantedScopes = (ti2.scope ?? "").split(" ").filter(Boolean);
+                hasBusinessManage = grantedScopes.some(s => s.includes("business.manage"));
+                tokenWasExpired = false; // fresh token is valid
+                console.log("[GOOGLE-VERIFY] post-refresh tokeninfo:", JSON.stringify({ grantedScopes, hasBusinessManage }));
+              }
+            } catch { /* non-fatal — proceed with fresh token anyway */ }
+          } else {
+            console.warn("[GOOGLE-REFRESH] refresh failed — will attempt API calls anyway (may fail)");
+          }
+        } else {
+          console.warn("[GOOGLE-REFRESH] no refresh token stored — cannot refresh");
+        }
+      }
     }
   } catch (tiErr: any) {
     console.warn(`[GOOGLE-VERIFY] tokeninfo fetch failed: ${tiErr?.message}`);
   }
 
   // ── Fetch GBP accounts ──
-  console.log(`[GOOGLE-VERIFY] fetching GBP accounts (hasBusinessManage=${hasBusinessManage})...`);
+  console.log(`[GOOGLE-VERIFY] fetching GBP accounts (hasBusinessManage=${hasBusinessManage} tokenWasExpired=${tokenWasExpired})...`);
   try {
     const acctR = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
-      headers: { Authorization: `Bearer ${row.accessToken}` },
+      headers: { Authorization: `Bearer ${activeToken}` },
       signal: AbortSignal.timeout(8000),
     });
     const acctBody = await acctR.text();
@@ -711,7 +782,7 @@ router.get("/social-connections/google-business-status", async (req, res) => {
         try {
           const locR = await fetch(
             `https://mybusinessbusinessinformation.googleapis.com/v1/${firstAccount.name}/locations?readMask=name,title`,
-            { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(8000) }
+            { headers: { Authorization: `Bearer ${activeToken}` }, signal: AbortSignal.timeout(8000) }
           );
           const locBody = await locR.text();
           console.log(`[GOOGLE-VERIFY] locations API status=${locR.status} body=${locBody.slice(0, 500)}`);
@@ -764,15 +835,29 @@ router.get("/social-connections/google-business-status", async (req, res) => {
       try { errMsg = (JSON.parse(acctBody) as any)?.error?.message ?? errMsg; } catch {}
       console.warn(`[GOOGLE-VERIFY] accounts API failed HTTP ${acctR.status}: ${errMsg}`);
       if (acctR.status === 403 || acctR.status === 401) {
-        // Distinguish "API not enabled in GCP" from "business.manage scope not granted"
+        // Classify the failure carefully:
+        //   google_api_not_enabled   → GCP project hasn't enabled the API
+        //   missing_business_manage_scope → token is valid but lacks business.manage
+        //   google_api_error         → expired/invalid token (UNAUTHENTICATED), quota, or other transient error
         const isApiDisabled = /has not been used|is disabled|SERVICE_DISABLED|PROJECT_INVALID/i.test(errMsg);
-        const isScopeError = /insufficient.*scope|authError|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(errMsg);
+        const isScopeError  = /insufficient.*scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(errMsg);
+        // A 401 UNAUTHENTICATED means the token itself was rejected, not that a scope is missing.
+        // This happens when the token expired and either refresh failed or wasn't attempted.
+        // Only blame missing scope when tokeninfo explicitly confirmed it was absent.
+        const isExpiredTokenError = /UNAUTHENTICATED|invalid authentication credentials|invalid_token/i.test(errMsg);
+
         if (isApiDisabled) {
           failureReason = "google_api_not_enabled";
           console.warn(`[GOOGLE-VERIFY] → google_api_not_enabled (API not enabled in GCP Console)`);
-        } else if (isScopeError || !isApiDisabled) {
+        } else if (isScopeError || (!hasBusinessManage && !tokenWasExpired && !isExpiredTokenError)) {
+          // Scope definitively missing: either the error says so explicitly, OR
+          // tokeninfo succeeded and confirmed business.manage was not in the granted set.
           failureReason = "missing_business_manage_scope";
           console.warn(`[GOOGLE-VERIFY] → missing_business_manage_scope (scope not granted or insufficient)`);
+        } else {
+          // Token expired / UNAUTHENTICATED / transient — not a scope problem.
+          failureReason = "google_api_error";
+          console.warn(`[GOOGLE-VERIFY] → google_api_error (expired/invalid token or transient auth failure; tokenWasExpired=${tokenWasExpired})`);
         }
         apiError = `Accounts API: HTTP ${acctR.status} — ${errMsg}`;
       } else {

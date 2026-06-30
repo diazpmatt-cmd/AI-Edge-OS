@@ -280,8 +280,38 @@ function deriveGBPPresenceStatus(gbp: GBPStatus | undefined): PresenceStatus {
 }
 
 function deriveGBPHealth(gbp: GBPStatus | undefined): { health: HealthStatus; warnings: string[] } {
-  if (!gbp?.connected) return { health: "unknown", warnings: [] };
+  if (!gbp) return { health: "unknown", warnings: [] };
   const warnings: string[] = [];
+
+  if (!gbp.connected) {
+    switch (gbp.failureReason) {
+      case "google_api_error":
+        if (gbp.apiError?.includes("429") || gbp.apiError?.includes("RESOURCE_EXHAUSTED")) {
+          warnings.push("Google API quota exceeded — status will auto-recover; no action needed");
+        } else if (gbp.apiError?.includes("UNAUTHENTICATED") || gbp.apiError?.includes("invalid authentication")) {
+          warnings.push("Access token expired — refreshing automatically on next check");
+        } else {
+          warnings.push(`Google API error: ${gbp.apiError ?? "unknown — check diagnostics"}`);
+        }
+        return { health: "warning", warnings };
+      case "missing_business_manage_scope":
+        warnings.push("business.manage permission not granted — reconnect and approve all scopes on the Google consent screen");
+        return { health: "error", warnings };
+      case "google_api_not_enabled":
+        warnings.push("Business Profile API not enabled in Google Cloud Console — enable it at console.cloud.google.com");
+        return { health: "error", warnings };
+      case "no_gbp_accounts_found":
+        warnings.push("No GBP accounts found — ensure your Google account has a Business Profile");
+        return { health: "warning", warnings };
+      case "no_gbp_locations_found":
+        warnings.push("GBP account connected but no locations found — add a location in Business Profile");
+        return { health: "warning", warnings };
+      default:
+        return { health: "unknown", warnings: [] };
+    }
+  }
+
+  // Connected — check for soft warnings
   if (gbp.apiError?.includes("429") || gbp.apiError?.includes("RESOURCE_EXHAUSTED")) {
     warnings.push("Google API quota exceeded — publishing on cooldown");
   }

@@ -11,6 +11,8 @@ import leadsRouter from "./leads";
 import socialPostsRouter from "./social-posts";
 import autoContentRouter from "./auto-content";
 import diagnosticsRouter from "./diagnostics";
+import storageRouter from "./storage";
+import imageAssetsRouter from "./image-assets";
 
 const router: IRouter = Router();
 
@@ -26,5 +28,7 @@ router.use(leadsRouter);
 router.use(socialPostsRouter);
 router.use(autoContentRouter);
 router.use(diagnosticsRouter);
+router.use(storageRouter);
+router.use(imageAssetsRouter);
 
 export default router;

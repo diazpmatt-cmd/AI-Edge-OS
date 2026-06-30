@@ -235,6 +235,17 @@ export default function SystemDiagnosticsPage() {
     staleTime: 15_000,
   });
 
+  type ImageStats = {
+    total: number; tagged: number; untagged: number; coverageScore: number;
+    topicCounts: Record<string, number>; suggestions: string[];
+  };
+  const { data: imageStats } = useQuery<ImageStats>({
+    queryKey: ["image-assets-stats-diag"],
+    queryFn: () => authFetch<ImageStats>("/image-assets/stats"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const regenQueueMut = useMutation({
     mutationFn: () => authFetch<{ ok: boolean; created: number }>("/auto-content/generate", { method: "POST", body: JSON.stringify({}) }),
     onSuccess: (d) => { toast.success(`Queue regenerated: ${d.created} posts created`); qc.invalidateQueries({ queryKey: ["diagnostics_health"] }); },
@@ -899,6 +910,64 @@ export default function SystemDiagnosticsPage() {
           <div style={{ color: "#334155", fontSize: 12 }}>Loading…</div>
         )}
       </div>
+      {/* ── SECTION 7: Image Engine ── */}
+      <div style={SECTION_STYLE}>
+        <div style={SECTION_TITLE}><span>🖼</span> Image Engine</div>
+        {imageStats ? (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
+              {[
+                { label: "Total Assets",    value: imageStats.total,         sub: "uploaded images",   color: "#00AEEF" },
+                { label: "Tagged Assets",   value: imageStats.tagged,        sub: "with topic / city", color: "#10B981" },
+                { label: "Untagged Assets", value: imageStats.untagged,      sub: "need tagging",      color: imageStats.untagged > 0 ? "#F59E0B" : "#10B981" },
+                {
+                  label: "Coverage Score",
+                  value: `${imageStats.coverageScore}%`,
+                  sub: imageStats.coverageScore >= 80 ? "Excellent coverage" : imageStats.coverageScore >= 50 ? "Good — add more images" : "Low — upload more",
+                  color: imageStats.coverageScore >= 80 ? "#10B981" : imageStats.coverageScore >= 50 ? "#F59E0B" : "#EF4444",
+                },
+              ].map(card => (
+                <div key={card.label} style={{
+                  background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 12, padding: "14px 16px",
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{card.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: card.color, marginBottom: 3 }}>{card.value}</div>
+                  <div style={{ fontSize: 10.5, color: "#334155" }}>{card.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* AI Coverage Suggestions */}
+            {imageStats.suggestions.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 8 }}>
+                  AI Coverage Suggestions
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {imageStats.suggestions.slice(0, 4).map((s, i) => (
+                    <div key={i} style={{
+                      fontSize: 12, color: "#CBD5E1", lineHeight: 1.5,
+                      background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)",
+                      borderRadius: 8, padding: "7px 11px",
+                    }}>
+                      <span style={{ color: "#00AEEF", fontWeight: 800, marginRight: 5 }}>→</span>{s}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <a href="#" onClick={e => { e.preventDefault(); window.location.href = window.location.href.replace("/diagnostics", "/image-assets"); }}
+              style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: "#00AEEF", textDecoration: "none", padding: "7px 14px", borderRadius: 8, background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)" }}>
+              → Manage Images
+            </a>
+          </>
+        ) : (
+          <div style={{ color: "#334155", fontSize: 12 }}>Loading image stats…</div>
+        )}
+      </div>
+
     </AppShell>
   );
 }

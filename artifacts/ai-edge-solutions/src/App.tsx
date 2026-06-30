@@ -42,6 +42,7 @@ const ConnectionsPage     = lazy(() => import("./pages/ConnectionsPage"));
 const LeadRecoveryPage        = lazy(() => import("./pages/LeadRecoveryPage"));
 const SocialPublishingPage    = lazy(() => import("./pages/SocialPublishingPage"));
 const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEnginePage"));
+const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
 
 const PageLoader = () => (
@@ -117,6 +118,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/auto-content">
           <Authenticated><AutoContentEnginePage /></Authenticated>
+        </Route>
+        <Route path="/admin/image-assets">
+          <Authenticated><ImageAssetManagerPage /></Authenticated>
         </Route>
         <Route path="/admin/diagnostics">
           <Authenticated><SystemDiagnosticsPage /></Authenticated>

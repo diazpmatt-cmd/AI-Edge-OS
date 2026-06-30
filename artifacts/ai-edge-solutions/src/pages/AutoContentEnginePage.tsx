@@ -215,6 +215,80 @@ function AnglePill({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
+// ── Matched Image Block ────────────────────────────────────────────────────────
+
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+type MatchResult = {
+  asset: { id: string; fileUrl: string; fileName: string; topicTags: string[]; cityTags: string[]; category: string };
+  score: number;
+} | null;
+
+function MatchedImageBlock({ city, topic, angle }: { city: string | null; topic: string | null; angle: string | null }) {
+  const apiFetch = useApiFetch();
+  const params = new URLSearchParams();
+  if (city)  params.set("city",  city.split(",")[0]?.trim() ?? "");
+  if (topic) params.set("topic", topic);
+  if (angle) params.set("angle", angle);
+
+  const { data, isLoading } = useQuery<{ match: MatchResult }>({
+    queryKey: ["img-match", city, topic, angle],
+    queryFn: () => apiFetch(`/image-assets/match?${params.toString()}`),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) return (
+    <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.12)" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 5 }}>🖼 Best Matched Image</div>
+      <div style={{ fontSize: 11, color: "#475569" }}>Searching library…</div>
+    </div>
+  );
+
+  const m = data?.match;
+  if (!m) return (
+    <div style={{ background: "rgba(107,158,255,0.04)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.1)" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 5 }}>🖼 Best Matched Image</div>
+      <div style={{ fontSize: 11, color: "#475569" }}>No images in library yet — upload via Image Asset Manager.</div>
+    </div>
+  );
+
+  const scoreColor = m.score >= 80 ? "#10B981" : m.score >= 50 ? "#F59E0B" : "#EF4444";
+
+  return (
+    <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.15)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px" }}>🖼 Best Matched Image</div>
+        <span style={{ fontSize: 11, fontWeight: 800, color: scoreColor, background: `${scoreColor}18`, border: `1px solid ${scoreColor}33`, padding: "1px 8px", borderRadius: 20 }}>
+          {m.score}/100 match
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ width: 72, height: 54, borderRadius: 6, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,0.4)" }}>
+          <img
+            src={`${BASE_URL}/api/storage${m.asset.fileUrl}`}
+            alt={m.asset.fileName}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: "#CBD5E1", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {m.asset.fileName}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {m.asset.topicTags.map(t => (
+              <span key={t} style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 10, background: "rgba(0,174,239,0.12)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.2)" }}>{t}</span>
+            ))}
+            {m.asset.category && (
+              <span style={{ fontSize: 9.5, fontWeight: 700, padding: "2px 7px", borderRadius: 10, background: "rgba(192,192,192,0.1)", color: "#C0C0C0", border: "1px solid rgba(192,192,192,0.2)" }}>{m.asset.category}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_COLOR: Record<string, string> = {
   scheduled: "#00AEEF", draft: "#94A3B8", published: "#10B981", failed: "#EF4444", pending: "#F59E0B",
 };
@@ -1046,7 +1120,7 @@ export default function AutoContentEnginePage() {
                             {p.imageRecommendation && (
                               <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.15)" }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 5 }}>
-                                  📸 Image Recommendation
+                                  📸 Image Prompt
                                 </div>
                                 <p style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.5, margin: 0 }}>
                                   {p.imageRecommendation}
@@ -1061,6 +1135,11 @@ export default function AutoContentEnginePage() {
                                 {whyGenerated(p.city, p.topic, p.angle)}
                               </p>
                             </div>
+                          </div>
+
+                          {/* Matched image from library */}
+                          <div style={{ marginTop: 12 }}>
+                            <MatchedImageBlock city={p.city} topic={p.topic} angle={p.angle} />
                           </div>
 
                           {/* Platforms row */}

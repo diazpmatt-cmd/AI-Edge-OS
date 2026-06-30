@@ -171,8 +171,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* Main content */}
-      <main style={{ flex: 1, paddingLeft: SIDEBAR_W }} className="app-main">
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px 48px" }}>
+      <main style={{ flex: 1, minWidth: 0, overflowX: "hidden", paddingLeft: SIDEBAR_W }} className="app-main">
+        <div style={{ maxWidth: 1200, width: "100%", boxSizing: "border-box", margin: "0 auto", padding: "32px 24px 48px" }}>
           {children}
         </div>
       </main>

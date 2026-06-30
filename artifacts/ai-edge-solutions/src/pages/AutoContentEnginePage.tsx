@@ -347,7 +347,7 @@ export default function AutoContentEnginePage() {
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px", overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px", width: "100%", boxSizing: "border-box" }}>
 
         {/* ── Header ── */}
         <div style={{ marginBottom: 20 }}>

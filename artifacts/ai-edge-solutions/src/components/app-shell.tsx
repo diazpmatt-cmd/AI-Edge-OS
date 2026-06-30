@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
   { to: "/admin/auto-content",        icon: "🤖", label: "Auto Content Engine" },
   { to: "/admin/image-assets",        icon: "🖼",  label: "Image Asset Manager" },
+  { to: "/admin/local-presence",       icon: "📍", label: "Local Presence Engine" },
   { to: "/admin/diagnostics",         icon: "🛰",  label: "System Diagnostics" },
 ];
 

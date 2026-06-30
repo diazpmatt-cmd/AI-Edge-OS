@@ -44,6 +44,7 @@ const SocialPublishingPage    = lazy(() => import("./pages/SocialPublishingPage"
 const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEnginePage"));
 const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
+const LocalPresenceEnginePage    = lazy(() => import("./pages/LocalPresenceEnginePage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -124,6 +125,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/diagnostics">
           <Authenticated><SystemDiagnosticsPage /></Authenticated>
+        </Route>
+        <Route path="/admin/local-presence">
+          <Authenticated><LocalPresenceEnginePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

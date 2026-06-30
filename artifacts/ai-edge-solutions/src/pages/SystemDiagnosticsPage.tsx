@@ -1330,7 +1330,59 @@ export default function SystemDiagnosticsPage() {
         )}
       </div>
 
-      {/* ── Section 9: Backup Center V1 ── */}
+      {/* ── Section 9: Local Presence Engine ── */}
+      <div style={{ background: "rgba(11,22,41,0.85)", border: "1px solid rgba(0,174,239,0.18)", borderRadius: 16, padding: "24px 28px", marginBottom: 16, backdropFilter: "blur(8px)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+          <span style={{ fontSize: 20 }}>📍</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>Local Presence Engine</span>
+          <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 20, padding: "2px 8px", letterSpacing: "0.06em" }}>V1</span>
+          <a href="/admin/local-presence" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#00AEEF", textDecoration: "none", background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 8, padding: "4px 10px" }}>
+            Open Dashboard ↗
+          </a>
+        </div>
+
+        {/* Channel status grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
+          {[
+            { name: "Google Business Profile", icon: "G",  color: "#EA4335", status: "healthy"  as const, detail: "Connected · Bed Bugs & Beyond" },
+            { name: "Apple Business Connect",  icon: "🍎", color: "#A2AAAD", status: "warning"  as const, detail: "Setup pending — not yet claimed" },
+            { name: "Bing Places for Business",icon: "B",  color: "#00ADEF", status: "warning"  as const, detail: "Setup pending — not yet claimed" },
+            { name: "Nextdoor Business",        icon: "N",  color: "#8DC641", status: "warning"  as const, detail: "Setup pending — not yet claimed" },
+          ].map(({ name, icon, color, status, detail }) => {
+            const st = { healthy: { dot: "#10B981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)", label: "Connected" }, warning: { dot: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)", label: "Pending" } }[status];
+            return (
+              <div key={name} style={{ background: st.bg, border: `1px solid ${st.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 6, background: `${color}18`, border: `1px solid ${color}25`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color, flexShrink: 0 }}>
+                    {icon}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{name}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.dot, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: "#94A3B8" }}>{detail}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Visibility score bar */}
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "12px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase" }}>Local Visibility Score</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B" }}>36 / 100 <span style={{ fontSize: 10, color: "#475569", fontWeight: 400 }}>— 3 channels pending setup</span></span>
+          </div>
+          <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: "36%", background: "linear-gradient(90deg, #F59E0B, #00AEEF)", borderRadius: 3 }} />
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>
+            Complete Apple, Bing, and Nextdoor setup to reach 100% local channel coverage.
+          </div>
+        </div>
+      </div>
+
+      {/* ── Section 10: Backup Center V1 ── */}
       <div style={{ background: "rgba(11,22,41,0.85)", border: "1px solid rgba(0,174,239,0.18)", borderRadius: 16, padding: "24px 28px", marginBottom: 16, backdropFilter: "blur(8px)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>

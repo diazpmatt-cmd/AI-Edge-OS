@@ -1,0 +1,110 @@
+Build Local Presence Engine V1 for AI Edge Solutions.
+
+Add three new local visibility channels to the platform roadmap and dashboard:
+
+1. Apple Business Connect / Apple Maps
+2. Bing Places for Business
+3. Nextdoor Business
+
+Goal:
+Help local businesses get found across Apple Maps, Siri, Bing, Microsoft/Copilot search, ChatGPT-related search visibility, and neighborhood referral platforms.
+
+Add this inside the Local Business Division as:
+Local Presence Engine
+
+Requirements:
+
+1. Add dashboard section/page:
+Local Presence Engine
+
+2. Add status cards:
+- Google Business Profile
+- Apple Business Connect
+- Bing Places
+- Nextdoor Business
+
+Each card should show:
+- Connection/setup status
+- Business name
+- Primary phone
+- Website
+- Category
+- Service area
+- Last checked date
+- Action button
+
+3. For Apple Business Connect:
+Add setup checklist:
+- Claim or create business listing
+- Verify business ownership
+- Add business name
+- Add phone number
+- Add website
+- Add logo/photos
+- Add service area
+- Add categories
+- Add hours
+- Confirm Apple Maps visibility
+
+External link:
+https://businessconnect.apple.com
+
+4. For Bing Places:
+Add setup checklist:
+- Claim or create listing
+- Import from Google Business Profile if available
+- Verify ownership
+- Add phone number
+- Add website
+- Add service area
+- Add business category
+- Add hours/photos
+- Confirm Bing Maps visibility
+
+External link:
+https://www.bingplaces.com
+
+5. For Nextdoor Business:
+Add setup checklist:
+- Create or claim business page
+- Add service area
+- Add business phone
+- Add website
+- Add services
+- Add logo/photos
+- Enable neighborhood visibility
+- Track recommendations/reviews
+
+External link:
+https://business.nextdoor.com
+
+6. Add Local Presence Engine to System Diagnostics.
+Show:
+- Google Business Profile connected
+- Apple Maps setup pending
+- Bing Places setup pending
+- Nextdoor setup pending
+- Local visibility score placeholder
+
+7. Add AI Edge positioning copy:
+"Get Found Everywhere — AI Edge helps local businesses improve visibility across Google, Apple Maps, Bing, AI search, social platforms, and neighborhood discovery channels."
+
+8. Add Bed Bugs & Beyond as the first local presence demo client.
+
+Use known demo client details where available:
+Business Name: Bed Bugs & Beyond
+Primary Phone: (251) 324-9090
+Website: https://aiedgesolutions.online
+Industry: Pest Control
+Service Area: Baldwin County, Alabama
+Cities: Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort
+
+9. Do not build live API integrations yet.
+This is Local Presence Engine V1:
+- dashboard
+- checklist
+- status tracking
+- external setup links
+- diagnostics visibility
+
+10. Keep UI consistent with current AI Edge dark dashboard style.

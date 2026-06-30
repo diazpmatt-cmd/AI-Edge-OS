@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -86,7 +87,43 @@ type EditState = {
 
 export default function ImageAssetManagerPage() {
   const apiFetch = useApiFetch();
+  const { getToken } = useAuth();
   const qc = useQueryClient();
+
+  const [backingUp, setBackingUp] = useState(false);
+
+  async function downloadAssetBackup() {
+    if (backingUp) return;
+    setBackingUp(true);
+    const toastId = toast.loading("Building backup ZIP…");
+    try {
+      const token = await getToken().catch(() => null);
+      const res = await fetch(`${BASE}/api/image-assets/backup`, {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const filename = `image-backup-${ts}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      toast.dismiss(toastId);
+      toast.success(`Backup downloaded: ${filename}`);
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error(err?.message ?? "Backup failed");
+    } finally {
+      setBackingUp(false);
+    }
+  }
 
   // Filters
   const [filterTopic,    setFilterTopic]    = useState("");
@@ -313,7 +350,7 @@ export default function ImageAssetManagerPage() {
               {CATEGORY_OPTIONS.filter(c => c.value).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
-          {/* Clear + Upload */}
+          {/* Clear + Backup + Upload */}
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
             {(filterTopic || filterCity || filterCategory || searchText) && (
               <button onClick={() => { setFilterTopic(""); setFilterCity(""); setFilterCategory(""); setSearchText(""); }}
@@ -321,6 +358,20 @@ export default function ImageAssetManagerPage() {
                 Clear
               </button>
             )}
+            <button
+              onClick={downloadAssetBackup}
+              disabled={backingUp}
+              title="Export all images + metadata as a ZIP file"
+              style={{
+                padding: "8px 16px", borderRadius: 8, display: "flex", alignItems: "center", gap: 6,
+                background: backingUp ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.12)",
+                border: "1px solid rgba(139,92,246,0.35)", color: backingUp ? "#A78BFA" : "#8B5CF6",
+                fontSize: 13, fontWeight: 700, cursor: backingUp ? "not-allowed" : "pointer",
+                transition: "all 0.2s",
+              }}>
+              <span>{backingUp ? "⏳" : "📦"}</span>
+              {backingUp ? "Zipping…" : "Export Backup"}
+            </button>
             <button onClick={() => setShowUpload(true)}
               style={{
                 padding: "8px 18px", borderRadius: 8,

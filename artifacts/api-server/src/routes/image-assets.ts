@@ -3,6 +3,12 @@ import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { imageAssetsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { createRequire } from "module";
+import { ObjectStorageService } from "../lib/objectStorage";
+
+const _require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const archiver: any = _require("archiver");
 
 const router: IRouter = Router();
 
@@ -193,6 +199,83 @@ router.get("/image-assets/stats", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[image-assets] stats error", err);
     res.status(500).json({ error: "Failed to load stats" });
+  }
+});
+
+// ── POST /image-assets/backup — ZIP all images + metadata ────────────────────
+router.post("/image-assets/backup", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  try {
+    const rows = await db
+      .select()
+      .from(imageAssetsTable)
+      .where(eq(imageAssetsTable.userId, userId))
+      .orderBy(imageAssetsTable.uploadDate);
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: "No image assets to backup" }); return;
+    }
+
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const zipName = `image-backup-${ts}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+
+    const archive = archiver("zip", { zlib: { level: 6 } });
+
+    archive.on("error", (err: Error) => {
+      console.error("[image-assets] backup archive error:", err);
+      if (!res.writableEnded) res.end();
+    });
+
+    archive.pipe(res);
+
+    // metadata.json — all asset records with tags, category, city, topic
+    const metaRecords = rows.map(r => ({
+      id:         r.id,
+      fileName:   r.fileName,
+      fileUrl:    r.fileUrl,
+      topicTags:  getTagsArr(r.topicTags),
+      cityTags:   getTagsArr(r.cityTags),
+      category:   r.category,
+      uploadDate: r.uploadDate,
+    }));
+    archive.append(
+      JSON.stringify({ exportedAt: new Date().toISOString(), version: "1.0", totalAssets: rows.length, assets: metaRecords }, null, 2),
+      { name: "metadata.json" },
+    );
+
+    // Add each image file
+    const storage = new ObjectStorageService();
+    let downloaded = 0;
+    let skipped = 0;
+
+    for (const asset of rows) {
+      try {
+        const file = await storage.getObjectEntityFile(asset.fileUrl);
+        const response = await storage.downloadObject(file);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        // Use original filename but prefix with id to avoid collisions
+        const safeName = asset.fileName.replace(/[^a-zA-Z0-9._\-]/g, "_");
+        archive.append(buffer, { name: `images/${asset.id}_${safeName}` });
+        downloaded++;
+      } catch (err) {
+        console.warn(`[image-assets] backup skip ${asset.id} (${asset.fileName}):`, err);
+        skipped++;
+      }
+    }
+
+    console.log(`[image-assets] backup ${zipName}: ${downloaded} downloaded, ${skipped} skipped`);
+    await archive.finalize();
+
+  } catch (err: any) {
+    console.error("[image-assets] backup error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message ?? "Backup failed" });
+    }
   }
 });
 

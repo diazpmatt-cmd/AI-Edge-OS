@@ -789,11 +789,11 @@ export default function AutoContentEnginePage() {
             <>
               {/* Scrollable table wrapper — only this div scrolls, not the page */}
               <div style={{ overflowX: "auto", borderRadius: 10, margin: "0 -2px" }}>
-              <div style={{ minWidth: 720 }}>
+              <div style={{ minWidth: 860 }}>
 
               {/* Table header */}
               <div style={{
-                display: "grid", gridTemplateColumns: "88px 155px 105px 115px 98px 125px 1fr",
+                display: "grid", gridTemplateColumns: "88px 148px 100px 110px 95px 115px 164px",
                 gap: 6, padding: "6px 14px 8px",
                 borderBottom: "1px solid rgba(255,255,255,0.07)",
                 fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px",
@@ -820,7 +820,7 @@ export default function AutoContentEnginePage() {
                       <div
                         onClick={() => setExpandedPostId(isExpanded ? null : p.id)}
                         style={{
-                          display: "grid", gridTemplateColumns: "88px 155px 105px 115px 98px 125px 1fr",
+                          display: "grid", gridTemplateColumns: "88px 148px 100px 110px 95px 115px 164px",
                           gap: 6, padding: "10px 14px", cursor: "pointer", alignItems: "center",
                           background: isExpanded
                             ? "rgba(0,174,239,0.06)"

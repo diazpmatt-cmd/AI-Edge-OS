@@ -97,13 +97,39 @@ const CTA_OPTIONS = [
 ];
 
 const DEFAULT_SETTINGS: Settings = {
-  clientName: "Bed Bugs & Beyond", industry: "pest_control",
+  clientName: "", industry: "pest_control",
   serviceAreas: [], topics: [], frequency: "every_other_day",
   postingTimes: ["08:00", "12:00", "17:00"], platforms: ["facebook", "google"],
-  approvalMode: "auto_schedule", ctaText: "Call Now \u2014 (251) 324-9090",
+  approvalMode: "auto_schedule", ctaText: "",
   ctaPreference: "call_now", toneStyle: ["professional", "friendly"],
   postAngles: ["educational", "warning", "promotional", "seasonal", "faq", "prevention"],
-  autoGenerateEnabled: true, enginePaused: false, usedCombos: [], lastGeneratedAt: null,
+  autoGenerateEnabled: false, enginePaused: false, usedCombos: [], lastGeneratedAt: null,
+};
+
+const BED_BUGS_PRESET: Settings = {
+  clientName: "Bed Bugs & Beyond",
+  industry: "pest_control",
+  serviceAreas: [
+    "Foley, AL", "Gulf Shores, AL", "Orange Beach, AL", "Fairhope, AL",
+    "Daphne, AL", "Spanish Fort, AL", "Loxley, AL", "Summerdale, AL",
+    "Elberta, AL", "Lillian, AL", "Perdido Beach, AL",
+  ],
+  topics: [
+    "Bed Bugs", "Roaches", "Ants", "Fleas", "Ticks",
+    "Rats", "Mice", "Wasps", "Spiders", "Mosquitoes", "Moles",
+  ],
+  frequency: "every_other_day",
+  postingTimes: ["08:00", "12:00", "17:00"],
+  platforms: ["facebook", "google"],
+  approvalMode: "auto_schedule",
+  ctaText: "Call Now \u2014 (251) 324-9090",
+  ctaPreference: "call_now",
+  toneStyle: ["professional", "educational", "urgent", "friendly"],
+  postAngles: ["educational", "warning", "promotional", "seasonal", "faq", "prevention", "emergency"],
+  autoGenerateEnabled: true,
+  enginePaused: false,
+  usedCombos: [],
+  lastGeneratedAt: null,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -219,6 +245,21 @@ export default function AutoContentEnginePage() {
     onError: () => toast.error("Failed to save settings."),
   });
 
+  const presetMut = useMutation({
+    mutationFn: (s: Settings) => authFetch("/auto-content/settings", { method: "PUT", body: JSON.stringify(s) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["auto-content-settings"] });
+      toast.success("Bed Bugs & Beyond preset loaded and saved.");
+    },
+    onError: () => toast.error("Failed to save preset."),
+  });
+
+  const loadPreset = () => {
+    const preset = { ...BED_BUGS_PRESET };
+    setSettings(preset);
+    presetMut.mutate(preset);
+  };
+
   const generateMut = useMutation({
     mutationFn: (payload: Settings & { count?: number }) =>
       authFetch<GenerateResult>("/auto-content/generate", { method: "POST", body: JSON.stringify(payload) }),
@@ -249,7 +290,7 @@ export default function AutoContentEnginePage() {
     onSuccess: () => { setSettings(p => ({ ...p, enginePaused: false })); toast.success("Engine resumed."); },
   });
 
-  const anyPending = generateMut.isPending || clearQueueMut.isPending || pauseMut.isPending || resumeMut.isPending;
+  const anyPending = generateMut.isPending || clearQueueMut.isPending || pauseMut.isPending || resumeMut.isPending || presetMut.isPending;
 
   const totalCombos = settings.serviceAreas.length * settings.topics.length;
   const usedCount = settings.usedCombos.length;
@@ -301,10 +342,26 @@ export default function AutoContentEnginePage() {
                 AI-powered local posts — rotating city, topic, and angle automatically.
               </p>
             </div>
-            <button onClick={() => saveMut.mutate(settings)} disabled={saveMut.isPending}
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#CBD5E1", cursor: "pointer", fontWeight: 600 }}>
-              {saveMut.isPending ? "Saving…" : "💾 Save Settings"}
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={loadPreset}
+                disabled={presetMut.isPending || saveMut.isPending}
+                style={{
+                  background: "linear-gradient(135deg, rgba(0,174,239,0.18) 0%, rgba(0,112,184,0.18) 100%)",
+                  border: "1px solid rgba(0,174,239,0.45)",
+                  borderRadius: 9, padding: "10px 18px", fontSize: 13, color: "#00AEEF",
+                  cursor: presetMut.isPending ? "not-allowed" : "pointer",
+                  fontWeight: 700, display: "flex", alignItems: "center", gap: 7,
+                  opacity: presetMut.isPending ? 0.7 : 1,
+                }}>
+                <span style={{ fontSize: 15 }}>🐛</span>
+                {presetMut.isPending ? "Loading preset…" : "Load Bed Bugs & Beyond Preset"}
+              </button>
+              <button onClick={() => saveMut.mutate(settings)} disabled={saveMut.isPending || presetMut.isPending}
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9, padding: "10px 20px", fontSize: 13.5, color: "#CBD5E1", cursor: "pointer", fontWeight: 600 }}>
+                {saveMut.isPending ? "Saving…" : "💾 Save Settings"}
+              </button>
+            </div>
           </div>
         </div>
 

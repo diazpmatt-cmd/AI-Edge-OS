@@ -38,7 +38,8 @@ type GenerateResult = {
 
 type QueuePost = {
   id: string; city: string | null; topic: string | null; angle: string | null;
-  caption: string; platforms: string[]; scheduledAt: string | null; status: string;
+  caption: string; captionFacebook: string | null; captionGoogle: string | null;
+  platforms: string[]; scheduledAt: string | null; status: string;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -743,6 +744,21 @@ export default function AutoContentEnginePage() {
                               {p.status}
                             </span>
                           </div>
+                          {/* Dual-caption section */}
+                          {p.captionFacebook && p.captionGoogle ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 4 }}>
+                              <div style={{ display: "flex", gap: 5, alignItems: "flex-start" }}>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.1)", borderRadius: 8, padding: "1px 5px", flexShrink: 0, marginTop: 1 }}>FB</span>
+                                <span style={{ fontSize: 10.5, color: "#94A3B8", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.captionFacebook}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.1)", borderRadius: 8, padding: "1px 5px", flexShrink: 0 }}>GBP</span>
+                                <span style={{ fontSize: 10.5, color: "#64748B", fontStyle: "italic" }}>{p.captionGoogle}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.4 }}>{p.caption}</div>
+                          )}
                           <div style={{ fontSize: 10.5, color: "#475569" }}>
                             {p.scheduledAt ? fmtDate(p.scheduledAt) : "No time set"}
                             {p.platforms.length > 0 && <span style={{ marginLeft: 8, color: "#334155" }}>· {p.platforms.join(", ")}</span>}

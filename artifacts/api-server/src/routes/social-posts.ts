@@ -31,19 +31,21 @@ const upload = multer({
 
 function rowToDto(r: typeof socialPostsTable.$inferSelect) {
   return {
-    id:           r.id,
-    clientName:   r.clientName,
-    platforms:    JSON.parse(r.platforms || "[]") as string[],
-    imageUrl:     r.imageData,
-    caption:      r.caption,
-    ctaType:      r.ctaType,
-    ctaValue:     r.ctaValue,
-    scheduledAt:  r.scheduledAt?.toISOString() ?? null,
-    status:       r.status,
-    publishedAt:  r.publishedAt?.toISOString() ?? null,
-    errorMessage: r.errorMessage,
-    createdAt:    r.createdAt.toISOString(),
-    updatedAt:    r.updatedAt.toISOString(),
+    id:              r.id,
+    clientName:      r.clientName,
+    platforms:       JSON.parse(r.platforms || "[]") as string[],
+    imageUrl:        r.imageData,
+    caption:         r.caption,
+    captionFacebook: r.captionFacebook ?? null,
+    captionGoogle:   r.captionGoogle ?? null,
+    ctaType:         r.ctaType,
+    ctaValue:        r.ctaValue,
+    scheduledAt:     r.scheduledAt?.toISOString() ?? null,
+    status:          r.status,
+    publishedAt:     r.publishedAt?.toISOString() ?? null,
+    errorMessage:    r.errorMessage,
+    createdAt:       r.createdAt.toISOString(),
+    updatedAt:       r.updatedAt.toISOString(),
   };
 }
 
@@ -100,14 +102,16 @@ router.patch("/social-posts/:id", async (req, res) => {
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const b = req.body as any;
   const [row] = await db.update(socialPostsTable).set({
-    ...(b.clientName  !== undefined && { clientName:  b.clientName }),
-    ...(b.platforms   !== undefined && { platforms:   JSON.stringify(b.platforms) }),
-    ...(b.imageUrl    !== undefined && { imageData:   b.imageUrl }),
-    ...(b.caption     !== undefined && { caption:     b.caption }),
-    ...(b.ctaType     !== undefined && { ctaType:     b.ctaType }),
-    ...(b.ctaValue    !== undefined && { ctaValue:    b.ctaValue }),
-    ...(b.scheduledAt !== undefined && { scheduledAt: b.scheduledAt ? new Date(b.scheduledAt) : null }),
-    ...(b.status      !== undefined && { status:      b.status }),
+    ...(b.clientName      !== undefined && { clientName:      b.clientName }),
+    ...(b.platforms       !== undefined && { platforms:       JSON.stringify(b.platforms) }),
+    ...(b.imageUrl        !== undefined && { imageData:       b.imageUrl }),
+    ...(b.caption         !== undefined && { caption:         b.caption }),
+    ...(b.captionFacebook !== undefined && { captionFacebook: b.captionFacebook }),
+    ...(b.captionGoogle   !== undefined && { captionGoogle:   b.captionGoogle }),
+    ...(b.ctaType         !== undefined && { ctaType:         b.ctaType }),
+    ...(b.ctaValue        !== undefined && { ctaValue:        b.ctaValue }),
+    ...(b.scheduledAt     !== undefined && { scheduledAt:     b.scheduledAt ? new Date(b.scheduledAt) : null }),
+    ...(b.status          !== undefined && { status:          b.status }),
     updatedAt: new Date(),
   }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
   if (!row) { res.status(404).send(); return; }
@@ -232,7 +236,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
   if (platforms.includes("facebook") && fbPages.length) {
     const page = fbPages[0];
     try {
-      const fullCaption = buildCaption(post.caption, post.ctaType, post.ctaValue);
+      const fbCaption = post.captionFacebook ?? post.caption;
+      const fullCaption = buildCaption(fbCaption, post.ctaType, post.ctaValue);
       const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, post.imageData ?? null);
       results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };
       fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
@@ -253,7 +258,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const imageUrl = fbPhotoUrl ?? (post.imageData?.startsWith("http") ? post.imageData : null);
       if (!imageUrl) throw new Error("Instagram requires a public image URL. Select both Facebook and Instagram together — the Facebook upload will provide the hosted URL.");
 
-      const fullCaption = buildCaption(post.caption, post.ctaType, post.ctaValue);
+      const igCaption = post.captionFacebook ?? post.caption;
+      const fullCaption = buildCaption(igCaption, post.ctaType, post.ctaValue);
       const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -295,7 +301,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     } else {
       try {
         const token = await getGoogleAccessToken(gbpConn);
-        const gbpResult = await publishToGBP(token, gbpConn, post.caption, post.ctaType, post.ctaValue, post.imageData ?? null);
+        const googleCaption = post.captionGoogle ?? post.caption;
+        const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, post.imageData ?? null);
         results.google = { ok: true, postId: gbpResult.id };
       } catch (e: any) {
         results.google = { ok: false, error: e.message };

@@ -15,6 +15,8 @@ export const socialPostsTable = pgTable("social_posts", {
   status:       text("status").notNull().default("draft"),
   publishedAt:  timestamp("published_at", { withTimezone: true }),
   errorMessage: text("error_message"),
+  captionFacebook: text("caption_facebook"),
+  captionGoogle:   text("caption_google"),
   aiCity:       text("ai_city"),
   aiTopic:      text("ai_topic"),
   aiAngle:      text("ai_angle"),

@@ -263,17 +263,22 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
 
   const postStatus = approvalMode === "draft_only" ? "draft" : "scheduled";
   const insertedIds: string[] = [];
+  const effectiveClient = clientName ?? "Bed Bugs & Beyond";
 
   for (const post of generated) {
     const captionFull = post.hashtags?.length
       ? `${post.caption}\n\n${post.hashtags.join(" ")}`
       : post.caption;
 
+    const captionGoogle = `${effectiveClient} proudly servicing ${post.city}.`;
+
     const [ins] = await db.insert(socialPostsTable).values({
       userId,
-      clientName: clientName ?? "Bed Bugs & Beyond",
+      clientName: effectiveClient,
       platforms: JSON.stringify(Array.isArray(platforms) && platforms.length ? platforms : ["facebook"]),
       caption: captionFull,
+      captionFacebook: captionFull,
+      captionGoogle,
       ctaType: ctaPreference ?? "call_now",
       ctaValue: ctaText ?? "Call Now \u2014 (251) 324-9090",
       scheduledAt: post.date,
@@ -322,6 +327,8 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       topic: p.topic,
       angle: p.angle,
       caption: p.caption,
+      captionFacebook: p.hashtags?.length ? `${p.caption}\n\n${p.hashtags.join(" ")}` : p.caption,
+      captionGoogle: `${effectiveClient} proudly servicing ${p.city}.`,
       hashtags: p.hashtags,
       imagePrompt: p.imagePrompt,
       scheduledAt: p.date.toISOString(),
@@ -360,7 +367,9 @@ router.get("/auto-content/queue", async (req, res) => {
       city: p.aiCity ?? null,
       topic: p.aiTopic ?? null,
       angle: p.aiAngle ?? null,
-      caption: (p.caption ?? "").slice(0, 100),
+      caption: (p.captionFacebook ?? p.caption ?? "").slice(0, 120),
+      captionFacebook: p.captionFacebook ? p.captionFacebook.slice(0, 120) : null,
+      captionGoogle: p.captionGoogle ?? null,
       platforms: parseJson<string[]>(p.platforms, []),
       scheduledAt: p.scheduledAt?.toISOString() ?? null,
       status: p.status,

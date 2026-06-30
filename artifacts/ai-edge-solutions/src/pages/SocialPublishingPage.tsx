@@ -14,6 +14,8 @@ type SocialPost = {
   platforms: Platform[];
   imageUrl: string | null;
   caption: string;
+  captionFacebook: string | null;
+  captionGoogle: string | null;
   ctaType: string;
   ctaValue: string | null;
   scheduledAt: string | null;
@@ -634,9 +636,31 @@ export default function SocialPublishingPage() {
                         )}
                       </div>
 
-                      <div style={{ fontSize: 13, color: "#D1D5DB", lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                        {post.caption || <span style={{ color: "#475569", fontStyle: "italic" }}>No caption</span>}
-                      </div>
+                      {/* Dual-caption preview when both Facebook + Google are selected */}
+                      {post.captionFacebook && post.captionGoogle && post.platforms.includes("facebook") && post.platforms.includes("google") ? (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ marginBottom: 6 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, color: "#6B9EFF", background: "rgba(107,158,255,0.12)", border: "1px solid rgba(107,158,255,0.25)", borderRadius: 10, padding: "1px 7px", letterSpacing: "0.4px", textTransform: "uppercase" }}>f Facebook</span>
+                            </div>
+                            <div style={{ fontSize: 12.5, color: "#D1D5DB", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                              {post.captionFacebook}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, color: "#EA4335", background: "rgba(234,67,53,0.1)", border: "1px solid rgba(234,67,53,0.25)", borderRadius: 10, padding: "1px 7px", letterSpacing: "0.4px", textTransform: "uppercase" }}>G Google</span>
+                            </div>
+                            <div style={{ fontSize: 12.5, color: "#94A3B8", lineHeight: 1.5, fontStyle: "italic" }}>
+                              {post.captionGoogle}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: "#D1D5DB", lineHeight: 1.5, marginBottom: 6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                          {post.caption || <span style={{ color: "#475569", fontStyle: "italic" }}>No caption</span>}
+                        </div>
+                      )}
 
                       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 11, color: "#475569" }}>{post.clientName}</span>

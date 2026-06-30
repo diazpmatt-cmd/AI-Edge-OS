@@ -1,8 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
+import { toast } from "sonner";
 
+// ── Types ──────────────────────────────────────────────────────────────────────
 type Lead = {
   id: string;
   clientName: string;
@@ -22,21 +24,64 @@ type LeadsResponse = {
   stats: { total: number; active: number; thisMonth: number; withMessages: number };
 };
 
+// ── Demo data ─────────────────────────────────────────────────────────────────
+const DEMO_LEADS: DemoLead[] = [
+  { id: "d1", name: "Sarah M.",     phone: "(251) 555-0182", service: "Bed Bug Treatment",    city: "Gulf Shores",   status: "qualified",   lastActivity: "2m ago",    priority: "high",   pipeline: "appointment_booked" },
+  { id: "d2", name: "James K.",     phone: "(251) 555-0247", service: "Roach Infestation",    city: "Foley",         status: "responded",   lastActivity: "8m ago",    priority: "high",   pipeline: "customer_responded" },
+  { id: "d3", name: "Lisa T.",      phone: "(251) 555-0319", service: "Termite Inspection",   city: "Fairhope",      status: "sms_sent",    lastActivity: "14m ago",   priority: "medium", pipeline: "sms_sent"          },
+  { id: "d4", name: "Robert H.",    phone: "(251) 555-0461", service: "Ant Problem",          city: "Orange Beach",  status: "sms_sent",    lastActivity: "21m ago",   priority: "medium", pipeline: "sms_sent"          },
+  { id: "d5", name: "Maria G.",     phone: "(251) 555-0533", service: "Bed Bug Treatment",    city: "Daphne",        status: "missed",      lastActivity: "34m ago",   priority: "low",    pipeline: "missed_call"       },
+  { id: "d6", name: "Tom B.",       phone: "(251) 555-0628", service: "Wasp Nest Removal",    city: "Spanish Fort",  status: "qualified",   lastActivity: "1h ago",    priority: "medium", pipeline: "qualified"         },
+  { id: "d7", name: "Unknown",      phone: "(251) 555-0774", service: "Unknown",              city: "Gulf Shores",   status: "missed",      lastActivity: "2h ago",    priority: "low",    pipeline: "missed_call"       },
+];
+
+type DemoLead = {
+  id: string;
+  name: string;
+  phone: string;
+  service: string;
+  city: string;
+  status: string;
+  lastActivity: string;
+  priority: "high" | "medium" | "low";
+  pipeline: "missed_call" | "sms_sent" | "customer_responded" | "qualified" | "appointment_booked";
+};
+
+const PIPELINE_STAGES = [
+  { id: "missed_call",         label: "Missed Call",        icon: "📵", color: "#EF4444" },
+  { id: "sms_sent",            label: "SMS Sent",           icon: "💬", color: "#F59E0B" },
+  { id: "customer_responded",  label: "Responded",          icon: "↩️", color: "#00AEEF" },
+  { id: "qualified",           label: "Qualified",          icon: "✓",  color: "#8B5CF6" },
+  { id: "appointment_booked",  label: "Booked",             icon: "📅", color: "#10B981" },
+];
+
+const LEAD_STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
+  missed:      { bg: "rgba(239,68,68,0.1)",    color: "#F87171", dot: "#EF4444" },
+  sms_sent:    { bg: "rgba(245,158,11,0.1)",   color: "#FCD34D", dot: "#F59E0B" },
+  responded:   { bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF" },
+  qualified:   { bg: "rgba(139,92,246,0.1)",   color: "#A78BFA", dot: "#8B5CF6" },
+  booked:      { bg: "rgba(16,185,129,0.12)",  color: "#10B981", dot: "#10B981" },
+  new:         { bg: "rgba(0,174,239,0.12)",   color: "#00AEEF", dot: "#00AEEF" },
+  contacted:   { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B", dot: "#F59E0B" },
+  closed:      { bg: "rgba(16,185,129,0.08)",  color: "#6EE7B7", dot: "#6EE7B7" },
+  lost:        { bg: "rgba(148,163,184,0.1)",  color: "#64748B", dot: "#475569" },
+  appointment_booked: { bg: "rgba(16,185,129,0.12)", color: "#10B981", dot: "#10B981" },
+};
+
+const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
+  high:   { color: "#EF4444", label: "High"   },
+  medium: { color: "#F59E0B", label: "Med"    },
+  low:    { color: "#64748B", label: "Low"    },
+};
+
+const SMS_FLOW = [
+  { step: 1, delay: "0 sec",  trigger: "Missed call detected", message: "Sorry we missed your call! This is Bed Bugs & Beyond. How can we help you today? 🐛" },
+  { step: 2, delay: "Reply",  trigger: "Customer responds",     message: "Thanks for reaching out! What pest issue are you dealing with? (bed bugs, roaches, termites, ants, etc.)" },
+  { step: 3, delay: "Reply",  trigger: "Customer answers",      message: "Got it! What city are you located in? We serve Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, and Spanish Fort." },
+  { step: 4, delay: "Reply",  trigger: "City confirmed",        message: "Great news — we service your area! Would you prefer a callback from our team or an on-site inspection appointment?" },
+];
+
 const STATUS_OPTIONS = ["new", "contacted", "booked", "closed", "lost"];
-
-const STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
-  new:       { bg: "rgba(0,174,239,0.12)",    color: "#00AEEF", dot: "#00AEEF" },
-  contacted: { bg: "rgba(245,158,11,0.12)",   color: "#F59E0B", dot: "#F59E0B" },
-  booked:    { bg: "rgba(16,185,129,0.12)",   color: "#10B981", dot: "#10B981" },
-  closed:    { bg: "rgba(16,185,129,0.08)",   color: "#6EE7B7", dot: "#6EE7B7" },
-  lost:      { bg: "rgba(148,163,184,0.1)",   color: "#64748B", dot: "#475569" },
-};
-
-const EVENT_ICON: Record<string, string> = {
-  sms:         "💬",
-  missed_call: "📵",
-  call:        "📞",
-};
 
 function formatPhone(p: string) {
   const d = p.replace(/\D/g, "");
@@ -55,14 +100,98 @@ function timeAgo(iso: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// ── Shared UI ──────────────────────────────────────────────────────────────────
+function SectionDivider({ title, right }: { title: string; right?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1.2px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
+      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
+      {right}
+    </div>
+  );
+}
+
+function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label: string; value: string | number; sub?: string; color: string; glow?: boolean }) {
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.8))",
+      border: `1px solid ${color}22`,
+      borderRadius: 14, padding: "20px 22px",
+      boxShadow: glow ? `0 0 24px ${color}18` : "none",
+      position: "relative", overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", top: -16, right: -16, width: 72, height: 72, borderRadius: "50%",
+        background: `${color}0C`, border: `1px solid ${color}14`,
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
+      }}>{icon}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 34, fontWeight: 900, color, lineHeight: 1, marginBottom: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11.5, color: "#64748B" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const s = LEAD_STATUS_STYLE[status] ?? LEAD_STATUS_STYLE.new;
+  const label = status.replace(/_/g, " ");
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      background: s.bg, color: s.color, fontSize: 10, fontWeight: 700,
+      padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
+      textTransform: "capitalize",
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
+      {label}
+    </span>
+  );
+}
+
+function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ fontSize: 13, color: "#CBD5E1" }}>{label}</span>
+      <div
+        onClick={onToggle}
+        style={{
+          width: 42, height: 22, borderRadius: 11, cursor: "pointer", position: "relative",
+          background: on ? "rgba(0,174,239,0.6)" : "rgba(255,255,255,0.1)",
+          border: on ? "1px solid rgba(0,174,239,0.5)" : "1px solid rgba(255,255,255,0.15)",
+          transition: "all 0.2s",
+        }}
+      >
+        <div style={{
+          position: "absolute", top: 2, left: on ? 22 : 2, width: 16, height: 16, borderRadius: "50%",
+          background: on ? "#00AEEF" : "#475569", transition: "left 0.2s",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function LeadRecoveryPage() {
   const authFetch = useApiFetch();
   const qc = useQueryClient();
+
+  // Live API state
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [testing, setTesting] = useState<"sms" | "call" | null>(null);
+  const [activeTab, setActiveTab] = useState<"queue" | "flow" | "analytics" | "settings">("queue");
 
-  const { data, isLoading, error } = useQuery<LeadsResponse>({
+  // Settings state
+  const [autoText, setAutoText]         = useState(true);
+  const [afterHours, setAfterHours]     = useState(true);
+  const [escalation, setEscalation]     = useState(true);
+  const [qualifyFirst, setQualifyFirst] = useState(false);
+  const [delay, setDelay]               = useState("0");
+  const [hoursOpen, setHoursOpen]       = useState("8:00 AM");
+  const [hoursClose, setHoursClose]     = useState("6:00 PM");
+
+  // Live Telnyx leads
+  const { data, isLoading } = useQuery<LeadsResponse>({
     queryKey: ["leads"],
     queryFn: () => authFetch("/leads"),
     refetchInterval: 30000,
@@ -71,30 +200,40 @@ export default function LeadRecoveryPage() {
   const patchMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Lead> }) =>
       authFetch(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["leads"] }); toast.success("Lead updated"); },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to update lead"),
   });
 
   const testMut = useMutation({
     mutationFn: (type: "sms" | "call") =>
-      authFetch(
-        type === "sms" ? "/telnyx/test-sms" : "/telnyx/test-missed-call",
-        { method: "POST", body: JSON.stringify({}) }
-      ),
-    onSuccess: () => {
-      setTesting(null);
-      qc.invalidateQueries({ queryKey: ["leads"] });
-    },
+      authFetch(type === "sms" ? "/telnyx/test-sms" : "/telnyx/test-missed-call", { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: () => { setTesting(null); qc.invalidateQueries({ queryKey: ["leads"] }); toast.success("Test event sent"); },
+    onError:   () => { setTesting(null); toast.error("Test failed"); },
     onSettled: () => setTesting(null),
   });
 
-  const leads = data?.leads ?? [];
-  const stats = data?.stats ?? { total: 0, active: 0, thisMonth: 0, withMessages: 0 };
-  const selected = leads.find(l => l.id === selectedId);
+  const liveleads = data?.leads ?? [];
+  const liveStats = data?.stats ?? { total: 0, active: 0, thisMonth: 0, withMessages: 0 };
+  const selectedLive = liveleads.find(l => l.id === selectedId);
+
+  // Pipeline counts from demo data
+  const pipelineCounts = PIPELINE_STAGES.reduce((acc, s) => {
+    acc[s.id] = DEMO_LEADS.filter(l => l.pipeline === s.id).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const tabs = [
+    { id: "queue",     label: "Lead Queue"       },
+    { id: "flow",      label: "Conversation Flow" },
+    { id: "analytics", label: "Analytics"         },
+    { id: "settings",  label: "Settings"          },
+  ] as const;
 
   return (
     <AppShell>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 8,
@@ -102,24 +241,25 @@ export default function LeadRecoveryPage() {
             borderRadius: 20, padding: "4px 14px", marginBottom: 14,
           }}>
             <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              📞 Lead Recovery
+              📞 Lead Recovery AI
             </span>
           </div>
+
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
               <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 6px" }}>
                 Lead Recovery AI
               </h1>
-              <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>
-                Missed calls and inbound SMS from Telnyx — auto-captured leads.
+              <p style={{ fontSize: 14, color: "#6B7280", margin: 0, maxWidth: 540 }}>
+                Automatically recover missed calls with instant AI-powered SMS follow-up, lead qualification, and appointment booking.
               </p>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 onClick={() => { setTesting("sms"); testMut.mutate("sms"); }}
                 disabled={testing !== null}
                 style={{
-                  padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  padding: "8px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.3)", color: "#00AEEF",
                   opacity: testing ? 0.6 : 1,
                 }}
@@ -130,207 +270,527 @@ export default function LeadRecoveryPage() {
                 onClick={() => { setTesting("call"); testMut.mutate("call"); }}
                 disabled={testing !== null}
                 style={{
-                  padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  padding: "8px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
                   background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171",
                   opacity: testing ? 0.6 : 1,
                 }}
               >
-                {testing === "call" ? "Sending…" : "📵 Test Missed Call"}
+                {testing === "call" ? "Sending…" : "📵 Sim Missed Call"}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
-          {[
-            { label: "Total Leads",    value: stats.total,        color: "#FFFFFF" },
-            { label: "Active",         value: stats.active,       color: "#00AEEF" },
-            { label: "This Month",     value: stats.thisMonth,    color: "#10B981" },
-            { label: "With Messages",  value: stats.withMessages, color: "#F59E0B" },
-          ].map(s => (
-            <div key={s.label} style={{
-              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-              borderRadius: 12, padding: "16px 18px",
-            }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: s.color, marginBottom: 4 }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{s.label}</div>
-            </div>
+        {/* ── KPI Cards ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
+          <KPICard icon="📵" label="Missed Calls Today" value={14}     sub="+3 vs yesterday"           color="#EF4444" />
+          <KPICard icon="📈" label="Recovery Rate"      value="42%"    sub="6 of 14 leads recovered"   color="#00AEEF" glow />
+          <KPICard icon="✅" label="Leads Recovered"    value={6}      sub="Today · 47 this month"      color="#10B981" />
+          <KPICard icon="💰" label="Revenue Recovered"  value="$1,750" sub="Est. at $292/job avg."     color="#F59E0B" glow />
+        </div>
+
+        {/* ── Recovery Pipeline ── */}
+        <div style={{ marginBottom: 28 }}>
+          <SectionDivider title="Recovery Pipeline" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0 }}>
+            {PIPELINE_STAGES.map((stage, i) => {
+              const count = pipelineCounts[stage.id] ?? 0;
+              const isLast = i === PIPELINE_STAGES.length - 1;
+              return (
+                <div key={stage.id} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+                  <div style={{
+                    background: `${stage.color}10`,
+                    border: `1px solid ${stage.color}25`,
+                    borderRight: isLast ? undefined : "none",
+                    borderRadius: i === 0 ? "12px 0 0 12px" : isLast ? "0 12px 12px 0" : 0,
+                    padding: "16px 14px",
+                    display: "flex", flexDirection: "column", gap: 8, flex: 1,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 14 }}>{stage.icon}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: stage.color, letterSpacing: "0.5px", textTransform: "uppercase" }}>{stage.label}</span>
+                    </div>
+                    <div style={{ fontSize: 30, fontWeight: 900, color: count > 0 ? stage.color : "#334155", lineHeight: 1 }}>{count}</div>
+                    <div style={{ fontSize: 10, color: "#475569" }}>{count === 1 ? "lead" : "leads"}</div>
+                  </div>
+                  {!isLast && (
+                    <div style={{
+                      position: "absolute", right: -12, top: "50%", transform: "translateY(-50%)",
+                      width: 24, height: 24, borderRadius: "50%",
+                      background: "#030612", border: "1px solid rgba(255,255,255,0.1)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 10, color: "#475569", zIndex: 1,
+                    }}>→</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Tab Navigation ── */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 4, width: "fit-content" }}>
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              style={{
+                padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none",
+                background: activeTab === t.id ? "rgba(0,174,239,0.18)" : "transparent",
+                color: activeTab === t.id ? "#00AEEF" : "#64748B",
+                transition: "all 0.15s",
+              }}
+            >{t.label}</button>
           ))}
         </div>
 
-        {/* Lead list + detail panel */}
-        <div style={{ display: "grid", gridTemplateColumns: selectedId ? "1fr 360px" : "1fr", gap: 16 }}>
-          {/* Table */}
-          <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden" }}>
-            {isLoading && (
-              <div style={{ padding: 40, textAlign: "center", color: "#6B7280" }}>Loading leads…</div>
-            )}
-            {error && (
-              <div style={{ padding: 40, textAlign: "center", color: "#F87171" }}>Failed to load leads.</div>
-            )}
-            {!isLoading && !error && leads.length === 0 && (
-              <div style={{ padding: 60, textAlign: "center" }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>No leads yet</div>
-                <div style={{ fontSize: 13, color: "#6B7280", maxWidth: 340, margin: "0 auto" }}>
-                  Leads appear here when Telnyx delivers an inbound SMS or missed call. Use the test buttons above to simulate.
-                </div>
-              </div>
-            )}
-            {leads.length > 0 && (
+        {/* ── Tab: Lead Queue ── */}
+        {activeTab === "queue" && (
+          <div>
+            {/* Demo leads + live leads combined */}
+            <SectionDivider
+              title={`Live Lead Queue — ${DEMO_LEADS.length} active${liveleads.length > 0 ? ` + ${liveleads.length} live` : ""}`}
+              right={
+                <span style={{ fontSize: 10, color: "#475569", whiteSpace: "nowrap" }}>
+                  Auto-refreshes every 30s · Bed Bugs &amp; Beyond
+                </span>
+              }
+            />
+
+            {/* Demo lead table */}
+            <div style={{
+              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 14, overflow: "hidden", marginBottom: 16,
+            }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    {["", "Phone", "Type", "Message", "Client", "Status", "Time"].map(h => (
-                      <th key={h} style={{ padding: "11px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
+                    {["Priority", "Customer", "Phone", "Service Needed", "City", "Status", "Last Activity"].map(h => (
+                      <th key={h} style={{ padding: "11px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((lead, i) => {
-                    const sm = STATUS_STYLE[lead.status] ?? STATUS_STYLE.new;
-                    const isSelected = lead.id === selectedId;
+                  {DEMO_LEADS.map((lead, i) => {
+                    const pr = PRIORITY_STYLE[lead.priority];
                     return (
-                      <tr
-                        key={lead.id}
-                        onClick={() => {
-                          if (isSelected) { setSelectedId(null); }
-                          else { setSelectedId(lead.id); setEditNotes(lead.notes ?? ""); }
-                        }}
-                        style={{
-                          borderBottom: i < leads.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                          background: isSelected ? "rgba(0,174,239,0.07)" : "transparent",
-                          cursor: "pointer", transition: "background 0.15s",
-                        }}
-                      >
-                        <td style={{ padding: "11px 14px", fontSize: 16 }}>{EVENT_ICON[lead.eventType] ?? "📋"}</td>
-                        <td style={{ padding: "11px 14px", fontSize: 13, color: "#E5E7EB", fontWeight: 600, whiteSpace: "nowrap" }}>
-                          {formatPhone(lead.phone)}
-                          {lead.customerName && <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 400 }}>{lead.customerName}</div>}
-                        </td>
-                        <td style={{ padding: "11px 14px" }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                            {lead.eventType.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#9CA3AF", maxWidth: 220 }}>
-                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {lead.message ?? "—"}
-                          </div>
-                        </td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#6B7280", whiteSpace: "nowrap" }}>{lead.clientName || "—"}</td>
+                      <tr key={lead.id} style={{
+                        borderBottom: i < DEMO_LEADS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                        transition: "background 0.15s",
+                      }}>
                         <td style={{ padding: "11px 14px" }}>
                           <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 5,
-                            padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                            background: sm.bg, color: sm.color,
-                          }}>
-                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: sm.dot, flexShrink: 0 }} />
-                            {lead.status}
-                          </span>
+                            display: "inline-block", fontSize: 10, fontWeight: 800,
+                            color: pr.color, background: `${pr.color}15`,
+                            border: `1px solid ${pr.color}30`,
+                            padding: "2px 8px", borderRadius: 6,
+                          }}>{pr.label}</span>
                         </td>
-                        <td style={{ padding: "11px 14px", fontSize: 11, color: "#6B7280", whiteSpace: "nowrap" }}>{timeAgo(lead.createdAt)}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{lead.name}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#94A3B8", whiteSpace: "nowrap" }}>{lead.phone}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#CBD5E1" }}>{lead.service}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#94A3B8" }}>{lead.city}</td>
+                        <td style={{ padding: "11px 14px" }}><StatusBadge status={lead.pipeline} /></td>
+                        <td style={{ padding: "11px 14px", fontSize: 11, color: "#64748B", whiteSpace: "nowrap" }}>{lead.lastActivity}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Live Telnyx leads (if any) */}
+            {liveleads.length > 0 && (
+              <>
+                <SectionDivider title={`Live Telnyx Leads (${liveleads.length})`} />
+                <div style={{ display: "grid", gridTemplateColumns: selectedId ? "1fr 360px" : "1fr", gap: 16 }}>
+                  <div style={{
+                    background: "rgba(11,22,41,0.7)", border: "1px solid rgba(0,174,239,0.12)",
+                    borderRadius: 14, overflow: "hidden",
+                  }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          {["", "Phone", "Type", "Message", "Status", "Time"].map(h => (
+                            <th key={h} style={{ padding: "11px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {liveleads.map((lead, i) => {
+                          const sm = LEAD_STATUS_STYLE[lead.status] ?? LEAD_STATUS_STYLE.new;
+                          const isSelected = lead.id === selectedId;
+                          const icon = lead.eventType === "sms" ? "💬" : lead.eventType === "missed_call" ? "📵" : "📞";
+                          return (
+                            <tr
+                              key={lead.id}
+                              onClick={() => { isSelected ? setSelectedId(null) : (setSelectedId(lead.id), setEditNotes(lead.notes ?? "")); }}
+                              style={{
+                                borderBottom: i < liveleads.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                                background: isSelected ? "rgba(0,174,239,0.07)" : "transparent",
+                                cursor: "pointer", transition: "background 0.15s",
+                              }}
+                            >
+                              <td style={{ padding: "11px 14px", fontSize: 16 }}>{icon}</td>
+                              <td style={{ padding: "11px 14px", fontSize: 13, color: "#E5E7EB", fontWeight: 600, whiteSpace: "nowrap" }}>
+                                {formatPhone(lead.phone)}
+                                {lead.customerName && <div style={{ fontSize: 11, color: "#6B7280" }}>{lead.customerName}</div>}
+                              </td>
+                              <td style={{ padding: "11px 14px", fontSize: 11, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase" }}>{lead.eventType.replace("_", " ")}</td>
+                              <td style={{ padding: "11px 14px", fontSize: 12, color: "#9CA3AF", maxWidth: 200 }}>
+                                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lead.message ?? "—"}</div>
+                              </td>
+                              <td style={{ padding: "11px 14px" }}><StatusBadge status={lead.status} /></td>
+                              <td style={{ padding: "11px 14px", fontSize: 11, color: "#6B7280", whiteSpace: "nowrap" }}>{timeAgo(lead.createdAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Live lead detail panel */}
+                  {selectedLive && (
+                    <div style={{
+                      background: "rgba(11,22,41,0.9)", border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 14,
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>Lead Detail</span>
+                        <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", fontSize: 18 }}>×</button>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {[
+                          { label: "Phone",    value: formatPhone(selectedLive.phone) },
+                          { label: "Type",     value: selectedLive.eventType.replace("_", " ") },
+                          { label: "Source",   value: selectedLive.source },
+                          { label: "Received", value: new Date(selectedLive.createdAt).toLocaleString() },
+                        ].map(({ label, value }) => (
+                          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ fontSize: 12, color: "#475569", fontWeight: 600, flexShrink: 0 }}>{label}</span>
+                            <span style={{ fontSize: 12, color: "#D1D5DB", textAlign: "right" }}>{value}</span>
+                          </div>
+                        ))}
+                        {selectedLive.message && (
+                          <div>
+                            <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 5 }}>Message</div>
+                            <div style={{ fontSize: 13, color: "#D1D5DB", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 12px", lineHeight: 1.6 }}>{selectedLive.message}</div>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Status</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {STATUS_OPTIONS.map(s => {
+                            const sm = LEAD_STATUS_STYLE[s] ?? LEAD_STATUS_STYLE.new;
+                            const active = selectedLive.status === s;
+                            return (
+                              <button key={s} onClick={() => patchMut.mutate({ id: selectedLive.id, patch: { status: s } })} style={{
+                                padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                background: active ? sm.bg : "rgba(255,255,255,0.04)",
+                                border: active ? `1px solid ${sm.color}44` : "1px solid rgba(255,255,255,0.08)",
+                                color: active ? sm.color : "#6B7280",
+                              }}>{s}</button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Notes</div>
+                        <textarea
+                          value={editNotes}
+                          onChange={e => setEditNotes(e.target.value)}
+                          rows={3}
+                          placeholder="Add notes…"
+                          style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 12, color: "#D1D5DB", resize: "vertical", fontFamily: "inherit", outline: "none" }}
+                        />
+                        <button
+                          onClick={() => patchMut.mutate({ id: selectedLive.id, patch: { notes: editNotes } })}
+                          disabled={patchMut.isPending}
+                          style={{ marginTop: 8, padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF", opacity: patchMut.isPending ? 0.6 : 1 }}
+                        >{patchMut.isPending ? "Saving…" : "Save Notes"}</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Empty live state */}
+            {!isLoading && liveleads.length === 0 && (
+              <div style={{
+                background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.12)",
+                borderRadius: 12, padding: "16px 18px", display: "flex", alignItems: "center", gap: 12,
+              }}>
+                <span style={{ fontSize: 18 }}>📡</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8" }}>No live Telnyx leads yet</div>
+                  <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>Use the "Sim Missed Call" button above to trigger a test webhook. Real leads appear here automatically when calls come in.</div>
+                </div>
+              </div>
             )}
           </div>
+        )}
 
-          {/* Detail panel */}
-          {selected && (
-            <div style={{
-              background: "rgba(11,22,41,0.9)", border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 16,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>Lead Detail</span>
-                <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", fontSize: 18 }}>×</button>
+        {/* ── Tab: Conversation Flow ── */}
+        {activeTab === "flow" && (
+          <div>
+            <SectionDivider title="Automated SMS Conversation Flow" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              {/* Flow builder */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {SMS_FLOW.map((step, i) => (
+                  <div key={step.step}>
+                    <div style={{
+                      background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: 14, padding: "16px 18px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                        <div style={{
+                          width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                          background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.35)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, fontWeight: 900, color: "#00AEEF",
+                        }}>{step.step}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            {step.trigger}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#475569" }}>Delay: {step.delay}</div>
+                        </div>
+                      </div>
+                      <div style={{
+                        background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)",
+                        borderRadius: 10, padding: "12px 14px",
+                        fontSize: 13, color: "#CBD5E1", lineHeight: 1.6,
+                        borderLeft: "3px solid rgba(0,174,239,0.4)",
+                      }}>
+                        "{step.message}"
+                      </div>
+                    </div>
+                    {i < SMS_FLOW.length - 1 && (
+                      <div style={{ display: "flex", justifyContent: "center", padding: "6px 0", color: "#334155", fontSize: 16 }}>↓</div>
+                    )}
+                  </div>
+                ))}
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <Detail label="Phone"    value={formatPhone(selected.phone)} />
-                <Detail label="Type"     value={`${EVENT_ICON[selected.eventType] ?? ""} ${selected.eventType.replace("_", " ")}`} />
-                <Detail label="Source"   value={selected.source} />
-                <Detail label="Client"   value={selected.clientName || "—"} />
-                <Detail label="Received" value={new Date(selected.createdAt).toLocaleString()} />
-                {selected.message && (
-                  <div>
-                    <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 5 }}>Message</div>
-                    <div style={{ fontSize: 13, color: "#D1D5DB", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 12px", lineHeight: 1.6 }}>
-                      {selected.message}
+              {/* Phone preview */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{
+                  background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 14, padding: "16px 18px",
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 14 }}>SMS Preview</div>
+                  <div style={{
+                    background: "#1C1C1E", border: "1px solid #333",
+                    borderRadius: 20, padding: "20px 16px", maxWidth: 280, margin: "0 auto",
+                  }}>
+                    <div style={{ fontSize: 11, color: "#8E8E93", textAlign: "center", marginBottom: 16 }}>
+                      Bed Bugs &amp; Beyond · (251) 324-9090
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {SMS_FLOW.slice(0, 2).map((step, i) => (
+                        <div key={step.step} style={{ display: "flex", justifyContent: i % 2 === 0 ? "flex-start" : "flex-end" }}>
+                          <div style={{
+                            maxWidth: "85%", padding: "9px 13px", borderRadius: i % 2 === 0 ? "16px 16px 16px 4px" : "16px 16px 4px 16px",
+                            background: i % 2 === 0 ? "#2C2C2E" : "#00AEEF",
+                            fontSize: 12, color: i % 2 === 0 ? "#FFFFFF" : "#000", lineHeight: 1.4,
+                          }}>
+                            {i === 0 ? step.message : "I have a bed bug problem"}
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                        <div style={{ maxWidth: "85%", padding: "9px 13px", borderRadius: "16px 16px 16px 4px", background: "#2C2C2E", fontSize: 12, color: "#FFFFFF", lineHeight: 1.4 }}>
+                          {SMS_FLOW[1].message}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Status */}
-              <div>
-                <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Status</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {STATUS_OPTIONS.map(s => {
-                    const sm = STATUS_STYLE[s] ?? STATUS_STYLE.new;
-                    const active = selected.status === s;
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => patchMut.mutate({ id: selected.id, patch: { status: s } })}
-                        style={{
-                          padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: active ? sm.bg : "rgba(255,255,255,0.04)",
-                          border: active ? `1px solid ${sm.color}44` : "1px solid rgba(255,255,255,0.08)",
-                          color: active ? sm.color : "#6B7280",
-                        }}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
+                <div style={{
+                  background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)",
+                  borderRadius: 14, padding: "16px 18px",
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 12 }}>Flow Performance</div>
+                  {[
+                    { label: "Open Rate (SMS)",    value: "96%", bar: 96, color: "#10B981" },
+                    { label: "Response Rate",       value: "68%", bar: 68, color: "#00AEEF" },
+                    { label: "Qualification Rate",  value: "51%", bar: 51, color: "#8B5CF6" },
+                    { label: "Booking Rate",        value: "42%", bar: 42, color: "#F59E0B" },
+                  ].map(m => (
+                    <div key={m.label} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: "#94A3B8" }}>{m.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: m.color }}>{m.value}</span>
+                      </div>
+                      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${m.bar}%`, background: m.color, borderRadius: 2, transition: "width 0.6s" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Analytics ── */}
+        {activeTab === "analytics" && (
+          <div>
+            <SectionDivider title="Recovery Analytics — Last 30 Days" />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
+              {[
+                { label: "Calls Missed",       value: 187,     delta: "+12%", color: "#EF4444", icon: "📵" },
+                { label: "SMS Sent",            value: 187,     delta: "100%", color: "#00AEEF", icon: "💬" },
+                { label: "Responses Received",  value: 127,     delta: "68%",  color: "#8B5CF6", icon: "↩️" },
+                { label: "Leads Qualified",     value: 96,      delta: "51%",  color: "#F59E0B", icon: "✓"  },
+                { label: "Appointments Booked", value: 79,      delta: "42%",  color: "#10B981", icon: "📅" },
+                { label: "Revenue Recovered",   value: "$23.1k", delta: "+8%", color: "#FCD34D", icon: "💰" },
+              ].map(m => (
+                <div key={m.label} style={{
+                  background: "rgba(11,22,41,0.7)", border: `1px solid ${m.color}18`,
+                  borderRadius: 12, padding: "16px 18px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 16 }}>{m.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>{m.label}</span>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: m.color, marginBottom: 4 }}>{m.value}</div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>
+                    <span style={{ color: "#10B981" }}>{m.delta}</span> {m.delta.includes("%") && !m.delta.includes("+") ? "of missed calls" : "vs last month"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Funnel visualization */}
+            <SectionDivider title="Conversion Funnel" />
+            <div style={{
+              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 14, padding: "20px 24px",
+            }}>
+              {[
+                { label: "Missed Calls",   value: 187, pct: 100, color: "#EF4444" },
+                { label: "SMS Sent",       value: 187, pct: 100, color: "#F59E0B" },
+                { label: "Responded",      value: 127, pct: 68,  color: "#00AEEF" },
+                { label: "Qualified",      value: 96,  pct: 51,  color: "#8B5CF6" },
+                { label: "Booked",         value: 79,  pct: 42,  color: "#10B981" },
+              ].map((row, i) => (
+                <div key={row.label} style={{ marginBottom: i < 4 ? 12 : 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", width: 130, flexShrink: 0 }}>{row.label}</span>
+                    <div style={{ flex: 1, height: 28, background: "rgba(255,255,255,0.04)", borderRadius: 6, overflow: "hidden", position: "relative" }}>
+                      <div style={{ height: "100%", width: `${row.pct}%`, background: `${row.color}30`, borderRadius: 6, transition: "width 0.6s", display: "flex", alignItems: "center" }}>
+                        <div style={{ height: "100%", width: "100%", background: `linear-gradient(90deg, ${row.color}40, ${row.color}20)`, display: "flex", alignItems: "center", paddingLeft: 10 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: row.color }}>{row.value}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748B", width: 36, textAlign: "right" }}>{row.pct}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Settings ── */}
+        {activeTab === "settings" && (
+          <div>
+            <SectionDivider title="Automation Settings" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+              {/* Auto-response config */}
+              <div style={{
+                background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 4 }}>Auto-Response</div>
+                <Toggle on={autoText}     onToggle={() => setAutoText(v => !v)}         label="Auto-text missed calls" />
+                <Toggle on={afterHours}   onToggle={() => setAfterHours(v => !v)}       label="After-hours mode" />
+                <Toggle on={qualifyFirst} onToggle={() => setQualifyFirst(v => !v)}     label="Qualify before routing" />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 8 }}>Response Delay</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {["0", "30", "60", "120"].map(d => (
+                      <button key={d} onClick={() => setDelay(d)} style={{
+                        flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        background: delay === d ? "rgba(0,174,239,0.18)" : "rgba(255,255,255,0.04)",
+                        border: delay === d ? "1px solid rgba(0,174,239,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                        color: delay === d ? "#00AEEF" : "#64748B",
+                      }}>{d === "0" ? "Instant" : `${d}s`}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Notes */}
-              <div>
-                <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Notes</div>
-                <textarea
-                  value={editNotes}
-                  onChange={e => setEditNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Add notes about this lead…"
-                  style={{
-                    width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-                    padding: "10px 12px", fontSize: 13, color: "#D1D5DB", resize: "vertical",
-                    fontFamily: "inherit", outline: "none",
-                  }}
-                />
-                <button
-                  onClick={() => patchMut.mutate({ id: selected.id, patch: { notes: editNotes } })}
-                  disabled={patchMut.isPending}
-                  style={{
-                    marginTop: 8, padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                    background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF",
-                    opacity: patchMut.isPending ? 0.6 : 1,
-                  }}
-                >
-                  {patchMut.isPending ? "Saving…" : "Save Notes"}
+              {/* Business hours */}
+              <div style={{
+                background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 14, padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 4 }}>Business Hours</div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 8 }}>Open</div>
+                  <select value={hoursOpen} onChange={e => setHoursOpen(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, fontSize: 13, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#CBD5E1", outline: "none" }}>
+                    {["6:00 AM","7:00 AM","8:00 AM","9:00 AM"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 8 }}>Close</div>
+                  <select value={hoursClose} onChange={e => setHoursClose(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, fontSize: 13, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#CBD5E1", outline: "none" }}>
+                    {["4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <Toggle on={escalation} onToggle={() => setEscalation(v => !v)} label="Escalate if no response in 1h" />
+              </div>
+
+              {/* Escalation rules */}
+              <div style={{
+                background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 14, padding: "20px 22px",
+                gridColumn: "1 / -1",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FFFFFF", marginBottom: 14 }}>Escalation Rules</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { trigger: "No response after 1 hour",      action: "Send follow-up SMS #2",          active: true  },
+                    { trigger: "No response after 3 hours",     action: "Notify business owner via SMS",   active: true  },
+                    { trigger: "Customer requests callback",     action: "Add to callback queue instantly", active: true  },
+                    { trigger: "Bed bug keyword detected",       action: "Mark as high priority",           active: true  },
+                    { trigger: "Outside business hours",         action: "Queue for morning follow-up",     active: afterHours },
+                  ].map((rule, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)",
+                      borderRadius: 9, padding: "10px 14px",
+                    }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: rule.active ? "#10B981" : "#334155", flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 12, color: "#94A3B8" }}>If <strong style={{ color: "#CBD5E1" }}>{rule.trigger}</strong> → {rule.action}</span>
+                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: rule.active ? "#10B981" : "#334155", background: rule.active ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${rule.active ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)"}`, padding: "2px 8px", borderRadius: 6 }}>
+                        {rule.active ? "Active" : "Off"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <button style={{
+                  marginTop: 14, padding: "9px 20px", borderRadius: 9, fontSize: 12, fontWeight: 700,
+                  cursor: "pointer", background: "rgba(0,174,239,0.15)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF",
+                }} onClick={() => toast.success("Settings saved")}>
+                  Save Settings
                 </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
       </div>
     </AppShell>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-      <span style={{ fontSize: 12, color: "#475569", fontWeight: 600, flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 12, color: "#D1D5DB", textAlign: "right" }}>{value}</span>
-    </div>
   );
 }

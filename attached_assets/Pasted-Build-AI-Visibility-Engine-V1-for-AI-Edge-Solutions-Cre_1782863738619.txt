@@ -1,0 +1,269 @@
+Build AI Visibility Engine V1 for AI Edge Solutions.
+
+Create a new dashboard module:
+AI Visibility Engine
+
+Route:
+/admin/ai-visibility
+
+Add sidebar nav item:
+✨ AI Visibility
+
+Goal:
+Help local businesses understand whether they are likely to be found and recommended by AI-powered search engines and assistants.
+
+This is V1 — no live API integrations yet. Build the dashboard, scoring model, prompt testing UI, competitor visibility table, recommendations, and diagnostics.
+
+Use demo client:
+Business: Bed Bugs & Beyond
+Phone: (251) 324-9090
+Industry: Pest Control
+Website: https://aiedgesolutions.online
+Service Area: Baldwin County, Alabama
+Cities:
+- Foley
+- Gulf Shores
+- Orange Beach
+- Fairhope
+- Daphne
+- Spanish Fort
+
+--------------------------------------------------
+PAGE SECTIONS
+--------------------------------------------------
+
+1) Header + AI Visibility Score
+2) AI Search Channel Cards
+3) Prompt Testing Dashboard
+4) Competitor Mentions
+5) Recommendation Gaps
+6) Content + Schema Recommendations
+7) What To Fix Next
+8) Diagnostics
+
+--------------------------------------------------
+KPI / SCORE CARDS
+--------------------------------------------------
+
+Top cards:
+
+- AI Visibility Score: 38/100
+- Prompt Coverage: 2/8
+- Competitor Gap: High
+- Optimization Status: Needs Work
+
+Score should feel realistic:
+Google Business Profile connected gives some baseline points.
+Missing Apple/Bing/Nextdoor lowers the score.
+Missing AI-specific content/schema lowers the score.
+
+--------------------------------------------------
+AI SEARCH CHANNEL CARDS
+--------------------------------------------------
+
+Create cards for:
+
+1. ChatGPT Search
+Status: Not Verified
+Description: Tracks whether the business appears in AI assistant recommendations.
+
+2. Google AI Overviews
+Status: Partial Signal
+Description: Uses Google Business Profile, local SEO, reviews, structured data, and authority.
+
+3. Bing Copilot
+Status: Weak Signal
+Description: Influenced by Bing Places, Microsoft search results, website authority, and citations.
+
+4. Perplexity AI
+Status: Not Verified
+Description: Influenced by high-quality web citations, content authority, and local relevance.
+
+5. Apple/Siri Discovery
+Status: Missing Listing
+Description: Influenced by Apple Business Connect and Apple Maps visibility.
+
+Each card should show:
+- status badge
+- signal strength
+- last checked
+- key missing factor
+- action button
+
+--------------------------------------------------
+PROMPT TESTING DASHBOARD
+--------------------------------------------------
+
+Create a section that simulates AI search prompt tests.
+
+Prompt examples:
+
+1. “Best pest control company in Foley AL”
+Result: Bed Bugs & Beyond not mentioned
+Competitors mentioned: 3
+Status: Gap Found
+
+2. “Bed bug treatment near Gulf Shores”
+Result: Bed Bugs & Beyond mentioned indirectly
+Competitors mentioned: 2
+Status: Partial
+
+3. “Who removes bed bugs in Baldwin County Alabama?”
+Result: Not mentioned
+Competitors mentioned: 4
+Status: Gap Found
+
+4. “Emergency pest control near Orange Beach”
+Result: Not mentioned
+Competitors mentioned: 3
+Status: Gap Found
+
+5. “Affordable roach exterminator in Fairhope”
+Result: Not mentioned
+Competitors mentioned: 2
+Status: Gap Found
+
+Show table columns:
+- Prompt
+- Bed Bugs & Beyond Result
+- Competitors Mentioned
+- Status
+- Recommended Fix
+
+Recommended fixes:
+- Create location-specific service page
+- Add FAQ schema
+- Improve Google Business Profile categories
+- Add review-request campaign
+- Add local citations
+- Add comparison/authority content
+
+--------------------------------------------------
+COMPETITOR MENTIONS
+--------------------------------------------------
+
+Create competitor visibility table.
+
+Demo competitors:
+- Havard Pest Control
+- Beebe’s Pest & Termite Control
+- Knox Pest Control
+- Arrow Exterminators
+- Wayne’s Pest Control
+
+Columns:
+- Competitor
+- AI Mentions
+- Review Strength
+- Local Authority
+- Content Depth
+- Threat Level
+
+Use realistic demo scores.
+
+--------------------------------------------------
+RECOMMENDATION GAPS
+--------------------------------------------------
+
+Show gap cards:
+
+1. Missing AI-optimized service pages
+2. Weak citation authority
+3. Limited review velocity
+4. Apple/Bing/Nextdoor listings incomplete
+5. Missing FAQ schema
+6. Missing location-specific content
+7. No AI-readable business summary
+8. Limited backlink authority
+
+Each should have:
+- severity
+- impact
+- recommended action
+
+--------------------------------------------------
+CONTENT + SCHEMA RECOMMENDATIONS
+--------------------------------------------------
+
+Create recommended content list:
+
+- Bed Bug Treatment in Foley AL
+- Bed Bug Treatment in Gulf Shores AL
+- Roach Exterminator in Baldwin County AL
+- Emergency Pest Control in Orange Beach AL
+- Pest Control FAQ for Baldwin County
+- Why Bed Bugs & Beyond is Different
+- Local Pest Control Service Area Page
+
+Schema recommendations:
+- LocalBusiness schema
+- PestControl schema if available
+- FAQPage schema
+- Review schema
+- Service schema
+- Breadcrumb schema
+
+--------------------------------------------------
+WHAT TO FIX NEXT
+--------------------------------------------------
+
+Priority action plan:
+
+Priority 1:
+Claim/setup Apple Business Connect
+
+Priority 2:
+Claim/setup Bing Places
+
+Priority 3:
+Create AI-readable business summary page
+
+Priority 4:
+Create city-specific pest control pages
+
+Priority 5:
+Add FAQ schema to service pages
+
+Priority 6:
+Launch review request campaign
+
+Priority 7:
+Build local backlinks/citations
+
+--------------------------------------------------
+DIAGNOSTICS
+--------------------------------------------------
+
+Add diagnostics section:
+
+- AI visibility scan status
+- Google signal health
+- Bing signal health
+- Citation health
+- Schema health
+- Review signal health
+- Local content health
+
+Use statuses:
+Healthy
+Warning
+Missing
+Coming Soon
+
+--------------------------------------------------
+STYLE REQUIREMENTS
+--------------------------------------------------
+
+Must match AI Edge dashboard style exactly:
+- dark navy background
+- cyan highlights
+- silver/blue borders
+- glow cards
+- status badges
+- same spacing and typography style as Local Presence Engine and Lead Recovery AI V2
+
+Use polished SaaS-style UI.
+This should feel like a premium AI search optimization module.
+
+Do not break existing routes or modules.
+Do not remove Lead Recovery AI, Local Presence Engine, Connected Accounts, or System Diagnostics.

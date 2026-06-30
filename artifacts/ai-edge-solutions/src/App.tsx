@@ -45,6 +45,7 @@ const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEngineP
 const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
 const LocalPresenceEnginePage    = lazy(() => import("./pages/LocalPresenceEnginePage"));
+const AIVisibilityEnginePage     = lazy(() => import("./pages/AIVisibilityEnginePage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -128,6 +129,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/local-presence">
           <Authenticated><LocalPresenceEnginePage /></Authenticated>
+        </Route>
+        <Route path="/admin/ai-visibility">
+          <Authenticated><AIVisibilityEnginePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

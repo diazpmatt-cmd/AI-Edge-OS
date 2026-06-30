@@ -59,11 +59,10 @@ type LogEntry = {
 
 type LogsData = { logs: LogEntry[]; total: number };
 
-type BackupItem = { filename: string; sizeBytes: number; createdAt: string };
-type BackupResult = {
-  ok: boolean; filename: string; totalRows: number;
-  rowCounts: Record<string, number>; exportedAt: string; tableNames: string[];
-};
+type BkStatus = "healthy" | "warning" | "never";
+type BkTypeStatus = { status: BkStatus; lastBackupAt: string | null; sizeBytes: number; filename: string | null };
+type BkStatusData = { status: Record<string, BkTypeStatus>; history: BkHistoryItem[] };
+type BkHistoryItem = { filename: string; type: string; sizeBytes: number; createdAt: string };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -157,8 +156,7 @@ export default function SystemDiagnosticsPage() {
   const [newestLogId, setNewestLogId] = useState<string | null>(null);
   const [, setTick] = useState(0); // forces re-render for countdown display
   const logsRef = useRef<HTMLDivElement>(null);
-  const [showRestore, setShowRestore] = useState(false);
-  const [lastBackup, setLastBackup] = useState<BackupResult | null>(null);
+  const [bkRunning, setBkRunning] = useState<Record<string, boolean>>({});
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -295,33 +293,40 @@ export default function SystemDiagnosticsPage() {
     onError: (e: any) => toast.error(e?.message ?? "Generate failed"),
   });
 
-  // ── Backup queries & mutations ──
-  const { data: backupsData, refetch: refetchBackups } = useQuery<{ backups: BackupItem[] }>({
-    queryKey: ["db_backups"],
-    queryFn: () => authFetch<{ backups: BackupItem[] }>("/diagnostics/backups"),
-    staleTime: 10_000,
+  // ── Backup Center queries & mutations ──
+  const { data: bkData, refetch: refetchBk } = useQuery<BkStatusData>({
+    queryKey: ["backup_center_status"],
+    queryFn: () => authFetch<BkStatusData>("/backups/status"),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
-  const createBackupMut = useMutation({
-    mutationFn: () => authFetch<BackupResult>("/diagnostics/db-backup", { method: "POST" }),
-    onSuccess: (d) => {
-      setLastBackup(d);
-      toast.success(`Backup saved: ${d.filename} (${d.totalRows.toLocaleString()} rows)`);
-      refetchBackups();
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Backup failed"),
-  });
-
-  const deleteBackupMut = useMutation({
-    mutationFn: (filename: string) => authFetch<{ ok: boolean }>(`/diagnostics/backups/${encodeURIComponent(filename)}`, { method: "DELETE" }),
-    onSuccess: () => { toast.success("Backup deleted"); refetchBackups(); },
-    onError: (e: any) => toast.error(e?.message ?? "Delete failed"),
-  });
-
-  const downloadBackup = async (filename: string) => {
+  const runBackup = async (type: "code" | "database" | "assets" | "full") => {
+    setBkRunning(p => ({ ...p, [type]: true }));
+    const labels: Record<string, string> = { code: "Code", database: "Database", assets: "Assets", full: "Full System" };
+    const tid = toast.loading(`Running ${labels[type]} backup…`);
     try {
       const token = await getToken().catch(() => null);
-      const res = await fetch(`${BASE}/api/diagnostics/backups/${encodeURIComponent(filename)}`, {
+      const res = await fetch(`${BASE}/api/backups/${type}`, {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Backup failed");
+      toast.success(`${labels[type]} backup complete — ${json.filename ?? ""}`, { id: tid });
+      refetchBk();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Backup failed", { id: tid });
+    } finally {
+      setBkRunning(p => ({ ...p, [type]: false }));
+    }
+  };
+
+  const downloadBkFile = async (filename: string) => {
+    try {
+      const token = await getToken().catch(() => null);
+      const res = await fetch(`${BASE}/api/backups/download/${encodeURIComponent(filename)}`, {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -332,12 +337,24 @@ export default function SystemDiagnosticsPage() {
       a.href = url; a.download = filename;
       document.body.appendChild(a); a.click();
       document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Download failed");
-    }
+    } catch { toast.error("Download failed"); }
   };
 
-  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending || regenQueueMut.isPending || clearQueueDiag.isPending || forceGenerateMut.isPending || createBackupMut.isPending;
+  const deleteBkFile = async (filename: string) => {
+    if (!confirm(`Delete ${filename}?`)) return;
+    try {
+      const token = await getToken().catch(() => null);
+      await fetch(`${BASE}/api/backups/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      toast.success("Backup deleted");
+      refetchBk();
+    } catch { toast.error("Delete failed"); }
+  };
+
+  const anyMutPending = retryFailed.isPending || clearGBPCache.isPending || refreshGBPLoc.isPending || forceHealthCheck.isPending || refreshTokens.isPending || useCachedLocation.isPending || regenQueueMut.isPending || clearQueueDiag.isPending || forceGenerateMut.isPending;
 
   const SECTION_STYLE: React.CSSProperties = {
     background: "rgba(11,22,41,0.7)",
@@ -1099,120 +1116,146 @@ export default function SystemDiagnosticsPage() {
         )}
       </div>
 
-      {/* ── Section 9: Database Backup ── */}
-      <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 12, padding: "20px 24px", marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: "#FFFFFF", marginBottom: 4 }}>Section 9 — Database Backup</div>
-        <div style={{ fontSize: 11, color: "#64748B", marginBottom: 18 }}>Export all database tables to a timestamped JSON file. Backups are stored on the server and can be downloaded locally.</div>
-
-        {/* ── Export Button Row ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+      {/* ── Section 9: Backup Center V1 ── */}
+      <div style={{ background: "rgba(11,22,41,0.85)", border: "1px solid rgba(0,174,239,0.18)", borderRadius: 16, padding: "24px 28px", marginBottom: 16, backdropFilter: "blur(8px)" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <span style={{ fontSize: 22 }}>🛡️</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>Backup Center</span>
+              <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(0,174,239,0.15)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 20, padding: "2px 8px", letterSpacing: "0.06em" }}>V1</span>
+            </div>
+            <div style={{ fontSize: 12, color: "#64748B" }}>Automated backups for code, database, and image assets. All files stored on server — download anytime.</div>
+          </div>
           <button
-            onClick={() => createBackupMut.mutate()}
-            disabled={createBackupMut.isPending}
+            onClick={() => runBackup("full")}
+            disabled={!!bkRunning["full"]}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              background: createBackupMut.isPending ? "rgba(0,174,239,0.3)" : "linear-gradient(135deg,#00AEEF,#0076A8)",
-              color: "#fff", border: "none", borderRadius: 8, padding: "11px 22px",
-              fontSize: 14, fontWeight: 700, cursor: createBackupMut.isPending ? "not-allowed" : "pointer",
-              boxShadow: createBackupMut.isPending ? "none" : "0 4px 16px rgba(0,174,239,0.35)",
-              transition: "all 0.2s",
+              background: bkRunning["full"] ? "rgba(139,92,246,0.2)" : "linear-gradient(135deg,#8B5CF6,#6D28D9)",
+              color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px",
+              fontSize: 13, fontWeight: 700, cursor: bkRunning["full"] ? "not-allowed" : "pointer",
+              boxShadow: bkRunning["full"] ? "none" : "0 4px 18px rgba(139,92,246,0.4)",
+              whiteSpace: "nowrap", transition: "all 0.2s",
             }}
           >
-            <span style={{ fontSize: 18 }}>{createBackupMut.isPending ? "⏳" : "💾"}</span>
-            {createBackupMut.isPending ? "Exporting…" : "Export Database Backup"}
+            <span style={{ fontSize: 16 }}>{bkRunning["full"] ? "⏳" : "⚡"}</span>
+            {bkRunning["full"] ? "Running Full Backup…" : "Full Backup"}
           </button>
-
-          {lastBackup && (
-            <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
-              <span style={{ color: "#10B981", fontWeight: 700 }}>✓ Last export:</span>{" "}
-              {new Date(lastBackup.exportedAt).toLocaleString()} &nbsp;·&nbsp;
-              <span style={{ color: "#00AEEF" }}>{lastBackup.totalRows.toLocaleString()} rows</span> across {lastBackup.tableNames.length} tables
-            </div>
-          )}
         </div>
 
-        {/* ── Backup File List ── */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              Saved Backups ({backupsData?.backups?.length ?? 0})
-            </div>
-          </div>
-
-          {!backupsData || backupsData.backups.length === 0 ? (
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "14px 16px", fontSize: 12, color: "#475569", textAlign: "center" }}>
-              No backups yet — click "Export Database Backup" to create your first one.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {backupsData.backups.map((b) => {
-                const kb = (b.sizeBytes / 1024).toFixed(1);
-                const mb = (b.sizeBytes / 1024 / 1024).toFixed(2);
-                const sizeLabel = b.sizeBytes > 1024 * 1024 ? `${mb} MB` : `${kb} KB`;
+        {/* ── 4 Status Cards ── */}
+        {(() => {
+          const cards: Array<{ key: "code" | "database" | "assets" | "full"; label: string; icon: string; desc: string; btnLabel: string; accent: string; accentBg: string }> = [
+            { key: "code",     label: "Code Backup",     icon: "💻", desc: "Full project source (excludes node_modules, .git, dist)", btnLabel: "Backup Code",     accent: "#00AEEF", accentBg: "rgba(0,174,239,0.08)"   },
+            { key: "database", label: "Database Backup", icon: "🗄️", desc: "Exports social_posts, image_assets, settings & connections", btnLabel: "Backup Database", accent: "#10B981", accentBg: "rgba(16,185,129,0.08)"  },
+            { key: "assets",   label: "Asset Backup",    icon: "🖼️", desc: "Image metadata + files from object storage as ZIP",   btnLabel: "Backup Images",   accent: "#F59E0B", accentBg: "rgba(245,158,11,0.08)"  },
+            { key: "full",     label: "Full System",     icon: "🔐", desc: "Runs all 3 backups + writes manifest.json",           btnLabel: "Full Backup",     accent: "#8B5CF6", accentBg: "rgba(139,92,246,0.08)"   },
+          ];
+          const statusStyle: Record<BkStatus, { dot: string; label: string; border: string }> = {
+            healthy: { dot: "#10B981", label: "Healthy",  border: "rgba(16,185,129,0.25)" },
+            warning: { dot: "#F59E0B", label: "Warning",  border: "rgba(245,158,11,0.25)" },
+            never:   { dot: "#475569", label: "No backup", border: "rgba(71,85,105,0.25)" },
+          };
+          const fmtSize = (b: number) => b > 1_000_000 ? `${(b/1_000_000).toFixed(1)} MB` : b > 1000 ? `${(b/1024).toFixed(0)} KB` : `${b} B`;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14, marginBottom: 28 }}>
+              {cards.map(c => {
+                const info: BkTypeStatus = bkData?.status?.[c.key] ?? { status: "never", lastBackupAt: null, sizeBytes: 0, filename: null };
+                const ss = statusStyle[info.status];
+                const running = !!bkRunning[c.key];
                 return (
-                  <div key={b.filename} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <span style={{ fontSize: 16 }}>🗄️</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.filename}</div>
-                      <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                        {new Date(b.createdAt).toLocaleString()} &nbsp;·&nbsp; {sizeLabel}
+                  <div key={c.key} style={{ background: c.accentBg, border: `1px solid ${ss.border}`, borderRadius: 12, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10, position: "relative", overflow: "hidden" }}>
+                    {/* Glow bar */}
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,transparent,${c.accent},transparent)`, opacity: info.status === "healthy" ? 1 : 0.3 }} />
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>{c.icon}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{c.label}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: ss.dot, boxShadow: `0 0 6px ${ss.dot}` }} />
+                        <span style={{ fontSize: 10, fontWeight: 600, color: ss.dot }}>{ss.label}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.5 }}>{c.desc}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                        Last: <span style={{ color: info.lastBackupAt ? "#CBD5E1" : "#475569" }}>
+                          {info.lastBackupAt ? new Date(info.lastBackupAt).toLocaleString() : "—"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                        Size: <span style={{ color: info.sizeBytes > 0 ? c.accent : "#475569", fontWeight: 600 }}>
+                          {info.sizeBytes > 0 ? fmtSize(info.sizeBytes) : "—"}
+                        </span>
                       </div>
                     </div>
                     <button
-                      onClick={() => downloadBackup(b.filename)}
-                      style={{ background: "rgba(0,174,239,0.12)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                      onClick={() => runBackup(c.key)}
+                      disabled={running}
+                      style={{
+                        marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        background: running ? "rgba(255,255,255,0.05)" : `linear-gradient(135deg,${c.accent}CC,${c.accent}88)`,
+                        color: running ? "#64748B" : "#fff", border: `1px solid ${running ? "rgba(255,255,255,0.08)" : c.accent + "55"}`,
+                        borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700,
+                        cursor: running ? "not-allowed" : "pointer", transition: "all 0.2s",
+                        boxShadow: running ? "none" : `0 2px 10px ${c.accent}33`,
+                      }}
+                    >
+                      {running ? "⏳ Running…" : `▶ ${c.btnLabel}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* ── Backup History ── */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 12 }}>
+            Backup History &nbsp;<span style={{ fontSize: 11, fontWeight: 400, color: "#475569", textTransform: "none" }}>— last 10 files</span>
+          </div>
+          {!bkData || bkData.history.length === 0 ? (
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "20px 16px", fontSize: 12, color: "#475569", textAlign: "center" }}>
+              No backups yet — click a backup button above to create your first one.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {bkData.history.map(b => {
+                const typeIcons: Record<string, string> = { code: "💻", database: "🗄️", assets: "🖼️", full: "🔐", other: "📄" };
+                const typeColors: Record<string, string> = { code: "#00AEEF", database: "#10B981", assets: "#F59E0B", full: "#8B5CF6", other: "#94A3B8" };
+                const icon = typeIcons[b.type] ?? "📄";
+                const color = typeColors[b.type] ?? "#94A3B8";
+                const sizeLabel = b.sizeBytes > 1_000_000 ? `${(b.sizeBytes/1_000_000).toFixed(1)} MB` : b.sizeBytes > 1000 ? `${(b.sizeBytes/1024).toFixed(0)} KB` : `${b.sizeBytes} B`;
+                return (
+                  <div key={b.filename} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(255,255,255,0.03)", borderRadius: 9, padding: "10px 14px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <span style={{ fontSize: 16 }}>{icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.filename}</div>
+                      <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                        <span style={{ color, fontWeight: 600, textTransform: "capitalize" }}>{b.type}</span>
+                        &nbsp;·&nbsp;{new Date(b.createdAt).toLocaleString()}
+                        &nbsp;·&nbsp;<span style={{ color }}>{sizeLabel}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => downloadBkFile(b.filename)}
+                      style={{ background: "rgba(0,174,239,0.1)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.25)", borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
                     >
                       ⬇ Download
                     </button>
                     <button
-                      onClick={() => { if (confirm(`Delete ${b.filename}?`)) deleteBackupMut.mutate(b.filename); }}
-                      disabled={deleteBackupMut.isPending}
-                      style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}
+                      onClick={() => deleteBkFile(b.filename)}
+                      style={{ background: "rgba(239,68,68,0.08)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", flexShrink: 0 }}
                     >
                       🗑
                     </button>
                   </div>
                 );
               })}
-            </div>
-          )}
-        </div>
-
-        {/* ── Restore Instructions ── */}
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 16 }}>
-          <button
-            onClick={() => setShowRestore(r => !r)}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", color: "#94A3B8", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: showRestore ? 14 : 0 }}
-          >
-            <span style={{ fontSize: 16 }}>📋</span>
-            Restore Instructions
-            <span style={{ fontSize: 10, marginLeft: 4 }}>{showRestore ? "▲" : "▼"}</span>
-          </button>
-
-          {showRestore && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12, color: "#94A3B8", lineHeight: 1.7 }}>
-              <div style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontWeight: 700, color: "#10B981", marginBottom: 6 }}>Step 1 — Download the backup file</div>
-                Click the <strong style={{ color: "#E2E8F0" }}>⬇ Download</strong> button next to any backup to save the JSON file locally.
-              </div>
-              <div style={{ background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontWeight: 700, color: "#00AEEF", marginBottom: 6 }}>Step 2 — Open the Replit Shell</div>
-                In the Replit editor, open the <strong style={{ color: "#E2E8F0" }}>Shell</strong> tab (bottom panel).
-              </div>
-              <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontWeight: 700, color: "#F59E0B", marginBottom: 6 }}>Step 3 — Run the restore script</div>
-                <div style={{ fontFamily: "monospace", background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "8px 12px", color: "#E2E8F0", fontSize: 11, marginBottom: 6 }}>
-                  node artifacts/api-server/scripts/restore-backup.js &lt;backup-file.json&gt;
-                </div>
-                The script reads each table from the JSON and re-inserts all rows using <code style={{ color: "#00AEEF" }}>INSERT … ON CONFLICT DO NOTHING</code> — safe to run on an existing database without wiping data.
-              </div>
-              <div style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontWeight: 700, color: "#8B5CF6", marginBottom: 6 }}>Step 4 — Verify</div>
-                Return to System Diagnostics and check the Section 1 platform health and Section 8 content performance counts to confirm data is restored correctly.
-              </div>
-              <div style={{ fontSize: 11, color: "#475569", paddingTop: 4 }}>
-                💡 <strong style={{ color: "#64748B" }}>Tip:</strong> Run a fresh backup immediately after any major feature deployment. Backups include all tables: social connections, posts, content engine settings, image assets, keywords, leads, articles, and more.
-              </div>
             </div>
           )}
         </div>

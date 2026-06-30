@@ -13,6 +13,7 @@ import autoContentRouter from "./auto-content";
 import diagnosticsRouter from "./diagnostics";
 import storageRouter from "./storage";
 import imageAssetsRouter from "./image-assets";
+import backupsRouter from "./backups";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(autoContentRouter);
 router.use(diagnosticsRouter);
 router.use(storageRouter);
 router.use(imageAssetsRouter);
+router.use(backupsRouter);
 
 export default router;

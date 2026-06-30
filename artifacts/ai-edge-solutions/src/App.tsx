@@ -132,16 +132,17 @@ function AppRouter() {
         </Route>
 
         {/* ── Public marketing pages ── */}
-        <Route path="/services"     component={ServicesPage} />
-        <Route path="/products"     component={ProductsPage} />
-        <Route path="/case-studies" component={CaseStudiesPage} />
-        <Route path="/pricing"      component={PricingPage} />
-        <Route path="/contact"      component={ContactPage} />
-        <Route path="/privacy"        component={PrivacyPage} />
-        <Route path="/privacy-policy" component={PrivacyPage} />
-        <Route path="/terms"          component={TermsPage} />
-        <Route path="/terms-of-service" component={TermsPage} />
-        <Route path="/"             component={HomePage} />
+        <Route path="/services"          component={ServicesPage} />
+        <Route path="/products"          component={ProductsPage} />
+        <Route path="/case-studies"      component={CaseStudiesPage} />
+        <Route path="/pricing"           component={PricingPage} />
+        <Route path="/contact"           component={ContactPage} />
+        {/* 10DLC compliance — must be public, no auth */}
+        <Route path="/privacy"           component={PrivacyPage} />
+        <Route path="/privacy-policy"    component={PrivacyPage} />
+        <Route path="/terms"             component={TermsPage} />
+        <Route path="/terms-of-service"  component={TermsPage} />
+        <Route path="/"                  component={HomePage} />
       </Switch>
     </Suspense>
   );

@@ -4520,7 +4520,228 @@ function NAPChecker({ connectedCount }: { connectedCount: number }) {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
+// ── Submission Tracker ────────────────────────────────────────────────────────
+type SubStatus = "not_started" | "in_progress" | "submitted" | "verification_pending" | "live" | "needs_fix";
+interface TrackerEntry {
+  key: string; name: string; dotColor: string; status: SubStatus;
+  submittedOn: string; verifyMethod: string; account: string;
+  listingUrl: string; notes: string; nextAction: string;
+}
+const SUB_STATUS_META: Record<SubStatus, { label: string; color: string; bg: string; border: string }> = {
+  not_started:          { label: "Not Started",          color: "#64748B", bg: "rgba(100,116,139,0.1)", border: "rgba(100,116,139,0.25)" },
+  in_progress:          { label: "In Progress",          color: "#00AEEF", bg: "rgba(0,174,239,0.1)",   border: "rgba(0,174,239,0.3)" },
+  submitted:            { label: "Submitted",            color: "#8B5CF6", bg: "rgba(139,92,246,0.1)",  border: "rgba(139,92,246,0.3)" },
+  verification_pending: { label: "Verification Pending", color: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.3)" },
+  live:                 { label: "Live / Connected",     color: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.3)" },
+  needs_fix:            { label: "Needs Fix",            color: "#EF4444", bg: "rgba(239,68,68,0.1)",   border: "rgba(239,68,68,0.3)" },
+};
+const TRACKER_INIT: TrackerEntry[] = [
+  { key: "gbp",       name: "Google Business Profile", dotColor: "#4285F4", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "nextdoor",  name: "Nextdoor",                dotColor: "#00B246", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "yelp",      name: "Yelp",                    dotColor: "#D32323", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "waze",      name: "Waze (WME)",              dotColor: "#00BBDE", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "angi",      name: "Angi for Pros",           dotColor: "#E8330A", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "thumbtack", name: "Thumbtack for Pros",      dotColor: "#009FD9", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+];
+function SubmissionTracker() {
+  const [open,     setOpen]     = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [entries,  setEntries]  = useState<TrackerEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem("lpe_tracker") ?? "null") ?? TRACKER_INIT; } catch { return TRACKER_INIT; }
+  });
+
+  function update(key: string, field: keyof TrackerEntry, value: string) {
+    setEntries(prev => prev.map(e => e.key === key ? { ...e, [field]: value } : e));
+  }
+  function save() {
+    localStorage.setItem("lpe_tracker", JSON.stringify(entries));
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2500);
+  }
+  function reset() {
+    if (!window.confirm("Reset all submission tracker data to defaults?")) return;
+    localStorage.removeItem("lpe_tracker");
+    setEntries(TRACKER_INIT);
+    setExpanded(null);
+  }
+
+  const liveCount       = entries.filter(e => e.status === "live").length;
+  const activeCount     = entries.filter(e => e.status !== "not_started").length;
+  const needsFixCount   = entries.filter(e => e.status === "needs_fix").length;
+
+  return (
+    <div style={{
+      borderRadius: 14, overflow: "hidden", marginBottom: 24,
+      background: "linear-gradient(135deg, rgba(0,174,239,0.04) 0%, rgba(11,22,41,0.92) 100%)",
+      border: "1px solid rgba(0,174,239,0.18)", boxShadow: "0 0 20px rgba(0,174,239,0.05)",
+    }}>
+      {/* ── Always-visible summary header ── */}
+      <div style={{ padding: "14px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 14 }}>📋</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>Submission Tracker</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>— manual status only</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 20, padding: "2px 10px" }}>
+              {liveCount} Live
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 20, padding: "2px 10px" }}>
+              {activeCount} Active
+            </span>
+            {needsFixCount > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#EF4444", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 20, padding: "2px 10px" }}>
+                {needsFixCount} Needs Fix
+              </span>
+            )}
+            <button onClick={() => setOpen(v => !v)} style={{
+              padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
+              background: open ? "rgba(0,174,239,0.18)" : "rgba(0,174,239,0.08)",
+              border: "1px solid rgba(0,174,239,0.3)", color: "#00AEEF", transition: "all 0.15s",
+            }}>{open ? "▲ Hide Details" : "▼ Edit Tracker"}</button>
+          </div>
+        </div>
+
+        {/* Channel status chips — always visible */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {entries.map(e => {
+            const m = SUB_STATUS_META[e.status];
+            return (
+              <button
+                key={e.key}
+                onClick={() => { setOpen(true); setExpanded(expanded === e.key ? null : e.key); }}
+                title={`${e.name}: ${m.label}`}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+                  padding: "4px 10px", borderRadius: 20, transition: "all 0.15s",
+                  background: m.bg, border: `1px solid ${m.border}`,
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: e.dotColor, display: "inline-block" }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: m.color, whiteSpace: "nowrap" }}>{e.name}</span>
+                <span style={{ fontSize: 10, color: m.color, opacity: 0.75 }}>· {m.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Expandable detail editor ── */}
+      {open && (
+        <div style={{ borderTop: "1px solid rgba(0,174,239,0.12)", background: "rgba(3,6,18,0.55)" }}>
+
+          {/* Disclaimer */}
+          <div style={{ padding: "10px 18px 0", fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
+            This is a manual tracking tool. Status updates are saved locally in your browser. Nothing is marked <strong style={{ color: "#10B981" }}>Live / Connected</strong> unless you set it after confirming setup is complete.
+          </div>
+
+          {/* Channel rows */}
+          <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
+            {entries.map(entry => {
+              const m    = SUB_STATUS_META[entry.status];
+              const isEx = expanded === entry.key;
+              return (
+                <div key={entry.key} style={{
+                  borderRadius: 10, overflow: "hidden",
+                  border: `1px solid ${isEx ? m.border : "rgba(255,255,255,0.06)"}`,
+                  background: isEx ? m.bg : "rgba(255,255,255,0.02)", transition: "all 0.15s",
+                }}>
+                  {/* Row header */}
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer" }}
+                    onClick={() => setExpanded(isEx ? null : entry.key)}
+                  >
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, background: entry.dotColor, display: "inline-block", boxShadow: `0 0 6px ${entry.dotColor}66` }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1", flex: 1 }}>{entry.name}</span>
+
+                    {/* Status selector — stops click propagation */}
+                    <select
+                      value={entry.status}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => update(entry.key, "status", e.target.value)}
+                      style={{
+                        padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                        background: m.bg, border: `1px solid ${m.border}`, color: m.color,
+                        outline: "none", appearance: "none", WebkitAppearance: "none",
+                        paddingRight: 20, backgroundImage: "none",
+                      }}
+                    >
+                      {(Object.keys(SUB_STATUS_META) as SubStatus[]).map(s => (
+                        <option key={s} value={s} style={{ background: "#0B1629", color: "#CBD5E1" }}>
+                          {SUB_STATUS_META[s].label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span style={{ fontSize: 11, color: "#475569", flexShrink: 0 }}>{isEx ? "▲" : "▼"}</span>
+                  </div>
+
+                  {/* Detail fields */}
+                  {isEx && (
+                    <div style={{ padding: "0 14px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      {([
+                        { field: "submittedOn",  label: "Submission Date",       ph: "e.g. Jul 1, 2026" },
+                        { field: "verifyMethod", label: "Verification Method",   ph: "e.g. Phone PIN / Email / WME Review" },
+                        { field: "account",      label: "Login / Account Used",  ph: "e.g. hello@bedbugsandbeyond.net" },
+                        { field: "listingUrl",   label: "Listing URL",           ph: "https://..." },
+                      ] as { field: keyof TrackerEntry; label: string; ph: string }[]).map(({ field, label, ph }) => (
+                        <div key={field}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 4 }}>{label}</div>
+                          <input
+                            value={entry[field] as string}
+                            onChange={e => update(entry.key, field, e.target.value)}
+                            placeholder={ph}
+                            style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", borderRadius: 7, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                          />
+                        </div>
+                      ))}
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 4 }}>Next Action</div>
+                        <input
+                          value={entry.nextAction}
+                          onChange={e => update(entry.key, "nextAction", e.target.value)}
+                          placeholder="e.g. Awaiting phone PIN, check email for approval, re-upload logo..."
+                          style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", borderRadius: 7, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 4 }}>Notes</div>
+                        <textarea
+                          value={entry.notes}
+                          onChange={e => update(entry.key, "notes", e.target.value)}
+                          rows={2}
+                          placeholder="Any blockers, edge cases, login details, or follow-up tasks..."
+                          style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", borderRadius: 7, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Save + reset footer */}
+          <div style={{ padding: "0 18px 16px", display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={save} style={{ padding: "8px 20px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#000", letterSpacing: "0.2px" }}>
+              Save Tracker
+            </button>
+            {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 700 }}>✓ Saved</span>}
+            <button onClick={reset} style={{ marginLeft: "auto", padding: "7px 14px", borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "transparent", border: "1px solid rgba(239,68,68,0.25)", color: "#64748B" }}>
+              Reset All
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LocalPresenceEnginePage() {
   const authFetch = useApiFetch();
   const qc = useQueryClient();
@@ -4627,6 +4848,9 @@ export default function LocalPresenceEnginePage() {
 
         {/* ── Discovery Channel Checklist ── */}
         <LocalPresenceChecklist gbpConnected={gbpPresence === "connected"} />
+
+        {/* ── Submission Tracker ── */}
+        <SubmissionTracker />
 
         {/* Platform cards */}
         <div style={{ marginBottom: 14 }}>

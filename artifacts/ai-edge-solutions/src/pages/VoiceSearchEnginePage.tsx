@@ -56,7 +56,7 @@ const ALEXA_SIGNALS: Signal[] = [
   {
     id: "bing_alexa",
     label: "Bing Places — verified listing",
-    description: "Amazon Alexa uses Bing as its primary local business data source for 'near me' and direct business queries.",
+    description: "Submitted — pending Bing verification. Alexa will use this listing as its primary local business data source once verified.",
     points: 35,
     platform: "Bing Places for Business",
     actionPath: "/admin/local-presence",
@@ -333,7 +333,7 @@ function OverallSummary({ scores }: { scores: { name: string; pct: number; color
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function VoiceSearchEnginePage() {
   const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set(["apple_bbc"]));
-  const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set());
+  const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set(["bing_alexa"]));
   const [googleConfirmed, setGoogleConfirmed] = useState<Set<string>>(new Set());
 
   function toggle(set: Set<string>, setFn: (s: Set<string>) => void, id: string) {

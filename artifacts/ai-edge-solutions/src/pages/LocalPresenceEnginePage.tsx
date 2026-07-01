@@ -884,7 +884,7 @@ function BingPlacesCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Bing Places for Business</span>
-              <StatusBadge status="setup_in_progress" />
+              <StatusBadge status="pending" />
             </div>
             <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
               Bing Maps, Microsoft Search, Copilot AI, Edge browser &amp; Windows 11 integration.
@@ -4036,7 +4036,7 @@ export default function LocalPresenceEnginePage() {
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "Bing Places setup in progress — verification pending",       severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Bing Places submitted — verification pending (do not mark Connected until Bing confirms)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business setup in progress — page claim pending",  severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
   ];

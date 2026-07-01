@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type PresenceStatus = "connected" | "pending" | "not_connected" | "error" | "coming_soon";
+type PresenceStatus = "connected" | "pending" | "not_connected" | "error" | "coming_soon" | "setup_in_progress";
 type HealthStatus   = "healthy" | "warning" | "error" | "unknown";
 
 type GBPStatus = {
@@ -43,7 +43,8 @@ const PRESENCE_STYLE: Record<PresenceStatus, { label: string; bg: string; color:
   pending:      { label: "Setup Pending", bg: "rgba(245,158,11,0.12)",  color: "#F59E0B", dot: "#F59E0B", border: "rgba(245,158,11,0.2)"   },
   not_connected:{ label: "Not Connected", bg: "rgba(148,163,184,0.1)",  color: "#94A3B8", dot: "#475569", border: "rgba(255,255,255,0.07)" },
   error:        { label: "Error",         bg: "rgba(239,68,68,0.12)",   color: "#EF4444", dot: "#EF4444", border: "rgba(239,68,68,0.25)"   },
-  coming_soon:  { label: "Coming Soon",   bg: "rgba(139,92,246,0.12)",  color: "#8B5CF6", dot: "#8B5CF6", border: "rgba(139,92,246,0.2)"   },
+  coming_soon:      { label: "Coming Soon",      bg: "rgba(139,92,246,0.12)",  color: "#8B5CF6", dot: "#8B5CF6", border: "rgba(139,92,246,0.2)"   },
+  setup_in_progress:{ label: "Setup In Progress",bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF", border: "rgba(0,174,239,0.25)"  },
 };
 
 const HEALTH_STYLE: Record<HealthStatus, { label: string; color: string; dot: string }> = {
@@ -55,9 +56,10 @@ const HEALTH_STYLE: Record<HealthStatus, { label: string; color: string; dot: st
 
 // ── Platform card background derivation ───────────────────────────────────────
 function cardBg(status: PresenceStatus) {
-  if (status === "connected") return "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(11,22,41,0.9) 100%)";
-  if (status === "error")     return "linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(11,22,41,0.9) 100%)";
-  if (status === "pending")   return "linear-gradient(135deg, rgba(245,158,11,0.04) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "connected")         return "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "error")             return "linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "pending")           return "linear-gradient(135deg, rgba(245,158,11,0.04) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "setup_in_progress") return "linear-gradient(135deg, rgba(0,174,239,0.05) 0%, rgba(11,22,41,0.9) 100%)";
   return "rgba(11,22,41,0.6)";
 }
 
@@ -166,6 +168,426 @@ function Checklist({ items }: { items: CheckItem[] }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Apple Business V2 Card ─────────────────────────────────────────────────────
+type AppleStepStatus = "complete" | "in-progress" | "pending" | "blocked";
+
+const APPLE_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create or sign into Apple Business",      status: "complete",     description: "Sign in at business.apple.com with your Apple ID." },
+  { label: "Add / claim business location",           status: "in-progress",  description: "Search for your business and claim the Apple Maps place card." },
+  { label: "Verify business ownership",               status: "pending",      description: "Apple sends a verification code by phone, email, or postcard." },
+  { label: "Confirm business name",                   status: "pending",      description: "Ensure the listing name exactly matches your registered business name." },
+  { label: "Confirm phone number",                    status: "pending",      description: "Verify (251) 324-9090 matches the Apple Maps listing." },
+  { label: "Confirm website",                         status: "pending",      description: "Verify website URL is correct and resolves without errors." },
+  { label: "Add business category",                   status: "pending",      description: "Select 'Pest Control Service' as the primary category." },
+  { label: "Add service area / location details",     status: "pending",      description: "Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
+  { label: "Add business hours",                      status: "pending",      description: "Mon–Fri 7am–6pm, Sat 8am–2pm. Include holiday hours if applicable." },
+  { label: "Upload logo",                             status: "pending",      description: "High-res square logo (min 400×400 px, PNG or JPG)." },
+  { label: "Upload cover photo",                      status: "pending",      description: "Landscape banner image representing your business (min 1024×512 px)." },
+  { label: "Add photos",                              status: "pending",      description: "Add at least 5 quality photos of the business, team, or service in action." },
+  { label: "Add call-to-action",                      status: "pending",      description: "Set a CTA button (e.g. 'Call Now' or 'Get a Quote') on your place card." },
+  { label: "Review Apple Maps place card",            status: "pending",      description: "Preview how your listing appears on iPhone, iPad, and Mac." },
+  { label: "Submit for Apple verification",           status: "pending",      description: "Complete and submit the listing — Apple reviews within 7–10 business days." },
+];
+
+type AppleDiagStatus = "healthy" | "warning" | "missing" | "pending" | "coming_soon";
+const APPLE_DIAG_STYLE: Record<AppleDiagStatus, { color: string; bg: string; border: string; dot: string }> = {
+  healthy:    { color: "#10B981", bg: "rgba(16,185,129,0.07)",   border: "rgba(16,185,129,0.2)",  dot: "#10B981" },
+  warning:    { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",   border: "rgba(245,158,11,0.18)", dot: "#F59E0B" },
+  missing:    { color: "#EF4444", bg: "rgba(239,68,68,0.07)",    border: "rgba(239,68,68,0.18)",  dot: "#EF4444" },
+  pending:    { color: "#00AEEF", bg: "rgba(0,174,239,0.07)",    border: "rgba(0,174,239,0.15)",  dot: "#00AEEF" },
+  coming_soon:{ color: "#8B5CF6", bg: "rgba(139,92,246,0.07)",   border: "rgba(139,92,246,0.15)", dot: "#8B5CF6" },
+};
+
+const APPLE_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Apple Business account created",    status: "healthy",    note: "Account active at business.apple.com" },
+  { check: "Location claimed",                  status: "warning",    note: "Claim in progress — awaiting Apple confirmation" },
+  { check: "Ownership verified",                status: "missing",    note: "Verification code not yet received" },
+  { check: "NAP matches Google Business Profile",status: "pending",   note: "Will be checked once listing is claimed" },
+  { check: "Phone matches business number",     status: "pending",    note: "Pending listing confirmation" },
+  { check: "Website matches",                   status: "pending",    note: "Pending listing confirmation" },
+  { check: "Category selected",                 status: "pending",    note: "To be set after claim is confirmed" },
+  { check: "Photos uploaded",                   status: "missing",    note: "No photos uploaded yet" },
+  { check: "Place card reviewed",               status: "pending",    note: "Available after verification" },
+  { check: "API access requested",              status: "missing",    note: "Apple API requires approved setup — not yet requested" },
+  { check: "Service account ready",             status: "missing",    note: "Requires Apple API approval first" },
+  { check: "Production publishing approved",    status: "coming_soon",note: "Requires Partner Delegation + Apple review — Coming Soon" },
+];
+
+function AppleStepBadge({ status }: { status: AppleStepStatus }) {
+  const map: Record<AppleStepStatus, { label: string; color: string; bg: string }> = {
+    complete:    { label: "Complete",    color: "#10B981", bg: "rgba(16,185,129,0.12)" },
+    "in-progress":{ label: "In Progress", color: "#00AEEF", bg: "rgba(0,174,239,0.12)"  },
+    pending:     { label: "Pending",     color: "#64748B", bg: "rgba(100,116,139,0.12)" },
+    blocked:     { label: "Blocked",     color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
+  };
+  const s = map[status];
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color: s.color, background: s.bg, borderRadius: 20, padding: "2px 8px", whiteSpace: "nowrap" }}>
+      {s.label}
+    </span>
+  );
+}
+
+function AppleBusinessCard() {
+  const [drawerOpen,    setDrawerOpen]    = useState(false);
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "profile" | "api" | "diagnostics">("checklist");
+  const [checklist,     setChecklist]     = useState(APPLE_CHECKLIST);
+  const [notes,         setNotes]         = useState("");
+  const [placeCardUrl,  setPlaceCardUrl]  = useState("");
+  const [mapsUrl,       setMapsUrl]       = useState("");
+  const [verifyEmail,   setVerifyEmail]   = useState("");
+  const [orgName,       setOrgName]       = useState("Bed Bugs & Beyond");
+  const [verifyMethod,  setVerifyMethod]  = useState("Phone");
+  const [verifyStatus,  setVerifyStatus]  = useState("Pending");
+  const [savedMsg,      setSavedMsg]      = useState(false);
+
+  const completedCount    = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount   = checklist.filter(s => s.status === "in-progress").length;
+  const appleScoreCredit  = Math.round((completedCount / checklist.length) * 15);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+
+  function handleSave() {
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2500);
+  }
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",  label: "Setup Checklist" },
+    { key: "profile",    label: "Profile Tracker" },
+    { key: "api",        label: "API Readiness" },
+    { key: "diagnostics",label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: cardBg("setup_in_progress"),
+      border: "1px solid rgba(0,174,239,0.25)",
+      borderRadius: 14,
+      backdropFilter: "blur(12px)",
+      overflow: "hidden",
+      transition: "border-color 0.2s",
+      boxShadow: "0 0 24px rgba(0,174,239,0.06)",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Top row */}
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #555, #999)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 20, boxShadow: "0 0 16px rgba(162,170,173,0.3)",
+          }}>🍎</div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Apple Business Connect</span>
+              <StatusBadge status="setup_in_progress" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Apple Maps, Siri, iOS Spotlight &amp; Apple Wallet — reaches all iPhone, iPad and Mac users.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "Category",     value: "Pest Control Service" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Last Checked", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score contribution + progress */}
+        <div style={{
+          background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.15)",
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF" }}>Apple Score: {appleScoreCredit} / 15 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: "#00AEEF", borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: "#00AEEF", fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: drawerOpen ? "rgba(0,174,239,0.2)" : "rgba(0,174,239,0.1)",
+              border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF", transition: "all 0.15s",
+            }}
+          >
+            {drawerOpen ? "▲ Close Apple Setup" : "▼ Open Apple Setup"}
+          </button>
+          <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(162,170,173,0.1)", border: "1px solid rgba(162,170,173,0.25)", color: "#A2AAAD", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Open Apple Business
+          </a>
+          <a href="https://maps.apple.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(162,170,173,0.07)", border: "1px solid rgba(162,170,173,0.18)", color: "#94A3B8", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Apple Maps
+          </a>
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: "1px solid rgba(0,174,239,0.12)", background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  background: "transparent", border: "none", borderBottom: activeTab === tab.key ? "2px solid #00AEEF" : "2px solid transparent",
+                  color: activeTab === tab.key ? "#00AEEF" : "#475569", transition: "all 0.15s", marginBottom: -1,
+                }}
+              >{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Tab: Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 15 steps to fully activate your Apple Maps listing. Steps can be marked complete after you've confirmed them in Apple Business.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(0,174,239,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(0,174,239,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      transition: "all 0.15s",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? "#00AEEF" : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button
+                              onClick={() => markStepComplete(idx)}
+                              style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981", transition: "all 0.15s" }}
+                            >Mark Done</button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                  <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.3)", color: "#00AEEF", textDecoration: "none" }}>
+                    ↗ View Apple Business Guide
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab: Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Apple Business account details, listing URLs, and verification status here. This is stored locally for reference — no backend required.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",       val: verifyEmail,  set: setVerifyEmail,  ph: "apple-id@example.com" },
+                    { label: "Organization Name",   val: orgName,      set: setOrgName,      ph: "Bed Bugs & Beyond" },
+                    { label: "Verification Method", val: verifyMethod, set: setVerifyMethod, ph: "Phone / Email / Postcard" },
+                    { label: "Verification Status", val: verifyStatus, set: setVerifyStatus, ph: "Pending / Submitted / Approved" },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input
+                        value={field.val}
+                        onChange={e => field.set(e.target.value)}
+                        placeholder={field.ph}
+                        style={{
+                          width: "100%", boxSizing: "border-box",
+                          padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0",
+                          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                          outline: "none", fontFamily: "inherit",
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Place Card URL</div>
+                    <input
+                      value={placeCardUrl}
+                      onChange={e => setPlaceCardUrl(e.target.value)}
+                      placeholder="https://maps.apple.com/?auid=..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Maps Listing URL</div>
+                    <input
+                      value={mapsUrl}
+                      onChange={e => setMapsUrl(e.target.value)}
+                      placeholder="https://maps.apple.com/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder="Add notes about the setup progress, blockers, or next steps..."
+                    rows={3}
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0",
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                      outline: "none", fontFamily: "inherit", resize: "vertical",
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button
+                    onClick={handleSave}
+                    style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#FFF", transition: "opacity 0.15s" }}
+                  >Save Setup Notes</button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab: API Readiness ── */}
+            {activeTab === "api" && (
+              <div>
+                <div style={{
+                  padding: "12px 16px", borderRadius: 10, marginBottom: 16,
+                  background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)",
+                  fontSize: 12.5, color: "#94A3B8", lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#F59E0B" }}>⚠ Apple API Access Notice:</strong> Apple Maps API access requires completing the full Apple Business setup, obtaining a service account, getting API approval, and passing Apple's production publishing review. These credentials are <strong style={{ color: "#F59E0B" }}>never</strong> stored in the browser.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                  {[
+                    { label: "API Access Requested",  value: "No",           status: "missing" as const },
+                    { label: "Service Account Created",value: "No",           status: "missing" as const },
+                    { label: "Client ID Stored",       value: "No",           status: "missing" as const },
+                    { label: "Client Secret Stored",   value: "No (secure)",  status: "missing" as const },
+                    { label: "Partner Delegation",     value: "Not Started",  status: "pending" as const },
+                    { label: "Production Publishing",  value: "Not Approved", status: "coming_soon" as const },
+                  ].map(item => {
+                    const s = APPLE_DIAG_STYLE[item.status];
+                    return (
+                      <div key={item.label} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}`,
+                      }}>
+                        <span style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 500 }}>{item.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{item.value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "not-allowed", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#475569" }}>
+                    Add API Credentials — API Pending
+                  </button>
+                  <button style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "not-allowed", background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)", color: "#475569" }}>
+                    Mark API Access Requested — Setup Required First
+                  </button>
+                  <a href="https://developer.apple.com/maps/mapskitjs/" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(162,170,173,0.08)", border: "1px solid rgba(162,170,173,0.2)", color: "#A2AAAD", textDecoration: "none" }}>
+                    ↗ View API Setup Steps
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab: Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Apple Business Connect setup requirements and NAP consistency.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {APPLE_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = {
+                      healthy:"Healthy", warning:"Warning", missing:"Missing", pending:"Pending", coming_soon:"Coming Soon",
+                    };
+                    return (
+                      <div key={i} style={{
+                        display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}`,
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: s.dot, marginRight: 5 }} />
+                          {statusLabels[d.status]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -586,8 +1008,13 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
   errors: number;
   diags: DiagEntry[];
 }) {
-  const total    = 4;
-  const scorePct = Math.round((connectedCount / total) * 100 * 0.55 + (connectedCount > 0 ? 10 : 0));
+  // Score breakdown: GBP=35, Apple progress=up to 15, Bing=up to 10, Nextdoor=up to 10, NAP=up to 15, Photos/content=up to 15
+  const gbpPoints      = connectedCount >= 1 ? 35 : 0;
+  const applePoints    = 2;   // 1 step complete + 1 in-progress = partial credit
+  const bingPoints     = 0;
+  const nextdoorPoints = 0;
+  const napPoints      = connectedCount >= 1 ? 5 : 0; // partial NAP from GBP only
+  const scorePct       = gbpPoints + applePoints + bingPoints + nextdoorPoints + napPoints;
   const warnCount = diags.filter(d => d.severity === "warning").length;
 
   return (
@@ -747,7 +1174,7 @@ export default function LocalPresenceEnginePage() {
   // Diagnostics issues list
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
-    { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect listing not yet claimed",           severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect setup in progress — claim pending", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Bing Places listing not yet verified",                      severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business page not yet created",                    severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
@@ -835,8 +1262,10 @@ export default function LocalPresenceEnginePage() {
             refreshing={refreshGBP.isPending}
             disconnecting={disconnectGBP.isPending}
           />
-          {/* Apple, Bing, Nextdoor — static V1 */}
-          {PLATFORM_DEFS.slice(1).map(def => (
+          {/* Apple — V2 dedicated card with setup workflow */}
+          <AppleBusinessCard />
+          {/* Bing, Nextdoor — static V1 */}
+          {PLATFORM_DEFS.slice(2).map(def => (
             <PlatformCard
               key={def.id}
               def={def}

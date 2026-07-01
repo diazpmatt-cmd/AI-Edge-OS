@@ -217,27 +217,45 @@ function Step4Content() {
 }
 
 function Step5Content() {
-  const items = [
-    { label: "Google Business Profile",  done: true },
-    { label: "Apple Business Connect",   done: false },
-    { label: "Bing Places",              done: false },
-    { label: "Nextdoor Business",        done: false },
+  type PlatformStatus = "complete" | "in-progress" | "pending";
+  const items: { label: string; status: PlatformStatus; note?: string }[] = [
+    { label: "Google Business Profile", status: "complete",   note: "Connected & verified" },
+    { label: "Apple Business Connect",  status: "in-progress",note: "Setup in progress — claim pending" },
+    { label: "Bing Places",             status: "pending" },
+    { label: "Nextdoor Business",       status: "pending" },
   ];
-  const done = items.filter(i => i.done).length;
+  const styleMap: Record<PlatformStatus, { bg: string; border: string; icon: string; iconColor: string; labelColor: string }> = {
+    complete:    { bg: "rgba(16,185,129,0.06)",  border: "rgba(16,185,129,0.2)",  icon: "✓", iconColor: "#10B981", labelColor: "#10B981" },
+    "in-progress":{ bg: "rgba(0,174,239,0.06)", border: "rgba(0,174,239,0.2)",   icon: "⟳", iconColor: "#00AEEF", labelColor: "#CBD5E1" },
+    pending:     { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.06)",icon: "○", iconColor: "#374151", labelColor: "#94A3B8" },
+  };
+  const done = items.filter(i => i.status === "complete").length;
   return (
     <div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-        {items.map(item => (
-          <div key={item.label} style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "8px 12px", borderRadius: 8,
-            background: item.done ? "rgba(16,185,129,0.06)" : "rgba(255,255,255,0.03)",
-            border: `1px solid ${item.done ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)"}`,
-          }}>
-            <span style={{ fontSize: 14, color: item.done ? "#10B981" : "#374151" }}>{item.done ? "✓" : "○"}</span>
-            <span style={{ fontSize: 13, color: item.done ? "#10B981" : "#94A3B8", fontWeight: item.done ? 600 : 400 }}>{item.label}</span>
-          </div>
-        ))}
+        {items.map(item => {
+          const s = styleMap[item.status];
+          return (
+            <div key={item.label} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+              padding: "8px 12px", borderRadius: 8,
+              background: s.bg, border: `1px solid ${s.border}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 14, color: s.iconColor }}>{s.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, color: s.labelColor, fontWeight: item.status === "complete" ? 600 : 400 }}>{item.label}</div>
+                  {item.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 1 }}>{item.note}</div>}
+                </div>
+              </div>
+              {item.status === "in-progress" && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#00AEEF", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.25)", borderRadius: 20, padding: "2px 8px", whiteSpace: "nowrap" }}>
+                  Setup In Progress
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -246,7 +264,10 @@ function Step5Content() {
         </div>
         <ProgressBar value={done} max={items.length} />
       </div>
-      <ActionBtn label="Open Local Presence Engine" to="/admin/local-presence" variant="primary" />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionBtn label="Open Local Presence Engine" to="/admin/local-presence" variant="primary" />
+        <ActionBtn label="🍎 Open Apple Setup" to="/admin/local-presence" />
+      </div>
     </div>
   );
 }

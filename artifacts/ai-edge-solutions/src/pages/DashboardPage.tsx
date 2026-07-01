@@ -29,7 +29,7 @@ const HEALTH_BREAKDOWN = [
 ];
 
 const ALERTS = [
-  { severity: "critical", text: "Apple Business Connect not claimed",          icon: "✕" },
+  { severity: "warning",  text: "Apple Business Connect setup in progress",    icon: "⚠" },
   { severity: "critical", text: "Bing Places not verified",                    icon: "✕" },
   { severity: "critical", text: "AI Visibility competitor gap is high",        icon: "✕" },
   { severity: "warning",  text: "Google API quota throttled recently",         icon: "⚠" },

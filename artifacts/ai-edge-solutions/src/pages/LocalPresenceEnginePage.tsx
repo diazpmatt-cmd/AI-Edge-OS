@@ -2337,6 +2337,534 @@ function AISearchCard() {
   );
 }
 
+// ── Yelp Business V2 Card ──────────────────────────────────────────────────────
+const YELP_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create or sign in to Yelp for Business",  status: "pending", description: "Sign up or log in at biz.yelp.com using your business email." },
+  { label: "Search for existing Yelp listing",        status: "pending", description: "Search 'Bed Bugs & Beyond Baldwin County AL' — Yelp often auto-creates listings from public data." },
+  { label: "Claim or create business page",           status: "pending", description: "Claim the existing listing or create a new one at biz.yelp.com." },
+  { label: "Verify ownership",                        status: "pending", description: "Yelp verifies by automated phone call PIN to (251) 324-9090." },
+  { label: "Confirm business name",                   status: "pending", description: "Exact match required: 'Bed Bugs & Beyond' — no keyword additions." },
+  { label: "Confirm phone number",                    status: "pending", description: "Set (251) 324-9090 as the primary contact number." },
+  { label: "Confirm website",                         status: "pending", description: "Set website to https://bedbugsandbeyond.net." },
+  { label: "Select business categories",              status: "pending", description: "Primary: Pest Control — Secondary: Exterminators." },
+  { label: "Set service area",                        status: "pending", description: "Add Baldwin County + all 7 primary cities." },
+  { label: "Add business description",                status: "pending", description: "Use the copy-ready description in the Business Info tab." },
+  { label: "Add specialties",                         status: "pending", description: "List: bed bugs, roaches, ants, spiders, fleas, rodents, mosquitoes, general pest." },
+  { label: "Upload logo / profile photo",             status: "pending", description: "Square, min 400×400 px (PNG or JPG)." },
+  { label: "Upload business photos",                  status: "pending", description: "Yelp recommends 10+ photos; minimum 5 to appear well-presented." },
+  { label: "Set business hours",                      status: "pending", description: "Mon–Fri 7am–6pm, Sat 8am–2pm, Sun Closed." },
+  { label: "Enable Request a Quote / messaging",      status: "pending", description: "Turn on Yelp's contact features so prospects can reach you directly." },
+];
+
+const YELP_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Yelp for Business account created",   status: "missing",     note: "No Yelp Business account detected — not yet started" },
+  { check: "Listing claimed or created",          status: "missing",     note: "Listing not yet claimed or created" },
+  { check: "Ownership verified",                  status: "missing",     note: "Phone verification not started" },
+  { check: "NAP matches Google Business Profile", status: "pending",     note: "Will be confirmed once listing is claimed" },
+  { check: "Phone confirmed",                     status: "pending",     note: "Pending listing setup" },
+  { check: "Website confirmed",                   status: "pending",     note: "Pending listing setup" },
+  { check: "Category selected",                   status: "missing",     note: "No category set yet" },
+  { check: "Service area configured",             status: "missing",     note: "No service area set" },
+  { check: "Photos uploaded",                     status: "missing",     note: "No photos — Yelp recommends 10+" },
+  { check: "Business description added",          status: "missing",     note: "No description set" },
+  { check: "Messaging / quotes enabled",          status: "missing",     note: "Contact features not enabled" },
+  { check: "Siri / Apple Maps cross-signal",      status: "pending",     note: "Yelp feeds Siri & Apple Maps — activates once listing is live" },
+];
+
+function YelpBusinessCard() {
+  const [drawerOpen,   setDrawerOpen]   = useState(false);
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [checklist,    setChecklist]    = useState(YELP_CHECKLIST);
+  const [listingUrl,   setListingUrl]   = useState("");
+  const [acctEmail,    setAcctEmail]    = useState("");
+  const [verifyStatus, setVerifyStatus] = useState("Not Started");
+  const [notes,        setNotes]        = useState("");
+  const [savedMsg,     setSavedMsg]     = useState(false);
+  const [copiedKey,    setCopiedKey]    = useState<string | null>(null);
+
+  const completedCount  = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const yelpScore       = Math.round((completedCount / checklist.length) * 10);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+  function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
+
+  const YELP_RED = "#D32323";
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",   label: "Setup Checklist" },
+    { key: "bizinfo",     label: "Business Info" },
+    { key: "profile",     label: "Profile Tracker" },
+    { key: "diagnostics", label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(211,35,35,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(211,35,35,0.25)",
+      borderRadius: 14, backdropFilter: "blur(12px)", overflow: "hidden",
+      boxShadow: "0 0 24px rgba(211,35,35,0.06)", transition: "border-color 0.2s",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #AF0606, #D32323)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 900, color: "#FFF",
+            boxShadow: "0 0 16px rgba(211,35,35,0.35)",
+          }}>★</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Yelp for Business</span>
+              <StatusBadge status="pending" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Local trust, reviews, Siri / Apple ecosystem, voice search &amp; iPhone local queries.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "Category",     value: "Pest Control" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Status",       value: "Not Started" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score + progress */}
+        <div style={{
+          background: "rgba(211,35,35,0.05)", border: "1px solid rgba(211,35,35,0.15)",
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: YELP_RED }}>Yelp Score: {yelpScore} / 10 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: YELP_RED, borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: YELP_RED, fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: drawerOpen ? "rgba(211,35,35,0.2)" : "rgba(211,35,35,0.1)",
+              border: "1px solid rgba(211,35,35,0.35)", color: YELP_RED, transition: "all 0.15s",
+            }}
+          >{drawerOpen ? "▲ Close Yelp Setup" : "▼ Open Yelp Setup"}</button>
+          <a href="https://biz.yelp.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(211,35,35,0.08)", border: "1px solid rgba(211,35,35,0.22)", color: YELP_RED, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Open Yelp for Business
+          </a>
+          <a href="https://www.yelp.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(211,35,35,0.05)", border: "1px solid rgba(211,35,35,0.15)", color: "#64748B", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Yelp.com
+          </a>
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: "1px solid rgba(211,35,35,0.12)", background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: activeTab === tab.key ? `2px solid ${YELP_RED}` : "2px solid transparent",
+                color: activeTab === tab.key ? YELP_RED : "#475569", transition: "all 0.15s", marginBottom: -1,
+              }}>{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 15 steps to fully activate your Yelp listing. Mark each step after confirming it in Yelp for Business.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(211,35,35,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(211,35,35,0.2)" : "rgba(255,255,255,0.05)"}`,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(211,35,35,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(211,35,35,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? YELP_RED : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                              Mark Done
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <a href="https://biz.yelp.com" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(211,35,35,0.1)", border: "1px solid rgba(211,35,35,0.3)", color: YELP_RED, textDecoration: "none", display: "inline-block" }}>
+                    ↗ Open Yelp for Business
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Bed Bugs & Beyond is Baldwin County's #1 trusted pest control company for homeowners, families, rental properties, and vacation rentals. We specialize in complete bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, results guaranteed. Call (251) 324-9090 to schedule your inspection today.`;
+
+              const SPECIALTIES =
+`Bed bug inspection and heat treatment
+Roach elimination
+Ant control (interior and exterior)
+Spider treatment
+Flea treatment (home and yard)
+Rodent exclusion and removal
+Mosquito yard treatment
+General pest control maintenance`;
+
+              const SERVICE_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Business Name",      value: "Bed Bugs & Beyond",                    note: "Exact match — no keywords appended" },
+                { label: "Phone Number",       value: "(251) 324-9090", copyKey: "yelp-phone",note: "Must match GBP exactly (NAP)" },
+                { label: "Website",            value: "https://bedbugsandbeyond.net",          note: "Confirmed BB&B website" },
+                { label: "Primary Category",   value: "Pest Control",                         note: "Select from Yelp's category list" },
+                { label: "Secondary Category", value: "Exterminators",                        note: "Add as secondary category" },
+                { label: "Service Area",       value: "Baldwin County, AL — 7 cities",        note: "Add: Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, Robertsdale" },
+                { label: "Business Hours",     value: "Mon–Fri 7am–6pm, Sat 8am–2pm",        note: "Set per-day in Yelp's hours editor" },
+                { label: "Verification",       value: "Automated phone call to (251) 324-9090", note: "Yelp calls with a PIN — answer during business hours" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string }[] = [
+                { item: "Logo / profile",   spec: "Square, min 400×400 px (PNG/JPG) — appears in search results" },
+                { item: "Cover photo",      spec: "Landscape, min 1200×675 px — top of your Yelp page" },
+                { item: "Service photo ×3", spec: "Treatment photos — bed bug, exterior spray, interior inspection" },
+                { item: "Team / vehicle",   spec: "Uniformed tech or branded truck — builds credibility" },
+                { item: "Before/after",     spec: "Before and after pest treatment (if available)" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(211,35,35,0.1)",
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(211,35,35,0.25)",
+                          color: copied ? "#10B981" : YELP_RED, transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly rows={rows} value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none", cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: YELP_RED }}>Setup Pending</strong> until the Yelp listing is claimed and verified.
+                  </div>
+
+                  {/* ── Why Yelp matters callout ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 20,
+                    background: "rgba(211,35,35,0.05)", border: "1px solid rgba(211,35,35,0.2)",
+                    fontSize: 12, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ fontWeight: 700, color: "#CBD5E1", marginBottom: 6, fontSize: 12.5 }}>Why Yelp matters for Bed Bugs &amp; Beyond</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                      {[
+                        { icon: "⭐", text: "Review authority — Yelp reviews rank in Google search results for brand queries" },
+                        { icon: "🍎", text: "Siri / Apple Maps — Yelp is the primary data source for Siri local business answers" },
+                        { icon: "🎙️", text: "Voice search — 'Hey Siri, find pest control near me' pulls from Yelp" },
+                        { icon: "🏠", text: "Local trust — Baldwin County homeowners check Yelp before calling a pest company" },
+                      ].map(item => (
+                        <div key={item.icon} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span style={{ flexShrink: 0, fontSize: 13 }}>{item.icon}</span>
+                          <span style={{ fontSize: 11.5, color: "#94A3B8" }}>{item.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Required fields ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(211,35,35,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(211,35,35,0.2)",
+                              color: copiedKey === f.copyKey ? "#10B981" : YELP_RED, whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready content ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Business Description" copyKey="yelp-desc"       value={BIZ_DESCRIPTION} rows={5} />
+                  <CopyBlock label="Specialties"          copyKey="yelp-specialties" value={SPECIALTIES}     rows={9} />
+                  <CopyBlock label="Service List"         copyKey="yelp-services"    value={SERVICE_LIST}    rows={9} />
+                  <CopyBlock label="Service Area List"    copyKey="yelp-areas"       value={SERVICE_AREAS}   rows={9} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Photo Requirements <span style={{ fontSize: 10, fontWeight: 500, color: "#475569", textTransform: "none" }}>(Yelp recommends 10+ total)</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: "#EF4444", background: "rgba(239,68,68,0.1)", whiteSpace: "nowrap" }}>Missing</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Verification ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Verification
+                  </div>
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 18,
+                    background: "rgba(211,35,35,0.04)", border: "1px solid rgba(211,35,35,0.18)",
+                    fontSize: 12.5, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    Yelp verifies ownership via an <strong style={{ color: "#CBD5E1" }}>automated phone call</strong> to the number on file. Yelp will call <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong> and provide a PIN. Enter the PIN in Yelp for Business to confirm ownership. Have someone available to answer during business hours (Mon–Fri 7am–6pm).
+                  </div>
+
+                  {/* ── Status + next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 14,
+                    background: "rgba(211,35,35,0.05)", border: "1px solid rgba(211,35,35,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>Listing Verification Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Status updates once the listing is claimed and the phone verification PIN is entered.
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: "rgba(211,35,35,0.12)", border: "1px solid rgba(211,35,35,0.3)", color: YELP_RED,
+                    }}>Not Started</span>
+                  </div>
+
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Go to <a href="https://biz.yelp.com" target="_blank" rel="noopener noreferrer" style={{ color: YELP_RED }}>biz.yelp.com</a> — sign in or create account</li>
+                      <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or click "Add Business"</li>
+                      <li>Select categories: <strong style={{ color: "#CBD5E1" }}>Pest Control</strong> + <strong style={{ color: "#CBD5E1" }}>Exterminators</strong></li>
+                      <li>Paste <strong style={{ color: "#CBD5E1" }}>Business Description</strong> and <strong style={{ color: "#CBD5E1" }}>Specialties</strong> using copy buttons above</li>
+                      <li>Add all 7 service area cities from <strong style={{ color: "#CBD5E1" }}>Service Area List</strong></li>
+                      <li>Upload logo and minimum 5 photos per specs above (10+ recommended)</li>
+                      <li>Set business hours (Mon–Fri 7am–6pm, Sat 8am–2pm)</li>
+                      <li>Answer the verification call to <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong> and enter the PIN</li>
+                      <li>Enable <strong style={{ color: "#CBD5E1" }}>Request a Quote</strong> and <strong style={{ color: "#CBD5E1" }}>Messaging</strong> for inbound leads</li>
+                      <li>Update verification status in <strong style={{ color: "#CBD5E1" }}>Profile Tracker</strong> tab once complete</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://biz.yelp.com" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(211,35,35,0.1)", border: "1px solid rgba(211,35,35,0.3)", color: YELP_RED, textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Yelp for Business
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Yelp for Business account details, listing URL, and verification status here.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",       val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
+                    { label: "Verification Status", val: verifyStatus, set: setVerifyStatus, ph: "Not Started / Pending / Verified" },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Yelp Listing URL</div>
+                    <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.yelp.com/biz/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                    placeholder="Notes about setup progress, blockers, or next steps..."
+                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: YELP_RED, border: "none", color: "#FFF" }}>
+                    Save Setup Notes
+                  </button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Yelp setup requirements, NAP consistency, and Siri/Apple ecosystem cross-signal readiness.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {YELP_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = { healthy: "Healthy", warning: "Warning", missing: "Missing", pending: "Pending", coming_soon: "Coming Soon" };
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>{statusLabels[d.status]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Diagnostics panel ──────────────────────────────────────────────────────────
 type DiagEntry = { icon: string; color: string; text: string; severity: "warning" | "info" };
 
@@ -2609,6 +3137,8 @@ export default function LocalPresenceEnginePage() {
           <BingPlacesCard />
           {/* Nextdoor — V2 dedicated card */}
           <NextdoorBusinessCard />
+          {/* Yelp — V2 dedicated card */}
+          <YelpBusinessCard />
           {/* AI Search Coming Soon */}
           <AISearchCard />
         </div>

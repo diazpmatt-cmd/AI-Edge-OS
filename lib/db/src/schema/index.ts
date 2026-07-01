@@ -7,3 +7,4 @@ export * from "./social-posts";
 export * from "./auto-content";
 export * from "./image-assets";
 export * from "./assessments";
+export * from "./gorilladesk";

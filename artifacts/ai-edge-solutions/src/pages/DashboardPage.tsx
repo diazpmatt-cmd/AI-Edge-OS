@@ -5,19 +5,18 @@ import { loadProfile, type Keyword, type ArticleDraft } from "@/lib/business-dat
 import { fetchKeywords, insertKeywords, clearKeywords } from "@/lib/keywords-store";
 import { fetchArticles, insertArticles, clearArticles, buildContentPlan } from "@/lib/articles-store";
 import { generateKeywordIdeas } from "@/lib/keywords.functions";
+import { useGorilladeskAnalytics } from "@/lib/gorilladesk-analytics";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Static demo data
+// Static platform-state cards (not from GorillaDesk)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const KPI_CARDS = [
-  { icon: "📞", label: "Leads Recovered",     value: "6",      sub: "42% recovery rate",               color: "#10B981", glow: true  },
-  { icon: "💰", label: "Revenue Recovered",   value: "$1,750", sub: "Est. today",                       color: "#F59E0B", glow: true  },
-  { icon: "📍", label: "Local Visibility",    value: "38/100", sub: "3 platforms pending",              color: "#EF4444", glow: false },
-  { icon: "✨", label: "AI Visibility",       value: "38/100", sub: "2 of 8 prompts detected",          color: "#8B5CF6", glow: false },
+const PLATFORM_KPI_CARDS = [
+  { icon: "📍", label: "Local Visibility",    value: "38/100", sub: "3 platforms pending",               color: "#EF4444", glow: false },
+  { icon: "✨", label: "AI Visibility",       value: "38/100", sub: "2 of 8 prompts detected",           color: "#8B5CF6", glow: false },
   { icon: "⚡", label: "Connected Platforms", value: "4 / 8",  sub: "Facebook, Instagram, GBP, YouTube", color: "#00AEEF", glow: false },
-  { icon: "🛡", label: "Automation Health",   value: "82%",    sub: "Core systems online",              color: "#10B981", glow: false },
+  { icon: "🛡", label: "Automation Health",   value: "82%",    sub: "Core systems online",               color: "#10B981", glow: false },
 ];
 
 const HEALTH_BREAKDOWN = [
@@ -71,10 +70,8 @@ const SNAPSHOTS = [
     color: "#10B981",
     link: "/admin/lead-recovery",
     rows: [
-      { label: "Missed calls today",  value: "14",    valueColor: "#E2E8F0" },
-      { label: "Recovered",           value: "6",     valueColor: "#10B981" },
-      { label: "Recovery rate",       value: "42%",   valueColor: "#10B981" },
-      { label: "Revenue recovered",   value: "$1,750",valueColor: "#F59E0B" },
+      { label: "Status",  value: "Active",  valueColor: "#10B981" },
+      { label: "Source",  value: "Telnyx",  valueColor: "#94A3B8" },
     ],
   },
   {
@@ -177,6 +174,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<null | "keywords" | "plan">(null);
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "healthy">("all");
+  const { data: gd, loading: gdLoading, error: gdError } = useGorilladeskAnalytics();
 
   const reload = async () => {
     const [kw, ar] = await Promise.all([fetchKeywords(), fetchArticles()]);
@@ -284,7 +282,23 @@ export default function DashboardPage() {
 
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 28 }}>
-          {KPI_CARDS.map(c => <KPICard key={c.label} {...c} />)}
+          <KPICard
+            icon="💰"
+            label="Monthly Revenue"
+            value={gdLoading ? "…" : (gd.revenue?.monthly_revenue_fmt ?? "—")}
+            sub={gdLoading ? "Loading…" : (gd.revenue ? `Period: ${gd.revenue.period}` : "No data yet")}
+            color="#F59E0B"
+            glow={!!(gd.revenue?.monthly_revenue)}
+          />
+          <KPICard
+            icon="🔧"
+            label="Jobs Completed"
+            value={gdLoading ? "…" : (gd.jobs ? String(gd.jobs.completed) : "—")}
+            sub={gdLoading ? "Loading…" : (gd.jobs ? `${gd.jobs.completion_rate}% completion rate` : "No data yet")}
+            color="#10B981"
+            glow={!!(gd.jobs?.completed)}
+          />
+          {PLATFORM_KPI_CARDS.map(c => <KPICard key={c.label} {...c} />)}
         </div>
 
         {/* ── Business Health Score + Live Alerts ── */}
@@ -360,6 +374,227 @@ export default function DashboardPage() {
               })}
             </div>
           </div>
+        </div>
+
+        {/* ── GorillaDesk Business Analytics ── */}
+        <div style={{ marginBottom: 28 }}>
+          <SectionDivider title="GorillaDesk Business Analytics" right={
+            gdError ? (
+              <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {gdError}</span>
+            ) : gdLoading ? (
+              <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>
+            ) : (
+              <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live</span>
+            )
+          } />
+
+          {gdLoading && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{
+                  background: "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 13, padding: "20px 18px", height: 100,
+                }} />
+              ))}
+            </div>
+          )}
+
+          {!gdLoading && gdError && (
+            <div style={{
+              background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)",
+              borderRadius: 13, padding: "28px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>⚠</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#F87171", marginBottom: 4 }}>Analytics unavailable</div>
+              <div style={{ fontSize: 11, color: "#64748B" }}>Could not load GorillaDesk data. The API may be unreachable.</div>
+            </div>
+          )}
+
+          {!gdLoading && !gdError && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Row 1: Revenue + Jobs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+
+                {/* Revenue */}
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                  border: "1px solid rgba(245,158,11,0.15)", borderRadius: 14, padding: "20px 22px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 16 }}>💰</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0" }}>Revenue</span>
+                    {gd.revenue && <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.revenue.period}</span>}
+                  </div>
+                  {!gd.revenue || gd.revenue.monthly_revenue === 0 ? (
+                    <div style={{ textAlign: "center", padding: "12px 0", color: "#475569", fontSize: 12 }}>No revenue data yet</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {[
+                        { label: "Monthly Revenue",    value: gd.revenue.monthly_revenue_fmt,     color: "#F59E0B" },
+                        { label: "Collected",          value: gd.revenue.collected_revenue_fmt,   color: "#10B981" },
+                        { label: "Outstanding",        value: gd.revenue.outstanding_revenue_fmt, color: "#F87171" },
+                        { label: "Avg Ticket",         value: gd.revenue.avg_ticket_fmt,          color: "#94A3B8" },
+                      ].map(m => (
+                        <div key={m.label} style={{
+                          background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>{m.label}</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Jobs */}
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                  border: "1px solid rgba(16,185,129,0.15)", borderRadius: 14, padding: "20px 22px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 16 }}>🔧</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0" }}>Jobs</span>
+                  </div>
+                  {!gd.jobs || gd.jobs.total === 0 ? (
+                    <div style={{ textAlign: "center", padding: "12px 0", color: "#475569", fontSize: 12 }}>No job data yet</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {[
+                        { label: "Total Jobs",       value: String(gd.jobs.total),              color: "#94A3B8" },
+                        { label: "Completed",        value: String(gd.jobs.completed),          color: "#10B981" },
+                        { label: "Incomplete",       value: String(gd.jobs.incomplete),         color: "#F87171" },
+                        { label: "Completion Rate",  value: `${gd.jobs.completion_rate}%`,      color: "#00AEEF" },
+                      ].map(m => (
+                        <div key={m.label} style={{
+                          background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>{m.label}</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 2: Customers + Payments */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+
+                {/* Customers */}
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                  border: "1px solid rgba(0,174,239,0.15)", borderRadius: 14, padding: "20px 22px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 16 }}>👥</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0" }}>Customers</span>
+                    {gd.customers && <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.customers.period}</span>}
+                  </div>
+                  {!gd.customers || (gd.customers.new_customers === 0 && gd.customers.returning_customers === 0) ? (
+                    <div style={{ textAlign: "center", padding: "12px 0", color: "#475569", fontSize: 12 }}>No customer data yet</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {[
+                        { label: "New Customers",      value: String(gd.customers.new_customers),      color: "#00AEEF" },
+                        { label: "Returning",          value: String(gd.customers.returning_customers), color: "#8B5CF6" },
+                        { label: "Active Services",    value: String(gd.customers.active_services),    color: "#F59E0B" },
+                        { label: "Recurring Services", value: String(gd.customers.recurring_services), color: "#10B981" },
+                      ].map(m => (
+                        <div key={m.label} style={{
+                          background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
+                          border: "1px solid rgba(255,255,255,0.05)",
+                        }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>{m.label}</div>
+                          <div style={{ fontSize: 22, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Payments */}
+                <div style={{
+                  background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                  border: "1px solid rgba(139,92,246,0.15)", borderRadius: 14, padding: "20px 22px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                    <span style={{ fontSize: 16 }}>💳</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0" }}>Payment Breakdown</span>
+                  </div>
+                  {!gd.payments || gd.payments.breakdown.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "12px 0", color: "#475569", fontSize: 12 }}>No payment data yet</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {gd.payments.breakdown.map(p => {
+                        const totalAmt = gd.payments!.total || 1;
+                        const pct = Math.round((p.amount / totalAmt) * 100);
+                        const methodColors: Record<string, string> = {
+                          card: "#00AEEF", cash: "#10B981", check: "#F59E0B", ach: "#8B5CF6", other: "#64748B",
+                        };
+                        const color = methodColors[p.method] ?? "#64748B";
+                        return (
+                          <div key={p.method}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                              <span style={{ fontSize: 12, color: "#CBD5E1", textTransform: "capitalize", fontWeight: 600 }}>{p.method}</span>
+                              <span style={{ fontSize: 12, fontWeight: 800, color }}>{p.amount_fmt}</span>
+                            </div>
+                            <div style={{ height: 5, background: "rgba(255,255,255,0.05)", borderRadius: 3, overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 3 }} />
+                            </div>
+                            <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{p.count} payment{p.count !== 1 ? "s" : ""} · {pct}%</div>
+                          </div>
+                        );
+                      })}
+                      <div style={{
+                        marginTop: 4, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}>
+                        <span style={{ fontSize: 11, color: "#475569" }}>Total processed</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: "#E2E8F0" }}>{gd.payments.total_fmt}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Marketing / Lead Sources */}
+              <div style={{
+                background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                border: "1px solid rgba(245,158,11,0.12)", borderRadius: 14, padding: "20px 22px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <span style={{ fontSize: 16 }}>📣</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0" }}>Marketing · Lead Sources</span>
+                  {gd.marketing && <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.marketing.period}</span>}
+                </div>
+                {!gd.marketing || gd.marketing.lead_sources.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "16px 0", color: "#475569", fontSize: 12 }}>No lead source data yet</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
+                    {gd.marketing.lead_sources.map((src, i) => {
+                      const palette = ["#00AEEF", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#E1306C"];
+                      const color = palette[i % palette.length];
+                      return (
+                        <div key={src.name} style={{
+                          background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "14px 16px",
+                          border: `1px solid ${color}18`,
+                        }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#CBD5E1", marginBottom: 6 }}>{src.name}</div>
+                          <div style={{ fontSize: 20, fontWeight: 900, color, marginBottom: 2 }}>{src.revenue_fmt}</div>
+                          <div style={{ fontSize: 10, color: "#475569" }}>{src.job_count} job{src.job_count !== 1 ? "s" : ""}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
         </div>
 
         {/* ── Growth Opportunities ── */}

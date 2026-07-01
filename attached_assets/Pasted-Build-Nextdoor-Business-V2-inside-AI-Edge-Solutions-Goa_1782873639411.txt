@@ -1,0 +1,274 @@
+Build Nextdoor Business V2 inside AI Edge Solutions.
+
+Goal:
+Upgrade Local Presence Engine with a serious Nextdoor Business setup and tracking workflow.
+
+Important:
+Do NOT pretend live Nextdoor API access is available.
+Build this as:
+1) Nextdoor Business setup workflow
+2) Nextdoor neighborhood visibility tracker
+3) profile readiness tracker
+4) diagnostics + status tracking
+
+Keep this inside existing route:
+/admin/local-presence
+
+Add deeper Nextdoor workflow inside Local Presence page:
+Nextdoor Setup Drawer or Nextdoor Detail Panel
+
+--------------------------------------------------
+NEXTDOOR CARD UPGRADE
+--------------------------------------------------
+
+Upgrade the Nextdoor Business card in Local Presence Engine.
+
+Show:
+
+Platform:
+Nextdoor Business
+
+Status options:
+- Not Started
+- Setup In Progress
+- Claimed
+- Verification Pending
+- Verified
+- Connected
+- Error
+
+Current demo status:
+Setup In Progress
+
+Business:
+Bed Bugs & Beyond
+
+Phone:
+(251) 324-9090
+
+Website:
+https://aiedgesolutions.online
+
+Category:
+Pest Control Service
+
+Service Area:
+Baldwin County, Alabama
+
+Cities:
+Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort
+
+Last checked:
+Today
+
+--------------------------------------------------
+NEXTDOOR SETUP WORKFLOW
+--------------------------------------------------
+
+Create detailed Nextdoor setup checklist:
+
+1. Create or sign into Nextdoor Business
+2. Add or claim business page
+3. Verify business ownership
+4. Confirm business name
+5. Confirm phone number
+6. Confirm website
+7. Select business category
+8. Add service area
+9. Add business description
+10. Upload logo
+11. Upload photos
+12. Enable recommendations
+13. Add services
+14. Review neighborhood visibility
+15. Publish business page
+
+Each checklist item should have:
+- status
+- description
+- action button if useful
+- notes field if easy/safe
+
+Statuses:
+Complete
+In Progress
+Pending
+Blocked
+
+--------------------------------------------------
+NEXTDOOR PROFILE TRACKER
+--------------------------------------------------
+
+Add profile tracking fields:
+
+- Nextdoor account email
+- Nextdoor business page URL
+- Verification method
+- Verification status
+- Verification submitted date
+- Verification approved date
+- Neighborhoods served
+- Recommendation status
+- Last manual review date
+- Notes
+
+Frontend state/demo is fine unless backend exists.
+
+--------------------------------------------------
+EXTERNAL LINKS
+--------------------------------------------------
+
+Buttons:
+- Open Nextdoor Business
+- View Nextdoor Business Page
+- View Nextdoor Guide
+- Mark Step Complete
+- Save Setup Notes
+
+Use:
+https://business.nextdoor.com
+
+Allow manual entry for Nextdoor business page URL.
+
+--------------------------------------------------
+NEIGHBORHOOD VISIBILITY SECTION
+--------------------------------------------------
+
+Create a Nextdoor neighborhood visibility panel.
+
+Track local coverage for:
+- Foley
+- Gulf Shores
+- Orange Beach
+- Fairhope
+- Daphne
+- Spanish Fort
+
+Each city/neighborhood should show:
+- coverage status
+- recommendations status
+- visibility strength
+- action needed
+
+Statuses:
+Covered
+Pending
+Missing
+Needs Recommendations
+
+--------------------------------------------------
+DIAGNOSTICS
+--------------------------------------------------
+
+Add Nextdoor diagnostics section:
+
+Checks:
+- Nextdoor account created
+- Business page claimed
+- Ownership verified
+- NAP matches Google Business Profile
+- Phone matches business number
+- Website matches
+- Category selected
+- Service area configured
+- Photos uploaded
+- Recommendations enabled
+- Neighborhood visibility reviewed
+- Business page published
+
+Statuses:
+Healthy
+Warning
+Missing
+Pending
+Coming Soon
+
+--------------------------------------------------
+LOCAL PRESENCE SCORE UPDATE
+--------------------------------------------------
+
+Update Local Presence score logic so Nextdoor progress contributes partial credit.
+
+Example:
+Google Business Profile verified: +35
+Apple setup progress: up to +15
+Bing setup progress: up to +10
+Nextdoor setup progress: up to +10
+NAP consistency: up to +15
+Photos/hours/category completeness: up to +15
+
+If Nextdoor is setup in progress, do not show zero credit.
+
+Show:
+Nextdoor Progress: X/10
+
+Demo:
+Nextdoor Progress: 2/10
+
+Updated demo total:
+GBP 35 + Apple 2 + Bing 2 + Nextdoor 2 + NAP 5 = 46 pts
+
+--------------------------------------------------
+COMMAND CENTER ALERT UPDATE
+--------------------------------------------------
+
+Update Command Center alert wording.
+
+Replace:
+Nextdoor Business page not created
+
+With:
+Nextdoor Business setup in progress
+
+If status is Not Started:
+Nextdoor Business not started
+
+If Verification Pending:
+Nextdoor verification pending
+
+--------------------------------------------------
+ONBOARDING UPDATE
+--------------------------------------------------
+
+Update Client Onboarding Wizard Step 5.
+
+Nextdoor should show:
+Setup In Progress
+
+Add button:
+Open Nextdoor Setup
+
+Link to:
+/admin/local-presence
+
+--------------------------------------------------
+IMPORTANT TECH REQUIREMENTS
+--------------------------------------------------
+
+1. Do not break existing Local Presence Engine.
+2. Do not break Google Business Profile.
+3. Do not break Apple Business Connect V2.
+4. Do not break Bing Places V2.
+5. Do not disconnect or overwrite production tokens.
+6. Do not create fake live Nextdoor API calls.
+7. Keep this production-safe.
+8. Use demo data where needed.
+9. Unavailable API features should clearly show:
+Coming Soon
+Manual Workflow
+No API Connected
+
+--------------------------------------------------
+STYLE REQUIREMENTS
+--------------------------------------------------
+
+Match AI Edge dashboard style exactly:
+- dark navy background
+- cyan/green highlights
+- metallic silver borders
+- glow cards
+- premium SaaS layout
+
+Nextdoor should feel equal in quality to Apple and Bing V2.
+
+This completes Local Presence Engine V2.

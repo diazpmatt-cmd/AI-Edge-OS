@@ -222,7 +222,7 @@ function Step5Content() {
     { label: "Google Business Profile", status: "complete",   note: "Connected & verified" },
     { label: "Apple Business Connect",  status: "in-progress",note: "Setup in progress — claim pending" },
     { label: "Bing Places",             status: "in-progress", note: "Setup in progress — verification pending" },
-    { label: "Nextdoor Business",       status: "pending" },
+    { label: "Nextdoor Business",       status: "in-progress", note: "Setup in progress — page claim pending" },
   ];
   const styleMap: Record<PlatformStatus, { bg: string; border: string; icon: string; iconColor: string; labelColor: string }> = {
     complete:    { bg: "rgba(16,185,129,0.06)",  border: "rgba(16,185,129,0.2)",  icon: "✓", iconColor: "#10B981", labelColor: "#10B981" },
@@ -268,6 +268,7 @@ function Step5Content() {
         <ActionBtn label="Open Local Presence Engine" to="/admin/local-presence" variant="primary" />
         <ActionBtn label="🍎 Open Apple Setup" to="/admin/local-presence" />
         <ActionBtn label="🔵 Open Bing Setup" to="/admin/local-presence" />
+        <ActionBtn label="🟢 Open Nextdoor Setup" to="/admin/local-presence" />
       </div>
     </div>
   );

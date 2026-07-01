@@ -33,7 +33,7 @@ const ALERTS = [
   { severity: "warning",  text: "Bing Places setup in progress",               icon: "⚠" },
   { severity: "critical", text: "AI Visibility competitor gap is high",        icon: "✕" },
   { severity: "warning",  text: "Google API quota throttled recently",         icon: "⚠" },
-  { severity: "warning",  text: "Nextdoor Business page not created",          icon: "⚠" },
+  { severity: "warning",  text: "Nextdoor Business setup in progress",         icon: "⚠" },
   { severity: "warning",  text: "Review velocity below competitor average",    icon: "⚠" },
   { severity: "healthy",  text: "Facebook connected and ready to publish",     icon: "✓" },
   { severity: "healthy",  text: "Instagram connected",                         icon: "✓" },

@@ -933,6 +933,358 @@ function BingPlacesCard() {
   );
 }
 
+// ── Nextdoor Business V2 Card ──────────────────────────────────────────────────
+const NEXTDOOR_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create or sign into Nextdoor Business",  status: "complete",    description: "Sign in at business.nextdoor.com with your email." },
+  { label: "Add or claim business page",             status: "in-progress", description: "Search for Bed Bugs & Beyond and claim the business page." },
+  { label: "Verify business ownership",              status: "pending",     description: "Nextdoor may verify by phone, email, or postcard." },
+  { label: "Confirm business name",                  status: "pending",     description: "Ensure the business name matches your registered entity exactly." },
+  { label: "Confirm phone number",                   status: "pending",     description: "Verify (251) 324-9090 matches the Nextdoor listing." },
+  { label: "Confirm website",                        status: "pending",     description: "Verify website URL resolves correctly and matches GBP." },
+  { label: "Select business category",               status: "pending",     description: "Select 'Pest Control' as the primary business category." },
+  { label: "Add service area",                       status: "pending",     description: "Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
+  { label: "Add business description",               status: "pending",     description: "Write a clear, local-focused description of services and service area." },
+  { label: "Upload logo",                            status: "pending",     description: "High-res square logo (min 400×400 px, PNG or JPG)." },
+  { label: "Upload photos",                          status: "pending",     description: "Add at least 5 quality photos of the business, team, or service." },
+  { label: "Enable recommendations",                 status: "pending",     description: "Turn on neighborhood recommendations to build social proof." },
+  { label: "Add services",                           status: "pending",     description: "List core services: bed bug inspection, heat treatment, pest control." },
+  { label: "Review neighborhood visibility",         status: "pending",     description: "Confirm visibility in Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
+  { label: "Publish business page",                  status: "pending",     description: "Publish the listing to make it visible to local neighborhoods." },
+];
+
+const NEXTDOOR_NEIGHBORHOODS: { city: string; status: "covered" | "pending" | "missing" | "needs_recs"; recs: number; strength: "Strong" | "Moderate" | "Weak" | "None"; action: string }[] = [
+  { city: "Foley",         status: "pending",    recs: 0, strength: "None",     action: "Claim listing and target Foley neighborhoods" },
+  { city: "Gulf Shores",   status: "pending",    recs: 0, strength: "None",     action: "Add Gulf Shores to service area" },
+  { city: "Orange Beach",  status: "pending",    recs: 0, strength: "None",     action: "Add Orange Beach to service area" },
+  { city: "Fairhope",      status: "pending",    recs: 0, strength: "None",     action: "Add Fairhope to service area" },
+  { city: "Daphne",        status: "pending",    recs: 0, strength: "None",     action: "Add Daphne to service area" },
+  { city: "Spanish Fort",  status: "pending",    recs: 0, strength: "None",     action: "Add Spanish Fort to service area" },
+];
+
+const NEXTDOOR_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Nextdoor account created",          status: "healthy",  note: "Account active at business.nextdoor.com" },
+  { check: "Business page claimed",             status: "warning",  note: "Claim in progress — awaiting Nextdoor confirmation" },
+  { check: "Ownership verified",                status: "missing",  note: "Verification not yet completed" },
+  { check: "NAP matches Google Business Profile",status:"pending",  note: "Will be confirmed once page is claimed" },
+  { check: "Phone matches business number",     status: "pending",  note: "Pending page confirmation" },
+  { check: "Website matches",                   status: "pending",  note: "Pending page confirmation" },
+  { check: "Category selected",                 status: "pending",  note: "To be set after claim is confirmed" },
+  { check: "Service area configured",           status: "pending",  note: "6 cities to be added after claim" },
+  { check: "Photos uploaded",                   status: "missing",  note: "No photos uploaded yet" },
+  { check: "Recommendations enabled",           status: "missing",  note: "Enable after page is published" },
+  { check: "Neighborhood visibility reviewed",  status: "pending",  note: "Available after publishing" },
+  { check: "Business page published",           status: "missing",  note: "Page not yet published" },
+];
+
+const ND_NEIGHBORHOOD_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  covered:      { color: "#10B981", bg: "rgba(16,185,129,0.07)",  border: "rgba(16,185,129,0.2)",  label: "Covered"            },
+  pending:      { color: "#00AEEF", bg: "rgba(0,174,239,0.07)",   border: "rgba(0,174,239,0.15)",  label: "Pending"            },
+  missing:      { color: "#EF4444", bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.18)",  label: "Missing"            },
+  needs_recs:   { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.18)", label: "Needs Recommendations" },
+};
+
+function NextdoorBusinessCard() {
+  const [drawerOpen,    setDrawerOpen]    = useState(false);
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "profile" | "neighborhoods" | "diagnostics">("checklist");
+  const [checklist,     setChecklist]     = useState(NEXTDOOR_CHECKLIST);
+  const [pageUrl,       setPageUrl]       = useState("");
+  const [acctEmail,     setAcctEmail]     = useState("");
+  const [verifyMethod,  setVerifyMethod]  = useState("Email");
+  const [verifyStatus,  setVerifyStatus]  = useState("Pending");
+  const [neighborhoods, setNeighborhoods] = useState("Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort");
+  const [recStatus,     setRecStatus]     = useState("Not Enabled");
+  const [notes,         setNotes]         = useState("");
+  const [savedMsg,      setSavedMsg]      = useState(false);
+
+  const completedCount  = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const ndScoreCredit   = Math.round((completedCount / checklist.length) * 10);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+  function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+
+  const ND_GREEN = "#8DC641";
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "neighborhoods", label: "Neighborhood Visibility" },
+    { key: "diagnostics",   label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(141,198,65,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(141,198,65,0.25)",
+      borderRadius: 14, backdropFilter: "blur(12px)", overflow: "hidden",
+      boxShadow: "0 0 24px rgba(141,198,65,0.06)", transition: "border-color 0.2s",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #5A9B1A, #8DC641)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 16, fontWeight: 900, color: "#FFF",
+            boxShadow: "0 0 16px rgba(141,198,65,0.3)",
+          }}>N</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Nextdoor Business</span>
+              <StatusBadge status="setup_in_progress" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Neighborhood discovery, local referrals, community trust &amp; neighbor recommendations.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "Category",     value: "Pest Control Service" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Last Checked", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score bar */}
+        <div style={{
+          background: "rgba(141,198,65,0.05)", border: "1px solid rgba(141,198,65,0.15)",
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: ND_GREEN }}>Nextdoor Score: {ndScoreCredit} / 10 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: ND_GREEN, borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: ND_GREEN, fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button onClick={() => setDrawerOpen(v => !v)} style={{
+            padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+            background: drawerOpen ? "rgba(141,198,65,0.2)" : "rgba(141,198,65,0.1)",
+            border: "1px solid rgba(141,198,65,0.35)", color: ND_GREEN, transition: "all 0.15s",
+          }}>{drawerOpen ? "▲ Close Nextdoor Setup" : "▼ Open Nextdoor Setup"}</button>
+          <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(141,198,65,0.08)", border: "1px solid rgba(141,198,65,0.22)", color: ND_GREEN, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Open Nextdoor Business
+          </a>
+          {pageUrl && (
+            <a href={pageUrl} target="_blank" rel="noopener noreferrer"
+              style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(141,198,65,0.05)", border: "1px solid rgba(141,198,65,0.15)", color: "#64748B", textDecoration: "none" }}>
+              ↗ View Page
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: "1px solid rgba(141,198,65,0.12)", background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: activeTab === tab.key ? `2px solid ${ND_GREEN}` : "2px solid transparent",
+                color: activeTab === tab.key ? ND_GREEN : "#475569", transition: "all 0.15s", marginBottom: -1,
+              }}>{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 15 steps to fully activate your Nextdoor Business page and neighborhood visibility.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(141,198,65,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(141,198,65,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      transition: "all 0.15s",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(141,198,65,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(141,198,65,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? ND_GREEN : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                              Mark Done
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(141,198,65,0.1)", border: "1px solid rgba(141,198,65,0.3)", color: ND_GREEN, textDecoration: "none", display: "inline-block" }}>
+                    ↗ View Nextdoor Business Guide
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Nextdoor Business account details, page URL, and verification status here.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",        val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
+                    { label: "Verification Method",  val: verifyMethod, set: setVerifyMethod, ph: "Email / Phone / Postcard" },
+                    { label: "Verification Status",  val: verifyStatus, set: setVerifyStatus, ph: "Pending / Submitted / Approved" },
+                    { label: "Recommendation Status",val: recStatus,    set: setRecStatus,    ph: "Not Enabled / Enabled" },
+                    { label: "Neighborhoods Served", val: neighborhoods,set: setNeighborhoods,ph: "Foley, Gulf Shores..." },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Business Page URL</div>
+                    <input value={pageUrl} onChange={e => setPageUrl(e.target.value)} placeholder="https://nextdoor.com/pages/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                    placeholder="Notes about setup progress, blockers, or next steps..."
+                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ND_GREEN, border: "none", color: "#FFF" }}>
+                    Save Setup Notes
+                  </button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── Neighborhood Visibility ── */}
+            {activeTab === "neighborhoods" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Track Nextdoor visibility and recommendation strength across each city in the service area. Visibility improves after publishing and receiving neighbor recommendations.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {NEXTDOOR_NEIGHBORHOODS.map(n => {
+                    const s = ND_NEIGHBORHOOD_STYLE[n.status];
+                    return (
+                      <div key={n.city} style={{
+                        display: "grid", gridTemplateColumns: "100px 1fr auto auto", gap: 12, alignItems: "center",
+                        padding: "10px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}`,
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{n.city}</span>
+                        <span style={{ fontSize: 11.5, color: "#475569" }}>{n.action}</span>
+                        <span style={{ fontSize: 11, color: "#64748B" }}>
+                          {n.recs > 0 ? `${n.recs} rec${n.recs !== 1 ? "s" : ""}` : "0 recs"}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: s.color, marginRight: 5 }} />
+                          {s.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{
+                  marginTop: 14, padding: "12px 14px", borderRadius: 10,
+                  background: "rgba(141,198,65,0.05)", border: "1px solid rgba(141,198,65,0.15)",
+                  fontSize: 12, color: "#64748B", lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: ND_GREEN }}>How to improve:</strong> Publish your business page → ask satisfied customers to leave Nextdoor recommendations → expand service area to all 6 cities. Each recommendation increases neighborhood visibility strength.
+                </div>
+              </div>
+            )}
+
+            {/* ── Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Nextdoor Business setup requirements and neighborhood visibility.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {NEXTDOOR_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = { healthy:"Healthy", warning:"Warning", missing:"Missing", pending:"Pending", coming_soon:"Coming Soon" };
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: s.dot, marginRight: 5 }} />
+                          {statusLabels[d.status]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Platform definitions ───────────────────────────────────────────────────────
 type PlatformDef = {
   id: string;
@@ -1353,7 +1705,7 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
   const gbpPoints      = connectedCount >= 1 ? 35 : 0;
   const applePoints    = 2;   // 1 step complete + 1 in-progress = partial credit
   const bingPoints     = 2;   // 1 step complete + 1 in-progress = partial credit
-  const nextdoorPoints = 0;
+  const nextdoorPoints = 2;   // 1 step complete + 1 in-progress = partial credit
   const napPoints      = connectedCount >= 1 ? 5 : 0; // partial NAP from GBP only
   const scorePct       = gbpPoints + applePoints + bingPoints + nextdoorPoints + napPoints;
   const warnCount = diags.filter(d => d.severity === "warning").length;
@@ -1517,7 +1869,7 @@ export default function LocalPresenceEnginePage() {
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect setup in progress — claim pending", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Bing Places setup in progress — verification pending",       severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business page not yet created",                    severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business setup in progress — page claim pending",  severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
   ];
 
@@ -1607,19 +1959,8 @@ export default function LocalPresenceEnginePage() {
           <AppleBusinessCard />
           {/* Bing — V2 dedicated card */}
           <BingPlacesCard />
-          {/* Nextdoor — static V1 */}
-          {PLATFORM_DEFS.slice(3).map(def => (
-            <PlatformCard
-              key={def.id}
-              def={def}
-              presenceStatus={otherStatus}
-              health={otherHealth}
-              warnings={[]}
-              lastChecked={null}
-              accountName={null}
-              locationTitle={null}
-            />
-          ))}
+          {/* Nextdoor — V2 dedicated card */}
+          <NextdoorBusinessCard />
           {/* AI Search Coming Soon */}
           <AISearchCard />
         </div>

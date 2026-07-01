@@ -49,6 +49,7 @@ const AIVisibilityEnginePage        = lazy(() => import("./pages/AIVisibilityEng
 const BusinessAssessmentPage        = lazy(() => import("./pages/BusinessAssessmentPage"));
 const AssessmentsInboxPage          = lazy(() => import("./pages/AssessmentsInboxPage"));
 const AIReceptionistPage            = lazy(() => import("./pages/AIReceptionistPage"));
+const ClientOnboardingPage          = lazy(() => import("./pages/ClientOnboardingPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -141,6 +142,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/ai-receptionist">
           <Authenticated><AIReceptionistPage /></Authenticated>
+        </Route>
+        <Route path="/admin/onboarding">
+          <Authenticated><ClientOnboardingPage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

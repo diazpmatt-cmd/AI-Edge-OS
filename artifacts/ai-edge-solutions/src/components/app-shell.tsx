@@ -8,6 +8,7 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const NAV_ITEMS = [
   { to: "/admin/dashboard",           icon: "⬡",  label: "Command Center" },
+  { to: "/admin/onboarding",          icon: "🚀", label: "Client Onboarding" },
   { to: "/admin/connections",         icon: "⚡",  label: "Connected Accounts" },
   { to: "/admin/distribution",        icon: "◈",  label: "Distribution" },
   { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },

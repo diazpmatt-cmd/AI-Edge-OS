@@ -1,0 +1,321 @@
+Build Client Onboarding Wizard for AI Edge Solutions.
+
+Goal:
+Create a premium onboarding experience for new AI Edge clients.
+
+This should guide every new client through setup so onboarding feels smooth, professional, and automated.
+
+This onboarding flow should become the bridge between:
+Sales → Setup → Activation
+
+Route:
+/admin/onboarding
+
+Add sidebar nav item:
+🚀 Client Onboarding
+
+Purpose:
+Help new clients complete all required setup steps before AI Edge services go live.
+
+Use Bed Bugs & Beyond as demo onboarding client.
+
+Business:
+Bed Bugs & Beyond
+Industry:
+Pest Control
+Phone:
+(251) 324-9090
+Website:
+https://aiedgesolutions.online
+Service Area:
+Baldwin County, Alabama
+
+--------------------------------------------------
+PAGE SECTIONS
+--------------------------------------------------
+
+1) Header
+2) Progress Overview
+3) Multi-Step Wizard
+4) Completion Summary
+5) Activation Checklist
+
+--------------------------------------------------
+HEADER
+--------------------------------------------------
+
+Title:
+Client Onboarding
+
+Subtitle:
+Set up AI Edge services, connect platforms, configure automation, and launch successfully.
+
+Status pill:
+Onboarding In Progress
+
+Show:
+- Client Name
+- Package
+- Start Date
+- Completion %
+
+Demo package:
+Edge Pro
+
+Demo start date:
+Today
+
+--------------------------------------------------
+PROGRESS OVERVIEW
+--------------------------------------------------
+
+Show top KPI cards:
+
+1. Steps Completed
+Value: 3 / 7
+
+2. Completion %
+Value: 42%
+
+3. Platforms Connected
+Value: 3 / 6
+
+4. Launch Status
+Value: In Progress
+
+--------------------------------------------------
+MULTI-STEP WIZARD
+--------------------------------------------------
+
+Create 7 onboarding steps.
+
+Each step should show:
+- status
+- completion
+- description
+- expand/collapse
+- action button
+
+Statuses:
+Complete
+In Progress
+Pending
+
+--------------------------------------------------
+STEP 1 — BUSINESS PROFILE
+--------------------------------------------------
+
+Fields:
+- Business Name
+- Industry
+- Phone
+- Email
+- Website
+- Address
+- Service Area
+- Business Hours
+
+Description:
+Basic business information for AI Edge setup.
+
+Status:
+Complete
+
+--------------------------------------------------
+STEP 2 — CONNECT ACCOUNTS
+--------------------------------------------------
+
+Connections:
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+- Apple Business Connect
+- Bing Places
+
+Show:
+Connected / Pending / Missing
+
+Buttons:
+- Open Connected Accounts
+- Connect Platforms
+
+Status:
+In Progress
+
+--------------------------------------------------
+STEP 3 — PHONE & SMS SETUP
+--------------------------------------------------
+
+Fields:
+- Business Number
+- Telnyx Number
+- Forward Number
+- SMS Enabled
+- Voice Enabled
+
+Show:
+- Lead Recovery linked
+- AI Receptionist linked
+
+Buttons:
+- Open Lead Recovery
+- Open AI Receptionist
+
+Status:
+Complete
+
+--------------------------------------------------
+STEP 4 — BUSINESS ASSESSMENT
+--------------------------------------------------
+
+Show assessment results summary:
+
+- Overall Score
+- Local Presence Score
+- AI Visibility Score
+- Review Strength
+- Opportunity Score
+
+Buttons:
+- Open Assessment
+- Re-run Assessment
+
+Status:
+Complete
+
+--------------------------------------------------
+STEP 5 — LOCAL PRESENCE SETUP
+--------------------------------------------------
+
+Checklist:
+- Google Business Profile
+- Apple Business Connect
+- Bing Places
+- Nextdoor Business
+
+Progress bar:
+1 / 4 complete
+
+Buttons:
+- Open Local Presence Engine
+
+Status:
+In Progress
+
+--------------------------------------------------
+STEP 6 — AUTOMATION SETTINGS
+--------------------------------------------------
+
+Settings:
+- Lead Recovery AI
+- AI Receptionist
+- Review Automation
+- Publishing Automation
+- Follow-Up Campaigns
+
+Toggle statuses:
+Enabled / Disabled
+
+Buttons:
+- Configure Automations
+
+Status:
+Pending
+
+--------------------------------------------------
+STEP 7 — LAUNCH READY
+--------------------------------------------------
+
+Checklist:
+- All integrations connected
+- Assessment completed
+- Automation enabled
+- Alerts reviewed
+- First campaign launched
+
+Final launch button:
+🚀 Activate Client
+
+Status:
+Pending
+
+--------------------------------------------------
+COMPLETION SUMMARY
+--------------------------------------------------
+
+Show onboarding summary:
+
+Completed:
+- Business setup
+- Phone setup
+- Assessment
+
+Remaining:
+- Connect Apple
+- Connect Bing
+- Enable automations
+- Launch campaign
+
+Estimated time remaining:
+45–90 minutes
+
+--------------------------------------------------
+ACTIVATION CHECKLIST
+--------------------------------------------------
+
+Final checklist:
+
+□ Accounts connected  
+□ Phone system active  
+□ AI receptionist active  
+□ Lead recovery active  
+□ Assessment complete  
+□ Local presence setup  
+□ AI visibility reviewed  
+□ First campaign published  
+
+When all complete:
+Status becomes:
+Launch Ready
+
+--------------------------------------------------
+FUTURE FEATURES
+--------------------------------------------------
+
+Design this so future automation can be added:
+
+V2:
+- Auto onboarding progress tracking
+- Required step enforcement
+- Auto reminders
+- Welcome email automation
+- Client onboarding CRM
+
+--------------------------------------------------
+IMPORTANT
+--------------------------------------------------
+
+1. Do not break existing routes or modules.
+2. Use real internal links where possible:
+- /admin/connections
+- /admin/lead-recovery
+- /admin/ai-receptionist
+- /admin/local-presence
+- /admin/assessments
+3. Safe demo buttons only unless backend exists.
+4. No destructive actions.
+
+--------------------------------------------------
+STYLE REQUIREMENTS
+--------------------------------------------------
+
+Match AI Edge dashboard style exactly:
+- dark navy background
+- electric blue/cyan highlights
+- metallic silver borders
+- glow cards
+- progress bars
+- polished SaaS onboarding UI
+
+This should feel like a premium onboarding experience for new AI Edge clients.

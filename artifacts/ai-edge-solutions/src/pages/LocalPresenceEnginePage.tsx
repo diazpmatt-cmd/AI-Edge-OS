@@ -1406,7 +1406,7 @@ const ND_NEIGHBORHOOD_STYLE: Record<string, { color: string; bg: string; border:
 
 function NextdoorBusinessCard() {
   const [drawerOpen,    setDrawerOpen]    = useState(false);
-  const [activeTab,     setActiveTab]     = useState<"checklist" | "profile" | "neighborhoods" | "diagnostics">("checklist");
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "neighborhoods" | "diagnostics">("checklist");
   const [checklist,     setChecklist]     = useState(NEXTDOOR_CHECKLIST);
   const [pageUrl,       setPageUrl]       = useState("");
   const [acctEmail,     setAcctEmail]     = useState("");
@@ -1416,6 +1416,7 @@ function NextdoorBusinessCard() {
   const [recStatus,     setRecStatus]     = useState("Not Enabled");
   const [notes,         setNotes]         = useState("");
   const [savedMsg,      setSavedMsg]      = useState(false);
+  const [copiedKey,     setCopiedKey]     = useState<string | null>(null);
 
   const completedCount  = checklist.filter(s => s.status === "complete").length;
   const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
@@ -1425,11 +1426,18 @@ function NextdoorBusinessCard() {
     setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
   }
   function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
 
   const ND_GREEN = "#8DC641";
 
   const TABS: { key: typeof activeTab; label: string }[] = [
     { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
     { key: "profile",       label: "Profile Tracker" },
     { key: "neighborhoods", label: "Neighborhood Visibility" },
     { key: "diagnostics",   label: "Diagnostics" },
@@ -1594,6 +1602,222 @@ function NextdoorBusinessCard() {
                 </div>
               </div>
             )}
+
+            {/* ── Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Bed Bugs & Beyond is Baldwin County's trusted neighborhood pest control company. We specialize in bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Serving homeowners and families in Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, neighbor-recommended. Call (251) 324-9090 to schedule today.`;
+
+              const SERVICE_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Business Name",      value: "Bed Bugs & Beyond",                       note: "Exact name — must match GBP exactly (NAP consistency)" },
+                { label: "Phone Number",       value: "(251) 324-9090",        copyKey: "nd-phone", note: "Must match Google Business Profile" },
+                { label: "Website",            value: "https://bedbugsandbeyond.net",             note: "Use the live BB&B website" },
+                { label: "Category",           value: "Pest Control",                             note: "Nextdoor uses simplified categories — select 'Pest Control'" },
+                { label: "Service Area",       value: "Baldwin County, AL — 7 cities",            note: "Add each city: Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, Robertsdale" },
+                { label: "Verification",       value: "Email, phone, or postcard",                note: "Nextdoor offers multiple verification methods — email is fastest" },
+                { label: "Recommendations",    value: "Enable after publishing",                  note: "Turn on to allow neighbors to recommend your business — critical for Nextdoor visibility" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string }[] = [
+                { item: "Logo",          spec: "PNG/JPG, square 1:1, min 400×400 px" },
+                { item: "Cover photo",   spec: "JPG/PNG, landscape, recommended 1200×628 px" },
+                { item: "Service photo", spec: "Treatment or inspection photo — builds trust" },
+                { item: "Team photo",    spec: "Uniformed technician or branded vehicle" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(141,198,65,0.1)",
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(141,198,65,0.25)",
+                          color: copied ? "#10B981" : ND_GREEN, transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly rows={rows} value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none", cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 18, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: ND_GREEN }}>Setup Pending</strong> until the Nextdoor Business page is published and verified. Use the copy buttons to paste content directly into Nextdoor Business.
+                  </div>
+
+                  {/* ── Nextdoor-specific note ── */}
+                  <div style={{
+                    padding: "10px 14px", borderRadius: 10, marginBottom: 18,
+                    background: "rgba(141,198,65,0.05)", border: "1px solid rgba(141,198,65,0.2)",
+                    fontSize: 12, color: "#94A3B8", lineHeight: 1.6,
+                  }}>
+                    <strong style={{ color: ND_GREEN }}>Nextdoor is neighborhood-first.</strong> Unlike Google or Bing, visibility here depends on neighbor <strong style={{ color: "#CBD5E1" }}>recommendations</strong> — not just having a listing. After publishing, ask satisfied Baldwin County customers to recommend you on Nextdoor.
+                  </div>
+
+                  {/* ── Required fields ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(141,198,65,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(141,198,65,0.2)",
+                              color: copiedKey === f.copyKey ? "#10B981" : ND_GREEN, whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready blocks ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Business Description" copyKey="nd-desc"     value={BIZ_DESCRIPTION} rows={4} />
+                  <CopyBlock label="Service List"         copyKey="nd-services" value={SERVICE_LIST}    rows={9} />
+                  <CopyBlock label="Service Area List"    copyKey="nd-areas"    value={SERVICE_AREAS}   rows={9} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Logo &amp; Photo Requirements
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "100px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: "#EF4444", background: "rgba(239,68,68,0.1)", whiteSpace: "nowrap" }}>Missing</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Verification steps ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Verification Steps
+                  </div>
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 18,
+                    background: "rgba(141,198,65,0.04)", border: "1px solid rgba(141,198,65,0.18)",
+                    fontSize: 12.5, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong style={{ color: "#CBD5E1" }}>Option A — Email</strong> (fastest)<br />
+                      Nextdoor sends a verification link to the email on file. Click the link to instantly verify ownership.
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong style={{ color: "#CBD5E1" }}>Option B — Phone PIN</strong><br />
+                      Nextdoor calls <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong> with an automated PIN. Enter it in Nextdoor Business to verify.
+                    </div>
+                    <div>
+                      <strong style={{ color: "#CBD5E1" }}>Option C — Postcard PIN</strong><br />
+                      Nextdoor mails a PIN to the business address. Takes 10–14 business days. Use only if email and phone fail.
+                    </div>
+                  </div>
+
+                  {/* ── Verification status + next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 14,
+                    background: "rgba(141,198,65,0.05)", border: "1px solid rgba(141,198,65,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>Listing Verification Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Status updates to <strong style={{ color: "#CBD5E1" }}>Verified</strong> after ownership is confirmed and the page is published to Nextdoor neighborhoods.
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: "rgba(141,198,65,0.12)", border: "1px solid rgba(141,198,65,0.3)", color: ND_GREEN,
+                    }}>Setup Pending</span>
+                  </div>
+
+                  {/* ── Next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Go to <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer" style={{ color: ND_GREEN }}>business.nextdoor.com</a> — sign in with your email</li>
+                      <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or create new</li>
+                      <li>Select category <strong style={{ color: "#CBD5E1" }}>Pest Control</strong></li>
+                      <li>Paste the <strong style={{ color: "#CBD5E1" }}>Business Description</strong> and <strong style={{ color: "#CBD5E1" }}>Service List</strong> using the copy buttons above</li>
+                      <li>Add all 7 service area cities from the <strong style={{ color: "#CBD5E1" }}>Service Area List</strong></li>
+                      <li>Upload logo and photos per the specs above</li>
+                      <li>Complete verification — choose <strong style={{ color: "#CBD5E1" }}>email</strong> for fastest turnaround</li>
+                      <li>Publish the business page to make it visible to Baldwin County neighborhoods</li>
+                      <li>Enable <strong style={{ color: "#CBD5E1" }}>Recommendations</strong> — then ask past customers to recommend you on Nextdoor</li>
+                      <li>Update verification status in the <strong style={{ color: "#CBD5E1" }}>Profile Tracker</strong> tab once published</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(141,198,65,0.1)", border: "1px solid rgba(141,198,65,0.3)", color: ND_GREEN, textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Nextdoor Business
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Profile Tracker ── */}
             {activeTab === "profile" && (

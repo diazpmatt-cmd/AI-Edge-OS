@@ -4644,6 +4644,163 @@ Baldwin County, Alabama`;
 // ── Diagnostics panel ──────────────────────────────────────────────────────────
 type DiagEntry = { icon: string; color: string; text: string; severity: "warning" | "info" };
 
+// ── Local Presence Summary Card ───────────────────────────────────────────────
+type SumStatus = "connected" | "verified_publishing" | "setup_pending" | "not_started" | "needs_action" | "coming_soon";
+
+const SUMMARY_STATUS_META: Record<SumStatus, { label: string; color: string; bg: string; border: string }> = {
+  connected:           { label: "Connected",             color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.25)"  },
+  verified_publishing: { label: "Verified · Publishing", color: "#A78BFA", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)"   },
+  setup_pending:       { label: "Setup Pending",         color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)"  },
+  not_started:         { label: "Not Started",           color: "#64748B", bg: "rgba(100,116,139,0.08)", border: "rgba(100,116,139,0.2)"  },
+  needs_action:        { label: "Needs Action",          color: "#EF4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)"   },
+  coming_soon:         { label: "Coming Soon",           color: "#8B5CF6", bg: "rgba(139,92,246,0.08)",  border: "rgba(139,92,246,0.2)"   },
+};
+
+const SUMMARY_PLATFORMS: {
+  name: string; dot: string; summaryStatus: SumStatus; note: string;
+}[] = [
+  { name: "Google Business Profile", dot: "#4285F4", summaryStatus: "connected",           note: "Connected via API · GBP active"                                     },
+  { name: "Bing Places",             dot: "#008272", summaryStatus: "verified_publishing", note: "Verified · Synced with Google · Publishing · Live in 7–12 days"     },
+  { name: "Apple Business Connect",  dot: "#888888", summaryStatus: "setup_pending",       note: "Submitted · Phone PIN / Apple review in progress"                    },
+  { name: "Nextdoor Business",       dot: "#00B246", summaryStatus: "not_started",         note: "Listing not yet claimed"                                             },
+  { name: "Yelp for Business",       dot: "#D32323", summaryStatus: "not_started",         note: "Profile not yet created"                                             },
+  { name: "Waze (WME)",              dot: "#00BBDE", summaryStatus: "not_started",         note: "Free path via Waze Map Editor — community moderated"                 },
+  { name: "Angi for Pros",           dot: "#E8330A", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
+  { name: "Thumbtack for Pros",      dot: "#009FD9", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
+  { name: "AI Search (LLMs)",        dot: "#8B5CF6", summaryStatus: "coming_soon",         note: "AI Visibility module — not yet set up"                               },
+];
+
+function LocalPresenceSummaryCard() {
+  const countsByStatus = (SUMMARY_PLATFORMS
+    .filter(p => p.summaryStatus !== "coming_soon")
+    .reduce((acc, p) => {
+      acc[p.summaryStatus] = (acc[p.summaryStatus] ?? 0) + 1;
+      return acc;
+    }, {} as Partial<Record<SumStatus, number>>));
+
+  const pillOrder: SumStatus[] = ["connected", "verified_publishing", "setup_pending", "not_started", "needs_action"];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(0,174,239,0.03) 0%, rgba(3,6,18,0.95) 100%)",
+      border: "1px solid rgba(0,174,239,0.14)",
+      borderRadius: 14, marginBottom: 28, overflow: "hidden",
+    }}>
+
+      {/* ── Header row ── */}
+      <div style={{
+        padding: "14px 20px 12px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap",
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", letterSpacing: "-0.2px" }}>
+            Local Presence Summary
+          </div>
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+            8 platforms + AI search · setup tracking only · no analytics
+          </div>
+        </div>
+
+        {/* Count pills */}
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          {pillOrder.map(s => {
+            const count = countsByStatus[s] ?? 0;
+            const m = SUMMARY_STATUS_META[s];
+            return (
+              <div key={s} style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: count > 0 ? m.bg : "rgba(255,255,255,0.02)",
+                border: `1px solid ${count > 0 ? m.border : "rgba(255,255,255,0.05)"}`,
+                borderRadius: 20, padding: "3px 10px",
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: count > 0 ? m.color : "#334155", lineHeight: 1 }}>{count}</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: count > 0 ? m.color : "#334155", letterSpacing: "0.3px", whiteSpace: "nowrap" }}>{m.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ padding: "16px 20px 20px" }}>
+
+        {/* ── Platform rows ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 18 }}>
+          {SUMMARY_PLATFORMS.map(p => {
+            const m = SUMMARY_STATUS_META[p.summaryStatus];
+            return (
+              <div key={p.name} style={{
+                display: "grid", gridTemplateColumns: "10px 1fr auto auto", gap: "0 12px", alignItems: "center",
+                padding: "8px 12px", borderRadius: 9,
+                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)",
+              }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: p.dot, flexShrink: 0 }} />
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "#CBD5E1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.name}
+                </div>
+                <div style={{ fontSize: 11, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 340 }}>
+                  {p.note}
+                </div>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap",
+                  background: m.bg, border: `1px solid ${m.border}`, color: m.color,
+                }}>
+                  {m.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Divider ── */}
+        <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginBottom: 14 }} />
+
+        {/* ── Current + Next Best Action ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+          {/* Current action */}
+          <div style={{
+            padding: "12px 14px", borderRadius: 10,
+            background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.16)",
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+              Current
+            </div>
+            <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
+              <span style={{ color: "#F59E0B", fontWeight: 700 }}>Apple Business Connect</span>
+              {" — verification in progress. Check "}
+              <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer"
+                style={{ color: "#F59E0B", textDecoration: "none", fontWeight: 600 }}>
+                business.apple.com
+              </a>
+              {" for PIN or review status. Do not mark Connected until Apple confirms."}
+            </div>
+          </div>
+
+          {/* Next best action */}
+          <div style={{
+            padding: "12px 14px", borderRadius: 10,
+            background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.16)",
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+              Next Best Action
+            </div>
+            <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
+              <span style={{ color: "#10B981", fontWeight: 700 }}>Claim Nextdoor Business listing</span>
+              {" — free, high-value neighborhood channel. Pest control pros get strong local visibility on Nextdoor in service areas."}
+            </div>
+            <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11, fontWeight: 700, color: "#10B981", textDecoration: "none" }}>
+              ↗ business.nextdoor.com
+            </a>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
   connectedCount: number;
   pendingCount: number;
@@ -5107,6 +5264,9 @@ export default function LocalPresenceEnginePage() {
 
         {/* ── Submission Tracker ── */}
         <SubmissionTracker />
+
+        {/* ── Local Presence Summary ── */}
+        <LocalPresenceSummaryCard />
 
         {/* Platform cards */}
         <div style={{ marginBottom: 14 }}>

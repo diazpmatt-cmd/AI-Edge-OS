@@ -4537,7 +4537,7 @@ const SUB_STATUS_META: Record<SubStatus, { label: string; color: string; bg: str
 };
 const TRACKER_INIT: TrackerEntry[] = [
   { key: "gbp",       name: "Google Business Profile", dotColor: "#4285F4", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Apple review", account: "", listingUrl: "", notes: "Website submitted: https://bedbugsandbeyond.net", nextAction: "Wait for Apple verification approval" },
   { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
   { key: "nextdoor",  name: "Nextdoor",                dotColor: "#00B246", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
   { key: "yelp",      name: "Yelp",                    dotColor: "#D32323", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },

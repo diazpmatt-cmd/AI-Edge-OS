@@ -299,7 +299,7 @@ function AppleBusinessCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Apple Business Connect</span>
-              <StatusBadge status="setup_in_progress" />
+              <StatusBadge status="pending" />
             </div>
             <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
               Apple Maps, Siri, iOS Spotlight &amp; Apple Wallet — reaches all iPhone, iPad and Mac users.
@@ -4035,7 +4035,7 @@ export default function LocalPresenceEnginePage() {
   // Diagnostics issues list
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
-    { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect setup in progress — claim pending", severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Bing Places setup in progress — verification pending",       severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business setup in progress — page claim pending",  severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },

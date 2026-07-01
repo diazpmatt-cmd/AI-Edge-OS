@@ -19,7 +19,7 @@ const SIRI_SIGNALS: Signal[] = [
   {
     id: "apple_bbc",
     label: "Apple Business Connect — claimed & verified",
-    description: "Siri pulls primary business data directly from Apple Business Connect listings.",
+    description: "Submitted — pending Apple verification. Siri will pull primary business data from this listing once verified.",
     points: 35,
     platform: "Apple Business Connect",
     actionPath: "/admin/local-presence",
@@ -332,7 +332,7 @@ function OverallSummary({ scores }: { scores: { name: string; pct: number; color
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function VoiceSearchEnginePage() {
-  const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set());
+  const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set(["apple_bbc"]));
   const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set());
   const [googleConfirmed, setGoogleConfirmed] = useState<Set<string>>(new Set());
 

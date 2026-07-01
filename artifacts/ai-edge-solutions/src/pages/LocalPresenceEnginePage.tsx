@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1928,6 +1929,9 @@ export default function LocalPresenceEnginePage() {
             fontSize: 10, fontWeight: 700, color: "#00AEEF", letterSpacing: "0.8px", textTransform: "uppercase",
           }}>Active Client</div>
         </div>
+
+        {/* ── Discovery Channel Checklist ── */}
+        <LocalPresenceChecklist gbpConnected={gbpPresence === "connected"} />
 
         {/* Platform cards */}
         <div style={{ marginBottom: 14 }}>

@@ -3538,6 +3538,14 @@ function AngiBusinessCard() {
 
   const ANGI_ORANGE = "#E8330A";
 
+  const ANGI_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
+    { value: "Not Started",      label: "Not Started",      color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
+    { value: "In Progress",      label: "In Progress",      color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
+    { value: "Profile Complete", label: "Profile Complete", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Leads Active",     label: "Leads Active",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
+    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+  ];
+
   const TABS: { key: typeof activeTab; label: string }[] = [
     { key: "checklist",   label: "Setup Checklist" },
     { key: "bizinfo",     label: "Business Info" },
@@ -3934,42 +3942,118 @@ Baldwin County, Alabama`;
             })()}
 
             {/* ── Profile Tracker ── */}
-            {activeTab === "profile" && (
-              <div>
-                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
-                  Track your Angi for Pros account details, profile URL, and lead status here.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {[
-                    { label: "Account Email",    val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
-                    { label: "Profile Status",   val: verifyStatus, set: setVerifyStatus, ph: "Not Started / In Progress / Live" },
-                  ].map(field => (
-                    <div key={field.label}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
-                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+            {activeTab === "profile" && (() => {
+              const currentStage = ANGI_STAGES.find(s => s.value === verifyStatus) ?? ANGI_STAGES[0];
+              const currentIdx   = ANGI_STAGES.findIndex(s => s.value === verifyStatus);
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Track Angi for Pros setup and lead status here. This is setup/lead-gen tracking only — no analytics or performance data.
+                  </div>
+
+                  {/* ── 5-stage status selector ── */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                      Lead-Gen Status
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 0, flexWrap: "wrap", rowGap: 8 }}>
+                      {ANGI_STAGES.map((stage, i) => {
+                        const isActive = stage.value === verifyStatus;
+                        const isPast   = i < currentIdx;
+                        const isLocked = stage.value === "Receiving Leads";
+                        return (
+                          <React.Fragment key={stage.value}>
+                            {i > 0 && (
+                              <div style={{
+                                width: 20, height: 2, flexShrink: 0,
+                                background: isPast || isActive ? stage.color : "rgba(255,255,255,0.08)",
+                                transition: "background 0.2s",
+                              }} />
+                            )}
+                            <button
+                              onClick={() => !isLocked && setVerifyStatus(stage.value)}
+                              title={isLocked ? "Set to Receiving Leads only after you confirm leads are arriving in Angi for Pros" : `Set status to ${stage.label}`}
+                              style={{
+                                padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                                cursor: isLocked ? "not-allowed" : "pointer",
+                                background: isActive ? stage.bg : isPast ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${isActive ? stage.border : isPast ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)"}`,
+                                color: isActive ? stage.color : isPast ? "#475569" : "#334155",
+                                opacity: isLocked ? 0.6 : 1,
+                                transition: "all 0.15s", whiteSpace: "nowrap",
+                              }}
+                            >
+                              {isPast && !isActive ? "✓ " : ""}{stage.label}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{
+                      marginTop: 12, padding: "10px 14px", borderRadius: 9,
+                      background: currentStage.bg, border: `1px solid ${currentStage.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: currentStage.color }}>
+                          Current: {currentStage.label}
+                        </span>
+                        {verifyStatus === "In Progress" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— profile setup started at pro.angi.com</span>
+                        )}
+                        {verifyStatus === "Profile Complete" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— all fields, photos, and hours filled in</span>
+                        )}
+                        {verifyStatus === "Leads Active" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— lead preferences and weekly budget configured</span>
+                        )}
+                        {verifyStatus === "Receiving Leads" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— confirmed leads arriving · update card status badge</span>
+                        )}
+                      </div>
+                      {verifyStatus === "Receiving Leads" && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                          Ready to mark Live
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
+                      <strong style={{ color: "#64748B" }}>Receiving Leads</strong> is locked until you manually confirm leads are arriving in Angi for Pros. Do not set based on profile approval alone.
+                    </div>
+                  </div>
+
+                  {/* ── Account detail fields ── */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Account Email</div>
+                      <input value={acctEmail} onChange={e => setAcctEmail(e.target.value)} placeholder="email@example.com"
                         style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
                     </div>
-                  ))}
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Angi Profile URL</div>
-                    <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.angi.com/companylist/..."
-                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Angi Profile URL</div>
+                      <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.angi.com/companylist/..."
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                      placeholder="Notes about setup progress, lead budget, blockers, or next steps..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                    <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ANGI_ORANGE, border: "none", color: "#FFF" }}>
+                      Save Setup Notes
+                    </button>
+                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
-                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-                    placeholder="Notes about setup progress, lead budget, blockers, or next steps..."
-                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ANGI_ORANGE, border: "none", color: "#FFF" }}>
-                    Save Setup Notes
-                  </button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── Diagnostics ── */}
             {activeTab === "diagnostics" && (
@@ -4063,6 +4147,14 @@ function ThumbtackBusinessCard() {
   }
 
   const TT_TEAL = "#009FD9";
+
+  const TT_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
+    { value: "Not Started",      label: "Not Started",      color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
+    { value: "In Progress",      label: "In Progress",      color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
+    { value: "Profile Complete", label: "Profile Complete", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Leads Active",     label: "Leads Active",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
+    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+  ];
 
   const TABS: { key: typeof activeTab; label: string }[] = [
     { key: "checklist",   label: "Setup Checklist" },
@@ -4408,37 +4500,115 @@ Baldwin County, Alabama`;
             })()}
 
             {/* ── Profile Tracker ── */}
-            {activeTab === "profile" && (
-              <div>
-                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>Track your Thumbtack for Pros account details, profile URL, and lead status here.</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {[
-                    { label: "Account Email",  val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
-                    { label: "Profile Status", val: verifyStatus, set: setVerifyStatus, ph: "Not Started / In Progress / Live" },
-                  ].map(field => (
-                    <div key={field.label}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
-                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+            {activeTab === "profile" && (() => {
+              const currentStage = TT_STAGES.find(s => s.value === verifyStatus) ?? TT_STAGES[0];
+              const currentIdx   = TT_STAGES.findIndex(s => s.value === verifyStatus);
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Track Thumbtack for Pros setup and lead status here. This is setup/lead-gen tracking only — no analytics or performance data.
+                  </div>
+
+                  {/* ── 5-stage status selector ── */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                      Lead-Gen Status
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 0, flexWrap: "wrap", rowGap: 8 }}>
+                      {TT_STAGES.map((stage, i) => {
+                        const isActive = stage.value === verifyStatus;
+                        const isPast   = i < currentIdx;
+                        const isLocked = stage.value === "Receiving Leads";
+                        return (
+                          <React.Fragment key={stage.value}>
+                            {i > 0 && (
+                              <div style={{
+                                width: 20, height: 2, flexShrink: 0,
+                                background: isPast || isActive ? stage.color : "rgba(255,255,255,0.08)",
+                                transition: "background 0.2s",
+                              }} />
+                            )}
+                            <button
+                              onClick={() => !isLocked && setVerifyStatus(stage.value)}
+                              title={isLocked ? "Set to Receiving Leads only after you confirm quote requests are arriving in Thumbtack for Pros" : `Set status to ${stage.label}`}
+                              style={{
+                                padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                                cursor: isLocked ? "not-allowed" : "pointer",
+                                background: isActive ? stage.bg : isPast ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${isActive ? stage.border : isPast ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)"}`,
+                                color: isActive ? stage.color : isPast ? "#475569" : "#334155",
+                                opacity: isLocked ? 0.6 : 1,
+                                transition: "all 0.15s", whiteSpace: "nowrap",
+                              }}
+                            >
+                              {isPast && !isActive ? "✓ " : ""}{stage.label}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{
+                      marginTop: 12, padding: "10px 14px", borderRadius: 9,
+                      background: currentStage.bg, border: `1px solid ${currentStage.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: currentStage.color }}>
+                          Current: {currentStage.label}
+                        </span>
+                        {verifyStatus === "In Progress" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— profile setup started at thumbtack.com/pro</span>
+                        )}
+                        {verifyStatus === "Profile Complete" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— all fields, intro, photos, and hours filled in</span>
+                        )}
+                        {verifyStatus === "Leads Active" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— quote preferences and Instant Match configured</span>
+                        )}
+                        {verifyStatus === "Receiving Leads" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>— confirmed quote requests arriving · update card status badge</span>
+                        )}
+                      </div>
+                      {verifyStatus === "Receiving Leads" && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                          Ready to mark Live
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
+                      <strong style={{ color: "#64748B" }}>Receiving Leads</strong> is locked until you manually confirm quote requests are arriving in Thumbtack for Pros. Do not set based on profile approval alone.
+                    </div>
+                  </div>
+
+                  {/* ── Account detail fields ── */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Account Email</div>
+                      <input value={acctEmail} onChange={e => setAcctEmail(e.target.value)} placeholder="email@example.com"
                         style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
                     </div>
-                  ))}
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Thumbtack Profile URL</div>
-                    <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.thumbtack.com/..."
-                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Thumbtack Profile URL</div>
+                      <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.thumbtack.com/..."
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Notes about setup progress, quote preferences, budget, or next steps..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                    <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: TT_TEAL, border: "none", color: "#FFF" }}>Save Setup Notes</button>
+                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
-                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Notes about setup progress, lead budget, or next steps..."
-                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: TT_TEAL, border: "none", color: "#FFF" }}>Save Setup Notes</button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── Diagnostics ── */}
             {activeTab === "diagnostics" && (

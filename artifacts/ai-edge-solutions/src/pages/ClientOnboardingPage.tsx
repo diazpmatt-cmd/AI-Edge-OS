@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { AppShell } from "../components/app-shell";
 
@@ -10,7 +10,7 @@ interface Step {
   title: string;
   description: string;
   status: StepStatus;
-  content: () => JSX.Element;
+  content: () => ReactNode;
 }
 
 // ─── Demo data ────────────────────────────────────────────────────────────────

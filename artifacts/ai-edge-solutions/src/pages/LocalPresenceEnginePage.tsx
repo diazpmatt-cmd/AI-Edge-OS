@@ -4038,7 +4038,8 @@ export default function LocalPresenceEnginePage() {
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Bing Places submitted — verification pending (do not mark Connected until Bing confirms)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business submitted — verification pending (do not mark Connected until Nextdoor confirms profile is live)", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Yelp submitted — verification pending (do not mark Connected until Yelp profile is live and publicly searchable)", severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor, Yelp data unconfirmed", severity: "warning" },
   ];
 
   return (

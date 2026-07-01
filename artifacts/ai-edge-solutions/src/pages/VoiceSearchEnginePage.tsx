@@ -28,7 +28,7 @@ const SIRI_SIGNALS: Signal[] = [
   {
     id: "yelp_siri",
     label: "Yelp listing — live & verified",
-    description: "Yelp is a primary fallback data source for Siri when Apple Business Connect data is missing or incomplete.",
+    description: "Submitted — pending Yelp verification. Once live, Yelp serves as a primary fallback data source for Siri when Apple Business Connect data is incomplete.",
     points: 30,
     platform: "Yelp for Business",
     actionPath: "/admin/local-presence",
@@ -65,7 +65,7 @@ const ALEXA_SIGNALS: Signal[] = [
   {
     id: "yelp_alexa",
     label: "Yelp listing — live & verified",
-    description: "Alexa uses Yelp as a supplementary source for ratings, reviews, and business details.",
+    description: "Submitted — pending Yelp verification. Once live, Alexa uses this listing as a supplementary source for ratings, reviews, and business details.",
     points: 25,
     platform: "Yelp for Business",
     actionPath: "/admin/local-presence",
@@ -332,8 +332,8 @@ function OverallSummary({ scores }: { scores: { name: string; pct: number; color
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function VoiceSearchEnginePage() {
-  const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set(["apple_bbc"]));
-  const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set(["bing_alexa"]));
+  const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set(["apple_bbc", "yelp_siri"]));
+  const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set(["bing_alexa", "yelp_alexa"]));
   const [googleConfirmed, setGoogleConfirmed] = useState<Set<string>>(new Set());
 
   function toggle(set: Set<string>, setFn: (s: Set<string>) => void, id: string) {

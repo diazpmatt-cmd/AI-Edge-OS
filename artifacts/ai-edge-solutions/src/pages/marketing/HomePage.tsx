@@ -105,8 +105,22 @@ export default function HomePage() {
               </p>
 
               {/* CTAs */}
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 44 }}>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 44 }}>
                 <GlowButton onClick={() => navigate("/contact")}>Book a Free Strategy Call</GlowButton>
+                <button
+                  onClick={() => navigate("/business-assessment")}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 8,
+                    padding: "12px 24px", borderRadius: 12, fontSize: 14, fontWeight: 800,
+                    cursor: "pointer", border: "1.5px solid rgba(0,174,239,0.45)",
+                    background: "rgba(0,174,239,0.1)", color: "#00AEEF",
+                    letterSpacing: "0.1px", transition: "all 0.2s",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,174,239,0.18)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(0,174,239,0.7)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,174,239,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(0,174,239,0.45)"; }}
+                >
+                  ⚡ Get Free AI Assessment
+                </button>
                 <OutlineButton onClick={() => navigate("/services")}>See What We Automate</OutlineButton>
               </div>
 

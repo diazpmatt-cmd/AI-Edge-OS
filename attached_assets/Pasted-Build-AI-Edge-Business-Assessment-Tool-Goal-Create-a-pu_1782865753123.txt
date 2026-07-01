@@ -1,0 +1,273 @@
+Build AI Edge Business Assessment Tool.
+
+Goal:
+Create a public-facing lead generation and sales tool for AI Edge Solutions.
+
+This tool should live on the public website and help convert visitors into qualified leads by showing them exactly where their business is losing visibility, leads, and revenue.
+
+This is a MAJOR business feature.
+It should feel premium and impressive.
+
+--------------------------------------------------
+ROUTES
+--------------------------------------------------
+
+Public route:
+ /business-assessment
+
+Optional CTA button on homepage:
+"Get Free AI Business Assessment"
+
+Optional admin review route later:
+ /admin/assessments
+
+--------------------------------------------------
+PURPOSE
+--------------------------------------------------
+
+A business owner enters their business information.
+
+AI Edge generates an instant assessment report showing:
+
+- Lead Recovery Score
+- Local Presence Score
+- AI Visibility Score
+- Review Strength
+- Growth Opportunity
+- Revenue Opportunity
+
+Then AI Edge encourages booking a strategy call.
+
+--------------------------------------------------
+STEP 1 — INPUT FORM
+--------------------------------------------------
+
+Create a premium multi-step assessment form.
+
+Fields:
+
+Step 1 — Business Info
+- Business Name
+- Industry
+- City
+- State
+
+Step 2 — Online Presence
+- Website URL
+- Google Business Profile URL (optional)
+- Facebook Page URL (optional)
+- Instagram URL (optional)
+
+Step 3 — Contact
+- Name
+- Email
+- Phone
+- Best Contact Method
+
+CTA:
+Run Assessment
+
+--------------------------------------------------
+STYLE
+--------------------------------------------------
+
+Public-facing premium AI Edge style:
+- dark navy background
+- blue/cyan glow
+- metallic silver accents
+- smooth transitions
+- polished enterprise look
+
+This should feel like a premium SaaS onboarding experience.
+
+--------------------------------------------------
+STEP 2 — LOADING EXPERIENCE
+--------------------------------------------------
+
+After submission show an animated assessment loading screen.
+
+Messages rotate:
+
+- Scanning business presence...
+- Checking local visibility...
+- Analyzing AI discoverability...
+- Evaluating competitor positioning...
+- Running growth opportunity analysis...
+- Generating AI Edge assessment...
+
+Loading time:
+3–5 seconds simulated
+
+Should feel premium.
+
+--------------------------------------------------
+STEP 3 — ASSESSMENT RESULTS PAGE
+--------------------------------------------------
+
+Generate a polished results dashboard.
+
+--------------------------------------------------
+TOP SCORE
+--------------------------------------------------
+
+Show:
+
+Overall Business Score: 64/100
+
+Status:
+Growth Opportunity Detected
+
+Subtitle:
+AI Edge found several high-impact growth opportunities for your business.
+
+--------------------------------------------------
+SCORE CARDS
+--------------------------------------------------
+
+1. Lead Recovery Score
+82/100
+Strong opportunity
+
+2. Local Presence Score
+38/100
+Needs improvement
+
+3. AI Visibility Score
+38/100
+Low discoverability
+
+4. Review Strength
+61/100
+Below competitors
+
+--------------------------------------------------
+OPPORTUNITY SECTION
+--------------------------------------------------
+
+Show estimated upside.
+
+Example:
+
+Revenue Recovery Opportunity:
++$3,200/month
+
+Local Visibility Opportunity:
++28%
+
+AI Visibility Opportunity:
++42%
+
+Lead Conversion Opportunity:
++18%
+
+--------------------------------------------------
+PAIN POINTS SECTION
+--------------------------------------------------
+
+Show issues found:
+
+- Apple Business Connect missing
+- Bing Places missing
+- Nextdoor Business missing
+- Weak AI search visibility
+- Low review velocity
+- Weak citation authority
+- Missing schema markup
+- Limited location-specific content
+
+Each issue should have:
+- severity
+- business impact
+
+--------------------------------------------------
+AI EDGE RECOMMENDATIONS
+--------------------------------------------------
+
+Show action plan:
+
+Priority 1:
+Claim Apple Business Connect
+
+Priority 2:
+Claim Bing Places
+
+Priority 3:
+Improve AI visibility
+
+Priority 4:
+Launch review campaign
+
+Priority 5:
+Deploy Lead Recovery AI
+
+--------------------------------------------------
+VALUE PROJECTION
+--------------------------------------------------
+
+Show projected impact if AI Edge is implemented.
+
+Example:
+
+Within 90 Days Estimated Improvement:
+- +42% AI Visibility
+- +28% Local Discovery
+- +18% Lead Conversion
+- +$3,200/mo Recovered Revenue
+
+--------------------------------------------------
+CTA SECTION
+--------------------------------------------------
+
+Big section:
+
+Ready to fix these growth gaps?
+
+Buttons:
+- Book Free Strategy Call
+- Talk to AI Edge
+- Get Custom Growth Plan
+
+Use strong CTA design.
+
+--------------------------------------------------
+ADMIN STORAGE
+--------------------------------------------------
+
+Store assessment submissions in DB.
+
+Save:
+- business info
+- contact info
+- timestamp
+- assessment results
+
+Future use:
+CRM / lead pipeline.
+
+--------------------------------------------------
+FUTURE PHASES
+--------------------------------------------------
+
+V1:
+Simulated scoring engine with smart demo scoring
+
+V2:
+Real AI-powered assessment using:
+- Google Business Profile
+- AI Visibility Engine
+- Local Presence Engine
+- Review Analysis
+- Competitor analysis
+
+--------------------------------------------------
+IMPORTANT
+--------------------------------------------------
+
+Do not break existing routes or dashboard modules.
+
+This tool should help AI Edge generate and qualify leads automatically.
+
+This is both:
+1) Lead generation tool
+2) Sales tool
+3) Client onboarding tool

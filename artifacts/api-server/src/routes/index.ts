@@ -14,6 +14,7 @@ import diagnosticsRouter from "./diagnostics";
 import storageRouter from "./storage";
 import imageAssetsRouter from "./image-assets";
 import backupsRouter from "./backups";
+import assessmentsRouter from "./assessments";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(diagnosticsRouter);
 router.use(storageRouter);
 router.use(imageAssetsRouter);
 router.use(backupsRouter);
+router.use(assessmentsRouter);
 
 export default router;

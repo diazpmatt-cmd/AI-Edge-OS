@@ -592,6 +592,347 @@ function AppleBusinessCard() {
   );
 }
 
+// ── Bing Places V2 Card ────────────────────────────────────────────────────────
+const BING_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create or sign into Bing Places account", status: "complete",    description: "Sign in at bingplaces.com with a Microsoft account." },
+  { label: "Add or claim business listing",           status: "in-progress", description: "Search for Bed Bugs & Beyond and claim the listing." },
+  { label: "Verify ownership",                        status: "pending",     description: "Microsoft sends a PIN by phone or postcard for verification." },
+  { label: "Confirm business name",                   status: "pending",     description: "Ensure the listing name matches your registered business exactly." },
+  { label: "Confirm phone number",                    status: "pending",     description: "Verify (251) 324-9090 matches the Bing listing." },
+  { label: "Confirm website",                         status: "pending",     description: "Verify website URL resolves correctly and matches GBP." },
+  { label: "Confirm category",                        status: "pending",     description: "Select 'Pest Control Service' as the primary business category." },
+  { label: "Confirm service area",                    status: "pending",     description: "Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
+  { label: "Add business hours",                      status: "pending",     description: "Mon–Fri 7am–6pm, Sat 8am–2pm. Include seasonal/holiday hours." },
+  { label: "Upload logo",                             status: "pending",     description: "High-res square logo (min 400×400 px, PNG or JPG)." },
+  { label: "Upload photos",                           status: "pending",     description: "Add at least 5 quality photos of the business or service." },
+  { label: "Add services",                            status: "pending",     description: "List core services: bed bug inspection, heat treatment, pest control." },
+  { label: "Review Bing Maps listing",                status: "pending",     description: "Preview how the listing appears in Bing Maps and Microsoft Search." },
+  { label: "Submit verification",                     status: "pending",     description: "Submit the listing — Microsoft reviews within 3–5 business days." },
+];
+
+const BING_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Bing account created",             status: "healthy",    note: "Microsoft account active at bingplaces.com" },
+  { check: "Listing claimed",                  status: "warning",    note: "Claim in progress — awaiting Microsoft confirmation" },
+  { check: "Ownership verified",               status: "missing",    note: "Verification PIN not yet received" },
+  { check: "NAP matches Google Business Profile",status: "pending",  note: "Will be confirmed once listing is claimed" },
+  { check: "Phone matches business number",    status: "pending",    note: "Pending listing confirmation" },
+  { check: "Website matches",                  status: "pending",    note: "Pending listing confirmation" },
+  { check: "Category selected",                status: "pending",    note: "To be set after claim is confirmed" },
+  { check: "Hours configured",                 status: "missing",    note: "No hours set yet" },
+  { check: "Photos uploaded",                  status: "missing",    note: "No photos uploaded yet" },
+  { check: "Maps listing reviewed",            status: "pending",    note: "Available after verification" },
+  { check: "API access requested",             status: "missing",    note: "Bing API requires setup — not yet requested" },
+  { check: "Sync enabled",                     status: "missing",    note: "Requires API credentials first" },
+  { check: "Copilot AI signal tracked",        status: "coming_soon",note: "Copilot integration — Coming Soon" },
+];
+
+function BingPlacesCard() {
+  const [drawerOpen,   setDrawerOpen]   = useState(false);
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "profile" | "api" | "diagnostics">("checklist");
+  const [checklist,    setChecklist]    = useState(BING_CHECKLIST);
+  const [notes,        setNotes]        = useState("");
+  const [listingUrl,   setListingUrl]   = useState("");
+  const [mapsUrl,      setMapsUrl]      = useState("");
+  const [acctEmail,    setAcctEmail]    = useState("");
+  const [verifyMethod, setVerifyMethod] = useState("Phone");
+  const [verifyStatus, setVerifyStatus] = useState("Pending");
+  const [savedMsg,     setSavedMsg]     = useState(false);
+
+  const completedCount  = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const bingScoreCredit = Math.round((completedCount / checklist.length) * 10);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+  function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",   label: "Setup Checklist" },
+    { key: "profile",     label: "Profile Tracker" },
+    { key: "api",         label: "API Readiness" },
+    { key: "diagnostics", label: "Diagnostics" },
+  ];
+
+  const BING_BLUE = "#00ADEF";
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(0,173,239,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(0,173,239,0.25)",
+      borderRadius: 14, backdropFilter: "blur(12px)", overflow: "hidden",
+      boxShadow: "0 0 24px rgba(0,173,239,0.06)", transition: "border-color 0.2s",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Top row */}
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #00ADEF, #0063B1)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 16, fontWeight: 900, color: "#FFF",
+            boxShadow: `0 0 16px rgba(0,173,239,0.3)`,
+          }}>B</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Bing Places for Business</span>
+              <StatusBadge status="setup_in_progress" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Bing Maps, Microsoft Search, Copilot AI, Edge browser &amp; Windows 11 integration.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "Category",     value: "Pest Control Service" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Last Checked", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score contribution + progress */}
+        <div style={{
+          background: `rgba(0,173,239,0.05)`, border: `1px solid rgba(0,173,239,0.15)`,
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: BING_BLUE }}>Bing Score: {bingScoreCredit} / 10 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: BING_BLUE, borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: BING_BLUE, fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: drawerOpen ? `rgba(0,173,239,0.2)` : `rgba(0,173,239,0.1)`,
+              border: `1px solid rgba(0,173,239,0.35)`, color: BING_BLUE, transition: "all 0.15s",
+            }}
+          >{drawerOpen ? "▲ Close Bing Setup" : "▼ Open Bing Setup"}</button>
+          <a href="https://www.bingplaces.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,173,239,0.08)", border: "1px solid rgba(0,173,239,0.22)", color: BING_BLUE, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Open Bing Places
+          </a>
+          <a href="https://www.bing.com/maps" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,173,239,0.05)", border: "1px solid rgba(0,173,239,0.15)", color: "#64748B", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Bing Maps
+          </a>
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: `1px solid rgba(0,173,239,0.12)`, background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: activeTab === tab.key ? `2px solid ${BING_BLUE}` : "2px solid transparent",
+                color: activeTab === tab.key ? BING_BLUE : "#475569", transition: "all 0.15s", marginBottom: -1,
+              }}>{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 14 steps to fully activate your Bing Maps listing. Mark each step after confirming it in Bing Places.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? `rgba(0,173,239,0.05)` : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? `rgba(0,173,239,0.2)` : "rgba(255,255,255,0.05)"}`,
+                      transition: "all 0.15s",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? `rgba(0,173,239,0.15)` : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? `rgba(0,173,239,0.3)` : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? BING_BLUE : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                              Mark Done
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <a href="https://www.bingplaces.com" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: `rgba(0,173,239,0.1)`, border: `1px solid rgba(0,173,239,0.3)`, color: BING_BLUE, textDecoration: "none", display: "inline-block" }}>
+                    ↗ View Bing Places Guide
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Bing Places account details, listing URLs, and verification status here.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",        val: acctEmail,    set: setAcctEmail,    ph: "microsoft-account@example.com" },
+                    { label: "Verification Method",  val: verifyMethod, set: setVerifyMethod, ph: "Phone / Postcard" },
+                    { label: "Verification Status",  val: verifyStatus, set: setVerifyStatus, ph: "Pending / Submitted / Approved" },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Bing Places Listing URL</div>
+                    <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.bingplaces.com/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Bing Maps Listing URL</div>
+                    <input value={mapsUrl} onChange={e => setMapsUrl(e.target.value)} placeholder="https://www.bing.com/maps?..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                    placeholder="Notes about setup progress, blockers, or next steps..."
+                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: BING_BLUE, border: "none", color: "#FFF" }}>
+                    Save Setup Notes
+                  </button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── API Readiness ── */}
+            {activeTab === "api" && (
+              <div>
+                <div style={{ padding: "12px 16px", borderRadius: 10, marginBottom: 16, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)", fontSize: 12.5, color: "#94A3B8", lineHeight: 1.6 }}>
+                  <strong style={{ color: "#F59E0B" }}>⚠ Bing API Notice:</strong> Future API sync can support listing updates, business data sync, and Copilot AI signal tracking. Credentials are <strong style={{ color: "#F59E0B" }}>never</strong> stored in the browser.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                  {[
+                    { label: "API Access Requested",    value: "No",      status: "missing" as AppleDiagStatus },
+                    { label: "Client ID Stored",        value: "No",      status: "missing" as AppleDiagStatus },
+                    { label: "Client Secret Stored",    value: "No (secure)", status: "missing" as AppleDiagStatus },
+                    { label: "Sync Enabled",            value: "No",      status: "missing" as AppleDiagStatus },
+                    { label: "Copilot Signal Tracking", value: "Pending", status: "coming_soon" as AppleDiagStatus },
+                  ].map(item => {
+                    const s = APPLE_DIAG_STYLE[item.status];
+                    return (
+                      <div key={item.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <span style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 500 }}>{item.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>{item.value}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "not-allowed", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#475569" }}>
+                    Add API Credentials — API Pending
+                  </button>
+                  <button style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "not-allowed", background: `rgba(0,173,239,0.06)`, border: `1px solid rgba(0,173,239,0.15)`, color: "#475569" }}>
+                    Mark API Access Requested — Setup Required First
+                  </button>
+                  <a href="https://www.bingplaces.com/Home/Help" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: `rgba(0,173,239,0.08)`, border: `1px solid rgba(0,173,239,0.2)`, color: BING_BLUE, textDecoration: "none" }}>
+                    ↗ View API Setup Steps
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Bing Places setup requirements and NAP consistency.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {BING_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = { healthy:"Healthy", warning:"Warning", missing:"Missing", pending:"Pending", coming_soon:"Coming Soon" };
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: s.dot, marginRight: 5 }} />
+                          {statusLabels[d.status]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Platform definitions ───────────────────────────────────────────────────────
 type PlatformDef = {
   id: string;
@@ -1011,7 +1352,7 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
   // Score breakdown: GBP=35, Apple progress=up to 15, Bing=up to 10, Nextdoor=up to 10, NAP=up to 15, Photos/content=up to 15
   const gbpPoints      = connectedCount >= 1 ? 35 : 0;
   const applePoints    = 2;   // 1 step complete + 1 in-progress = partial credit
-  const bingPoints     = 0;
+  const bingPoints     = 2;   // 1 step complete + 1 in-progress = partial credit
   const nextdoorPoints = 0;
   const napPoints      = connectedCount >= 1 ? 5 : 0; // partial NAP from GBP only
   const scorePct       = gbpPoints + applePoints + bingPoints + nextdoorPoints + napPoints;
@@ -1175,7 +1516,7 @@ export default function LocalPresenceEnginePage() {
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect setup in progress — claim pending", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "Bing Places listing not yet verified",                      severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Bing Places setup in progress — verification pending",       severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business page not yet created",                    severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
   ];
@@ -1264,8 +1605,10 @@ export default function LocalPresenceEnginePage() {
           />
           {/* Apple — V2 dedicated card with setup workflow */}
           <AppleBusinessCard />
-          {/* Bing, Nextdoor — static V1 */}
-          {PLATFORM_DEFS.slice(2).map(def => (
+          {/* Bing — V2 dedicated card */}
+          <BingPlacesCard />
+          {/* Nextdoor — static V1 */}
+          {PLATFORM_DEFS.slice(3).map(def => (
             <PlatformCard
               key={def.id}
               def={def}

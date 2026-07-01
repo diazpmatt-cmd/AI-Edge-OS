@@ -221,7 +221,7 @@ function Step5Content() {
   const items: { label: string; status: PlatformStatus; note?: string }[] = [
     { label: "Google Business Profile", status: "complete",   note: "Connected & verified" },
     { label: "Apple Business Connect",  status: "in-progress",note: "Setup in progress — claim pending" },
-    { label: "Bing Places",             status: "pending" },
+    { label: "Bing Places",             status: "in-progress", note: "Setup in progress — verification pending" },
     { label: "Nextdoor Business",       status: "pending" },
   ];
   const styleMap: Record<PlatformStatus, { bg: string; border: string; icon: string; iconColor: string; labelColor: string }> = {
@@ -267,6 +267,7 @@ function Step5Content() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <ActionBtn label="Open Local Presence Engine" to="/admin/local-presence" variant="primary" />
         <ActionBtn label="🍎 Open Apple Setup" to="/admin/local-presence" />
+        <ActionBtn label="🔵 Open Bing Setup" to="/admin/local-presence" />
       </div>
     </div>
   );

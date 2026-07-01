@@ -1,0 +1,276 @@
+Build Bing Places V2 inside AI Edge Solutions.
+
+Goal:
+Upgrade Local Presence Engine with a serious Bing Places for Business setup and integration workflow.
+
+Important:
+Do NOT pretend live Bing API access is already approved or connected.
+Build this as:
+1) Bing Places setup workflow
+2) Bing listing tracker
+3) API credential-ready integration shell
+4) diagnostics + status tracking
+
+Use user-friendly labels:
+Bing Places
+Bing Maps
+Microsoft Search
+Copilot AI
+
+Keep this inside existing route:
+/admin/local-presence
+
+Add deeper Bing workflow inside Local Presence page:
+Bing Setup Drawer or Bing Detail Panel
+
+Optional future route:
+/admin/local-presence/bing
+
+--------------------------------------------------
+BING CARD UPGRADE
+--------------------------------------------------
+
+Upgrade the Bing Places card in Local Presence Engine.
+
+Show:
+
+Platform:
+Bing Places for Business
+
+Status options:
+- Not Started
+- Setup In Progress
+- Claimed
+- Verification Pending
+- Verified
+- API Pending
+- Connected
+- Error
+
+Current demo status:
+Setup In Progress
+
+Business:
+Bed Bugs & Beyond
+
+Phone:
+(251) 324-9090
+
+Website:
+https://aiedgesolutions.online
+
+Category:
+Pest Control Service
+
+Service Area:
+Baldwin County, Alabama
+
+Cities:
+Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort
+
+Last checked:
+Today
+
+--------------------------------------------------
+BING SETUP WORKFLOW
+--------------------------------------------------
+
+Create detailed Bing setup checklist:
+
+1. Create or sign into Bing Places account
+2. Add or claim business listing
+3. Verify ownership
+4. Confirm business name
+5. Confirm phone number
+6. Confirm website
+7. Confirm category
+8. Confirm service area
+9. Add business hours
+10. Upload logo
+11. Upload photos
+12. Add services
+13. Review Bing Maps listing
+14. Submit verification
+
+Each checklist item should have:
+- status
+- description
+- action button if useful
+- notes field if easy/safe
+
+Statuses:
+Complete
+In Progress
+Pending
+Blocked
+
+--------------------------------------------------
+BING PROFILE TRACKER
+--------------------------------------------------
+
+Add profile tracking fields:
+
+- Bing account email
+- Bing Places listing URL
+- Bing Maps listing URL
+- Verification method
+- Verification status
+- Verification submitted date
+- Verification approved date
+- Last manual review date
+- Notes
+
+Frontend state/demo is fine unless backend exists.
+
+--------------------------------------------------
+EXTERNAL LINKS
+--------------------------------------------------
+
+Buttons:
+- Open Bing Places
+- Open Bing Maps
+- View Bing Guide
+- Mark Step Complete
+- Save Setup Notes
+
+Use:
+https://www.bingplaces.com
+
+Allow manual entry for Bing listing URLs.
+
+--------------------------------------------------
+API READINESS SECTION
+--------------------------------------------------
+
+Create a "Bing API Readiness" panel.
+
+Explain:
+Future API sync can support listing updates, business sync, and diagnostics.
+
+Fields:
+- API Access Requested: No
+- Client ID Stored: No
+- Client Secret Stored: No
+- Sync Enabled: No
+- Copilot Signal Tracking: Pending
+
+Buttons:
+- Add API Credentials
+- Mark API Access Requested
+- View API Setup Steps
+
+Important:
+Credential buttons should be safe placeholders unless backend secret storage exists.
+Do NOT store secrets in frontend or localStorage.
+
+--------------------------------------------------
+DIAGNOSTICS
+--------------------------------------------------
+
+Add Bing diagnostics section:
+
+Checks:
+- Bing account created
+- Listing claimed
+- Ownership verified
+- NAP matches Google Business Profile
+- Phone matches business number
+- Website matches
+- Category selected
+- Hours configured
+- Photos uploaded
+- Maps listing reviewed
+- API access requested
+- Sync enabled
+- Copilot AI signal tracked
+
+Statuses:
+Healthy
+Warning
+Missing
+Pending
+Coming Soon
+
+--------------------------------------------------
+LOCAL PRESENCE SCORE UPDATE
+--------------------------------------------------
+
+Update Local Presence score logic so Bing progress contributes partial credit.
+
+Example:
+Google Business Profile verified: +35
+Apple setup progress: up to +15
+Bing setup progress: up to +10
+Nextdoor setup progress: up to +10
+NAP consistency: up to +15
+Photos/hours/category completeness: up to +15
+
+If Bing is setup in progress, do not show zero credit.
+
+Show:
+Bing Progress: X/10
+
+Demo:
+Bing Progress: 2/10
+
+--------------------------------------------------
+COMMAND CENTER ALERT UPDATE
+--------------------------------------------------
+
+Update Command Center alert wording.
+
+Replace:
+Bing Places not verified
+
+With:
+Bing Places setup in progress
+
+If status is Not Started:
+Bing Places not started
+
+If Verification Pending:
+Bing verification pending
+
+--------------------------------------------------
+ONBOARDING UPDATE
+--------------------------------------------------
+
+Update Client Onboarding Wizard Step 5.
+
+Bing should show:
+Setup In Progress
+
+Add button:
+Open Bing Setup
+
+Link to:
+/admin/local-presence
+or /admin/local-presence/bing
+
+--------------------------------------------------
+IMPORTANT TECH REQUIREMENTS
+--------------------------------------------------
+
+1. Do not break existing Local Presence Engine.
+2. Do not break Google Business Profile.
+3. Do not break Apple Business Connect V2.
+4. Do not disconnect or overwrite production tokens.
+5. Do not create fake live Bing API calls.
+6. Keep this production-safe.
+7. Use demo data where needed.
+8. Unavailable API features must clearly show:
+API Pending
+Coming Soon
+
+--------------------------------------------------
+STYLE REQUIREMENTS
+--------------------------------------------------
+
+Match AI Edge dashboard style exactly:
+- dark navy background
+- cyan/blue highlights
+- metallic silver borders
+- glow cards
+- premium SaaS layout
+
+Bing should feel equal in quality to Apple Business Connect V2.

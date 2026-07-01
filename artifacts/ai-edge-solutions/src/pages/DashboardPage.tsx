@@ -30,7 +30,7 @@ const HEALTH_BREAKDOWN = [
 
 const ALERTS = [
   { severity: "warning",  text: "Apple Business Connect setup in progress",    icon: "⚠" },
-  { severity: "critical", text: "Bing Places not verified",                    icon: "✕" },
+  { severity: "warning",  text: "Bing Places setup in progress",               icon: "⚠" },
   { severity: "critical", text: "AI Visibility competitor gap is high",        icon: "✕" },
   { severity: "warning",  text: "Google API quota throttled recently",         icon: "⚠" },
   { severity: "warning",  text: "Nextdoor Business page not created",          icon: "⚠" },

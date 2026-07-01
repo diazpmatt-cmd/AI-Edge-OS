@@ -24,28 +24,6 @@ type LeadsResponse = {
   stats: { total: number; active: number; thisMonth: number; withMessages: number };
 };
 
-// ── Demo data ─────────────────────────────────────────────────────────────────
-const DEMO_LEADS: DemoLead[] = [
-  { id: "d1", name: "Sarah M.",     phone: "(251) 555-0182", service: "Bed Bug Treatment",    city: "Gulf Shores",   status: "qualified",   lastActivity: "2m ago",    priority: "high",   pipeline: "appointment_booked" },
-  { id: "d2", name: "James K.",     phone: "(251) 555-0247", service: "Roach Infestation",    city: "Foley",         status: "responded",   lastActivity: "8m ago",    priority: "high",   pipeline: "customer_responded" },
-  { id: "d3", name: "Lisa T.",      phone: "(251) 555-0319", service: "Termite Inspection",   city: "Fairhope",      status: "sms_sent",    lastActivity: "14m ago",   priority: "medium", pipeline: "sms_sent"          },
-  { id: "d4", name: "Robert H.",    phone: "(251) 555-0461", service: "Ant Problem",          city: "Orange Beach",  status: "sms_sent",    lastActivity: "21m ago",   priority: "medium", pipeline: "sms_sent"          },
-  { id: "d5", name: "Maria G.",     phone: "(251) 555-0533", service: "Bed Bug Treatment",    city: "Daphne",        status: "missed",      lastActivity: "34m ago",   priority: "low",    pipeline: "missed_call"       },
-  { id: "d6", name: "Tom B.",       phone: "(251) 555-0628", service: "Wasp Nest Removal",    city: "Spanish Fort",  status: "qualified",   lastActivity: "1h ago",    priority: "medium", pipeline: "qualified"         },
-  { id: "d7", name: "Unknown",      phone: "(251) 555-0774", service: "Unknown",              city: "Gulf Shores",   status: "missed",      lastActivity: "2h ago",    priority: "low",    pipeline: "missed_call"       },
-];
-
-type DemoLead = {
-  id: string;
-  name: string;
-  phone: string;
-  service: string;
-  city: string;
-  status: string;
-  lastActivity: string;
-  priority: "high" | "medium" | "low";
-  pipeline: "missed_call" | "sms_sent" | "customer_responded" | "qualified" | "appointment_booked";
-};
 
 const PIPELINE_STAGES = [
   { id: "missed_call",         label: "Missed Call",        icon: "📵", color: "#EF4444" },
@@ -216,9 +194,8 @@ export default function LeadRecoveryPage() {
   const liveStats = data?.stats ?? { total: 0, active: 0, thisMonth: 0, withMessages: 0 };
   const selectedLive = liveleads.find(l => l.id === selectedId);
 
-  // Pipeline counts from demo data
   const pipelineCounts = PIPELINE_STAGES.reduce((acc, s) => {
-    acc[s.id] = DEMO_LEADS.filter(l => l.pipeline === s.id).length;
+    acc[s.id] = 0;
     return acc;
   }, {} as Record<string, number>);
 
@@ -283,10 +260,10 @@ export default function LeadRecoveryPage() {
 
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-          <KPICard icon="📵" label="Missed Calls Today" value={14}     sub="+3 vs yesterday"           color="#EF4444" />
-          <KPICard icon="📈" label="Recovery Rate"      value="42%"    sub="6 of 14 leads recovered"   color="#00AEEF" glow />
-          <KPICard icon="✅" label="Leads Recovered"    value={6}      sub="Today · 47 this month"      color="#10B981" />
-          <KPICard icon="💰" label="Revenue Recovered"  value="$1,750" sub="Est. at $292/job avg."     color="#F59E0B" glow />
+          <KPICard icon="📵" label="Missed Calls Total"  value={liveStats.total}        sub="From Telnyx webhook"                color="#EF4444" />
+          <KPICard icon="📈" label="Recovery Rate"      value={liveStats.total > 0 ? `${Math.round((liveStats.withMessages / liveStats.total) * 100)}%` : "—"} sub={liveStats.total > 0 ? `${liveStats.withMessages} of ${liveStats.total} responded` : "No leads yet"} color="#00AEEF" glow />
+          <KPICard icon="✅" label="Leads Responded"    value={liveStats.withMessages}  sub="Replied to SMS follow-up"          color="#10B981" />
+          <KPICard icon="💰" label="Revenue Recovered"  value="—"      sub="Connect billing source"                 color="#F59E0B" />
         </div>
 
         {/* ── Recovery Pipeline ── */}
@@ -347,9 +324,8 @@ export default function LeadRecoveryPage() {
         {/* ── Tab: Lead Queue ── */}
         {activeTab === "queue" && (
           <div>
-            {/* Demo leads + live leads combined */}
             <SectionDivider
-              title={`Live Lead Queue — ${DEMO_LEADS.length} active${liveleads.length > 0 ? ` + ${liveleads.length} live` : ""}`}
+              title={`Live Lead Queue${liveleads.length > 0 ? ` — ${liveleads.length} leads` : ""}`}
               right={
                 <span style={{ fontSize: 10, color: "#475569", whiteSpace: "nowrap" }}>
                   Auto-refreshes every 30s · Bed Bugs &amp; Beyond
@@ -357,49 +333,7 @@ export default function LeadRecoveryPage() {
               }
             />
 
-            {/* Demo lead table */}
-            <div style={{
-              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-              borderRadius: 14, overflow: "hidden", marginBottom: 16,
-            }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    {["Priority", "Customer", "Phone", "Service Needed", "City", "Status", "Last Activity"].map(h => (
-                      <th key={h} style={{ padding: "11px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {DEMO_LEADS.map((lead, i) => {
-                    const pr = PRIORITY_STYLE[lead.priority];
-                    return (
-                      <tr key={lead.id} style={{
-                        borderBottom: i < DEMO_LEADS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                        transition: "background 0.15s",
-                      }}>
-                        <td style={{ padding: "11px 14px" }}>
-                          <span style={{
-                            display: "inline-block", fontSize: 10, fontWeight: 800,
-                            color: pr.color, background: `${pr.color}15`,
-                            border: `1px solid ${pr.color}30`,
-                            padding: "2px 8px", borderRadius: 6,
-                          }}>{pr.label}</span>
-                        </td>
-                        <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{lead.name}</td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#94A3B8", whiteSpace: "nowrap" }}>{lead.phone}</td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#CBD5E1" }}>{lead.service}</td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#94A3B8" }}>{lead.city}</td>
-                        <td style={{ padding: "11px 14px" }}><StatusBadge status={lead.pipeline} /></td>
-                        <td style={{ padding: "11px 14px", fontSize: 11, color: "#64748B", whiteSpace: "nowrap" }}>{lead.lastActivity}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Live Telnyx leads (if any) */}
+            {/* Live Telnyx leads */}
             {liveleads.length > 0 && (
               <>
                 <SectionDivider title={`Live Telnyx Leads (${liveleads.length})`} />
@@ -616,21 +550,20 @@ export default function LeadRecoveryPage() {
                 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 12 }}>Flow Performance</div>
                   {[
-                    { label: "Open Rate (SMS)",    value: "96%", bar: 96, color: "#10B981" },
-                    { label: "Response Rate",       value: "68%", bar: 68, color: "#00AEEF" },
-                    { label: "Qualification Rate",  value: "51%", bar: 51, color: "#8B5CF6" },
-                    { label: "Booking Rate",        value: "42%", bar: 42, color: "#F59E0B" },
+                    { label: "Open Rate (SMS)",    color: "#10B981" },
+                    { label: "Response Rate",       color: "#00AEEF" },
+                    { label: "Qualification Rate",  color: "#8B5CF6" },
+                    { label: "Booking Rate",        color: "#F59E0B" },
                   ].map(m => (
                     <div key={m.label} style={{ marginBottom: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span style={{ fontSize: 12, color: "#94A3B8" }}>{m.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: m.color }}>{m.value}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>—</span>
                       </div>
-                      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${m.bar}%`, background: m.color, borderRadius: 2, transition: "width 0.6s" }} />
-                      </div>
+                      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }} />
                     </div>
                   ))}
+                  <div style={{ fontSize: 11, color: "#334155", marginTop: 8 }}>Waiting for live call data</div>
                 </div>
               </div>
             </div>
@@ -641,58 +574,15 @@ export default function LeadRecoveryPage() {
         {activeTab === "analytics" && (
           <div>
             <SectionDivider title="Recovery Analytics — Last 30 Days" />
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
-              {[
-                { label: "Calls Missed",       value: 187,     delta: "+12%", color: "#EF4444", icon: "📵" },
-                { label: "SMS Sent",            value: 187,     delta: "100%", color: "#00AEEF", icon: "💬" },
-                { label: "Responses Received",  value: 127,     delta: "68%",  color: "#8B5CF6", icon: "↩️" },
-                { label: "Leads Qualified",     value: 96,      delta: "51%",  color: "#F59E0B", icon: "✓"  },
-                { label: "Appointments Booked", value: 79,      delta: "42%",  color: "#10B981", icon: "📅" },
-                { label: "Revenue Recovered",   value: "$23.1k", delta: "+8%", color: "#FCD34D", icon: "💰" },
-              ].map(m => (
-                <div key={m.label} style={{
-                  background: "rgba(11,22,41,0.7)", border: `1px solid ${m.color}18`,
-                  borderRadius: 12, padding: "16px 18px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 16 }}>{m.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>{m.label}</span>
-                  </div>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: m.color, marginBottom: 4 }}>{m.value}</div>
-                  <div style={{ fontSize: 11, color: "#64748B" }}>
-                    <span style={{ color: "#10B981" }}>{m.delta}</span> {m.delta.includes("%") && !m.delta.includes("+") ? "of missed calls" : "vs last month"}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Funnel visualization */}
-            <SectionDivider title="Conversion Funnel" />
             <div style={{
-              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-              borderRadius: 14, padding: "20px 24px",
+              background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.12)",
+              borderRadius: 12, padding: "36px 24px", textAlign: "center",
             }}>
-              {[
-                { label: "Missed Calls",   value: 187, pct: 100, color: "#EF4444" },
-                { label: "SMS Sent",       value: 187, pct: 100, color: "#F59E0B" },
-                { label: "Responded",      value: 127, pct: 68,  color: "#00AEEF" },
-                { label: "Qualified",      value: 96,  pct: 51,  color: "#8B5CF6" },
-                { label: "Booked",         value: 79,  pct: 42,  color: "#10B981" },
-              ].map((row, i) => (
-                <div key={row.label} style={{ marginBottom: i < 4 ? 12 : 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#94A3B8", width: 130, flexShrink: 0 }}>{row.label}</span>
-                    <div style={{ flex: 1, height: 28, background: "rgba(255,255,255,0.04)", borderRadius: 6, overflow: "hidden", position: "relative" }}>
-                      <div style={{ height: "100%", width: `${row.pct}%`, background: `${row.color}30`, borderRadius: 6, transition: "width 0.6s", display: "flex", alignItems: "center" }}>
-                        <div style={{ height: "100%", width: "100%", background: `linear-gradient(90deg, ${row.color}40, ${row.color}20)`, display: "flex", alignItems: "center", paddingLeft: 10 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: row.color }}>{row.value}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#64748B", width: 36, textAlign: "right" }}>{row.pct}%</span>
-                  </div>
-                </div>
-              ))}
+              <div style={{ fontSize: 22, marginBottom: 10, opacity: 0.3 }}>📊</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 6 }}>No analytics data yet</div>
+              <div style={{ fontSize: 12, color: "#334155", maxWidth: 400, margin: "0 auto" }}>
+                Analytics will populate automatically once missed calls are routed through the Telnyx number and SMS follow-ups are sent.
+              </div>
             </div>
           </div>
         )}

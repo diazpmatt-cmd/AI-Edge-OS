@@ -26,7 +26,7 @@ type GBPStatus = {
   apiError: string | null;
 };
 
-// ── Demo client NAP data ───────────────────────────────────────────────────────
+// ── Active client NAP data ────────────────────────────────────────────────────
 const NAP = {
   name: "Bed Bugs & Beyond",
   address: "Baldwin County, Alabama",
@@ -1908,7 +1908,7 @@ export default function LocalPresenceEnginePage() {
           </div>
         </div>
 
-        {/* Demo client banner */}
+        {/* Active client banner */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12,
           background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.15)",

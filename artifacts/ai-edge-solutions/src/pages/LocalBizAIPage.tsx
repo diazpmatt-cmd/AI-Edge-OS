@@ -6,77 +6,35 @@ type Priority = "high" | "medium" | "low";
 type CalStatus = "scheduled" | "published" | "pending";
 type CampaignStatus = "active" | "paused" | "completed";
 
-// ── Demo data ─────────────────────────────────────────────────────────────────
+// ── Client config ─────────────────────────────────────────────────────────────
 const CLIENT = { name: "Bed Bugs & Beyond", category: "Pest Control", area: "Baldwin County, AL" };
 
 const KPI_CARDS = [
-  { icon: "🏆", label: "Growth Score",         value: "72",    sub: "+4 pts this week",          color: "#00AEEF", glow: true  },
-  { icon: "📍", label: "Visibility Score",      value: "46",    sub: "Apple, Bing, Nextdoor in progress", color: "#F59E0B", glow: false },
-  { icon: "⭐", label: "Reviews This Month",    value: "11",    sub: "avg 4.8 ★ · +3 vs last mo", color: "#10B981", glow: true  },
-  { icon: "📝", label: "Content Published",     value: "9",     sub: "7 posts · 2 GBP updates",   color: "#8B5CF6", glow: false },
-  { icon: "📣", label: "Campaign Performance", value: "38%",   sub: "open rate · 2 active",       color: "#EC4899", glow: false },
-  { icon: "✨", label: "AI Opportunity Score",  value: "83",    sub: "High — 5 actions pending",  color: "#F59E0B", glow: true  },
+  { icon: "🏆", label: "Growth Score",         value: "—",    sub: "Waiting for live data",          color: "#00AEEF", glow: false },
+  { icon: "📍", label: "Visibility Score",      value: "—",    sub: "Connect local presence sources", color: "#F59E0B", glow: false },
+  { icon: "⭐", label: "Reviews This Month",    value: "—",    sub: "Connect review sources",         color: "#10B981", glow: false },
+  { icon: "📝", label: "Content Published",     value: "—",    sub: "Connect social publishing",      color: "#8B5CF6", glow: false },
+  { icon: "📣", label: "Campaign Performance",  value: "—",    sub: "No active campaigns",            color: "#EC4899", glow: false },
+  { icon: "✨", label: "AI Opportunity Score",  value: "—",    sub: "Waiting for live data",          color: "#F59E0B", glow: false },
 ];
 
 type Rec = { id: number; title: string; desc: string; priority: Priority; impact: string; time: string; link: string; icon: string };
-const RECS: Rec[] = [
-  { id: 1, title: "Publish Facebook post",                desc: "AI has a draft ready about Gulf Shores bed bug season. High engagement window: Tuesday 10am.",    priority: "high",   impact: "+12% reach", time: "5 min",  link: "/admin/social-publishing", icon: "📘" },
-  { id: 2, title: "Update Google Business Profile",       desc: "Post a seasonal pest control tip to your GBP. Boosts AI Overview signals and local ranking.",     priority: "high",   impact: "+8% GBP visibility", time: "8 min", link: "/admin/local-presence",    icon: "🗺" },
-  { id: 3, title: "Respond to 3 pending reviews",         desc: "2 Google reviews and 1 Facebook review need responses. Fast replies improve review velocity.",     priority: "high",   impact: "+0.2 star avg", time: "10 min", link: "/admin/lead-recovery",     icon: "⭐" },
-  { id: 4, title: "Complete Apple listing claim",         desc: "Apple Maps reach is zero until the claim is finished. Step 2 of 15 is pending your action.",     priority: "medium", impact: "+15 visibility pts", time: "15 min", link: "/admin/local-presence", icon: "🍎" },
-  { id: 5, title: "Launch review request campaign",       desc: "Send automated SMS review requests to last 30 closed jobs. Projected +4–6 new 5-star reviews.",  priority: "medium", impact: "+4 reviews/mo", time: "3 min",  link: "/admin/lead-recovery",    icon: "📣" },
-  { id: 6, title: "Add local citations for Daphne",       desc: "Daphne is underrepresented in local directories. Adding citations boosts local SEO signals.",     priority: "low",    impact: "+local rank", time: "20 min", link: "/admin/local-presence",   icon: "📋" },
-];
+const RECS: Rec[] = [];
 
 type CalItem = { day: string; time: string; type: string; title: string; status: CalStatus; color: string };
-const CALENDAR: CalItem[] = [
-  { day: "Mon", time: "10:00 AM", type: "Facebook",  title: "Gulf Shores bed bug season tips",       status: "published", color: "#1877F2" },
-  { day: "Mon", time: "11:00 AM", type: "GBP Post",  title: "Summer pest prevention checklist",      status: "published", color: "#EA4335" },
-  { day: "Tue", time: "10:00 AM", type: "Facebook",  title: "Heat treatment FAQ post",               status: "scheduled", color: "#1877F2" },
-  { day: "Tue", time: "2:00 PM",  type: "Instagram", title: "Before/after treatment photo",          status: "scheduled", color: "#E1306C" },
-  { day: "Wed", time: "9:00 AM",  type: "Blog",      title: "How to spot bed bugs early guide",      status: "pending",   color: "#8B5CF6" },
-  { day: "Wed", time: "10:00 AM", type: "GBP Post",  title: "Customer success story — Fairhope",     status: "scheduled", color: "#EA4335" },
-  { day: "Thu", time: "10:00 AM", type: "Facebook",  title: "Promotion: free inspection in July",    status: "pending",   color: "#1877F2" },
-  { day: "Thu", time: "3:00 PM",  type: "Instagram", title: "Team spotlight — certified technician", status: "pending",   color: "#E1306C" },
-  { day: "Fri", time: "10:00 AM", type: "Facebook",  title: "Weekend tip: check mattress seams",     status: "pending",   color: "#1877F2" },
-  { day: "Fri", time: "11:00 AM", type: "Promo",     title: "July 4th heat treatment special",       status: "pending",   color: "#F59E0B" },
-];
+const CALENDAR: CalItem[] = [];
 
 type Review = { platform: string; author: string; rating: number; text: string; date: string; color: string; responded: boolean; suggestion: string };
-const REVIEWS: Review[] = [
-  { platform: "Google",   author: "Jennifer M.", rating: 5, text: "Absolutely amazing service! They found and treated our bed bug issue in one visit. Highly recommend!", date: "Jul 1", color: "#EA4335", responded: false, suggestion: "Thank you so much, Jennifer! We're thrilled we could resolve your issue in a single visit. Your comfort and peace of mind are our top priority — thank you for trusting Bed Bugs & Beyond!" },
-  { platform: "Google",   author: "Marcus T.",   rating: 5, text: "Professional team, thorough inspection, and fair pricing. Gulf Shores best pest control for sure.",   date: "Jun 29", color: "#EA4335", responded: false, suggestion: "Marcus, thank you for the kind words! We're proud to serve Gulf Shores and the surrounding communities. So glad the team delivered the experience you deserved." },
-  { platform: "Facebook", author: "Sandra K.",   rating: 4, text: "Good experience overall. Technician was on time and explained everything clearly.",                   date: "Jun 27", color: "#1877F2", responded: true,  suggestion: "" },
-  { platform: "Google",   author: "David R.",    rating: 5, text: "Called on a Friday, they came Saturday morning. Problem solved fast. Real pros.",                   date: "Jun 25", color: "#EA4335", responded: true,  suggestion: "" },
-];
+const REVIEWS: Review[] = [];
 
 type Campaign = { name: string; status: CampaignStatus; sent: number; opened: number; responded: number; converted: number; color: string };
-const CAMPAIGNS: Campaign[] = [
-  { name: "Review Request — June Closed Jobs", status: "active",    sent: 34, opened: 21, responded: 9,  converted: 7,  color: "#10B981" },
-  { name: "Reactivation — Past Customers",     status: "active",    sent: 18, opened: 11, responded: 3,  converted: 1,  color: "#00AEEF" },
-  { name: "Seasonal Promo — July Heat Special",status: "paused",    sent: 0,  opened: 0,  responded: 0,  converted: 0,  color: "#F59E0B" },
-  { name: "Missed Call Follow-up",             status: "completed", sent: 42, opened: 38, responded: 14, converted: 6,  color: "#8B5CF6" },
-];
+const CAMPAIGNS: Campaign[] = [];
 
 type Insight = { icon: string; title: string; detail: string; opportunity: "high" | "medium" | "low"; recommendation: string; impact: string };
-const INSIGHTS: Insight[] = [
-  { icon: "📍", title: "Local visibility improving",    detail: "Apple, Bing, and Nextdoor are all now in setup. Completing them unlocks +37 visibility pts.", opportunity: "high",   recommendation: "Finish Apple Maps claim — 14 steps remain",          impact: "+15 pts score" },
-  { icon: "🤖", title: "AI visibility up 12% this week",detail: "Your GBP posts are being picked up in Google AI Overviews for 'pest control Foley AL'.",        opportunity: "medium", recommendation: "Post 2 more GBP updates targeting Gulf Shores + Orange Beach", impact: "+8% AI reach"  },
-  { icon: "⭐", title: "Review velocity below target",  detail: "Competitor in Orange Beach avg 6 reviews/mo. You're at 3.7. A review campaign can close gap.",  opportunity: "high",   recommendation: "Launch automated SMS review request to last 30 jobs", impact: "+4 reviews/mo" },
-  { icon: "📉", title: "GBP engagement dipped Mon–Tue", detail: "Profile views dropped 18% Mon–Tue vs prior week average. Posting frequency may be the cause.",   opportunity: "medium", recommendation: "Post daily Mon–Wed for 2 weeks to rebuild momentum",   impact: "+22% engagement" },
-  { icon: "🏆", title: "Local ranking improved in Foley",detail: "Bed Bugs & Beyond moved from #4 to #2 in Foley 'pest control' searches this week.",             opportunity: "low",    recommendation: "Maintain review velocity and GBP post cadence",       impact: "Maintain #2 rank" },
-];
+const INSIGHTS: Insight[] = [];
 
 type Alert = { severity: "critical" | "warning" | "info"; text: string; icon: string; link?: string };
-const ALERTS: Alert[] = [
-  { severity: "critical", text: "Apple Maps listing incomplete — 14 steps remaining",   icon: "✕", link: "/admin/local-presence" },
-  { severity: "critical", text: "4 missed calls today — recovery window closing",        icon: "✕", link: "/admin/lead-recovery"   },
-  { severity: "warning",  text: "Review velocity below competitor average in Orange Beach", icon: "⚠", link: "/admin/lead-recovery" },
-  { severity: "warning",  text: "Bing Places verification PIN not yet received",         icon: "⚠", link: "/admin/local-presence" },
-  { severity: "warning",  text: "AI visibility dropped in Gulf Shores — GBP update recommended", icon: "⚠", link: "/admin/ai-visibility" },
-  { severity: "info",     text: "GBP engagement up 22% after Tuesday post",              icon: "ℹ", link: "/admin/local-presence" },
-  { severity: "info",     text: "Review request campaign: 7 new conversions this week",  icon: "ℹ", link: "/admin/lead-recovery"  },
-];
+const ALERTS: Alert[] = [];
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 const PRIORITY_STYLE: Record<Priority, { color: string; bg: string; label: string }> = {
@@ -185,9 +143,11 @@ export default function LocalBizAIPage() {
               padding: "4px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, color: "#64748B",
               background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
             }}>📅 {today}</div>
+            {RECS.filter(r => r.priority === "high").length > 0 && (
             <div style={{ padding: "4px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.18)" }}>
               ⚡ {RECS.filter(r => r.priority === "high").length} high-priority actions today
             </div>
+          )}
             {pendingResponses > 0 && (
               <div style={{ padding: "4px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#EF4444", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)" }}>
                 ⭐ {pendingResponses} reviews need responses
@@ -220,8 +180,15 @@ export default function LocalBizAIPage() {
 
         {/* ── 3. Today's Recommendations ── */}
         <div style={{ marginBottom: 28 }}>
-          <SectionHeader icon="⚡" title="Today's Recommendations" sub={`${RECS.length} actions queued`} />
+          <SectionHeader icon="⚡" title="Today's Recommendations" sub={RECS.length > 0 ? `${RECS.length} actions queued` : "No actions yet"} />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {RECS.length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>⚡</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No recommendations yet</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>AI-generated daily actions will appear here as your live data connects</div>
+              </div>
+            )}
             {RECS.map((rec, idx) => {
               const ps = PRIORITY_STYLE[rec.priority];
               const open = expandedRec === rec.id;
@@ -290,6 +257,12 @@ export default function LocalBizAIPage() {
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#334155", letterSpacing: "0.8px", textTransform: "uppercase" }}>{h}</div>
               ))}
             </div>
+            {CALENDAR.filter(c => calFilter === "all" || c.status === calFilter).length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No content scheduled</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>AI content calendar will populate once your social publishing is connected</div>
+              </div>
+            )}
             {CALENDAR.filter(c => calFilter === "all" || c.status === calFilter).map((item, i) => {
               const cs = CAL_STATUS_STYLE[item.status];
               return (
@@ -321,10 +294,10 @@ export default function LocalBizAIPage() {
           {/* Stats bar */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
             {[
-              { label: "Avg Rating",      value: "4.8 ★", color: "#F59E0B" },
-              { label: "This Month",      value: "11",    color: "#10B981" },
-              { label: "Pending Response",value: String(pendingResponses), color: "#EF4444" },
-              { label: "Review Velocity", value: "3.7/mo",color: "#00AEEF" },
+              { label: "Avg Rating",       value: "—",  color: "#F59E0B" },
+              { label: "This Month",       value: "—",  color: "#10B981" },
+              { label: "Pending Response", value: String(pendingResponses || "—"), color: "#EF4444" },
+              { label: "Review Velocity",  value: "—",  color: "#00AEEF" },
             ].map(s => (
               <div key={s.label} style={{
                 background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
@@ -337,6 +310,13 @@ export default function LocalBizAIPage() {
           </div>
           {/* Reviews */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {REVIEWS.length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>⭐</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No reviews yet</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Reviews will appear here once your Google and Facebook accounts are connected</div>
+              </div>
+            )}
             {REVIEWS.map((rev, idx) => {
               const open = expandedReview === idx;
               return (
@@ -393,8 +373,15 @@ export default function LocalBizAIPage() {
 
         {/* ── 6. Campaign Center ── */}
         <div style={{ marginBottom: 28 }}>
-          <SectionHeader icon="📣" title="Campaign Center" sub={`${CAMPAIGNS.filter(c => c.status === "active").length} active`} />
+          <SectionHeader icon="📣" title="Campaign Center" sub={CAMPAIGNS.filter(c => c.status === "active").length > 0 ? `${CAMPAIGNS.filter(c => c.status === "active").length} active` : "No active campaigns"} />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {CAMPAIGNS.length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>📣</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No campaigns yet</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>SMS and review request campaigns will appear here once launched</div>
+              </div>
+            )}
             {CAMPAIGNS.map((camp, i) => {
               const cs = CAMPAIGN_STATUS_STYLE[camp.status];
               return (
@@ -442,6 +429,13 @@ export default function LocalBizAIPage() {
         <div style={{ marginBottom: 28 }}>
           <SectionHeader icon="🤖" title="AI Growth Advisor" sub="Personalized insights" />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {INSIGHTS.length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>🤖</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No insights yet</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>AI-generated growth insights will appear here as live data sources are connected</div>
+              </div>
+            )}
             {INSIGHTS.map((ins, i) => {
               const ops = OPPORTUNITY_STYLE[ins.opportunity];
               return (
@@ -480,8 +474,17 @@ export default function LocalBizAIPage() {
 
         {/* ── 8. Smart Alerts ── */}
         <div style={{ marginBottom: 8 }}>
-          <SectionHeader icon="🔔" title="Smart Alerts" sub={`${ALERTS.filter((_, i) => !dismissedAlerts.includes(i)).length} active`} />
+          <SectionHeader icon="🔔" title="Smart Alerts" sub={ALERTS.length === 0 ? "All clear" : `${ALERTS.filter((_, i) => !dismissedAlerts.includes(i)).length} active`} />
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {ALERTS.length === 0 && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderRadius: 10,
+                background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.15)",
+              }}>
+                <span style={{ fontSize: 16 }}>✓</span>
+                <span style={{ fontSize: 13, color: "#10B981", fontWeight: 600 }}>No active alerts — live data will generate alerts automatically</span>
+              </div>
+            )}
             {ALERTS.map((alert, i) => {
               if (dismissedAlerts.includes(i)) return null;
               const as = ALERT_STYLE[alert.severity];

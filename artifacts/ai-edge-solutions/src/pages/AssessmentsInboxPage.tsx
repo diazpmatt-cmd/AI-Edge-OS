@@ -29,19 +29,6 @@ type Assessment = {
   createdAt: string;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo data — shown when DB has no submissions
-// ─────────────────────────────────────────────────────────────────────────────
-const DEMO_LEADS: Assessment[] = [
-  { id: "demo-1", businessName: "Gulf Coast Pest Control", industry: "Pest Control", city: "Mobile", state: "AL", websiteUrl: "https://gulfcoastpest.com", gbpUrl: null, facebookUrl: "https://facebook.com/gulfcoastpest", instagramUrl: null, contactName: "Rick Harmon", contactEmail: "rick@gulfcoastpest.com", contactPhone: "(251) 555-0101", contactMethod: "phone", scoreOverall: 48, scoreLeadRecovery: 70, scoreLocalPresence: 25, scoreAiVisibility: 30, scoreReviewStrength: 53, status: "new", notes: null, createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
-  { id: "demo-2", businessName: "Bama HVAC & Cooling", industry: "HVAC", city: "Huntsville", state: "AL", websiteUrl: "https://bamahvac.com", gbpUrl: "https://maps.google.com/bamahvac", facebookUrl: "https://facebook.com/bamahvac", instagramUrl: "https://instagram.com/bamahvac", contactName: "Diane Fuller", contactEmail: "diane@bamahvac.com", contactPhone: "(256) 555-0202", contactMethod: "email", scoreOverall: 64, scoreLeadRecovery: 80, scoreLocalPresence: 43, scoreAiVisibility: 38, scoreReviewStrength: 68, status: "contacted", notes: "Called 6/29 — interested in Lead Recovery + AI Visibility. Follow up next week.", createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
-  { id: "demo-3", businessName: "Delta Roofing Co.", industry: "Roofing", city: "Montgomery", state: "AL", websiteUrl: null, gbpUrl: null, facebookUrl: null, instagramUrl: null, contactName: "James Deluca", contactEmail: "james@deltaroofing.net", contactPhone: "(334) 555-0303", contactMethod: "text", scoreOverall: 32, scoreLeadRecovery: 25, scoreLocalPresence: 18, scoreAiVisibility: 22, scoreReviewStrength: 40, status: "qualified", notes: "Big opportunity — no online presence at all. Budget confirmed.", createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
-  { id: "demo-4", businessName: "Emerald Isle Landscaping", industry: "Landscaping", city: "Pensacola", state: "FL", websiteUrl: "https://emeraldislelandscaping.com", gbpUrl: "https://maps.google.com/emeraldisle", facebookUrl: "https://facebook.com/emeraldisle", instagramUrl: "https://instagram.com/emeraldisle", contactName: "Sara Nguyen", contactEmail: "sara@emeraldisle.com", contactPhone: "(850) 555-0404", contactMethod: "email", scoreOverall: 72, scoreLeadRecovery: 85, scoreLocalPresence: 58, scoreAiVisibility: 44, scoreReviewStrength: 74, status: "strategy_call_booked", notes: "Strategy call scheduled 7/3 at 2PM. Sending agenda beforehand.", createdAt: new Date(Date.now() - 7 * 86400000).toISOString() },
-  { id: "demo-5", businessName: "Bay Area Plumbing", industry: "Plumbing", city: "Biloxi", state: "MS", websiteUrl: "https://bayareaplumbing.com", gbpUrl: null, facebookUrl: "https://facebook.com/bayareaplumbing", instagramUrl: null, contactName: "Tom Rourke", contactEmail: "tom@bayareaplumbing.com", contactPhone: "(228) 555-0505", contactMethod: "phone", scoreOverall: 51, scoreLeadRecovery: 67, scoreLocalPresence: 28, scoreAiVisibility: 35, scoreReviewStrength: 60, status: "proposal_sent", notes: "Proposal sent 6/28. Waiting on approval from owner.", createdAt: new Date(Date.now() - 10 * 86400000).toISOString() },
-  { id: "demo-6", businessName: "Coastal Clean Co.", industry: "Cleaning Services", city: "Destin", state: "FL", websiteUrl: "https://coastalclean.co", gbpUrl: "https://maps.google.com/coastalclean", facebookUrl: "https://facebook.com/coastalclean", instagramUrl: "https://instagram.com/coastalclean", contactName: "Amy Voss", contactEmail: "amy@coastalclean.co", contactPhone: "(850) 555-0606", contactMethod: "text", scoreOverall: 68, scoreLeadRecovery: 78, scoreLocalPresence: 51, scoreAiVisibility: 40, scoreReviewStrength: 70, status: "won", notes: "Closed 6/25! Full AI Edge bundle — $1,800/mo. Onboarding 7/1.", createdAt: new Date(Date.now() - 14 * 86400000).toISOString() },
-  { id: "demo-7", businessName: "Granite City Electrical", industry: "Electrical", city: "Birmingham", state: "AL", websiteUrl: null, gbpUrl: null, facebookUrl: null, instagramUrl: null, contactName: "Ed Marsh", contactEmail: "ed@granitecityelectric.com", contactPhone: "(205) 555-0707", contactMethod: "phone", scoreOverall: 29, scoreLeadRecovery: 22, scoreLocalPresence: 15, scoreAiVisibility: 20, scoreReviewStrength: 38, status: "lost", notes: "Not interested — budget constraints. Re-engage Q4.", createdAt: new Date(Date.now() - 18 * 86400000).toISOString() },
-  { id: "demo-8", businessName: "Sunrise Auto Repair", industry: "Auto Repair", city: "Dothan", state: "AL", websiteUrl: "https://sunriseautorepair.com", gbpUrl: "https://maps.google.com/sunriseauto", facebookUrl: null, instagramUrl: null, contactName: "Chris Pak", contactEmail: "chris@sunriseauto.com", contactPhone: "(334) 555-0808", contactMethod: "email", scoreOverall: 55, scoreLeadRecovery: 72, scoreLocalPresence: 35, scoreAiVisibility: 32, scoreReviewStrength: 65, status: "new", notes: null, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status config
@@ -99,7 +86,6 @@ export default function AssessmentsInboxPage() {
   const apiFetch = useApiFetch();
   const [leads, setLeads] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [usingDemo, setUsingDemo] = useState(false);
   const [selected, setSelected] = useState<Assessment | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterIndustry, setFilterIndustry] = useState("all");
@@ -111,18 +97,11 @@ export default function AssessmentsInboxPage() {
 
   const loadLeads = useCallback(async () => {
     try {
-      const data = await apiFetch("/api/assessments");
+      const data = await apiFetch("/api/assessments") as { assessments?: Assessment[] };
       const rows: Assessment[] = data.assessments ?? [];
-      if (rows.length === 0) {
-        setLeads(DEMO_LEADS);
-        setUsingDemo(true);
-      } else {
-        setLeads(rows);
-        setUsingDemo(false);
-      }
+      setLeads(rows);
     } catch {
-      setLeads(DEMO_LEADS);
-      setUsingDemo(true);
+      setLeads([]);
     } finally {
       setLoading(false);
     }
@@ -159,12 +138,8 @@ export default function AssessmentsInboxPage() {
 
   // ── Patch helpers ──
   async function patchLead(id: string, patch: { status?: string; notes?: string }) {
-    if (usingDemo) {
-      setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
-      return;
-    }
     try {
-      const updated = await apiFetch(`/api/assessments/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+      const updated = await apiFetch(`/api/assessments/${id}`, { method: "PATCH", body: JSON.stringify(patch) }) as Partial<Assessment>;
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updated } : l));
     } catch (e) {
       console.error("patch failed", e);
@@ -213,13 +188,6 @@ export default function AssessmentsInboxPage() {
                 color: "#10B981", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
                 borderRadius: 20, padding: "3px 10px",
               }}>Lead Pipeline Active</span>
-              {usingDemo && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase",
-                  color: "#F59E0B", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)",
-                  borderRadius: 20, padding: "3px 10px",
-                }}>Demo Data</span>
-              )}
             </div>
             <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>Manage AI Edge assessment leads, track pipeline progress, and convert opportunities into clients.</p>
           </div>

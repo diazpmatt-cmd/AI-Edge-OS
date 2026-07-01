@@ -10,40 +10,6 @@ const TELNYX_NUMBER   = "+1 (251) 286-3200";
 const FORWARD_NUMBER  = "+1 (251) 324-9090";
 const BUSINESS_NAME   = "Bed Bugs & Beyond";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo data
-// ─────────────────────────────────────────────────────────────────────────────
-const DEMO_CALL_QUEUE = [
-  { id: "q1", caller: "Sarah M.",    phone: "(251) 555-0182", intent: "Bed Bug Emergency",   city: "Gulf Shores",  urgency: "urgent",   status: "transferred",   duration: "2m 14s", statusColor: "#10B981" },
-  { id: "q2", caller: "James K.",    phone: "(251) 555-0247", intent: "Roach Callback",      city: "Foley",        urgency: "normal",   status: "callback",      duration: "1m 42s", statusColor: "#00AEEF" },
-  { id: "q3", caller: "Lisa T.",     phone: "(251) 555-0319", intent: "Ant Inquiry",          city: "Fairhope",     urgency: "normal",   status: "inquiry",       duration: "1m 08s", statusColor: "#8B5CF6" },
-  { id: "q4", caller: "Robert H.",   phone: "(251) 555-0461", intent: "Rodent Issue",         city: "Daphne",       urgency: "normal",   status: "voicemail",     duration: "0m 45s", statusColor: "#F59E0B" },
-  { id: "q5", caller: "Maria G.",    phone: "(251) 555-0533", intent: "Flea Treatment",       city: "Spanish Fort", urgency: "normal",   status: "qualified",     duration: "2m 31s", statusColor: "#06B6D4" },
-];
-
-const DEMO_CALL_LOGS = [
-  { id: "l1", dateTime: "Today 10:42 AM", caller: "Sarah M.",    phone: "(251) 555-0182", intent: "Bed Bugs",     outcome: "Transferred",        duration: "2m 14s", recording: true,  transcript: "Available" },
-  { id: "l2", dateTime: "Today 10:18 AM", caller: "James K.",    phone: "(251) 555-0247", intent: "Roaches",      outcome: "Callback Requested", duration: "1m 42s", recording: true,  transcript: "Available" },
-  { id: "l3", dateTime: "Today 9:57 AM",  caller: "Lisa T.",     phone: "(251) 555-0319", intent: "Ants",         outcome: "Qualified Lead",     duration: "1m 08s", recording: false, transcript: "Pending"   },
-  { id: "l4", dateTime: "Today 9:34 AM",  caller: "Robert H.",   phone: "(251) 555-0461", intent: "Rodents",      outcome: "Voicemail",          duration: "0m 45s", recording: true,  transcript: "Available" },
-  { id: "l5", dateTime: "Today 9:12 AM",  caller: "Maria G.",    phone: "(251) 555-0533", intent: "Fleas",        outcome: "Qualified Lead",     duration: "2m 31s", recording: false, transcript: "Pending"   },
-  { id: "l6", dateTime: "Today 8:50 AM",  caller: "Unknown",     phone: "(251) 555-0774", intent: "Unknown",      outcome: "Missed",             duration: "—",      recording: false, transcript: "—"         },
-  { id: "l7", dateTime: "Yesterday 4:22PM",caller: "Tom B.",     phone: "(251) 555-0628", intent: "Wasps",        outcome: "Transferred",        duration: "1m 55s", recording: true,  transcript: "Available" },
-  { id: "l8", dateTime: "Yesterday 2:11PM",caller: "Anna R.",    phone: "(251) 555-0901", intent: "Termites",     outcome: "Callback Requested", duration: "1m 18s", recording: true,  transcript: "Available" },
-];
-
-const DEMO_CALLBACKS = [
-  { id: "cb1", name: "James K.",  phone: "(251) 555-0247", issue: "Roach infestation",    city: "Foley",        urgency: "normal", requested: "ASAP",       status: "pending"   },
-  { id: "cb2", name: "Anna R.",   phone: "(251) 555-0901", issue: "Termite inspection",   city: "Orange Beach", urgency: "normal", requested: "Next day",   status: "pending"   },
-  { id: "cb3", name: "Derek W.",  phone: "(251) 555-0645", issue: "Bed bugs in hotel",    city: "Gulf Shores",  urgency: "urgent", requested: "Today",      status: "returned"  },
-  { id: "cb4", name: "Priya S.",  phone: "(251) 555-0388", issue: "Ant problem outside",  city: "Daphne",       urgency: "normal", requested: "This week",  status: "archived"  },
-];
-
-const DEMO_VOICEMAILS = [
-  { id: "vm1", caller: "(251) 555-0461", duration: "0m 45s", preview: "Hi, this is Robert in Daphne, I have a rodent problem in my garage — please call me back...", recording: true,  status: "new"      },
-  { id: "vm2", caller: "(251) 555-0774", duration: "0m 22s", preview: "Um, yeah, calling about bugs I found in my bedroom. Need someone out asap...",                  recording: true,  status: "new"      },
-  { id: "vm3", caller: "(251) 555-0530", duration: "1m 02s", preview: "Hey, we have a wasp nest above our front door in Spanish Fort, can you come tomorrow...",        recording: false, status: "reviewed" },
-];
 
 const DEFAULT_INTAKE_QUESTIONS = [
   { id: 1, text: "What pest issue are you dealing with?",                              purpose: "Identify service type",            required: true  },
@@ -134,9 +100,9 @@ export default function AIReceptionistPage() {
     }
   }
 
-  const callsAnswered = telnyxStats?.missedCalls ? 18 + telnyxStats.missedCalls : 18;
-  const callsRouted   = telnyxStats?.sent        ? 11 + telnyxStats.sent        : 11;
-  const callbacks     = telnyxStats?.totalReplies ? telnyxStats.totalReplies    : 4;
+  const callsAnswered = telnyxStats?.missedCalls  ?? 0;
+  const callsRouted   = telnyxStats?.sent         ?? 0;
+  const callbacks     = telnyxStats?.totalReplies ?? 0;
 
   return (
     <AppShell>
@@ -170,9 +136,9 @@ export default function AIReceptionistPage() {
             { icon: "📞", label: "Calls Answered Today",      value: String(callsAnswered), color: "#00AEEF" },
             { icon: "↗",  label: "Calls Routed",              value: String(callsRouted),   color: "#10B981" },
             { icon: "📲", label: "Callback Requests",          value: String(callbacks),     color: "#8B5CF6" },
-            { icon: "🎙", label: "Voicemails Captured",        value: "3",                   color: "#F59E0B" },
-            { icon: "🎯", label: "Lead Qualification Rate",    value: "61%",                 color: "#06B6D4" },
-            { icon: "💰", label: "Revenue Protected",          value: "$2,450",              color: "#10B981" },
+            { icon: "🎙", label: "Voicemails Captured",        value: "—",                   color: "#F59E0B" },
+            { icon: "🎯", label: "Lead Qualification Rate",    value: "—",                   color: "#06B6D4" },
+            { icon: "💰", label: "Revenue Protected",          value: "—",                   color: "#10B981" },
           ].map(k => (
             <div key={k.label} style={{
               background: "linear-gradient(160deg, rgba(11,22,41,0.98), rgba(3,6,18,0.9))",
@@ -245,19 +211,11 @@ export default function AIReceptionistPage() {
                     <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px" }}>{h}</div>
                   ))}
                 </div>
-                {DEMO_CALL_QUEUE.map(c => (
-                  <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1.4fr 1fr 80px 110px 70px", padding: "11px 16px", borderBottom: "1px solid rgba(255,255,255,0.04)", alignItems: "center" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{c.caller}</span>
-                    <span style={{ fontSize: 12, color: "#64748B" }}>{c.phone}</span>
-                    <span style={{ fontSize: 12, color: "#94A3B8" }}>{c.intent}</span>
-                    <span style={{ fontSize: 12, color: "#64748B" }}>{c.city}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: c.urgency === "urgent" ? "#EF4444" : "#475569", background: c.urgency === "urgent" ? "rgba(239,68,68,0.1)" : "rgba(255,255,255,0.03)", padding: "2px 8px", borderRadius: 10 }}>
-                      {c.urgency === "urgent" ? "🚨 Urgent" : "Normal"}
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: c.statusColor, background: `${c.statusColor}15`, padding: "2px 10px", borderRadius: 12 }}>{c.status.charAt(0).toUpperCase() + c.status.slice(1)}</span>
-                    <span style={{ fontSize: 11, color: "#475569" }}>{c.duration}</span>
-                  </div>
-                ))}
+                <div style={{ padding: "36px 20px", textAlign: "center" }}>
+                  <div style={{ fontSize: 20, marginBottom: 8, opacity: 0.3 }}>📞</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No active calls</div>
+                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Live call queue will appear here when calls are routed through this number</div>
+                </div>
               </div>
             </div>
 
@@ -388,21 +346,11 @@ export default function AIReceptionistPage() {
                   <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{h}</div>
                 ))}
               </div>
-              {DEMO_CALL_LOGS.map(log => {
-                const oc = OUTCOME_CFG[log.outcome] ?? { color: "#64748B", bg: "rgba(255,255,255,0.04)" };
-                return (
-                  <div key={log.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.2fr 1fr 1.2fr 70px 80px 100px", padding: "11px 16px", borderBottom: "1px solid rgba(255,255,255,0.04)", alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "#475569" }}>{log.dateTime}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{log.caller}</span>
-                    <span style={{ fontSize: 12, color: "#64748B" }}>{log.phone}</span>
-                    <span style={{ fontSize: 12, color: "#94A3B8" }}>{log.intent}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: oc.color, background: oc.bg, padding: "2px 9px", borderRadius: 12, display: "inline-block" }}>{log.outcome}</span>
-                    <span style={{ fontSize: 11, color: "#475569" }}>{log.duration}</span>
-                    <span style={{ fontSize: 11, color: log.recording ? "#10B981" : "#334155" }}>{log.recording ? "🎙 Yes" : "—"}</span>
-                    <span style={{ fontSize: 11, color: log.transcript === "Available" ? "#8B5CF6" : log.transcript === "Pending" ? "#F59E0B" : "#334155" }}>{log.transcript}</span>
-                  </div>
-                );
-              })}
+              <div style={{ padding: "44px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: 20, marginBottom: 8, opacity: 0.3 }}>📋</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No call logs yet</div>
+                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Call history will appear here once live calls are routed through this number</div>
+              </div>
             </div>
           </div>
         )}
@@ -415,33 +363,11 @@ export default function AIReceptionistPage() {
             <div>
               <SectionHeader icon="📲" title="Callback Requests" />
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {DEMO_CALLBACKS.map(cb => {
-                  const statusColor = cb.status === "returned" ? "#10B981" : cb.status === "archived" ? "#334155" : "#00AEEF";
-                  return (
-                    <div key={cb.id} style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "14px 16px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                        <div>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0" }}>{cb.name}</span>
-                          {cb.urgency === "urgent" && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: "#EF4444", background: "rgba(239,68,68,0.12)", padding: "2px 8px", borderRadius: 10 }}>🚨 Urgent</span>}
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: statusColor, background: `${statusColor}12`, padding: "3px 10px", borderRadius: 12 }}>{cb.status.charAt(0).toUpperCase() + cb.status.slice(1)}</span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px", marginBottom: 10 }}>
-                        {[["📱 Phone", cb.phone], ["📍 City", cb.city], ["🐛 Issue", cb.issue], ["⏰ Requested", cb.requested]].map(([l, v]) => (
-                          <div key={l as string} style={{ fontSize: 12, color: "#475569" }}><span style={{ color: "#334155" }}>{l as string}: </span>{v as string}</div>
-                        ))}
-                      </div>
-                      {cb.status === "pending" && (
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <ActionBtn onClick={() => toast.success("Marked as returned.")} label="✓ Mark Returned" color="#10B981" small />
-                          <ActionBtn onClick={() => toast.info("SMS follow-up queued.")} label="💬 Send SMS" color="#00AEEF" small />
-                          <ActionBtn onClick={() => toast.info("Assigned to Lead Recovery.")} label="→ Lead Recovery" color="#8B5CF6" small />
-                          <ActionBtn onClick={() => toast.info("Archived.")} label="Archive" color="#475569" small />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div style={{ padding: "32px 20px", textAlign: "center", background: "rgba(11,22,41,0.5)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                  <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>📲</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No callback requests</div>
+                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Callback requests captured by the AI receptionist will appear here</div>
+                </div>
               </div>
             </div>
 
@@ -449,29 +375,11 @@ export default function AIReceptionistPage() {
             <div>
               <SectionHeader icon="🎙" title="Voicemails" />
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {DEMO_VOICEMAILS.map(vm => (
-                  <div key={vm.id} style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "14px 16px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{vm.caller}</span>
-                        <span style={{ marginLeft: 10, fontSize: 11, color: "#475569" }}>⏱ {vm.duration}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {vm.recording && <span style={{ fontSize: 10, fontWeight: 700, color: "#8B5CF6", background: "rgba(139,92,246,0.12)", padding: "2px 8px", borderRadius: 10 }}>🎙 Recorded</span>}
-                        <span style={{ fontSize: 10, fontWeight: 700, color: vm.status === "new" ? "#F59E0B" : "#475569", background: vm.status === "new" ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 10 }}>{vm.status === "new" ? "New" : "Reviewed"}</span>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.5, background: "rgba(255,255,255,0.03)", borderRadius: 7, padding: "8px 10px", marginBottom: 10, fontStyle: "italic" }}>
-                      "{vm.preview}"
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <ActionBtn onClick={() => toast.success("Marked returned.")} label="✓ Mark Returned" color="#10B981" small />
-                      <ActionBtn onClick={() => toast.info("SMS follow-up sent.")} label="💬 Send SMS" color="#00AEEF" small />
-                      <ActionBtn onClick={() => toast.info("Assigned to Lead Recovery.")} label="→ Lead Recovery" color="#8B5CF6" small />
-                      <ActionBtn onClick={() => toast.info("Archived.")} label="Archive" color="#475569" small />
-                    </div>
-                  </div>
-                ))}
+                <div style={{ padding: "32px 20px", textAlign: "center", background: "rgba(11,22,41,0.5)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
+                  <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>🎙</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No voicemails</div>
+                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Voicemails recorded by the AI receptionist will appear here</div>
+                </div>
               </div>
             </div>
 

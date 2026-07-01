@@ -50,7 +50,24 @@ export const gorilladeskLeadSourcesTable = pgTable("gorilladesk_lead_sources", {
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Stores exact aggregated metric snapshots from GorillaDesk exports.
+ * Used as the authoritative source for revenue, jobs, and customer metrics
+ * when individual transactional records are unavailable.
+ * metric_type values: "revenue" | "jobs" | "customers" | "marketing"
+ */
+export const gorilladeskMetricSnapshotsTable = pgTable("gorilladesk_metric_snapshots", {
+  id:         uuid("id").primaryKey().defaultRandom(),
+  projectId:  text("project_id").notNull().default("bed-bugs-and-beyond"),
+  period:     text("period").notNull(),
+  metricType: text("metric_type").notNull(),
+  data:       text("data").notNull(),
+  source:     text("source").notNull().default("manual_import"),
+  importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type GorilladeskJob      = typeof gorilladeskJobsTable.$inferSelect;
 export type GorilladeskCustomer = typeof gorilladeskCustomersTable.$inferSelect;
 export type GorilladeskPayment  = typeof gorilladeskPaymentsTable.$inferSelect;
 export type GorilladeskLeadSource = typeof gorilladeskLeadSourcesTable.$inferSelect;
+export type GorilladeskMetricSnapshot = typeof gorilladeskMetricSnapshotsTable.$inferSelect;

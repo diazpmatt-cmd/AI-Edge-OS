@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApiFetch } from "./api";
 
 export type RevenueAnalytics = {
@@ -11,6 +11,7 @@ export type RevenueAnalytics = {
   outstanding_revenue_fmt: string;
   avg_ticket_fmt: string;
   period: string;
+  data_source?: string;
 };
 
 export type JobsAnalytics = {
@@ -19,14 +20,16 @@ export type JobsAnalytics = {
   incomplete: number;
   completion_rate: number;
   by_status: Record<string, number>;
+  data_source?: string;
 };
 
 export type CustomersAnalytics = {
-  new_customers: number;
-  returning_customers: number;
+  new_customers: number | null;
+  returning_customers: number | null;
   active_services: number;
   recurring_services: number;
   period: string;
+  data_source?: string;
 };
 
 export type LeadSource = {
@@ -39,6 +42,7 @@ export type LeadSource = {
 export type MarketingAnalytics = {
   lead_sources: LeadSource[];
   period: string;
+  data_source?: string;
 };
 
 export type PaymentBreakdown = {
@@ -52,6 +56,7 @@ export type PaymentsAnalytics = {
   breakdown: PaymentBreakdown[];
   total: number;
   total_fmt: string;
+  data_source?: string;
 };
 
 export type GorilladeskAnalytics = {
@@ -78,25 +83,55 @@ const EMPTY: GorilladeskAnalytics = {
 
 export function useGorilladeskAnalytics() {
   const apiFetch = useApiFetch();
+  // Store latest apiFetch in a ref so the effect dependency is stable
+  const apiFetchRef = useRef(apiFetch);
+  apiFetchRef.current = apiFetch;
+
   const [state, setState] = useState<FetchState>({ data: EMPTY, loading: true, error: null });
+  const loadedRef = useRef(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
     setState(s => ({ ...s, loading: true, error: null }));
-    try {
-      const [revenue, jobs, customers, marketing, payments] = await Promise.all([
-        apiFetch<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
-        apiFetch<JobsAnalytics>("/analytics/gorilladesk/jobs"),
-        apiFetch<CustomersAnalytics>("/analytics/gorilladesk/customers"),
-        apiFetch<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
-        apiFetch<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
-      ]);
-      setState({ data: { revenue, jobs, customers, marketing, payments }, loading: false, error: null });
-    } catch (err) {
-      setState({ data: EMPTY, loading: false, error: err instanceof Error ? err.message : "Failed to load analytics" });
-    }
-  }, [apiFetch]);
 
-  useEffect(() => { load(); }, [load]);
+    const fn = apiFetchRef.current;
+    Promise.all([
+      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
+      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
+      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
+      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
+      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
+    ])
+      .then(([revenue, jobs, customers, marketing, payments]) => {
+        setState({ data: { revenue, jobs, customers, marketing, payments }, loading: false, error: null });
+      })
+      .catch(err => {
+        setState({ data: EMPTY, loading: false, error: err instanceof Error ? err.message : "Failed to load analytics" });
+      });
+  }, []); // runs once on mount
 
-  return { ...state, reload: load };
+  const reload = () => {
+    loadedRef.current = false;
+    setState({ data: EMPTY, loading: true, error: null });
+    const fn = apiFetchRef.current;
+    Promise.all([
+      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
+      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
+      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
+      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
+      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
+    ])
+      .then(([revenue, jobs, customers, marketing, payments]) => {
+        setState({ data: { revenue, jobs, customers, marketing, payments }, loading: false, error: null });
+        loadedRef.current = true;
+      })
+      .catch(err => {
+        setState({ data: EMPTY, loading: false, error: err instanceof Error ? err.message : "Failed to load analytics" });
+        loadedRef.current = true;
+      });
+  };
+
+  return { ...state, reload };
 }

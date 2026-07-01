@@ -16,6 +16,7 @@ import imageAssetsRouter from "./image-assets";
 import backupsRouter from "./backups";
 import assessmentsRouter from "./assessments";
 import gorilladeskRouter from "./gorilladesk";
+import gorilladeskImportRouter from "./gorilladesk-import";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(imageAssetsRouter);
 router.use(backupsRouter);
 router.use(assessmentsRouter);
 router.use(gorilladeskRouter);
+router.use(gorilladeskImportRouter);
 
 export default router;

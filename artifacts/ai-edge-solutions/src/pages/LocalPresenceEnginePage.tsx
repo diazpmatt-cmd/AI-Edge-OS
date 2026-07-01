@@ -32,7 +32,7 @@ const NAP = {
   name: "Bed Bugs & Beyond",
   address: "Baldwin County, Alabama",
   phone: "(251) 324-9090",
-  website: "https://aiedgesolutions.online",
+  website: "https://bedbugsandbeyond.net",
   category: "Pest Control",
   serviceArea: "Baldwin County, Alabama",
   cities: "Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort",
@@ -474,7 +474,7 @@ Baldwin County, Alabama`;
               const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
                 { label: "Business Name",     value: "Bed Bugs & Beyond",                        note: "Exact legal name — no keyword stuffing" },
                 { label: "Phone Number",      value: "(251) 324-9090",         copyKey: "phone", note: "Must match Google Business Profile exactly" },
-                { label: "Website",           value: "https://aiedgesolutions.online",            note: "Use the live URL; Apple will verify it" },
+                { label: "Website",           value: NAP.website,                                note: "Use the live URL; Apple will verify it resolves correctly" },
                 { label: "Primary Category",  value: "Pest Control Service",                     note: "Select from Apple's category list" },
                 { label: "Secondary Category",value: "Exterminator",                             note: "Optional — add if available" },
                 { label: "Address / Area",    value: "Baldwin County, Alabama (Service Area)",   note: "Service-area business — no physical storefront" },
@@ -1062,7 +1062,7 @@ Sunday:    Closed`;
               const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
                 { label: "Business Name",      value: "Bed Bugs & Beyond",                       note: "Exact name — must match GBP exactly (NAP consistency)" },
                 { label: "Phone Number",       value: "(251) 324-9090",        copyKey: "phone", note: "Must match Google Business Profile" },
-                { label: "Website",            value: NAP.website,                               note: "⚠ Confirm this is BB&B's actual business website" },
+                { label: "Website",            value: NAP.website,                               note: "Use the live URL; Bing will verify it resolves correctly" },
                 { label: "Primary Category",   value: "Pest Control Service",                    note: "Select from Bing's business category picker" },
                 { label: "Secondary Category", value: "Exterminator",                            note: "Optional — add if available in Bing's list" },
                 { label: "Service Area",       value: "Baldwin County, Alabama",                 note: "Service-area business — hide street address if no storefront" },
@@ -1124,13 +1124,13 @@ Sunday:    Closed`;
                       <div key={f.label} style={{
                         display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
                         padding: "9px 14px", borderRadius: 9,
-                        background: f.label === "Website" ? "rgba(245,158,11,0.04)" : "rgba(255,255,255,0.025)",
-                        border: f.label === "Website" ? "1px solid rgba(245,158,11,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                        background: "rgba(255,255,255,0.025)",
+                        border: "1px solid rgba(255,255,255,0.06)",
                       }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
                         <div>
                           <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
-                          {f.note && <div style={{ fontSize: 11, color: f.label === "Website" ? "#F59E0B" : "#475569", marginTop: 2 }}>{f.note}</div>}
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
                         </div>
                         {f.copyKey && (
                           <button

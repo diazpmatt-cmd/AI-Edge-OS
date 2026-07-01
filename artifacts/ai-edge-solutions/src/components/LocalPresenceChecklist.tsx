@@ -119,7 +119,7 @@ const BASE_CHANNELS: PresenceChannel[] = [
     category:       "Directory",
     status:         "not_started",
     priority:       "high",
-    why_it_matters: "Angi is the #1 home services directory for pest control leads. GorillaDesk lead data shows 'Angi's Leads' as an existing source — a claimed profile increases bid quality.",
+    why_it_matters: "Angi is a leading home services directory for pest control leads. GorillaDesk lead data shows 'Angi's Leads' as an existing source — a claimed profile increases bid quality.",
     next_action:    "Create or claim your Angi Pro profile at pro.angi.com. Match your NAP exactly to GorillaDesk records.",
     action_url:     "https://pro.angi.com",
     setup_time:     "~30 min",

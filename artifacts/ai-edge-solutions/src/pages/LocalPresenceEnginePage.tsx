@@ -449,7 +449,7 @@ function AppleBusinessCard() {
             {/* ── Tab: Business Info ── */}
             {activeTab === "bizinfo" && (() => {
               const BIZ_DESCRIPTION =
-`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, specializing in fast, effective elimination of bed bugs, roaches, ants, spiders, fleas, rodents, mosquitoes, and common household pests. We serve homeowners, rental properties, vacation rentals, and businesses throughout Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, guaranteed results. Call (251) 324-9090 to schedule today.`;
+`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, specializing in fast, effective elimination of bed bugs, roaches, ants, spiders, fleas, rodents, mosquitoes, and common household pests. We serve homeowners, rental properties, vacation rentals, and businesses throughout Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, experienced, fast response. Call (251) 324-9090 to schedule today.`;
 
               const SERVICE_LIST =
 `Bed Bug Treatment
@@ -1028,7 +1028,7 @@ function BingPlacesCard() {
             {/* ── Business Info ── */}
             {activeTab === "bizinfo" && (() => {
               const BIZ_DESCRIPTION =
-`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. We specialize in bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Locally owned, fast response, guaranteed results. Call (251) 324-9090 to schedule your inspection today.`;
+`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. We specialize in bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Locally owned, experienced, fast response. Call (251) 324-9090 to schedule your inspection today.`;
 
               const SERVICE_LIST =
 `Bed Bug Treatment
@@ -2569,7 +2569,7 @@ function YelpBusinessCard() {
             {/* ── Business Info ── */}
             {activeTab === "bizinfo" && (() => {
               const BIZ_DESCRIPTION =
-`Bed Bugs & Beyond is Baldwin County's #1 trusted pest control company for homeowners, families, rental properties, and vacation rentals. We specialize in complete bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, results guaranteed. Call (251) 324-9090 to schedule your inspection today.`;
+`Bed Bugs & Beyond is a trusted, locally owned pest control company serving Baldwin County homeowners, families, rental properties, and vacation rentals. We specialize in complete bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, experienced, fast response. Call (251) 324-9090 to schedule your inspection today.`;
 
               const SPECIALTIES =
 `Bed bug inspection and heat treatment
@@ -2842,6 +2842,532 @@ Baldwin County, Alabama`;
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                   {YELP_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = { healthy: "Healthy", warning: "Warning", missing: "Missing", pending: "Pending", coming_soon: "Coming Soon" };
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>{statusLabels[d.status]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Angi for Pros V2 Card ─────────────────────────────────────────────────────
+const ANGI_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create Angi for Pros account",           status: "pending", description: "Sign up at pro.angi.com using your business email." },
+  { label: "Complete business profile",              status: "pending", description: "Fill in company name, contact info, and all profile sections." },
+  { label: "Confirm business name",                  status: "pending", description: "Exact match required: 'Bed Bugs & Beyond' — no keyword additions." },
+  { label: "Confirm phone number",                   status: "pending", description: "Set (251) 324-9090 as the primary contact number." },
+  { label: "Confirm website",                        status: "pending", description: "Set website to https://bedbugsandbeyond.net." },
+  { label: "Select service category",                status: "pending", description: "Primary: Pest Control. Add all relevant sub-services." },
+  { label: "Set service area",                       status: "pending", description: "Add Baldwin County + all 7 primary cities." },
+  { label: "Add business description",               status: "pending", description: "Use the copy-ready description in the Business Info tab." },
+  { label: "Upload logo / profile photo",            status: "pending", description: "Square, min 400×400 px (PNG or JPG)." },
+  { label: "Upload business photos",                 status: "pending", description: "Add at least 5 photos — work photos, truck, team, before/after." },
+  { label: "Set business hours",                     status: "pending", description: "Mon–Fri 7am–6pm, Sat 8am–2pm, Sun Closed." },
+  { label: "Enable lead preferences",                status: "pending", description: "Select which pest control services you want to receive quote requests for." },
+  { label: "Set weekly lead budget",                 status: "pending", description: "Configure how many leads per week and your budget cap." },
+  { label: "Enable Instant Match",                   status: "pending", description: "Turn on Instant Match so Angi connects homeowners to you automatically." },
+  { label: "Respond to first lead within 1 hour",   status: "pending", description: "Fast response rate improves your Angi ranking and win rate." },
+];
+
+const ANGI_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Angi for Pros account created",    status: "missing",  note: "No Angi Pro account detected — not yet started" },
+  { check: "Business profile completed",       status: "missing",  note: "Profile not created or incomplete" },
+  { check: "NAP matches Google Business Profile", status: "pending", note: "Will be confirmed once profile is created" },
+  { check: "Phone confirmed",                  status: "pending",  note: "Pending profile setup" },
+  { check: "Website confirmed",                status: "pending",  note: "Pending profile setup" },
+  { check: "Category selected",               status: "missing",  note: "No service category set" },
+  { check: "Service area configured",         status: "missing",  note: "No service area set" },
+  { check: "Business description added",      status: "missing",  note: "No description set" },
+  { check: "Photos uploaded",                 status: "missing",  note: "No photos — minimum 5 recommended" },
+  { check: "Lead preferences enabled",        status: "missing",  note: "Quote request categories not configured" },
+  { check: "Budget / lead cap configured",    status: "missing",  note: "Weekly budget not set" },
+  { check: "GorillaDesk 'Angi Leads' source", status: "pending",  note: "Already appearing in GorillaDesk — profile will improve lead quality" },
+];
+
+function AngiBusinessCard() {
+  const [drawerOpen,   setDrawerOpen]   = useState(false);
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [checklist,    setChecklist]    = useState(ANGI_CHECKLIST);
+  const [listingUrl,   setListingUrl]   = useState("");
+  const [acctEmail,    setAcctEmail]    = useState("");
+  const [verifyStatus, setVerifyStatus] = useState("Not Started");
+  const [notes,        setNotes]        = useState("");
+  const [savedMsg,     setSavedMsg]     = useState(false);
+  const [copiedKey,    setCopiedKey]    = useState<string | null>(null);
+
+  const completedCount  = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const angiScore       = Math.round((completedCount / checklist.length) * 10);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+  function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
+
+  const ANGI_ORANGE = "#E8330A";
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",   label: "Setup Checklist" },
+    { key: "bizinfo",     label: "Business Info" },
+    { key: "profile",     label: "Profile Tracker" },
+    { key: "diagnostics", label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(232,51,10,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(232,51,10,0.25)",
+      borderRadius: 14, backdropFilter: "blur(12px)", overflow: "hidden",
+      boxShadow: "0 0 24px rgba(232,51,10,0.06)", transition: "border-color 0.2s",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #C42D08, #E8330A)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 13, fontWeight: 900, color: "#FFF", letterSpacing: "-0.5px",
+            boxShadow: "0 0 16px rgba(232,51,10,0.35)",
+          }}>A</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Angi for Pros</span>
+              <StatusBadge status="pending" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Home service leads, pest control quote requests, local trust &amp; comparison shopping.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "Category",     value: "Pest Control" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Status",       value: "Not Started" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score + progress */}
+        <div style={{
+          background: "rgba(232,51,10,0.05)", border: "1px solid rgba(232,51,10,0.15)",
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: ANGI_ORANGE }}>Angi Score: {angiScore} / 10 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: ANGI_ORANGE, borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: ANGI_ORANGE, fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: drawerOpen ? "rgba(232,51,10,0.2)" : "rgba(232,51,10,0.1)",
+              border: "1px solid rgba(232,51,10,0.35)", color: ANGI_ORANGE, transition: "all 0.15s",
+            }}
+          >{drawerOpen ? "▲ Close Angi Setup" : "▼ Open Angi Setup"}</button>
+          <a href="https://pro.angi.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(232,51,10,0.08)", border: "1px solid rgba(232,51,10,0.22)", color: ANGI_ORANGE, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Open Angi for Pros
+          </a>
+          <a href="https://www.angi.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(232,51,10,0.05)", border: "1px solid rgba(232,51,10,0.15)", color: "#64748B", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Angi.com
+          </a>
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: "1px solid rgba(232,51,10,0.12)", background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: activeTab === tab.key ? `2px solid ${ANGI_ORANGE}` : "2px solid transparent",
+                color: activeTab === tab.key ? ANGI_ORANGE : "#475569", transition: "all 0.15s", marginBottom: -1,
+              }}>{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 15 steps to fully activate your Angi for Pros profile and start receiving pest control quote requests.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(232,51,10,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(232,51,10,0.2)" : "rgba(255,255,255,0.05)"}`,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(232,51,10,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(232,51,10,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? ANGI_ORANGE : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                              Mark Done
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <a href="https://pro.angi.com" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(232,51,10,0.1)", border: "1px solid rgba(232,51,10,0.3)", color: ANGI_ORANGE, textDecoration: "none", display: "inline-block" }}>
+                    ↗ Open Angi for Pros
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Bed Bugs & Beyond provides reliable, professional pest control services for homeowners and property managers throughout Baldwin County, Alabama. We specialize in bed bug treatment, roach and ant control, spider and flea elimination, rodent removal, mosquito treatment, and general pest management. Locally owned and operated, serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Call (251) 324-9090 for a free inspection estimate.`;
+
+              const SERVICES_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control`;
+
+              const SPECIALTIES =
+`Bed bug inspection and treatment
+Roach elimination
+Ant control (interior and exterior)
+Spider treatment
+Flea treatment (home and yard)
+Rodent exclusion and trapping
+Mosquito yard treatment
+General pest control maintenance`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Business Name",     value: "Bed Bugs & Beyond",                   note: "Exact match — no keywords appended" },
+                { label: "Phone Number",      value: "(251) 324-9090", copyKey: "angi-phone", note: "Must match GBP exactly (NAP)" },
+                { label: "Website",           value: "https://bedbugsandbeyond.net",          note: "Confirmed BB&B website" },
+                { label: "Primary Category",  value: "Pest Control",                          note: "Select from Angi's service category list" },
+                { label: "Service Area",      value: "Baldwin County, AL — 7 cities",         note: "Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, Robertsdale" },
+                { label: "Business Hours",    value: "Mon–Fri 7am–6pm, Sat 8am–2pm",         note: "Set in Angi Pro profile settings" },
+                { label: "Response Target",   value: "Within 1 hour of lead receipt",         note: "Fast response improves win rate and Angi ranking" },
+                { label: "Verification",      value: "Email + phone confirmation",            note: "Angi may also request a background check for new pros" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string }[] = [
+                { item: "Logo / profile",    spec: "Square, min 400×400 px (PNG/JPG) — appears in search results" },
+                { item: "Service photo ×3",  spec: "Treatment photos — bed bug, exterior spray, interior inspection" },
+                { item: "Team / vehicle",    spec: "Uniformed tech or branded truck builds credibility with homeowners" },
+                { item: "Before/after",      spec: "Before and after treatment photos (highly valued by comparison shoppers)" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(232,51,10,0.1)",
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(232,51,10,0.25)",
+                          color: copied ? "#10B981" : ANGI_ORANGE, transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly rows={rows} value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none", cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: ANGI_ORANGE }}>Setup Pending</strong> until the Angi profile is live and receiving leads.
+                  </div>
+
+                  {/* ── Why Angi matters callout ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 20,
+                    background: "rgba(232,51,10,0.05)", border: "1px solid rgba(232,51,10,0.2)",
+                    fontSize: 12, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ fontWeight: 700, color: "#CBD5E1", marginBottom: 6, fontSize: 12.5 }}>Why Angi matters for Bed Bugs &amp; Beyond</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                      {[
+                        { icon: "🔨", text: "Home service leads — homeowners searching for pest control submit quote requests directly to you" },
+                        { icon: "📊", text: "Comparison shopping — homeowners compare pros side-by-side; a complete profile wins more clicks" },
+                        { icon: "⭐", text: "Local trust — Angi-verified reviews build credibility for homeowners making buying decisions" },
+                        { icon: "📱", text: "GorillaDesk signal — 'Angi Leads' already appears in your lead source data; a profile improves lead quality" },
+                      ].map(item => (
+                        <div key={item.icon} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span style={{ flexShrink: 0, fontSize: 13 }}>{item.icon}</span>
+                          <span style={{ fontSize: 11.5, color: "#94A3B8" }}>{item.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Required fields ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(232,51,10,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(232,51,10,0.2)",
+                              color: copiedKey === f.copyKey ? "#10B981" : ANGI_ORANGE, whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready content ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Business Description" copyKey="angi-desc"       value={BIZ_DESCRIPTION} rows={5} />
+                  <CopyBlock label="Services List"        copyKey="angi-services"   value={SERVICES_LIST}   rows={9} />
+                  <CopyBlock label="Specialties"          copyKey="angi-specialties" value={SPECIALTIES}    rows={9} />
+                  <CopyBlock label="Service Area List"    copyKey="angi-areas"      value={SERVICE_AREAS}   rows={9} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Photo Requirements
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(232,51,10,0.04)", border: "1px solid rgba(232,51,10,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: "#EF4444", background: "rgba(239,68,68,0.1)", whiteSpace: "nowrap" }}>Missing</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Lead preferences note ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 18,
+                    background: "rgba(232,51,10,0.04)", border: "1px solid rgba(232,51,10,0.18)",
+                    fontSize: 12.5, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ fontWeight: 700, color: "#CBD5E1", marginBottom: 4, fontSize: 12 }}>Lead Preferences &amp; Budget</div>
+                    Angi charges per lead. Set a <strong style={{ color: "#CBD5E1" }}>weekly budget cap</strong> to control spend. Select only the pest control services you actively want leads for — unchecked services are excluded from matching. Enable <strong style={{ color: "#CBD5E1" }}>Instant Match</strong> to be auto-connected with homeowners who request quotes.
+                  </div>
+
+                  {/* ── Status + next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 14,
+                    background: "rgba(232,51,10,0.05)", border: "1px solid rgba(232,51,10,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>Profile &amp; Lead Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Updates once the Angi Pro profile is complete and leads are live.
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: "rgba(232,51,10,0.12)", border: "1px solid rgba(232,51,10,0.3)", color: ANGI_ORANGE,
+                    }}>Not Started</span>
+                  </div>
+
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Go to <a href="https://pro.angi.com" target="_blank" rel="noopener noreferrer" style={{ color: ANGI_ORANGE }}>pro.angi.com</a> — sign in or create a new Pros account</li>
+                      <li>Select <strong style={{ color: "#CBD5E1" }}>Pest Control</strong> as your service category</li>
+                      <li>Set service area to <strong style={{ color: "#CBD5E1" }}>Baldwin County</strong> + all 7 cities listed above</li>
+                      <li>Paste <strong style={{ color: "#CBD5E1" }}>Business Description</strong> using copy button above</li>
+                      <li>Add <strong style={{ color: "#CBD5E1" }}>Services List</strong> and <strong style={{ color: "#CBD5E1" }}>Specialties</strong> from copy blocks above</li>
+                      <li>Upload logo and minimum 5 photos per specs above</li>
+                      <li>Set business hours (Mon–Fri 7am–6pm, Sat 8am–2pm)</li>
+                      <li>Configure <strong style={{ color: "#CBD5E1" }}>lead preferences</strong> — select services to receive quote requests for</li>
+                      <li>Set a <strong style={{ color: "#CBD5E1" }}>weekly budget cap</strong> to control Angi lead costs</li>
+                      <li>Enable <strong style={{ color: "#CBD5E1" }}>Instant Match</strong> for automatic lead connections</li>
+                      <li>Update profile and lead status in <strong style={{ color: "#CBD5E1" }}>Profile Tracker</strong> tab once live</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://pro.angi.com" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(232,51,10,0.1)", border: "1px solid rgba(232,51,10,0.3)", color: ANGI_ORANGE, textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Angi for Pros
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Angi for Pros account details, profile URL, and lead status here.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",    val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
+                    { label: "Profile Status",   val: verifyStatus, set: setVerifyStatus, ph: "Not Started / In Progress / Live" },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Angi Profile URL</div>
+                    <input value={listingUrl} onChange={e => setListingUrl(e.target.value)} placeholder="https://www.angi.com/companylist/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                    placeholder="Notes about setup progress, lead budget, blockers, or next steps..."
+                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ANGI_ORANGE, border: "none", color: "#FFF" }}>
+                    Save Setup Notes
+                  </button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Angi for Pros setup requirements, NAP consistency, and lead readiness.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {ANGI_DIAGS.map((d, i) => {
                     const s = APPLE_DIAG_STYLE[d.status];
                     const statusLabels: Record<AppleDiagStatus, string> = { healthy: "Healthy", warning: "Warning", missing: "Missing", pending: "Pending", coming_soon: "Coming Soon" };
                     return (
@@ -3139,6 +3665,8 @@ export default function LocalPresenceEnginePage() {
           <NextdoorBusinessCard />
           {/* Yelp — V2 dedicated card */}
           <YelpBusinessCard />
+          {/* Angi — V2 dedicated card */}
+          <AngiBusinessCard />
           {/* AI Search Coming Soon */}
           <AISearchCard />
         </div>

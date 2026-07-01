@@ -6,6 +6,7 @@ import { fetchKeywords, insertKeywords, clearKeywords } from "@/lib/keywords-sto
 import { fetchArticles, insertArticles, clearArticles, buildContentPlan } from "@/lib/articles-store";
 import { generateKeywordIdeas } from "@/lib/keywords.functions";
 import { useGorilladeskAnalytics } from "@/lib/gorilladesk-analytics";
+import { AiInsightsPanel } from "@/components/AiInsightsPanel";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,6 +312,9 @@ export default function DashboardPage() {
           />
           {PLATFORM_KPI_CARDS.map(c => <KPICard key={c.label} {...c} />)}
         </div>
+
+        {/* ── AI Business Insights ── */}
+        <AiInsightsPanel />
 
         {/* ── Business Health Score + Live Alerts ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 28 }}>

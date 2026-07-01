@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: "/admin/distribution",        icon: "◈",  label: "Distribution" },
   { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },
   { to: "/admin/lead-recovery",       icon: "📞", label: "Lead Recovery" },
+  { to: "/admin/ai-receptionist",    icon: "🎙", label: "AI Receptionist" },
   { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
   { to: "/admin/auto-content",        icon: "🤖", label: "Auto Content Engine" },
   { to: "/admin/image-assets",        icon: "🖼",  label: "Image Asset Manager" },

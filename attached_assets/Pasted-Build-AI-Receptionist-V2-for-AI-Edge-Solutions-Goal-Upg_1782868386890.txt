@@ -1,0 +1,369 @@
+Build AI Receptionist V2 for AI Edge Solutions.
+
+Goal:
+Upgrade the current Telnyx Voice Receptionist from basic keypad routing into a premium AI-powered receptionist module.
+
+Do NOT remove or break the existing working Telnyx voice routes.
+
+Existing working routes:
+- /api/telnyx/voice
+- /api/telnyx/voice/gather
+- /api/telnyx/voice/recording
+
+Existing V1 flow:
+1 = transfer to business
+2 = callback request
+3 = voicemail
+
+Keep this V1 fallback working.
+
+--------------------------------------------------
+NEW MODULE
+--------------------------------------------------
+
+Create/upgrade admin module:
+
+AI Receptionist
+
+Route:
+ /admin/ai-receptionist
+
+Sidebar nav item:
+📞 AI Receptionist
+
+Purpose:
+Let local businesses manage their AI phone receptionist, call routing, intake flows, voicemail, callbacks, and qualification settings.
+
+Use demo client:
+Business: Bed Bugs & Beyond
+Phone: (251) 324-9090
+Industry: Pest Control
+Service Area: Baldwin County, Alabama
+Cities:
+- Foley
+- Gulf Shores
+- Orange Beach
+- Fairhope
+- Daphne
+- Spanish Fort
+
+Business forward number:
++12513249090
+
+Telnyx number:
++12512863200
+
+--------------------------------------------------
+PAGE SECTIONS
+--------------------------------------------------
+
+1) Executive Header
+2) KPI Cards
+3) Receptionist Status
+4) Call Flow Builder
+5) Intake Questions
+6) Live Call Queue
+7) Call Logs
+8) Voicemail + Callback Requests
+9) AI Script / Greeting Builder
+10) Settings
+11) Diagnostics
+
+--------------------------------------------------
+EXECUTIVE HEADER
+--------------------------------------------------
+
+Title:
+AI Receptionist
+
+Subtitle:
+Answer calls, qualify leads, route urgent requests, and recover missed opportunities automatically.
+
+Status pill:
+Voice Automation Active
+
+Show:
+- Telnyx number
+- Business forward number
+- Last checked timestamp
+
+--------------------------------------------------
+KPI CARDS
+--------------------------------------------------
+
+Show 6 cards:
+
+1. Calls Answered Today
+Value: 18
+
+2. Calls Routed
+Value: 11
+
+3. Callback Requests
+Value: 4
+
+4. Voicemails Captured
+Value: 3
+
+5. Lead Qualification Rate
+Value: 61%
+
+6. Estimated Revenue Protected
+Value: $2,450
+
+--------------------------------------------------
+RECEPTIONIST STATUS
+--------------------------------------------------
+
+Show system status cards:
+
+- Telnyx Voice Webhook: Healthy
+- Call Transfer: Active
+- Callback Capture: Active
+- Voicemail Recording: Active
+- AI Conversation Mode: V2 Preview
+- Business Hours Routing: Enabled
+
+Include buttons:
+- Test Voice Webhook
+- Simulate Incoming Call
+- Open Diagnostics
+
+--------------------------------------------------
+CALL FLOW BUILDER
+--------------------------------------------------
+
+Create a visual call flow.
+
+Default pest control flow:
+
+1. Incoming Call
+2. AI Greeting
+3. Identify Intent
+4. Ask Service Needed
+5. Ask City / Service Area
+6. Ask Urgency
+7. Route Based on Intent
+
+Branching:
+
+Emergency / urgent pest issue:
+→ Transfer to business
+
+Callback request:
+→ Capture name, phone, issue, city
+→ Send callback notification
+
+General inquiry:
+→ Answer FAQs or offer callback
+
+Voicemail:
+→ Record message
+→ Save call log
+
+Preserve keypad fallback:
+Press 1 = transfer
+Press 2 = callback
+Press 3 = voicemail
+
+--------------------------------------------------
+INTAKE QUESTIONS
+--------------------------------------------------
+
+Create editable intake question list.
+
+Default questions:
+
+1. What pest issue are you dealing with?
+2. What city are you located in?
+3. Is this urgent or can it wait until the next business day?
+4. Have you seen the pest activity inside, outside, or both?
+5. Would you like a callback or inspection appointment?
+
+Show each question with:
+- question text
+- purpose
+- required toggle
+- reorder controls
+- edit button
+
+--------------------------------------------------
+LIVE CALL QUEUE
+--------------------------------------------------
+
+Show active/recent calls.
+
+Fields:
+- Caller
+- Phone
+- Intent
+- City
+- Urgency
+- Status
+- Duration
+- Action
+
+Use demo calls for Bed Bugs & Beyond:
+- Bed bugs in Gulf Shores — urgent — transferred
+- Roaches in Foley — callback requested
+- Ants in Fairhope — general inquiry
+- Rodents in Daphne — voicemail
+- Fleas in Spanish Fort — qualified lead
+
+--------------------------------------------------
+CALL LOGS
+--------------------------------------------------
+
+Create table:
+
+Columns:
+- Date/Time
+- Caller
+- Phone
+- Intent
+- Outcome
+- Duration
+- Recording
+- Transcript Status
+
+Outcomes:
+- Transferred
+- Callback Requested
+- Voicemail
+- Qualified Lead
+- Missed
+- Spam Blocked
+
+--------------------------------------------------
+VOICEMAIL + CALLBACK REQUESTS
+--------------------------------------------------
+
+Create section with cards:
+
+Callback Requests:
+- name
+- phone
+- issue
+- city
+- urgency
+- requested time
+- status
+
+Voicemails:
+- caller
+- duration
+- transcript preview
+- recording status
+- action button
+
+Actions:
+- Mark Returned
+- Send SMS Follow-up
+- Assign to Lead Recovery
+- Archive
+
+--------------------------------------------------
+AI SCRIPT / GREETING BUILDER
+--------------------------------------------------
+
+Create editable script panel.
+
+Default greeting:
+
+“Thank you for calling Bed Bugs & Beyond. This is the AI receptionist. I can help route your call, take a message, or collect information so our team can call you back quickly. If this is urgent, I can transfer you now.”
+
+Add script sections:
+- Greeting
+- Urgent issue response
+- Callback capture response
+- After-hours response
+- Voicemail prompt
+- Closing message
+
+Each section should show:
+- script text
+- edit button
+- preview button
+
+--------------------------------------------------
+SETTINGS
+--------------------------------------------------
+
+Create settings panel:
+
+Toggles:
+- AI Receptionist Enabled
+- Keypad Fallback Enabled
+- Business Hours Routing
+- After-Hours Mode
+- Spam Filtering
+- Record Voicemails
+- Send SMS Follow-Up
+- Assign Missed Calls to Lead Recovery
+
+Routing settings:
+- Business forward number
+- Transfer timeout
+- After-hours behavior
+- Emergency keyword routing
+
+Emergency keywords:
+- bed bugs
+- infestation
+- urgent
+- emergency
+- same day
+- hotel
+- rental
+- children
+- elderly
+
+--------------------------------------------------
+DIAGNOSTICS
+--------------------------------------------------
+
+Add diagnostics panel:
+
+- Telnyx webhook reachable
+- Voice route responding
+- Gather route responding
+- Recording route responding
+- Forward number configured
+- SMS follow-up linked
+- Lead Recovery linked
+- Recent call test status
+
+Statuses:
+Healthy
+Warning
+Error
+Coming Soon
+
+--------------------------------------------------
+IMPORTANT TECH REQUIREMENTS
+--------------------------------------------------
+
+1. Preserve all existing Telnyx routes and behavior.
+2. Do not disconnect or overwrite production Telnyx settings.
+3. Do not remove existing Lead Recovery functionality.
+4. Do not remove existing System Diagnostics.
+5. If live Telnyx call data already exists, display it.
+6. If no live call data exists, show polished demo data.
+7. Use V2 UI while keeping V1 voice fallback safe.
+8. Make all buttons safe for demo unless backend exists.
+9. Do not add fake destructive actions.
+
+--------------------------------------------------
+STYLE REQUIREMENTS
+--------------------------------------------------
+
+Must match AI Edge dashboard style exactly:
+- dark navy background
+- cyan highlights
+- metallic/silver borders
+- glow cards
+- status badges
+- polished SaaS UI
+- consistent with Command Center V2, Lead Recovery AI V2, Local Presence Engine, and AI Visibility Engine
+
+This module should feel like a premium AI phone automation system for local businesses.

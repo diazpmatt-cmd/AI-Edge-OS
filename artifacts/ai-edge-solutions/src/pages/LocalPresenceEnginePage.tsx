@@ -244,10 +244,18 @@ function AppleBusinessCard() {
   const [mapsUrl,       setMapsUrl]       = useState("");
   const [verifyEmail,   setVerifyEmail]   = useState("");
   const [orgName,       setOrgName]       = useState("Bed Bugs & Beyond");
-  const [verifyMethod,  setVerifyMethod]  = useState("Phone");
-  const [verifyStatus,  setVerifyStatus]  = useState("Pending");
+  const [verifyMethod,  setVerifyMethod]  = useState("Phone PIN / Apple review");
+  const [verifyStatus,  setVerifyStatus]  = useState("Verification Pending");
   const [savedMsg,      setSavedMsg]      = useState(false);
   const [copiedKey,     setCopiedKey]     = useState<string | null>(null);
+
+  const APPLE_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
+    { value: "Not Started",          label: "Not Started",          color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
+    { value: "Submitted",            label: "Submitted",            color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Verification Pending", label: "Verification Pending", color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
+    { value: "Verified",             label: "Verified",             color: "#00AEEF", bg: "rgba(0,174,239,0.12)",   border: "rgba(0,174,239,0.35)"   },
+    { value: "Live",                 label: "Live",                 color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+  ];
 
   const completedCount    = checklist.filter(s => s.status === "complete").length;
   const inProgressCount   = checklist.filter(s => s.status === "in-progress").length;
@@ -638,76 +646,152 @@ Baldwin County, Alabama`;
             })()}
 
             {/* ── Tab: Profile Tracker ── */}
-            {activeTab === "profile" && (
-              <div>
-                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
-                  Track your Apple Business account details, listing URLs, and verification status here. This is stored locally for reference — no backend required.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  {[
-                    { label: "Account Email",       val: verifyEmail,  set: setVerifyEmail,  ph: "apple-id@example.com" },
-                    { label: "Organization Name",   val: orgName,      set: setOrgName,      ph: "Bed Bugs & Beyond" },
-                    { label: "Verification Method", val: verifyMethod, set: setVerifyMethod, ph: "Phone / Email / Postcard" },
-                    { label: "Verification Status", val: verifyStatus, set: setVerifyStatus, ph: "Pending / Submitted / Approved" },
-                  ].map(field => (
-                    <div key={field.label}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+            {activeTab === "profile" && (() => {
+              const currentStage = APPLE_STAGES.find(s => s.value === verifyStatus) ?? APPLE_STAGES[0];
+              const currentIdx   = APPLE_STAGES.findIndex(s => s.value === verifyStatus);
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Track Apple Business Connect setup status here. Status stays <strong style={{ color: "#F59E0B" }}>Setup Pending</strong> on the card badge until you confirm the listing is live.
+                  </div>
+
+                  {/* ── 5-stage status selector ── */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                      Setup Status
+                    </div>
+
+                    {/* Stage rail */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 0, flexWrap: "wrap", rowGap: 8 }}>
+                      {APPLE_STAGES.map((stage, i) => {
+                        const isActive  = stage.value === verifyStatus;
+                        const isPast    = i < currentIdx;
+                        const isLive    = stage.value === "Live";
+                        return (
+                          <React.Fragment key={stage.value}>
+                            {i > 0 && (
+                              <div style={{
+                                width: 20, height: 2, flexShrink: 0,
+                                background: isPast || isActive ? stage.color : "rgba(255,255,255,0.08)",
+                                transition: "background 0.2s",
+                              }} />
+                            )}
+                            <button
+                              onClick={() => !isLive && setVerifyStatus(stage.value)}
+                              title={isLive ? "Set to Live only after Apple confirms the listing is publicly visible" : `Set status to ${stage.label}`}
+                              style={{
+                                padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                                cursor: isLive ? "not-allowed" : "pointer",
+                                background: isActive ? stage.bg : isPast ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+                                border: `1px solid ${isActive ? stage.border : isPast ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)"}`,
+                                color: isActive ? stage.color : isPast ? "#475569" : "#334155",
+                                opacity: isLive ? 0.6 : 1,
+                                transition: "all 0.15s", whiteSpace: "nowrap",
+                              }}
+                            >
+                              {isPast && !isActive ? "✓ " : ""}{stage.label}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {/* Current status callout */}
+                    <div style={{
+                      marginTop: 12, padding: "10px 14px", borderRadius: 9,
+                      background: currentStage.bg, border: `1px solid ${currentStage.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: currentStage.color }}>
+                          Current: {currentStage.label}
+                        </span>
+                        {verifyStatus === "Verification Pending" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>
+                            — waiting for Apple to confirm PIN or review
+                          </span>
+                        )}
+                        {verifyStatus === "Verified" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>
+                            — verified but not yet confirmed live on Apple Maps
+                          </span>
+                        )}
+                        {verifyStatus === "Live" && (
+                          <span style={{ fontSize: 11, color: "#64748B", marginLeft: 8 }}>
+                            — listing confirmed live · update card status badge
+                          </span>
+                        )}
+                      </div>
+                      {verifyStatus === "Live" && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                          Ready to mark Connected
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Live stage guard note */}
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
+                      <strong style={{ color: "#64748B" }}>Live</strong> is locked until you manually confirm the Apple Maps listing is publicly visible. Do not set Live based on email only.
+                    </div>
+                  </div>
+
+                  {/* ── Account detail fields ── */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    {[
+                      { label: "Account Email",       val: verifyEmail,  set: setVerifyEmail,  ph: "apple-id@example.com" },
+                      { label: "Organization Name",   val: orgName,      set: setOrgName,      ph: "Bed Bugs & Beyond" },
+                      { label: "Verification Method", val: verifyMethod, set: setVerifyMethod, ph: "Phone PIN / Apple review" },
+                    ].map(field => (
+                      <div key={field.label}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                        <input
+                          value={field.val}
+                          onChange={e => field.set(e.target.value)}
+                          placeholder={field.ph}
+                          style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                        />
+                      </div>
+                    ))}
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Place Card URL</div>
                       <input
-                        value={field.val}
-                        onChange={e => field.set(e.target.value)}
-                        placeholder={field.ph}
-                        style={{
-                          width: "100%", boxSizing: "border-box",
-                          padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0",
-                          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-                          outline: "none", fontFamily: "inherit",
-                        }}
+                        value={placeCardUrl}
+                        onChange={e => setPlaceCardUrl(e.target.value)}
+                        placeholder="https://maps.apple.com/?auid=..."
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
                       />
                     </div>
-                  ))}
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Place Card URL</div>
-                    <input
-                      value={placeCardUrl}
-                      onChange={e => setPlaceCardUrl(e.target.value)}
-                      placeholder="https://maps.apple.com/?auid=..."
-                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Maps Listing URL</div>
+                      <input
+                        value={mapsUrl}
+                        onChange={e => setMapsUrl(e.target.value)}
+                        placeholder="https://maps.apple.com/..."
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                    <textarea
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Add notes about the setup progress, blockers, or next steps..."
+                      rows={3}
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }}
                     />
                   </div>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Apple Maps Listing URL</div>
-                    <input
-                      value={mapsUrl}
-                      onChange={e => setMapsUrl(e.target.value)}
-                      placeholder="https://maps.apple.com/..."
-                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }}
-                    />
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                    <button
+                      onClick={handleSave}
+                      style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#FFF" }}
+                    >Save Setup Notes</button>
+                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
-                  <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Add notes about the setup progress, blockers, or next steps..."
-                    rows={3}
-                    style={{
-                      width: "100%", boxSizing: "border-box",
-                      padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0",
-                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-                      outline: "none", fontFamily: "inherit", resize: "vertical",
-                    }}
-                  />
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-                  <button
-                    onClick={handleSave}
-                    style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#FFF", transition: "opacity 0.15s" }}
-                  >Save Setup Notes</button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── Tab: API Readiness ── */}
             {activeTab === "api" && (

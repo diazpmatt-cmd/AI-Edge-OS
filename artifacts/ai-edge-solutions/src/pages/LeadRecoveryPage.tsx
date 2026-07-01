@@ -5,6 +5,29 @@ import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+type TelnyxAnalytics = {
+  total_calls:        number;
+  missed_calls:       number;
+  answered_calls:     number;
+  voicemail_calls:    number;
+  callback_requests:  number;
+  textbacks_sent:     number;
+  textbacks_failed:   number;
+  sms_received:       number;
+  sms_replies:        number;
+  recovered_leads:    number;
+  recovery_rate:      number | null;
+  after_hours_missed: number;
+  estimated_missed_revenue_fmt:  string | null;
+  estimated_missed_revenue_note: string | null;
+  reply_breakdown: { quote_request: number; appointment_request: number; emergency_request: number };
+  total_rows:         number;
+  test_rows_excluded: number;
+  has_real_calls:     boolean;
+  data_source:        "live";
+  period:             string;
+};
+
 type Lead = {
   id: string;
   clientName: string;
@@ -171,8 +194,15 @@ export default function LeadRecoveryPage() {
   // Live Telnyx leads
   const { data, isLoading } = useQuery<LeadsResponse>({
     queryKey: ["leads"],
-    queryFn: () => authFetch("/leads"),
+    queryFn: () => authFetch<LeadsResponse>("/leads"),
     refetchInterval: 30000,
+  });
+
+  // Telnyx analytics (real webhook data)
+  const { data: telnyxData, isLoading: telnyxLoading } = useQuery<TelnyxAnalytics>({
+    queryKey: ["telnyx-analytics"],
+    queryFn: () => authFetch<TelnyxAnalytics>("/analytics/telnyx"),
+    refetchInterval: 60000,
   });
 
   const patchMut = useMutation({
@@ -260,10 +290,30 @@ export default function LeadRecoveryPage() {
 
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-          <KPICard icon="📵" label="Missed Calls Total"  value={liveStats.total}        sub="From Telnyx webhook"                color="#EF4444" />
-          <KPICard icon="📈" label="Recovery Rate"      value={liveStats.total > 0 ? `${Math.round((liveStats.withMessages / liveStats.total) * 100)}%` : "—"} sub={liveStats.total > 0 ? `${liveStats.withMessages} of ${liveStats.total} responded` : "No leads yet"} color="#00AEEF" glow />
-          <KPICard icon="✅" label="Leads Responded"    value={liveStats.withMessages}  sub="Replied to SMS follow-up"          color="#10B981" />
-          <KPICard icon="💰" label="Revenue Recovered"  value="—"      sub="Connect billing source"                 color="#F59E0B" />
+          <KPICard
+            icon="📵" label="Missed Calls"
+            value={telnyxLoading ? "…" : (telnyxData?.missed_calls ?? 0)}
+            sub={telnyxLoading ? "Loading…" : `${telnyxData?.after_hours_missed ?? 0} after-hours`}
+            color="#EF4444"
+          />
+          <KPICard
+            icon="📈" label="Recovery Rate"
+            value={telnyxLoading ? "…" : (telnyxData?.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—")}
+            sub={telnyxLoading ? "Loading…" : (telnyxData?.recovered_leads ? `${telnyxData.recovered_leads} leads recovered` : "No replies yet")}
+            color="#00AEEF" glow
+          />
+          <KPICard
+            icon="💬" label="Text-backs Sent"
+            value={telnyxLoading ? "…" : (telnyxData?.textbacks_sent ?? 0)}
+            sub={telnyxLoading ? "Loading…" : `${telnyxData?.sms_replies ?? 0} replies received`}
+            color="#10B981"
+          />
+          <KPICard
+            icon="💰" label="Est. Missed Revenue"
+            value={telnyxLoading ? "…" : (telnyxData?.estimated_missed_revenue_fmt ?? "—")}
+            sub="Estimate — see note in Analytics tab"
+            color="#F59E0B"
+          />
         </div>
 
         {/* ── Recovery Pipeline ── */}
@@ -573,17 +623,129 @@ export default function LeadRecoveryPage() {
         {/* ── Tab: Analytics ── */}
         {activeTab === "analytics" && (
           <div>
-            <SectionDivider title="Recovery Analytics — Last 30 Days" />
-            <div style={{
-              background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.12)",
-              borderRadius: 12, padding: "36px 24px", textAlign: "center",
-            }}>
-              <div style={{ fontSize: 22, marginBottom: 10, opacity: 0.3 }}>📊</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 6 }}>No analytics data yet</div>
-              <div style={{ fontSize: 12, color: "#334155", maxWidth: 400, margin: "0 auto" }}>
-                Analytics will populate automatically once missed calls are routed through the Telnyx number and SMS follow-ups are sent.
+            <SectionDivider title="Recovery Analytics — Live (Telnyx)" right={
+              telnyxData && (
+                <span style={{ fontSize: 10, color: "#475569" }}>
+                  Period: {telnyxData.period} · {telnyxData.test_rows_excluded} test rows excluded · source: live
+                </span>
+              )
+            } />
+
+            {telnyxLoading && (
+              <div style={{ textAlign: "center", color: "#475569", padding: 40 }}>Loading Telnyx analytics…</div>
+            )}
+
+            {!telnyxLoading && telnyxData && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* Call metrics */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                  {[
+                    { label: "Total Calls",       value: telnyxData.total_calls,       color: "#94A3B8", note: "Missed + IVR reached" },
+                    { label: "Missed Calls",       value: telnyxData.missed_calls,      color: "#EF4444", note: "Went to text-back flow" },
+                    { label: "IVR Reached",        value: telnyxData.answered_calls,    color: "#60A5FA", note: "Entered voice menu" },
+                    { label: "Voicemails",         value: telnyxData.voicemail_calls,   color: "#8B5CF6", note: "Pressed 3 in menu" },
+                  ].map(m => (
+                    <div key={m.label} style={{
+                      background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: 12, padding: "16px 18px",
+                    }}>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+                      <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4 }}>{m.label}</div>
+                      <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{m.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* SMS / text-back metrics */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                  {[
+                    { label: "Text-backs Sent",    value: telnyxData.textbacks_sent,    color: "#10B981", note: "Auto-sent on missed call" },
+                    { label: "Text-back Failed",   value: telnyxData.textbacks_failed,  color: "#F87171", note: "Delivery failures" },
+                    { label: "SMS Received",       value: telnyxData.sms_received,      color: "#F59E0B", note: "Inbound SMS total" },
+                    { label: "SMS Replies",        value: telnyxData.sms_replies,       color: "#00AEEF", note: "Replies to text-back menu" },
+                  ].map(m => (
+                    <div key={m.label} style={{
+                      background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: 12, padding: "16px 18px",
+                    }}>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+                      <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 4 }}>{m.label}</div>
+                      <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{m.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recovery + after-hours row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Callback Requests</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: "#00AEEF" }}>{telnyxData.callback_requests}</div>
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Pressed 2 in voice menu</div>
+                  </div>
+                  <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>After-Hours Missed</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: "#F59E0B" }}>{telnyxData.after_hours_missed}</div>
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Before 8am or after 6pm CT</div>
+                  </div>
+                  <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Recovery Rate</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: "#10B981" }}>
+                      {telnyxData.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                      {telnyxData.recovered_leads} recovered of {telnyxData.missed_calls} missed
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reply breakdown */}
+                <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "18px 20px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 14 }}>SMS Reply Breakdown</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                    {[
+                      { label: "Quote Requests",       value: telnyxData.reply_breakdown.quote_request,       color: "#00AEEF" },
+                      { label: "Appointment Requests", value: telnyxData.reply_breakdown.appointment_request, color: "#10B981" },
+                      { label: "Emergency Issues",     value: telnyxData.reply_breakdown.emergency_request,   color: "#EF4444" },
+                    ].map(m => (
+                      <div key={m.label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: m.color }}>{m.value}</div>
+                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Revenue estimate */}
+                {telnyxData.estimated_missed_revenue_fmt && (
+                  <div style={{
+                    background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.2)",
+                    borderRadius: 12, padding: "16px 20px",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+                      ⚠ Revenue Estimate (not confirmed)
+                    </div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "#FCD34D" }}>{telnyxData.estimated_missed_revenue_fmt}</div>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+                      {telnyxData.estimated_missed_revenue_note}
+                    </div>
+                  </div>
+                )}
+
+                {/* No real data state */}
+                {!telnyxData.has_real_calls && (
+                  <div style={{
+                    background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)",
+                    borderRadius: 10, padding: "14px 18px",
+                  }}>
+                    <div style={{ fontSize: 12, color: "#475569" }}>
+                      No real call data yet — {telnyxData.test_rows_excluded} test rows excluded. Real data will appear once calls route through the Telnyx number.
+                    </div>
+                  </div>
+                )}
+
               </div>
-            </div>
+            )}
           </div>
         )}
 

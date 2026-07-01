@@ -5,9 +5,32 @@ import { loadProfile, type Keyword, type ArticleDraft } from "@/lib/business-dat
 import { fetchKeywords, insertKeywords, clearKeywords } from "@/lib/keywords-store";
 import { fetchArticles, insertArticles, clearArticles, buildContentPlan } from "@/lib/articles-store";
 import { generateKeywordIdeas } from "@/lib/keywords.functions";
+import { useQuery } from "@tanstack/react-query";
+import { useApiFetch } from "@/lib/api";
 import { useGorilladeskAnalytics } from "@/lib/gorilladesk-analytics";
 import { AiInsightsPanel } from "@/components/AiInsightsPanel";
 import { toast } from "sonner";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Telnyx analytics type
+// ─────────────────────────────────────────────────────────────────────────────
+type TelnyxAnalytics = {
+  total_calls:        number;
+  missed_calls:       number;
+  answered_calls:     number;
+  voicemail_calls:    number;
+  callback_requests:  number;
+  textbacks_sent:     number;
+  sms_replies:        number;
+  recovered_leads:    number;
+  recovery_rate:      number | null;
+  after_hours_missed: number;
+  estimated_missed_revenue_fmt:  string | null;
+  estimated_missed_revenue_note: string | null;
+  has_real_calls:     boolean;
+  data_source:        "live";
+  period:             string;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Static platform-state cards (not from GorillaDesk)
@@ -177,6 +200,12 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState<null | "keywords" | "plan">(null);
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "healthy">("all");
   const { data: gd, loading: gdLoading, error: gdError, syncing: gdSyncing, lastSyncedAt, syncFromGorillaDesk } = useGorilladeskAnalytics();
+  const dashApiFetch = useApiFetch();
+  const { data: telnyxData, isLoading: telnyxLoading } = useQuery<TelnyxAnalytics>({
+    queryKey: ["telnyx-analytics"],
+    queryFn: () => dashApiFetch<TelnyxAnalytics>("/analytics/telnyx"),
+    refetchInterval: 60000,
+  });
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const handleSync = async () => {
@@ -712,6 +741,57 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* ── Lead Recovery / Telnyx Analytics ── */}
+        <div style={{ marginBottom: 28 }}>
+          <SectionDivider title="Lead Recovery Analytics" right={
+            <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live · Telnyx</span>
+          } />
+          {telnyxLoading ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, height: 88 }} />
+              ))}
+            </div>
+          ) : telnyxData ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                {[
+                  { label: "Missed Calls",     value: String(telnyxData.missed_calls),      color: "#EF4444", sub: `${telnyxData.after_hours_missed} after-hours` },
+                  { label: "Recovery Rate",    value: telnyxData.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—", color: "#10B981", sub: `${telnyxData.recovered_leads} leads recovered` },
+                  { label: "Text-backs Sent",  value: String(telnyxData.textbacks_sent),    color: "#00AEEF", sub: `${telnyxData.sms_replies} replies` },
+                  { label: "Callback Requests",value: String(telnyxData.callback_requests), color: "#8B5CF6", sub: "Via voice menu" },
+                ].map(m => (
+                  <div key={m.label} style={{
+                    background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+                    border: `1px solid ${m.color}20`, borderRadius: 12, padding: "16px 18px",
+                  }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>{m.label}</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: m.color }}>{m.value}</div>
+                    <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>{m.sub}</div>
+                  </div>
+                ))}
+              </div>
+              {telnyxData.estimated_missed_revenue_fmt && (
+                <div style={{
+                  background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.15)",
+                  borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 12,
+                }}>
+                  <span style={{ fontSize: 11, color: "#F59E0B", fontWeight: 700 }}>⚠ Est. Missed Revenue:</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: "#FCD34D" }}>{telnyxData.estimated_missed_revenue_fmt}</span>
+                  <span style={{ fontSize: 10, color: "#6B7280" }}>{telnyxData.estimated_missed_revenue_note}</span>
+                </div>
+              )}
+              {!telnyxData.has_real_calls && (
+                <div style={{ fontSize: 11, color: "#475569", padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8 }}>
+                  No real call traffic yet — monitoring active. Data appears once calls route through the Telnyx number.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#475569", textAlign: "center", padding: 24 }}>Unable to load Telnyx data</div>
+          )}
         </div>
 
         {/* ── Performance Snapshots ── */}

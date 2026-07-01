@@ -208,16 +208,12 @@ export default function ReviewsEnginePage() {
   const loadData = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [statsRes, reqsRes] = await Promise.all([
-        apiFetch("/api/reviews/stats"),
-        apiFetch("/api/reviews/requests"),
+      const [statsData, reqsData] = await Promise.all([
+        apiFetch<{ stats: PlatformStat[] }>("/reviews/stats"),
+        apiFetch<{ requests: ReviewRequest[] }>("/reviews/requests"),
       ]);
-      const statsJson = await statsRes.json();
-      const reqsJson  = await reqsRes.json();
-      if (!statsRes.ok) throw new Error(statsJson.error ?? "Failed to load stats");
-      if (!reqsRes.ok)  throw new Error(reqsJson.error  ?? "Failed to load requests");
-      setStats(statsJson.stats ?? []);
-      setRequests(reqsJson.requests ?? []);
+      setStats(statsData.stats ?? []);
+      setRequests(reqsData.requests ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -230,7 +226,7 @@ export default function ReviewsEnginePage() {
   async function handleSaveStat(platform: string) {
     setSaving(true);
     try {
-      const res = await apiFetch(`/api/reviews/stats/${platform}`, {
+      await apiFetch(`/reviews/stats/${platform}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -238,7 +234,6 @@ export default function ReviewsEnginePage() {
           averageRating: editRating,
         }),
       });
-      if (!res.ok) throw new Error("Save failed");
       setEditingPlatform(null);
       await loadData();
     } finally {
@@ -250,12 +245,11 @@ export default function ReviewsEnginePage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await apiFetch("/api/reviews/requests", {
+      await apiFetch("/reviews/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error("Failed to log request");
       setForm({ customerName: "", contact: "", contactType: "sms", platform: "google", templateId: "", notes: "" });
       setFormSuccess(true);
       setTimeout(() => setFormSuccess(false), 3000);
@@ -267,12 +261,12 @@ export default function ReviewsEnginePage() {
 
   async function handleDeleteRequest(id: number) {
     if (!confirm("Delete this request log?")) return;
-    await apiFetch(`/api/reviews/requests/${id}`, { method: "DELETE" });
+    await apiFetch(`/reviews/requests/${id}`, { method: "DELETE" });
     await loadData();
   }
 
   async function handleStatusChange(id: number, status: string) {
-    await apiFetch(`/api/reviews/requests/${id}`, {
+    await apiFetch(`/reviews/requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),

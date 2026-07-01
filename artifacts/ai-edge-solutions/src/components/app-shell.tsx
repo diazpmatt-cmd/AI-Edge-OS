@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { to: "/admin/ai-visibility",        icon: "✨", label: "AI Visibility Engine" },
   { to: "/admin/local-presence",       icon: "📍", label: "Local Presence Engine" },
   { to: "/admin/voice-search",         icon: "🔊", label: "Voice Search Engine" },
+  { to: "/admin/reviews",             icon: "⭐", label: "Reviews Engine" },
   { to: "/admin/assessments",         icon: "📊", label: "Business Assessments" },
   { to: "/admin/diagnostics",         icon: "🛰",  label: "System Diagnostics" },
 ];

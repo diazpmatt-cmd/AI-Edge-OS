@@ -8,3 +8,4 @@ export * from "./auto-content";
 export * from "./image-assets";
 export * from "./assessments";
 export * from "./gorilladesk";
+export * from "./reviews";

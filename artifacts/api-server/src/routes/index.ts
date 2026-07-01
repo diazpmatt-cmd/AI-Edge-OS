@@ -19,6 +19,7 @@ import gorilladeskRouter from "./gorilladesk";
 import gorilladeskImportRouter from "./gorilladesk-import";
 import telnyxAnalyticsRouter from "./telnyx-analytics";
 import insightsRouter from "./insights";
+import reviewsRouter from "./reviews";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(gorilladeskRouter);
 router.use(gorilladeskImportRouter);
 router.use(telnyxAnalyticsRouter);
 router.use(insightsRouter);
+router.use(reviewsRouter);
 
 export default router;

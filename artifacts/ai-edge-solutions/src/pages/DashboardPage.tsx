@@ -56,7 +56,7 @@ const HEALTH_BREAKDOWN = [
 
 const ALERTS = [
   { severity: "warning",  text: "Apple Business Connect setup in progress",    icon: "⚠" },
-  { severity: "warning",  text: "Bing Places setup in progress",               icon: "⚠" },
+  { severity: "healthy",  text: "Bing Places verified — publishing to Bing Maps (live in 7–12 days)", icon: "✓" },
   { severity: "critical", text: "AI Visibility competitor gap is high",        icon: "✕" },
   { severity: "warning",  text: "Google API quota throttled recently",         icon: "⚠" },
   { severity: "warning",  text: "Nextdoor Business setup in progress",         icon: "⚠" },
@@ -79,13 +79,13 @@ const ALERT_STYLE: Record<string, { color: string; bg: string; border: string; l
 const OPPORTUNITIES = [
   { icon: "📞", title: "Missed Call Recovery",  potential: "Estimate pending",  color: "#10B981", action: "Improve response automation and appointment booking",  link: "/admin/lead-recovery"   },
   { icon: "✨", title: "AI Search Visibility",  potential: "Estimate pending",  color: "#8B5CF6", action: "Create AI-readable business summary and city pages",   link: "/admin/ai-visibility"   },
-  { icon: "📍", title: "Local Listings",        potential: "Estimate pending",  color: "#00AEEF", action: "Claim Apple, Bing, and Nextdoor listings",             link: "/admin/local-presence"  },
+  { icon: "📍", title: "Local Listings",        potential: "Estimate pending",  color: "#00AEEF", action: "Claim Apple and Nextdoor listings · Bing publishing",  link: "/admin/local-presence"  },
   { icon: "⭐", title: "Review Growth",         potential: "Estimate pending",  color: "#F59E0B", action: "Launch automated review request campaign",             link: "/admin/lead-recovery"   },
 ];
 
 const MODULES = [
   { icon: "📞", name: "Lead Recovery AI",    status: "Active",       statusColor: "#10B981", pct: null, summary: "Telnyx connected · Monitoring calls",  link: "/admin/lead-recovery"     },
-  { icon: "📍", name: "Local Presence",      status: "Setup needed", statusColor: "#F59E0B", pct: null, summary: "3 platforms not yet claimed",          link: "/admin/local-presence"    },
+  { icon: "📍", name: "Local Presence",      status: "In Progress",  statusColor: "#A78BFA", pct: null, summary: "Bing verified · 2 platforms pending",  link: "/admin/local-presence"    },
   { icon: "✨", name: "AI Visibility",       status: "Pending scan", statusColor: "#EF4444", pct: null, summary: "No scan data yet",                     link: "/admin/ai-visibility"     },
   { icon: "⚡", name: "Connected Accounts",  status: "Partial",      statusColor: "#00AEEF", pct: null, summary: "4 of 8 platforms connected",           link: "/admin/connections"       },
   { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Queue open · No score yet",            link: "/admin/social-publishing" },
@@ -112,7 +112,7 @@ const SNAPSHOTS = [
     rows: [
       { label: "Google Business",    value: "Connected",  valueColor: "#10B981" },
       { label: "Apple Business",     value: "Pending",    valueColor: "#F87171" },
-      { label: "Bing Places",        value: "Pending",    valueColor: "#F87171" },
+      { label: "Bing Places",        value: "Publishing",  valueColor: "#A78BFA" },
       { label: "Nextdoor Business",  value: "Pending",    valueColor: "#F87171" },
     ],
   },
@@ -147,7 +147,7 @@ const ACTIVITY: { time: string; text: string; icon: string; color: string }[] = 
 
 const NEXT_ACTIONS = [
   { rank: 1, action: "Claim Apple Business Connect",                  impact: "High", time: "30 min" },
-  { rank: 2, action: "Claim Bing Places for Business",               impact: "High", time: "30 min" },
+  { rank: 2, action: "Monitor Bing Places — add logo + photos once listing goes live", impact: "Medium", time: "15 min" },
   { rank: 3, action: "Create AI-readable business summary page",     impact: "High", time: "2 hrs"  },
   { rank: 4, action: "Launch review request campaign",               impact: "High", time: "1 day"  },
   { rank: 5, action: "Create Foley and Gulf Shores city pages",      impact: "High", time: "1 day"  },

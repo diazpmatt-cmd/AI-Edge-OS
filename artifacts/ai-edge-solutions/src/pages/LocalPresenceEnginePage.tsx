@@ -7,7 +7,7 @@ import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type PresenceStatus = "connected" | "pending" | "not_connected" | "error" | "coming_soon" | "setup_in_progress";
+type PresenceStatus = "connected" | "pending" | "not_connected" | "error" | "coming_soon" | "setup_in_progress" | "verified_publishing";
 type HealthStatus   = "healthy" | "warning" | "error" | "unknown";
 
 type GBPStatus = {
@@ -45,7 +45,8 @@ const PRESENCE_STYLE: Record<PresenceStatus, { label: string; bg: string; color:
   not_connected:{ label: "Not Connected", bg: "rgba(148,163,184,0.1)",  color: "#94A3B8", dot: "#475569", border: "rgba(255,255,255,0.07)" },
   error:        { label: "Error",         bg: "rgba(239,68,68,0.12)",   color: "#EF4444", dot: "#EF4444", border: "rgba(239,68,68,0.25)"   },
   coming_soon:      { label: "Coming Soon",      bg: "rgba(139,92,246,0.12)",  color: "#8B5CF6", dot: "#8B5CF6", border: "rgba(139,92,246,0.2)"   },
-  setup_in_progress:{ label: "Setup In Progress",bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF", border: "rgba(0,174,239,0.25)"  },
+  setup_in_progress:  { label: "Setup In Progress",  bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF", border: "rgba(0,174,239,0.25)"  },
+  verified_publishing:{ label: "Verified · Publishing", bg: "rgba(139,92,246,0.12)", color: "#A78BFA", dot: "#A78BFA", border: "rgba(139,92,246,0.3)"   },
 };
 
 const HEALTH_STYLE: Record<HealthStatus, { label: string; color: string; dot: string }> = {
@@ -60,7 +61,8 @@ function cardBg(status: PresenceStatus) {
   if (status === "connected")         return "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(11,22,41,0.9) 100%)";
   if (status === "error")             return "linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(11,22,41,0.9) 100%)";
   if (status === "pending")           return "linear-gradient(135deg, rgba(245,158,11,0.04) 0%, rgba(11,22,41,0.9) 100%)";
-  if (status === "setup_in_progress") return "linear-gradient(135deg, rgba(0,174,239,0.05) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "setup_in_progress")   return "linear-gradient(135deg, rgba(0,174,239,0.05) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "verified_publishing") return "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(11,22,41,0.9) 100%)";
   return "rgba(11,22,41,0.6)";
 }
 
@@ -793,36 +795,36 @@ Baldwin County, Alabama`;
 
 // ── Bing Places V2 Card ────────────────────────────────────────────────────────
 const BING_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
-  { label: "Create or sign into Bing Places account", status: "complete",    description: "Sign in at bingplaces.com with a Microsoft account." },
-  { label: "Add or claim business listing",           status: "in-progress", description: "Search for Bed Bugs & Beyond and claim the listing." },
-  { label: "Verify ownership",                        status: "pending",     description: "Microsoft sends a PIN by phone or postcard for verification." },
-  { label: "Confirm business name",                   status: "pending",     description: "Ensure the listing name matches your registered business exactly." },
-  { label: "Confirm phone number",                    status: "pending",     description: "Verify (251) 324-9090 matches the Bing listing." },
-  { label: "Confirm website",                         status: "pending",     description: "Verify website URL resolves correctly and matches GBP." },
-  { label: "Confirm category",                        status: "pending",     description: "Select 'Pest Control Service' as the primary business category." },
-  { label: "Confirm service area",                    status: "pending",     description: "Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
-  { label: "Add business hours",                      status: "pending",     description: "Mon–Fri 7am–6pm, Sat 8am–2pm. Include seasonal/holiday hours." },
-  { label: "Upload logo",                             status: "pending",     description: "High-res square logo (min 400×400 px, PNG or JPG)." },
-  { label: "Upload photos",                           status: "pending",     description: "Add at least 5 quality photos of the business or service." },
-  { label: "Add services",                            status: "pending",     description: "List core services: bed bug inspection, heat treatment, pest control." },
-  { label: "Review Bing Maps listing",                status: "pending",     description: "Preview how the listing appears in Bing Maps and Microsoft Search." },
-  { label: "Submit verification",                     status: "pending",     description: "Submit the listing — Microsoft reviews within 3–5 business days." },
+  { label: "Create or sign into Bing Places account", status: "complete", description: "Sign in at bingplaces.com with a Microsoft account." },
+  { label: "Add or claim business listing",           status: "complete", description: "Bed Bugs & Beyond listing claimed." },
+  { label: "Verify ownership",                        status: "complete", description: "Verification complete — PIN confirmed." },
+  { label: "Confirm business name",                   status: "complete", description: "Synced with Google — name confirmed: Bed Bugs & Beyond." },
+  { label: "Confirm phone number",                    status: "complete", description: "Synced with Google — (251) 324-9090 confirmed." },
+  { label: "Confirm website",                         status: "complete", description: "Synced with Google — https://bedbugsandbeyond.net confirmed." },
+  { label: "Confirm category",                        status: "complete", description: "Synced with Google — Pest Control Service confirmed." },
+  { label: "Confirm service area",                    status: "complete", description: "Synced with Google — Baldwin County, AL service area confirmed." },
+  { label: "Add business hours",                      status: "complete", description: "Synced with Google — hours confirmed." },
+  { label: "Upload logo",                             status: "pending",  description: "High-res square logo (min 400×400 px, PNG or JPG)." },
+  { label: "Upload photos",                           status: "pending",  description: "Add at least 5 quality photos of the business or service." },
+  { label: "Add services",                            status: "pending",  description: "List core services: bed bug inspection, heat treatment, pest control." },
+  { label: "Review Bing Maps listing",                status: "in-progress", description: "Publishing in progress — listing will be live in Bing Maps within 7–12 days." },
+  { label: "Submit verification",                     status: "complete", description: "Submitted — verification complete." },
 ];
 
 const BING_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
-  { check: "Bing account created",             status: "healthy",    note: "Microsoft account active at bingplaces.com" },
-  { check: "Listing claimed",                  status: "warning",    note: "Claim in progress — awaiting Microsoft confirmation" },
-  { check: "Ownership verified",               status: "missing",    note: "Verification PIN not yet received" },
-  { check: "NAP matches Google Business Profile",status: "pending",  note: "Will be confirmed once listing is claimed" },
-  { check: "Phone matches business number",    status: "pending",    note: "Pending listing confirmation" },
-  { check: "Website matches",                  status: "pending",    note: "Pending listing confirmation" },
-  { check: "Category selected",                status: "pending",    note: "To be set after claim is confirmed" },
-  { check: "Hours configured",                 status: "missing",    note: "No hours set yet" },
-  { check: "Photos uploaded",                  status: "missing",    note: "No photos uploaded yet" },
-  { check: "Maps listing reviewed",            status: "pending",    note: "Available after verification" },
-  { check: "API access requested",             status: "missing",    note: "Bing API requires setup — not yet requested" },
-  { check: "Sync enabled",                     status: "missing",    note: "Requires API credentials first" },
-  { check: "Copilot AI signal tracked",        status: "coming_soon",note: "Copilot integration — Coming Soon" },
+  { check: "Bing account created",              status: "healthy",     note: "Microsoft account active at bingplaces.com" },
+  { check: "Listing claimed",                   status: "healthy",     note: "Listing claimed and ownership verified" },
+  { check: "Ownership verified",                status: "healthy",     note: "Verification complete — PIN confirmed" },
+  { check: "NAP matches Google Business Profile", status: "healthy",   note: "Synced with Google — NAP consistent" },
+  { check: "Phone matches business number",     status: "healthy",     note: "Confirmed via Google sync — (251) 324-9090" },
+  { check: "Website matches",                   status: "healthy",     note: "Confirmed via Google sync — bedbugsandbeyond.net" },
+  { check: "Category selected",                 status: "healthy",     note: "Pest Control Service — confirmed" },
+  { check: "Hours configured",                  status: "healthy",     note: "Synced with Google — hours confirmed" },
+  { check: "Photos uploaded",                   status: "missing",     note: "No photos uploaded yet — add after listing goes live" },
+  { check: "Maps listing reviewed",             status: "pending",     note: "Publishing in progress — live in Bing Maps within 7–12 days" },
+  { check: "Analytics available",               status: "pending",     note: "Analytics not available until listing is live" },
+  { check: "API access requested",              status: "missing",     note: "Bing API requires setup — not yet requested" },
+  { check: "Copilot AI signal tracked",         status: "coming_soon", note: "Copilot integration — Coming Soon" },
 ];
 
 function BingPlacesCard() {
@@ -884,10 +886,10 @@ function BingPlacesCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Bing Places for Business</span>
-              <StatusBadge status="pending" />
+              <StatusBadge status="verified_publishing" />
             </div>
             <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
-              Bing Maps, Microsoft Search, Copilot AI, Edge browser &amp; Windows 11 integration.
+              Verified &amp; synced with Google · Publishing to Bing Maps · Live in 7–12 days · Analytics available once live.
             </p>
           </div>
         </div>
@@ -1112,7 +1114,7 @@ Sunday:    Closed`;
               return (
                 <div>
                   <div style={{ fontSize: 11, color: "#475569", marginBottom: 18, lineHeight: 1.5 }}>
-                    Setup guidance only — not analytics. Status stays <strong style={{ color: BING_BLUE }}>Setup Pending</strong> until the Bing listing is submitted and the verification PIN is entered. Use the copy buttons to paste content directly into Bing Places for Business.
+                    Verification complete. Listing synced with Google and now publishing to Bing Maps. <strong style={{ color: "#A78BFA" }}>Publishing ETA: 7–12 days.</strong> Analytics will be available once the listing is live. No action required — monitor Bing Places for the live confirmation.
                   </div>
 
                   {/* ── Required fields ── */}
@@ -4464,10 +4466,10 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
 // ── NAP consistency checker ────────────────────────────────────────────────────
 function NAPChecker({ connectedCount }: { connectedCount: number }) {
   const fields = [
-    { label: "Name",    value: NAP.name,    platforms: ["Google ✓", "Apple —", "Bing —", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
-    { label: "Phone",   value: NAP.phone,   platforms: ["Google ✓", "Apple —", "Bing —", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
-    { label: "Website", value: NAP.website.replace("https://", ""), platforms: ["Google ✓", "Apple —", "Bing —", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
-    { label: "Address", value: NAP.address, platforms: ["Google ✓", "Apple —", "Bing —", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
+    { label: "Name",    value: NAP.name,    platforms: ["Google ✓", "Apple —", "Bing ✓", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
+    { label: "Phone",   value: NAP.phone,   platforms: ["Google ✓", "Apple —", "Bing ✓", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
+    { label: "Website", value: NAP.website.replace("https://", ""), platforms: ["Google ✓", "Apple —", "Bing ✓", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
+    { label: "Address", value: NAP.address, platforms: ["Google ✓", "Apple —", "Bing ✓", "Nextdoor —"], status: connectedCount > 0 ? "warning" as const : "unknown" as const },
   ];
 
   return (
@@ -4538,7 +4540,7 @@ const SUB_STATUS_META: Record<SubStatus, { label: string; color: string; bg: str
 const TRACKER_INIT: TrackerEntry[] = [
   { key: "gbp",       name: "Google Business Profile", dotColor: "#4285F4", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
   { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Apple review", account: "", listingUrl: "", notes: "Website submitted: https://bedbugsandbeyond.net", nextAction: "Wait for Apple verification approval" },
-  { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Google sync", account: "", listingUrl: "", notes: "Verification complete. Synced with Google. Publishing ETA 7–12 days. Analytics not available until listing is live.", nextAction: "Wait for listing to go live in Bing Maps. Add logo + photos once live." },
   { key: "nextdoor",  name: "Nextdoor",                dotColor: "#00B246", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
   { key: "yelp",      name: "Yelp",                    dotColor: "#D32323", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
   { key: "waze",      name: "Waze (WME)",              dotColor: "#00BBDE", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
@@ -4776,13 +4778,13 @@ export default function LocalPresenceEnginePage() {
 
   // Counts
   const connectedCount = gbpPresence === "connected" ? 1 : 0;
-  const pendingCount   = 3; // Apple, Bing, Nextdoor always pending in V1
+  const pendingCount   = 2; // Apple, Nextdoor pending — Bing verified/publishing
 
   // Diagnostics issues list
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "Bing Places submitted — verification pending (do not mark Connected until Bing confirms)", severity: "warning" },
+    { icon: "✓", color: "#A78BFA", text: "Bing Places verified — synced with Google · publishing to Bing Maps · live in 7–12 days · analytics pending", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business submitted — verification pending (do not mark Connected until Nextdoor confirms profile is live)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Yelp submitted — verification pending (do not mark Connected until Yelp profile is live and publicly searchable)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Angi submitted — verification pending (do not mark Connected until Angi profile is live and publicly searchable)", severity: "warning" },

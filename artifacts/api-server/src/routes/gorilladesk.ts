@@ -39,8 +39,11 @@ function startOfNextMonth(): Date {
   return new Date(now.getFullYear(), now.getMonth() + 1, 1);
 }
 
-/** Fetch the latest metric snapshot for a given type. Returns parsed data or null. */
-async function getSnapshot(metricType: string, projectId: string): Promise<Record<string, unknown> | null> {
+/** Fetch the latest metric snapshot for a given type. Prefers api_sync over manual_import. */
+async function getSnapshot(
+  metricType: string,
+  projectId: string,
+): Promise<{ data: Record<string, unknown>; source: string } | null> {
   const rows = await db
     .select()
     .from(gorilladeskMetricSnapshotsTable)
@@ -48,11 +51,14 @@ async function getSnapshot(metricType: string, projectId: string): Promise<Recor
       eq(gorilladeskMetricSnapshotsTable.projectId, projectId),
       eq(gorilladeskMetricSnapshotsTable.metricType, metricType),
     ))
-    .orderBy(desc(gorilladeskMetricSnapshotsTable.importedAt))
-    .limit(1);
+    .orderBy(desc(gorilladeskMetricSnapshotsTable.importedAt));
 
-  if (!rows[0]) return null;
-  try { return JSON.parse(rows[0].data); } catch { return null; }
+  // Prefer api_sync source if present, otherwise use most recent
+  const preferred = rows.find(r => r.source === "api_sync") ?? rows[0];
+  if (!preferred) return null;
+  try {
+    return { data: JSON.parse(preferred.data), source: preferred.source };
+  } catch { return null; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,9 +71,10 @@ router.get("/analytics/gorilladesk/revenue", async (req, res) => {
   const projectId = "bed-bugs-and-beyond";
 
   try {
-    const snapshot = await getSnapshot("revenue", projectId);
+    const snap = await getSnapshot("revenue", projectId);
 
-    if (snapshot) {
+    if (snap) {
+      const { data: snapshot, source } = snap;
       const monthly     = Number(snapshot.monthly_revenue     ?? 0);
       const collected   = Number(snapshot.collected_revenue   ?? 0);
       const outstanding = Number(snapshot.outstanding_revenue ?? 0);
@@ -82,7 +89,7 @@ router.get("/analytics/gorilladesk/revenue", async (req, res) => {
         outstanding_revenue_fmt: centsToDisplay(outstanding),
         avg_ticket_fmt:          centsToDisplay(avg),
         period:                  currentPeriod(),
-        data_source:             "snapshot",
+        data_source:             source,
       });
       return;
     }
@@ -151,16 +158,17 @@ router.get("/analytics/gorilladesk/jobs", async (req, res) => {
   const projectId = "bed-bugs-and-beyond";
 
   try {
-    const snapshot = await getSnapshot("jobs", projectId);
+    const snap = await getSnapshot("jobs", projectId);
 
-    if (snapshot) {
+    if (snap) {
+      const { data: snapshot, source } = snap;
       res.json({
         total:           Number(snapshot.total           ?? 0),
         completed:       Number(snapshot.completed       ?? 0),
         incomplete:      Number(snapshot.incomplete      ?? 0),
         completion_rate: Number(snapshot.completion_rate ?? 0),
         by_status:       {},
-        data_source:     "snapshot",
+        data_source:     source,
       });
       return;
     }
@@ -196,16 +204,17 @@ router.get("/analytics/gorilladesk/customers", async (req, res) => {
   const projectId = "bed-bugs-and-beyond";
 
   try {
-    const snapshot = await getSnapshot("customers", projectId);
+    const snap = await getSnapshot("customers", projectId);
 
-    if (snapshot) {
+    if (snap) {
+      const { data: snapshot, source } = snap;
       res.json({
         new_customers:       snapshot.new_customers       ?? null,
         returning_customers: snapshot.returning_customers ?? null,
         active_services:     Number(snapshot.active_services     ?? 0),
         recurring_services:  Number(snapshot.recurring_services  ?? 0),
         period:              currentPeriod(),
-        data_source:         "snapshot",
+        data_source:         source,
       });
       return;
     }
@@ -264,6 +273,28 @@ router.get("/analytics/gorilladesk/marketing", async (req, res) => {
 
   try {
     const period = currentPeriod();
+
+    // Prefer api_sync marketing snapshot (customer-count based lead sources)
+    const snap = await getSnapshot("marketing", projectId);
+    if (snap) {
+      const { data: snapshot, source } = snap;
+      const rawSources = (snapshot.lead_sources ?? []) as Array<{
+        name: string;
+        customer_count?: number;
+        job_count?: number;
+        revenue_cents?: number;
+      }>;
+      const leadSources = rawSources.map(s => ({
+        name:        s.name,
+        job_count:   s.customer_count ?? s.job_count ?? 0,
+        revenue:     s.revenue_cents ?? 0,
+        revenue_fmt: centsToDisplay(s.revenue_cents ?? 0),
+      }));
+      res.json({ lead_sources: leadSources, period, data_source: source });
+      return;
+    }
+
+    // Fall back to individual lead source records
     const rows = await db
       .select()
       .from(gorilladeskLeadSourcesTable)

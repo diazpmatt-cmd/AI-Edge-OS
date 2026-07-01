@@ -1,9 +1,7 @@
 /**
  * GorillaDesk Import Pipeline
  *
- * Option B: Manual JSON import for real GorillaDesk data.
- * No GorillaDesk API credentials were found in the environment.
- *
+ * POST /api/analytics/gorilladesk/sync    — live sync from GorillaDesk API
  * POST /api/analytics/gorilladesk/import  — batch import individual records
  * POST /api/analytics/gorilladesk/seed    — seed from known real snapshot data
  */
@@ -18,6 +16,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { fetchAllCustomers, computeCustomerMetrics } from "../lib/gorilladesk-api";
 
 const router = Router();
 
@@ -31,6 +30,118 @@ function currentPeriod(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/analytics/gorilladesk/sync
+// Pulls live data from the GorillaDesk API, upserts customers, recomputes
+// customer and marketing (lead source) snapshots.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post("/analytics/gorilladesk/sync", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const period    = currentPeriod();
+  const projectId = "bed-bugs-and-beyond";
+
+  try {
+    // 1. Fetch all customers from GorillaDesk API
+    const customers = await fetchAllCustomers();
+    const metrics   = computeCustomerMetrics(customers, period);
+
+    // 2. Upsert customers into DB
+    let upserted = 0;
+    for (const c of customers) {
+      const name = `${c.first_name} ${c.last_name}`.trim();
+      const phone = c.phones?.[0]?.phone ?? null;
+      const existing = await db
+        .select({ id: gorilladeskCustomersTable.id })
+        .from(gorilladeskCustomersTable)
+        .where(eq(gorilladeskCustomersTable.externalId, c.id))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db.update(gorilladeskCustomersTable)
+          .set({
+            name,
+            email:      c.email,
+            phone,
+            leadSource: c.source?.name ?? null,
+          })
+          .where(eq(gorilladeskCustomersTable.externalId, c.id));
+      } else {
+        await db.insert(gorilladeskCustomersTable).values({
+          projectId,
+          externalId:     c.id,
+          name,
+          email:          c.email,
+          phone,
+          isRecurring:    false,
+          leadSource:     c.source?.name ?? null,
+          activeServices: 0,
+          firstServiceAt: null,
+          lastServiceAt:  null,
+        }).onConflictDoNothing();
+      }
+      upserted++;
+    }
+
+    // 3. Delete old api_sync snapshots for this period, then insert fresh ones
+    await db.delete(gorilladeskMetricSnapshotsTable)
+      .where(and(
+        eq(gorilladeskMetricSnapshotsTable.projectId, projectId),
+        eq(gorilladeskMetricSnapshotsTable.period, period),
+        eq(gorilladeskMetricSnapshotsTable.source, "api_sync"),
+      ));
+
+    // 4. Customer snapshot
+    const customerSnap = {
+      new_customers:       metrics.new_this_month,
+      returning_customers: null,
+      active_services:     metrics.active_customers,
+      recurring_services:  0,
+    };
+    await db.insert(gorilladeskMetricSnapshotsTable).values({
+      projectId,
+      period,
+      metricType: "customers",
+      data:       JSON.stringify(customerSnap),
+      source:     "api_sync",
+      importedAt: new Date(),
+    });
+
+    // 5. Marketing snapshot — lead source customer counts
+    const marketingSnap = {
+      lead_sources: metrics.lead_sources.map(ls => ({
+        name:           ls.name,
+        customer_count: ls.customer_count,
+        job_count:      ls.customer_count,
+        revenue_cents:  0,
+      })),
+    };
+    await db.insert(gorilladeskMetricSnapshotsTable).values({
+      projectId,
+      period,
+      metricType: "marketing",
+      data:       JSON.stringify(marketingSnap),
+      source:     "api_sync",
+      importedAt: new Date(),
+    });
+
+    res.json({
+      ok:             true,
+      synced_at:      new Date().toISOString(),
+      customers_total:  customers.length,
+      customers_active: metrics.active_customers,
+      new_this_month:   metrics.new_this_month,
+      lead_sources:     metrics.lead_sources.length,
+      customers_upserted: upserted,
+      period,
+    });
+  } catch (err) {
+    console.error("GorillaDesk sync error:", err);
+    res.status(500).json({ error: "Sync failed", detail: String(err) });
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Real GorillaDesk snapshot data — sourced directly from GorillaDesk reports.

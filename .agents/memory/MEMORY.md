@@ -2,3 +2,4 @@
 - [Clerk auth pattern for API calls](clerk-api-auth.md) — All API fetches MUST use `useApiFetch()` hook (Bearer token); cookie-only `apiFetch` never works through the Vite proxy.
 - [Facebook OAuth DB split + sync](facebook-oauth-db-sync.md) — Dev pulls from prod (not push). Riker.replit.dev requires Replit auth for external POSTs. Fix: /api/social-connections/dev-export on deployed + /pull-from-prod on dev.
 - [Object Storage wildcard routes](object-storage-wildcard-routes.md) — Express with newer path-to-regexp requires named wildcards: use `/*paramName` not `/*`.
+- [GorillaDesk API](gorilladesk-api.md) — Public API limited to /company, /users, /customers only; no jobs/invoices/payments endpoints exist.

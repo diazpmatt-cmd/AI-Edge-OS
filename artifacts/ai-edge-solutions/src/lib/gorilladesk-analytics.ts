@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useApiFetch } from "./api";
 
 export type RevenueAnalytics = {
@@ -67,10 +67,22 @@ export type GorilladeskAnalytics = {
   payments: PaymentsAnalytics | null;
 };
 
+export type SyncResult = {
+  ok: boolean;
+  synced_at: string;
+  customers_total: number;
+  customers_active: number;
+  new_this_month: number;
+  lead_sources: number;
+  period: string;
+};
+
 type FetchState = {
   data: GorilladeskAnalytics;
   loading: boolean;
   error: string | null;
+  syncing: boolean;
+  lastSyncedAt: string | null;
 };
 
 const EMPTY: GorilladeskAnalytics = {
@@ -83,12 +95,30 @@ const EMPTY: GorilladeskAnalytics = {
 
 export function useGorilladeskAnalytics() {
   const apiFetch = useApiFetch();
-  // Store latest apiFetch in a ref so the effect dependency is stable
   const apiFetchRef = useRef(apiFetch);
   apiFetchRef.current = apiFetch;
 
-  const [state, setState] = useState<FetchState>({ data: EMPTY, loading: true, error: null });
+  const [state, setState] = useState<FetchState>({
+    data: EMPTY,
+    loading: true,
+    error: null,
+    syncing: false,
+    lastSyncedAt: null,
+  });
   const loadedRef = useRef(false);
+
+  const fetchAll = useCallback(() => {
+    const fn = apiFetchRef.current;
+    return Promise.all([
+      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
+      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
+      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
+      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
+      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
+    ]).then(([revenue, jobs, customers, marketing, payments]) => ({
+      revenue, jobs, customers, marketing, payments,
+    }));
+  }, []);
 
   useEffect(() => {
     if (loadedRef.current) return;
@@ -96,42 +126,60 @@ export function useGorilladeskAnalytics() {
 
     setState(s => ({ ...s, loading: true, error: null }));
 
-    const fn = apiFetchRef.current;
-    Promise.all([
-      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
-      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
-      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
-      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
-      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
-    ])
-      .then(([revenue, jobs, customers, marketing, payments]) => {
-        setState({ data: { revenue, jobs, customers, marketing, payments }, loading: false, error: null });
-      })
-      .catch(err => {
-        setState({ data: EMPTY, loading: false, error: err instanceof Error ? err.message : "Failed to load analytics" });
-      });
-  }, []); // runs once on mount
+    fetchAll()
+      .then(data => setState(s => ({ ...s, data, loading: false, error: null })))
+      .catch(err => setState(s => ({
+        ...s,
+        data: EMPTY,
+        loading: false,
+        error: err instanceof Error ? err.message : "Failed to load analytics",
+      })));
+  }, [fetchAll]);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     loadedRef.current = false;
-    setState({ data: EMPTY, loading: true, error: null });
-    const fn = apiFetchRef.current;
-    Promise.all([
-      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
-      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
-      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
-      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
-      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
-    ])
-      .then(([revenue, jobs, customers, marketing, payments]) => {
-        setState({ data: { revenue, jobs, customers, marketing, payments }, loading: false, error: null });
+    setState(s => ({ ...s, data: EMPTY, loading: true, error: null }));
+
+    fetchAll()
+      .then(data => {
         loadedRef.current = true;
+        setState(s => ({ ...s, data, loading: false, error: null }));
       })
       .catch(err => {
-        setState({ data: EMPTY, loading: false, error: err instanceof Error ? err.message : "Failed to load analytics" });
         loadedRef.current = true;
+        setState(s => ({
+          ...s,
+          data: EMPTY,
+          loading: false,
+          error: err instanceof Error ? err.message : "Failed to load analytics",
+        }));
       });
-  };
+  }, [fetchAll]);
 
-  return { ...state, reload };
+  const syncFromGorillaDesk = useCallback(async (): Promise<SyncResult | null> => {
+    setState(s => ({ ...s, syncing: true }));
+    try {
+      const fn = apiFetchRef.current;
+      const result = await fn<SyncResult>("/analytics/gorilladesk/sync", {
+        method: "POST",
+      });
+      // Reload analytics data after sync
+      const data = await fetchAll();
+      setState(s => ({
+        ...s,
+        data,
+        syncing: false,
+        lastSyncedAt: result.synced_at,
+        loading: false,
+        error: null,
+      }));
+      loadedRef.current = true;
+      return result;
+    } catch (err) {
+      setState(s => ({ ...s, syncing: false }));
+      throw err;
+    }
+  }, [fetchAll]);
+
+  return { ...state, reload, syncFromGorillaDesk };
 }

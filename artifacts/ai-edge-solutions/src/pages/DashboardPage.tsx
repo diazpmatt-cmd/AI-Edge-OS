@@ -174,7 +174,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<null | "keywords" | "plan">(null);
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "healthy">("all");
-  const { data: gd, loading: gdLoading, error: gdError } = useGorilladeskAnalytics();
+  const { data: gd, loading: gdLoading, error: gdError, syncing: gdSyncing, lastSyncedAt, syncFromGorillaDesk } = useGorilladeskAnalytics();
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncError(null);
+    try {
+      await syncFromGorillaDesk();
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Sync failed");
+    }
+  };
 
   const reload = async () => {
     const [kw, ar] = await Promise.all([fetchKeywords(), fetchArticles()]);
@@ -379,13 +389,42 @@ export default function DashboardPage() {
         {/* ── GorillaDesk Business Analytics ── */}
         <div style={{ marginBottom: 28 }}>
           <SectionDivider title="GorillaDesk Business Analytics" right={
-            gdError ? (
-              <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {gdError}</span>
-            ) : gdLoading ? (
-              <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>
-            ) : (
-              <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live</span>
-            )
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {syncError && (
+                <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {syncError}</span>
+              )}
+              {lastSyncedAt && !syncError && (
+                <span style={{ fontSize: 10, color: "#475569" }}>
+                  Synced {new Date(lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+              {gdError && !gdSyncing && (
+                <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {gdError}</span>
+              )}
+              {gdLoading && !gdSyncing && (
+                <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>
+              )}
+              {!gdLoading && !gdError && !gdSyncing && !lastSyncedAt && (
+                <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live</span>
+              )}
+              <button
+                onClick={handleSync}
+                disabled={gdSyncing || gdLoading}
+                style={{
+                  background: gdSyncing ? "rgba(0,174,239,0.08)" : "rgba(0,174,239,0.12)",
+                  border: "1px solid rgba(0,174,239,0.3)",
+                  borderRadius: 6,
+                  color: gdSyncing ? "#64748B" : "#00AEEF",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "4px 10px",
+                  cursor: gdSyncing || gdLoading ? "not-allowed" : "pointer",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {gdSyncing ? "⟳ Syncing…" : "⟳ Sync Now"}
+              </button>
+            </div>
           } />
 
           {gdLoading && (

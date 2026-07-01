@@ -44,8 +44,6 @@ externalPort = 3001
 BUSINESS_FORWARD_NUMBER = "+12543249090"
 TELNYX_FROM_NUMBER = "+12512863200"
 TELNYX_CLIENT_NAME = "Bed Bugs & Beyond"
-TIKTOK_CLIENT_KEY = "aw9vmhcwzpyr5i0w"
-GORILLADESK_API_KEY = "8ff9304fa9059540a3a4ed28678a276d29ae659e31a6bd04adfb67486f980e674f95fdd5bbcb9b69"
 
 [userenv.development]
 PUBLIC_APP_URL = "https://replit-exportzip-diazpmatt.replit.app"

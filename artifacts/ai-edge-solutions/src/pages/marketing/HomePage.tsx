@@ -122,6 +122,7 @@ export default function HomePage() {
                   ⚡ Get Free AI Assessment
                 </button>
                 <OutlineButton onClick={() => navigate("/services")}>See What We Automate</OutlineButton>
+                <OutlineButton onClick={() => navigate("/pricing")}>View Packages</OutlineButton>
               </div>
 
               {/* Trust checkmarks */}

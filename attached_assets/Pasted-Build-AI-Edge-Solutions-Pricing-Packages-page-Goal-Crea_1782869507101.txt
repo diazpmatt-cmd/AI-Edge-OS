@@ -1,0 +1,340 @@
+Build AI Edge Solutions Pricing & Packages page.
+
+Goal:
+Create a polished public pricing page that turns AI Edge Solutions into clear, sellable offers.
+
+Route:
+/pricing
+
+Add homepage CTA/link if not already present:
+"View Packages" or "See Pricing"
+
+Use AI Edge brand style:
+- dark navy background
+- electric blue/cyan highlights
+- metallic silver accents
+- premium SaaS cards
+- glow borders
+- clean comparison layout
+
+--------------------------------------------------
+PRICING STRATEGY
+--------------------------------------------------
+
+Position AI Edge as an all-in-one AI growth operating system that replaces multiple tools:
+
+- lead recovery software
+- AI receptionist
+- local SEO/listing tools
+- review/reputation tools
+- social publishing tools
+- AI visibility optimization
+- agency services
+
+Emphasize:
+"One platform. One growth system. Fewer tools. More recovered revenue."
+
+--------------------------------------------------
+PAGE STRUCTURE
+--------------------------------------------------
+
+1) Hero section
+2) Pricing cards
+3) Feature comparison table
+4) Add-ons section
+5) Setup/onboarding fee section
+6) Performance/hybrid model section
+7) FAQ section
+8) CTA section
+
+--------------------------------------------------
+HERO SECTION
+--------------------------------------------------
+
+Headline:
+AI Growth Packages Built for Local Businesses
+
+Subheadline:
+Recover missed leads, improve local visibility, get found in AI search, and automate customer follow-up from one powerful platform.
+
+CTA buttons:
+- Get Free Business Assessment
+- Book Strategy Call
+
+Mention:
+Plans designed to replace scattered tools, disconnected dashboards, and expensive manual marketing workflows.
+
+--------------------------------------------------
+PRICING TIERS
+--------------------------------------------------
+
+Create 4 pricing cards:
+
+--------------------------------------------------
+1. EDGE STARTER
+--------------------------------------------------
+
+Price:
+$297/mo
+
+Month-to-month:
+$399/mo
+
+Setup:
+$499 one-time
+Setup waived with 6-month commitment
+
+Best for:
+Small local businesses that need missed-call recovery and basic automation.
+
+Includes:
+- Lead Recovery AI
+- Missed call text-back
+- Basic SMS follow-up
+- Basic review request automation
+- Business assessment dashboard
+- Monthly performance summary
+- Basic support
+
+CTA:
+Start With Edge Starter
+
+--------------------------------------------------
+2. EDGE PRO
+--------------------------------------------------
+
+Price:
+$997/mo
+
+Setup:
+$999 one-time
+Setup waived with 6-month commitment
+
+Label:
+Most Popular
+
+Best for:
+Growth-focused local businesses that want AI automation, local visibility, and reputation growth.
+
+Includes everything in Starter plus:
+- AI Receptionist
+- Local Presence Engine
+- Google Business Profile optimization
+- Apple/Bing/Nextdoor setup guidance
+- AI Visibility Engine
+- Review automation
+- Social publishing support
+- Monthly strategy recommendations
+- Priority support
+
+CTA:
+Choose Edge Pro
+
+--------------------------------------------------
+3. EDGE ELITE
+--------------------------------------------------
+
+Price:
+$1,997/mo
+
+Optional range note:
+Starting at $1,997/mo
+
+Setup:
+$1,500–$2,500 one-time depending on scope
+
+Best for:
+Established businesses that want advanced visibility, automation, and competitive growth.
+
+Includes everything in Pro plus:
+- Advanced AI automation
+- SEO + AI visibility optimization
+- Content automation
+- Publishing Center
+- Competitor intelligence
+- Backlink/citation strategy
+- Advanced reporting
+- Local landing page strategy
+- Custom growth recommendations
+
+CTA:
+Apply for Edge Elite
+
+--------------------------------------------------
+4. AI EDGE ECOSYSTEM
+--------------------------------------------------
+
+Price:
+Custom
+
+Suggested range:
+$3,500–$5,000+/mo
+
+Setup:
+Custom onboarding
+
+Best for:
+Businesses that want the full AI growth operating system.
+
+Includes everything in Elite plus:
+- Full AI Edge platform setup
+- Custom workflows
+- Full SEO execution
+- AI receptionist customization
+- Omnichannel visibility management
+- Dedicated growth strategy
+- Multi-location support
+- Advanced automation consulting
+- Premium support
+
+CTA:
+Book Ecosystem Strategy Call
+
+--------------------------------------------------
+FEATURE COMPARISON TABLE
+--------------------------------------------------
+
+Columns:
+Feature | Starter | Pro | Elite | Ecosystem
+
+Rows:
+- Lead Recovery AI
+- Missed Call Text-Back
+- AI Receptionist
+- Local Presence Engine
+- Google Business Profile Optimization
+- Apple/Bing/Nextdoor Setup
+- AI Visibility Engine
+- Social Publishing
+- Review Automation
+- SEO Strategy
+- Competitor Intelligence
+- Backlink/Citation Strategy
+- Custom Automations
+- Multi-Location Support
+- Dedicated Strategy Support
+
+Use checkmarks, limited labels, and premium labels.
+
+--------------------------------------------------
+ADD-ONS SECTION
+--------------------------------------------------
+
+Add optional add-ons:
+
+Website Build:
+$1,500–$3,000+
+
+SEO Growth Package:
+$500–$1,500/mo
+
+AI Voice Receptionist Add-On:
+$100–$300/mo if purchased separately
+
+Extra Location:
+$250–$750/mo depending on package
+
+Custom Automation:
+Quoted individually
+
+Ecommerce / Seller Edge AI:
+Coming Soon
+
+--------------------------------------------------
+SETUP / ONBOARDING SECTION
+--------------------------------------------------
+
+Explain onboarding fee clearly:
+
+Includes:
+- account setup
+- business profile setup
+- integrations
+- phone/SMS configuration
+- initial automation build
+- dashboard setup
+- first growth assessment
+
+Add note:
+Setup may be waived with qualified 6 or 12-month agreements.
+
+--------------------------------------------------
+PERFORMANCE / HYBRID MODEL SECTION
+--------------------------------------------------
+
+Create section:
+Prefer performance-based pricing?
+
+Offer:
+Lower monthly retainer + per recovered lead or booked appointment.
+
+Example:
+Starting at $497/mo + performance fee
+
+Add disclaimer:
+Available for approved businesses with clear lead tracking.
+
+CTA:
+Ask About Performance Pricing
+
+--------------------------------------------------
+FAQ SECTION
+--------------------------------------------------
+
+Questions:
+
+1. Do I need all features right away?
+Answer:
+No. Most businesses start with Starter or Pro and upgrade as needed.
+
+2. Can setup fees be waived?
+Answer:
+Yes, setup may be waived with a longer commitment.
+
+3. Is this just software or done-for-you service?
+Answer:
+AI Edge combines software, automation, visibility systems, and strategy support depending on package.
+
+4. Can this replace multiple tools?
+Answer:
+Yes. AI Edge is designed to reduce the need for separate lead recovery, reputation, listing, AI visibility, and publishing tools.
+
+5. What businesses is this best for?
+Answer:
+Local service businesses, home services, medical/local offices, ecommerce brands, and companies that rely on inbound leads.
+
+6. Is AI Receptionist included?
+Answer:
+Included in Pro and higher; optional add-on for Starter.
+
+7. Do you support ecommerce?
+Answer:
+Seller Edge AI / ecommerce automation is coming soon.
+
+--------------------------------------------------
+CTA SECTION
+--------------------------------------------------
+
+Headline:
+Not Sure Which Package Fits?
+
+Subheadline:
+Start with a free AI Business Assessment and see where your business is losing leads, visibility, and revenue.
+
+Buttons:
+- Get Free AI Business Assessment
+- Book Strategy Call
+
+--------------------------------------------------
+ADMIN / FUTURE OPTION
+--------------------------------------------------
+
+No admin billing needed yet.
+
+This is a public-facing pricing/offer page only.
+
+Do not integrate Stripe yet.
+
+Do not break existing routes or modules.
+
+Make it polished, premium, and conversion-focused.

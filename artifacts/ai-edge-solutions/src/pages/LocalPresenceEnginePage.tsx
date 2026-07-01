@@ -2664,12 +2664,13 @@ Baldwin County, Alabama`;
                     fontSize: 12, color: "#94A3B8", lineHeight: 1.7,
                   }}>
                     <div style={{ fontWeight: 700, color: "#CBD5E1", marginBottom: 6, fontSize: 12.5 }}>Why Yelp matters for Bed Bugs &amp; Beyond</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {[
-                        { icon: "⭐", text: "Review authority — Yelp reviews rank in Google search results for brand queries" },
-                        { icon: "🍎", text: "Siri / Apple Maps — Yelp is the primary data source for Siri local business answers" },
-                        { icon: "🎙️", text: "Voice search — 'Hey Siri, find pest control near me' pulls from Yelp" },
-                        { icon: "🏠", text: "Local trust — Baldwin County homeowners check Yelp before calling a pest company" },
+                        { icon: "🐛", text: "Pest control discovery — homeowners actively search 'exterminator near me' and 'bed bug treatment Baldwin County AL' on Yelp; a claimed listing puts Bed Bugs & Beyond directly in front of them" },
+                        { icon: "⭐", text: "Review authority — Yelp reviews surface in Google results for brand queries and boost credibility before anyone calls" },
+                        { icon: "🍎", text: "Siri / Apple Maps — Yelp is Apple's primary local data source; your listing activates 'pest control near me' answers on every iPhone" },
+                        { icon: "🎙️", text: "Voice search — 'Hey Siri, find an exterminator near me' pulls directly from Yelp business profiles" },
+                        { icon: "🏠", text: "Local trust — Baldwin County vacation rental owners and families check Yelp ratings before choosing a pest company" },
                       ].map(item => (
                         <div key={item.icon} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                           <span style={{ flexShrink: 0, fontSize: 13 }}>{item.icon}</span>

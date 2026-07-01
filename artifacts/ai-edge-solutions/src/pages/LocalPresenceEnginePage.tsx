@@ -235,7 +235,7 @@ function AppleStepBadge({ status }: { status: AppleStepStatus }) {
 
 function AppleBusinessCard() {
   const [drawerOpen,    setDrawerOpen]    = useState(false);
-  const [activeTab,     setActiveTab]     = useState<"checklist" | "profile" | "api" | "diagnostics">("checklist");
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics">("checklist");
   const [checklist,     setChecklist]     = useState(APPLE_CHECKLIST);
   const [notes,         setNotes]         = useState("");
   const [placeCardUrl,  setPlaceCardUrl]  = useState("");
@@ -245,6 +245,7 @@ function AppleBusinessCard() {
   const [verifyMethod,  setVerifyMethod]  = useState("Phone");
   const [verifyStatus,  setVerifyStatus]  = useState("Pending");
   const [savedMsg,      setSavedMsg]      = useState(false);
+  const [copiedKey,     setCopiedKey]     = useState<string | null>(null);
 
   const completedCount    = checklist.filter(s => s.status === "complete").length;
   const inProgressCount   = checklist.filter(s => s.status === "in-progress").length;
@@ -259,8 +260,16 @@ function AppleBusinessCard() {
     setTimeout(() => setSavedMsg(false), 2500);
   }
 
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
+
   const TABS: { key: typeof activeTab; label: string }[] = [
     { key: "checklist",  label: "Setup Checklist" },
+    { key: "bizinfo",    label: "Business Info" },
     { key: "profile",    label: "Profile Tracker" },
     { key: "api",        label: "API Readiness" },
     { key: "diagnostics",label: "Diagnostics" },
@@ -436,6 +445,195 @@ function AppleBusinessCard() {
                 </div>
               </div>
             )}
+
+            {/* ── Tab: Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, specializing in fast, effective elimination of bed bugs, roaches, ants, spiders, fleas, rodents, mosquitoes, and common household pests. We serve homeowners, rental properties, vacation rentals, and businesses throughout Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, guaranteed results. Call (251) 324-9090 to schedule today.`;
+
+              const SERVICE_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Business Name",     value: "Bed Bugs & Beyond",                        note: "Exact legal name — no keyword stuffing" },
+                { label: "Phone Number",      value: "(251) 324-9090",         copyKey: "phone", note: "Must match Google Business Profile exactly" },
+                { label: "Website",           value: "https://aiedgesolutions.online",            note: "Use the live URL; Apple will verify it" },
+                { label: "Primary Category",  value: "Pest Control Service",                     note: "Select from Apple's category list" },
+                { label: "Secondary Category",value: "Exterminator",                             note: "Optional — add if available" },
+                { label: "Address / Area",    value: "Baldwin County, Alabama (Service Area)",   note: "Service-area business — no physical storefront" },
+                { label: "Verification",      value: "Phone call to (251) 324-9090",             note: "Apple calls the number on file to verify ownership" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string; status: "missing" | "ready" }[] = [
+                { item: "Logo",          spec: "PNG, 1:1, min 180×180 px, transparent bg preferred", status: "missing" },
+                { item: "Cover photo",   spec: "JPG/PNG, 16:9, min 1080×608 px",                      status: "missing" },
+                { item: "Service photo", spec: "Any photo of a treatment in progress",                 status: "missing" },
+                { item: "Team photo",    spec: "Uniformed technician preferred",                       status: "missing" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(0,174,239,0.1)",
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(0,174,239,0.25)",
+                          color: copied ? "#10B981" : "#00AEEF", transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly
+                      rows={rows}
+                      value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none",
+                        cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 18, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: "#00AEEF" }}>Setup Pending</strong> until the Apple listing is submitted and verified. Use the copy buttons to paste content directly into Apple Business Connect.
+                  </div>
+
+                  {/* ── Required fields grid ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(0,174,239,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(0,174,239,0.2)",
+                              color: copiedKey === f.copyKey ? "#10B981" : "#00AEEF", whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready blocks ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Business Description" copyKey="desc" value={BIZ_DESCRIPTION} rows={5} />
+                  <CopyBlock label="Service List" copyKey="services" value={SERVICE_LIST} rows={9} />
+                  <CopyBlock label="Service Area List" copyKey="areas" value={SERVICE_AREAS} rows={9} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Logo &amp; Photo Requirements
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "100px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: p.status === "missing" ? "rgba(239,68,68,0.04)" : "rgba(16,185,129,0.04)",
+                        border: p.status === "missing" ? "1px solid rgba(239,68,68,0.15)" : "1px solid rgba(16,185,129,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                          color: p.status === "missing" ? "#EF4444" : "#10B981",
+                          background: p.status === "missing" ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
+                        }}>{p.status === "missing" ? "Missing" : "Ready"}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Verification status banner ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>Listing Verification Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Apple verifies via phone call. Have someone available to answer <strong style={{ color: "#94A3B8" }}>(251) 324-9090</strong> during business hours.
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.3)", color: "#00AEEF",
+                    }}>Setup Pending</span>
+                  </div>
+
+                  {/* ── Next action ── */}
+                  <div style={{
+                    marginTop: 14, padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Go to <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer" style={{ color: "#00AEEF" }}>business.apple.com</a> and sign in with your Apple ID</li>
+                      <li>Search for "Bed Bugs &amp; Beyond" in Baldwin County — claim the existing listing if found</li>
+                      <li>If no listing exists, create one and enter all fields from the table above</li>
+                      <li>Paste the <strong style={{ color: "#CBD5E1" }}>Business Description</strong>, <strong style={{ color: "#CBD5E1" }}>Service List</strong>, and <strong style={{ color: "#CBD5E1" }}>Service Areas</strong> using the copy buttons</li>
+                      <li>Upload logo and cover photo per the specs above</li>
+                      <li>Complete phone verification — Apple calls <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong></li>
+                      <li>Mark listing as "Submitted" in the Profile Tracker tab once done</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.3)", color: "#00AEEF", textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Apple Business Connect
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Tab: Profile Tracker ── */}
             {activeTab === "profile" && (

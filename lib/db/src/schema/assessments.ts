@@ -19,6 +19,8 @@ export const assessmentsTable = pgTable("assessments", {
   scoreLocalPresence:   integer("score_local_presence"),
   scoreAiVisibility:    integer("score_ai_visibility"),
   scoreReviewStrength:  integer("score_review_strength"),
+  status:          text("status").notNull().default("new"),
+  notes:           text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -2866,6 +2866,530 @@ Baldwin County, Alabama`;
   );
 }
 
+// ── Waze Business V2 Card ─────────────────────────────────────────────────────
+const WAZE_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
+  { label: "Create a free Waze account",                  status: "pending", description: "Sign up or log in at waze.com — a Waze account is required to use the Map Editor." },
+  { label: "Open Waze Map Editor (WME)",                  status: "pending", description: "Go to waze.com/editor — this is where businesses are added and edited for free." },
+  { label: "Search for existing Bed Bugs & Beyond place", status: "pending", description: "Type 'Bed Bugs & Beyond' in the WME search bar to check if a place already exists." },
+  { label: "Add or edit the WME place",                   status: "pending", description: "If found: select the place and click Edit. If not found: click the map icon menu → Add Place / Point of Interest." },
+  { label: "Set place name",                              status: "pending", description: "Enter exactly: Bed Bugs & Beyond — no keyword additions or descriptors." },
+  { label: "Set phone number",                            status: "pending", description: "Enter (251) 324-9090 in the phone field." },
+  { label: "Set website URL",                             status: "pending", description: "Enter https://bedbugsandbeyond.net in the website field." },
+  { label: "Select WME category: Services",               status: "pending", description: "In WME, select 'Services' as the place category — closest match available for pest control." },
+  { label: "Pin location to Baldwin County, AL",          status: "pending", description: "Drag the location pin to your service base in Baldwin County. For a home-based business, use a general Baldwin County area pin (e.g., Foley or Fairhope)." },
+  { label: "Add place description",                       status: "pending", description: "Paste the copy-ready description from the Business Info tab." },
+  { label: "Save and submit WME changes",                 status: "pending", description: "Click Save in WME. Changes go through community review — typically 24–72 hours in the US." },
+  { label: "Confirm Google Business Profile NAP matches", status: "pending", description: "Google owns Waze. Ensure GBP name, phone, and website exactly match what you entered in WME." },
+  { label: "(Optional) Explore Waze for Brands paid ads", status: "pending", description: "Visit business.waze.com to evaluate Nearby Arrow and Promoted Search pins — paid features requiring a physical address." },
+];
+
+const WAZE_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
+  { check: "Waze account created",              status: "missing",  note: "Required to access Waze Map Editor" },
+  { check: "WME place found or added",          status: "missing",  note: "No Waze place found or created yet" },
+  { check: "Place name matches NAP",            status: "pending",  note: "Will be confirmed once WME place is created/edited" },
+  { check: "Phone number confirmed",            status: "pending",  note: "Pending WME place setup" },
+  { check: "Website URL confirmed",             status: "pending",  note: "Pending WME place setup" },
+  { check: "WME category set (Services)",       status: "missing",  note: "Category not yet assigned in WME" },
+  { check: "Location pin accurate",             status: "missing",  note: "No location pin set in Baldwin County" },
+  { check: "WME edit submitted for review",     status: "missing",  note: "Changes not yet submitted through WME" },
+  { check: "WME review approved",               status: "pending",  note: "Pending — community review takes 24–72 hrs after submission" },
+  { check: "GBP NAP consistency",               status: "pending",  note: "Google owns Waze — GBP accuracy feeds Waze place data" },
+  { check: "Waze / Google ecosystem ready",     status: "pending",  note: "Activates once WME place is live and GBP is fully verified" },
+  { check: "Waze for Brands ads evaluated",     status: "missing",  note: "Paid Nearby Arrow and Promoted Search — not yet reviewed" },
+];
+
+function WazeBusinessCard() {
+  const [drawerOpen,   setDrawerOpen]   = useState(false);
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [checklist,    setChecklist]    = useState(WAZE_CHECKLIST);
+  const [placeUrl,     setPlaceUrl]     = useState("");
+  const [acctEmail,    setAcctEmail]    = useState("");
+  const [verifyStatus, setVerifyStatus] = useState("Not Started");
+  const [notes,        setNotes]        = useState("");
+  const [savedMsg,     setSavedMsg]     = useState(false);
+  const [copiedKey,    setCopiedKey]    = useState<string | null>(null);
+
+  const completedCount  = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const wazeScore       = Math.round((completedCount / checklist.length) * 10);
+
+  function markStepComplete(idx: number) {
+    setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
+  }
+  function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
+
+  const WAZE_BLUE = "#00BBDE";
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",   label: "Setup Checklist" },
+    { key: "bizinfo",     label: "Business Info" },
+    { key: "profile",     label: "Profile Tracker" },
+    { key: "diagnostics", label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, rgba(0,187,222,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(0,187,222,0.22)",
+      borderRadius: 14, backdropFilter: "blur(12px)", overflow: "hidden",
+      boxShadow: "0 0 24px rgba(0,187,222,0.06)", transition: "border-color 0.2s",
+    }}>
+      {/* ── Card header ── */}
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: "linear-gradient(135deg, #0099BB, #00BBDE)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 900, color: "#FFF",
+            boxShadow: "0 0 16px rgba(0,187,222,0.3)",
+          }}>🚗</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Waze</span>
+              <StatusBadge status="pending" />
+            </div>
+            <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+              Route-based local discovery, driver visibility &amp; Google/Waze ecosystem presence.
+            </p>
+          </div>
+        </div>
+
+        {/* Business details */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "12px 14px",
+          display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px",
+        }}>
+          {[
+            { label: "Business",     value: NAP.name },
+            { label: "Phone",        value: NAP.phone },
+            { label: "Website",      value: NAP.website.replace("https://", "") },
+            { label: "WME Category", value: "Services" },
+            { label: "Service Area", value: NAP.serviceArea },
+            { label: "Status",       value: "Not Started" },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Score + progress */}
+        <div style={{
+          background: "rgba(0,187,222,0.05)", border: "1px solid rgba(0,187,222,0.15)",
+          borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: WAZE_BLUE }}>Waze Score: {wazeScore} / 10 pts</span>
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((completedCount / checklist.length) * 100)}%`, background: WAZE_BLUE, borderRadius: 2, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
+            <span style={{ fontSize: 11, color: WAZE_BLUE, fontWeight: 700 }}>{inProgressCount} active</span>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            style={{
+              padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: drawerOpen ? "rgba(0,187,222,0.18)" : "rgba(0,187,222,0.1)",
+              border: "1px solid rgba(0,187,222,0.32)", color: WAZE_BLUE, transition: "all 0.15s",
+            }}
+          >{drawerOpen ? "▲ Close Waze Setup" : "▼ Open Waze Setup"}</button>
+          <a href="https://waze.com/editor" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,187,222,0.08)", border: "1px solid rgba(0,187,222,0.22)", color: WAZE_BLUE, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Waze Map Editor
+          </a>
+          <a href="https://business.waze.com" target="_blank" rel="noopener noreferrer"
+            style={{ padding: "7px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,187,222,0.05)", border: "1px solid rgba(0,187,222,0.15)", color: "#64748B", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            ↗ Waze for Business
+          </a>
+        </div>
+      </div>
+
+      {/* ── Expandable drawer ── */}
+      {drawerOpen && (
+        <div style={{ borderTop: "1px solid rgba(0,187,222,0.12)", background: "rgba(3,6,18,0.6)" }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 20px" }}>
+            {TABS.map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                padding: "11px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: activeTab === tab.key ? `2px solid ${WAZE_BLUE}` : "2px solid transparent",
+                color: activeTab === tab.key ? WAZE_BLUE : "#475569", transition: "all 0.15s", marginBottom: -1,
+              }}>{tab.label}</button>
+            ))}
+          </div>
+
+          <div style={{ padding: 20 }}>
+
+            {/* ── Setup Checklist ── */}
+            {activeTab === "checklist" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Complete all 13 steps to establish your Waze presence. Waze uses the Map Editor (WME) — a community-moderated system — for free business place listings. Mark each step after completing it.
+                </div>
+
+                {/* Waze platform note */}
+                <div style={{
+                  padding: "10px 14px", borderRadius: 9, marginBottom: 14,
+                  background: "rgba(0,187,222,0.04)", border: "1px solid rgba(0,187,222,0.18)",
+                  fontSize: 11.5, color: "#64748B", lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#94A3B8" }}>How Waze business setup works:</strong> Unlike Google Business Profile or Apple Business Connect, Waze doesn't have a direct business "claiming" portal for service-area businesses. The free path is the <strong style={{ color: "#00BBDE" }}>Waze Map Editor (WME)</strong> — a community-maintained map where you can add or update a place. WME edits are reviewed by trusted community editors before going live (24–72 hrs). Google owns Waze, so a complete and accurate Google Business Profile also strengthens Waze visibility.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {checklist.map((step, idx) => (
+                    <div key={idx} style={{
+                      padding: "11px 14px", borderRadius: 10,
+                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(0,187,222,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(0,187,222,0.2)" : "rgba(255,255,255,0.05)"}`,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(0,187,222,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(0,187,222,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? WAZE_BLUE : "#475569", fontWeight: 800,
+                          }}>
+                            {step.status === "complete" ? "✓" : idx + 1}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
+                            {step.label}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <AppleStepBadge status={step.status} />
+                          {step.status !== "complete" && (
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                              Mark Done
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {step.description && (
+                        <p style={{ fontSize: 11.5, color: "#475569", margin: "4px 0 0 32px", lineHeight: 1.5 }}>{step.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <a href="https://waze.com/editor" target="_blank" rel="noopener noreferrer"
+                    style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,187,222,0.1)", border: "1px solid rgba(0,187,222,0.3)", color: WAZE_BLUE, textDecoration: "none", display: "inline-block" }}>
+                    ↗ Open Waze Map Editor
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* ── Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Locally owned pest control company serving Baldwin County, Alabama. Specializing in bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, and mosquito control. Serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Call (251) 324-9090.`;
+
+              const SERVICE_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Removal
+Mosquito Control
+General Pest Control`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Place Name",     value: "Bed Bugs & Beyond",              note: "Exact match — no keyword additions" },
+                { label: "Phone",          value: "(251) 324-9090", copyKey: "waze-phone", note: "Must match GBP exactly (NAP)" },
+                { label: "Website",        value: "https://bedbugsandbeyond.net",    note: "Confirmed BB&B website" },
+                { label: "WME Category",   value: "Services",                       note: "Closest WME category available for pest control" },
+                { label: "Location",       value: "Baldwin County, Alabama",        note: "Pin to service base — Foley or Fairhope area recommended" },
+                { label: "Editor",         value: "Waze Map Editor (waze.com/editor)", note: "Free, community-reviewed — no paid account required" },
+                { label: "Review Time",    value: "24–72 hours after submission",   note: "WME edits go through trusted editor review before going live" },
+                { label: "Paid option",    value: "Waze for Brands (business.waze.com)", note: "Nearby Arrow and Promoted Search pins — requires physical address + budget" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string }[] = [
+                { item: "Place photo",     spec: "Landscape or square, min 400×300 px — represents your business in Waze place view" },
+                { item: "Logo",            spec: "Optional in WME — square, min 400×400 px (PNG or JPG)" },
+                { item: "Note",            spec: "Waze WME photos are community-moderated; keep images professional and business-relevant" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(0,187,222,0.1)",
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(0,187,222,0.25)",
+                          color: copied ? "#10B981" : WAZE_BLUE, transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly rows={rows} value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none", cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: WAZE_BLUE }}>Setup Pending</strong> until the Waze Map Editor place is submitted and approved.
+                  </div>
+
+                  {/* ── Why Waze matters callout ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 20,
+                    background: "rgba(0,187,222,0.05)", border: "1px solid rgba(0,187,222,0.2)",
+                    fontSize: 12, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ fontWeight: 700, color: "#CBD5E1", marginBottom: 6, fontSize: 12.5 }}>Why Waze matters for Bed Bugs &amp; Beyond</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {[
+                        { icon: "🚗", text: "Route-based discovery — drivers navigating near Baldwin County see your business pin on the Waze map while en route to nearby destinations" },
+                        { icon: "🗺️", text: "Local map visibility — a Waze place puts 'Bed Bugs & Beyond' on the map for the entire Baldwin County service area" },
+                        { icon: "🔗", text: "Google/Waze ecosystem — Google owns Waze; a complete and accurate Google Business Profile strengthens your Waze visibility at no extra cost" },
+                        { icon: "📍", text: "Service-area credibility — appearing on Waze alongside Google Maps validates your coverage of Gulf Shores, Orange Beach, Foley, and the surrounding area" },
+                        { icon: "🐛", text: "Pest control calls — vacation rental owners and hotel guests who encounter an infestation while traveling in Baldwin County can find and call you directly from Waze" },
+                      ].map(item => (
+                        <div key={item.icon} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span style={{ flexShrink: 0, fontSize: 13 }}>{item.icon}</span>
+                          <span style={{ fontSize: 11.5, color: "#94A3B8" }}>{item.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Required fields ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information (WME)
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(0,187,222,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(0,187,222,0.2)",
+                              color: copiedKey === f.copyKey ? "#10B981" : WAZE_BLUE, whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready content ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Place Description" copyKey="waze-desc"     value={BIZ_DESCRIPTION} rows={4} />
+                  <CopyBlock label="Service List"       copyKey="waze-services" value={SERVICE_LIST}     rows={9} />
+                  <CopyBlock label="Service Area List"  copyKey="waze-areas"    value={SERVICE_AREAS}   rows={9} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Photo / Logo Requirements
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(0,187,222,0.04)", border: "1px solid rgba(0,187,222,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: "#64748B", background: "rgba(255,255,255,0.05)", whiteSpace: "nowrap" }}>Optional</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Verification / WME review ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Verification &amp; Review Process
+                  </div>
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 18,
+                    background: "rgba(0,187,222,0.04)", border: "1px solid rgba(0,187,222,0.18)",
+                    fontSize: 12.5, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    Waze does <strong style={{ color: "#CBD5E1" }}>not</strong> use phone or postcard verification like Google. WME place additions are reviewed by <strong style={{ color: "#CBD5E1" }}>trusted community editors</strong> (Waze Champs) and typically approved within <strong style={{ color: "#CBD5E1" }}>24–72 hours</strong> in the US. No ownership proof is required for adding a new business place. If the place already exists and has high usage, edits may require a higher-trust editor to approve — in that case, ensure all fields are accurate and the edit reason is clear.
+                  </div>
+
+                  {/* ── Status + next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 14,
+                    background: "rgba(0,187,222,0.05)", border: "1px solid rgba(0,187,222,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>WME Submission Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Status updates once the WME place is submitted and approved by community editors.
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: "rgba(0,187,222,0.12)", border: "1px solid rgba(0,187,222,0.3)", color: WAZE_BLUE,
+                    }}>Not Started</span>
+                  </div>
+
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Sign in at <a href="https://www.waze.com/login" target="_blank" rel="noopener noreferrer" style={{ color: WAZE_BLUE }}>waze.com/login</a> (create a free account if needed)</li>
+                      <li>Open <a href="https://www.waze.com/editor" target="_blank" rel="noopener noreferrer" style={{ color: WAZE_BLUE }}>waze.com/editor</a> and search <strong style={{ color: "#CBD5E1" }}>Bed Bugs &amp; Beyond</strong></li>
+                      <li>If found: select the existing place → click Edit → update all fields</li>
+                      <li>If not found: click the map icon → <strong style={{ color: "#CBD5E1" }}>Add Place</strong> → Point of Interest</li>
+                      <li>Enter name, phone, website, and category from the Required Business Information section above</li>
+                      <li>Drag the location pin to a point in <strong style={{ color: "#CBD5E1" }}>Baldwin County, AL</strong> (Foley or Fairhope area recommended)</li>
+                      <li>Paste the <strong style={{ color: "#CBD5E1" }}>Place Description</strong> using the copy button above</li>
+                      <li>Save and submit — community review takes <strong style={{ color: "#CBD5E1" }}>24–72 hours</strong></li>
+                      <li>Ensure your <strong style={{ color: "#CBD5E1" }}>Google Business Profile</strong> NAP matches (Google owns Waze — GBP accuracy boosts Waze visibility)</li>
+                      <li>Update this tracker once the WME place is live</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://www.waze.com/editor" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(0,187,222,0.1)", border: "1px solid rgba(0,187,222,0.3)", color: WAZE_BLUE, textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Waze Map Editor
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Profile Tracker ── */}
+            {activeTab === "profile" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 16, lineHeight: 1.5 }}>
+                  Track your Waze Map Editor account details, place URL, and submission status here.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {[
+                    { label: "Account Email",       val: acctEmail,    set: setAcctEmail,    ph: "email@example.com" },
+                    { label: "WME Review Status",   val: verifyStatus, set: setVerifyStatus, ph: "Not Started / Submitted / Approved / Live" },
+                  ].map(field => (
+                    <div key={field.label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{field.label}</div>
+                      <input value={field.val} onChange={e => field.set(e.target.value)} placeholder={field.ph}
+                        style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Waze Place URL</div>
+                    <input value={placeUrl} onChange={e => setPlaceUrl(e.target.value)} placeholder="https://waze.com/..."
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit" }} />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>Setup Notes</div>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                    placeholder="Notes about setup progress, WME edit status, or blockers..."
+                    style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 8, fontSize: 12, color: "#E2E8F0", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", outline: "none", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+                  <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: WAZE_BLUE, border: "none", color: "#FFF" }}>
+                    Save Setup Notes
+                  </button>
+                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {/* ── Diagnostics ── */}
+            {activeTab === "diagnostics" && (
+              <div>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 14, lineHeight: 1.5 }}>
+                  Automated checks against Waze Map Editor setup requirements, NAP consistency, and Google/Waze ecosystem readiness.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {WAZE_DIAGS.map((d, i) => {
+                    const s = APPLE_DIAG_STYLE[d.status];
+                    const statusLabels: Record<AppleDiagStatus, string> = { healthy: "Healthy", warning: "Warning", missing: "Missing", pending: "Pending", coming_soon: "Coming Soon" };
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center", padding: "9px 14px", borderRadius: 9, background: s.bg, border: `1px solid ${s.border}` }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>{d.check}</div>
+                          <div style={{ fontSize: 11, color: "#475569" }}>{d.note}</div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, whiteSpace: "nowrap" }}>{statusLabels[d.status]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Angi for Pros V2 Card ─────────────────────────────────────────────────────
 const ANGI_CHECKLIST: { label: string; status: AppleStepStatus; description: string }[] = [
   { label: "Create Angi for Pros account",           status: "pending", description: "Sign up at pro.angi.com using your business email." },
@@ -4138,6 +4662,8 @@ export default function LocalPresenceEnginePage() {
           <NextdoorBusinessCard />
           {/* Yelp — V2 dedicated card */}
           <YelpBusinessCard />
+          {/* Waze — V2 dedicated card */}
+          <WazeBusinessCard />
           {/* Angi — V2 dedicated card */}
           <AngiBusinessCard />
           {/* Thumbtack — V2 dedicated card */}

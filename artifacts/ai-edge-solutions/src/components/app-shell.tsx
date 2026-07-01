@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { to: "/admin/image-assets",        icon: "🖼",  label: "Image Asset Manager" },
   { to: "/admin/ai-visibility",        icon: "✨", label: "AI Visibility Engine" },
   { to: "/admin/local-presence",       icon: "📍", label: "Local Presence Engine" },
+  { to: "/admin/voice-search",         icon: "🔊", label: "Voice Search Engine" },
   { to: "/admin/assessments",         icon: "📊", label: "Business Assessments" },
   { to: "/admin/diagnostics",         icon: "🛰",  label: "System Diagnostics" },
 ];

@@ -45,6 +45,7 @@ const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEngineP
 const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
 const LocalPresenceEnginePage       = lazy(() => import("./pages/LocalPresenceEnginePage"));
+const VoiceSearchEnginePage         = lazy(() => import("./pages/VoiceSearchEnginePage"));
 const AIVisibilityEnginePage        = lazy(() => import("./pages/AIVisibilityEnginePage"));
 const BusinessAssessmentPage        = lazy(() => import("./pages/BusinessAssessmentPage"));
 const AssessmentsInboxPage          = lazy(() => import("./pages/AssessmentsInboxPage"));
@@ -134,6 +135,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/local-presence">
           <Authenticated><LocalPresenceEnginePage /></Authenticated>
+        </Route>
+        <Route path="/admin/voice-search">
+          <Authenticated><VoiceSearchEnginePage /></Authenticated>
         </Route>
         <Route path="/admin/ai-visibility">
           <Authenticated><AIVisibilityEnginePage /></Authenticated>

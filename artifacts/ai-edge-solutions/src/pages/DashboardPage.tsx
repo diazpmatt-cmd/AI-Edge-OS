@@ -13,18 +13,21 @@ import { toast } from "sonner";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PLATFORM_KPI_CARDS = [
-  { icon: "📍", label: "Local Visibility",    value: "38/100", sub: "3 platforms pending",               color: "#EF4444", glow: false },
-  { icon: "✨", label: "AI Visibility",       value: "38/100", sub: "2 of 8 prompts detected",           color: "#8B5CF6", glow: false },
+  { icon: "📍", label: "Local Visibility",    value: "Pending", sub: "Score not yet active",             color: "#EF4444", glow: false },
+  { icon: "✨", label: "AI Visibility",       value: "Pending", sub: "Scan not yet run",                 color: "#8B5CF6", glow: false },
   { icon: "⚡", label: "Connected Platforms", value: "4 / 8",  sub: "Facebook, Instagram, GBP, YouTube", color: "#00AEEF", glow: false },
-  { icon: "🛡", label: "Automation Health",   value: "82%",    sub: "Core systems online",               color: "#10B981", glow: false },
+  { icon: "🛡", label: "Automation Health",   value: "Pending", sub: "Health score pending",             color: "#10B981", glow: false },
 ];
 
+// Scoring breakdown — pending live data integration.
+// These values will be computed from real platform signals once each module
+// completes its initial setup and begins reporting live data.
 const HEALTH_BREAKDOWN = [
-  { label: "Lead Recovery",     pct: 82, color: "#10B981" },
-  { label: "Local Presence",    pct: 38, color: "#EF4444" },
-  { label: "AI Visibility",     pct: 38, color: "#8B5CF6" },
-  { label: "Social Publishing", pct: 75, color: "#00AEEF" },
-  { label: "Automation Health", pct: 82, color: "#F59E0B" },
+  { label: "Lead Recovery",     pct: 0, color: "#10B981", pending: true },
+  { label: "Local Presence",    pct: 0, color: "#EF4444", pending: true },
+  { label: "AI Visibility",     pct: 0, color: "#8B5CF6", pending: true },
+  { label: "Social Publishing", pct: 0, color: "#00AEEF", pending: true },
+  { label: "Automation Health", pct: 0, color: "#F59E0B", pending: true },
 ];
 
 const ALERTS = [
@@ -46,21 +49,24 @@ const ALERT_STYLE: Record<string, { color: string; bg: string; border: string; l
   healthy:  { color: "#10B981", bg: "rgba(16,185,129,0.07)", border: "rgba(16,185,129,0.2)", label: "Healthy"  },
 };
 
+// Opportunity estimates require baseline performance data before they can be
+// quantified. Specific projections will appear once each module has run for
+// a full reporting period and established its benchmark.
 const OPPORTUNITIES = [
-  { icon: "📞", title: "Missed Call Recovery",  potential: "+$3,200/mo",          color: "#10B981", action: "Improve response automation and appointment booking",      link: "/admin/lead-recovery"   },
-  { icon: "✨", title: "AI Search Visibility",  potential: "+42% visibility lift", color: "#8B5CF6", action: "Create AI-readable business summary and city pages",       link: "/admin/ai-visibility"   },
-  { icon: "📍", title: "Local Listings",        potential: "+28% local discovery", color: "#00AEEF", action: "Claim Apple, Bing, and Nextdoor listings",                link: "/admin/local-presence"  },
-  { icon: "⭐", title: "Review Growth",         potential: "+18% conversion lift", color: "#F59E0B", action: "Launch automated review request campaign",                link: "/admin/lead-recovery"   },
+  { icon: "📞", title: "Missed Call Recovery",  potential: "Estimate pending",  color: "#10B981", action: "Improve response automation and appointment booking",  link: "/admin/lead-recovery"   },
+  { icon: "✨", title: "AI Search Visibility",  potential: "Estimate pending",  color: "#8B5CF6", action: "Create AI-readable business summary and city pages",   link: "/admin/ai-visibility"   },
+  { icon: "📍", title: "Local Listings",        potential: "Estimate pending",  color: "#00AEEF", action: "Claim Apple, Bing, and Nextdoor listings",             link: "/admin/local-presence"  },
+  { icon: "⭐", title: "Review Growth",         potential: "Estimate pending",  color: "#F59E0B", action: "Launch automated review request campaign",             link: "/admin/lead-recovery"   },
 ];
 
 const MODULES = [
-  { icon: "📞", name: "Lead Recovery AI",    status: "Healthy",      statusColor: "#10B981", pct: 82, summary: "6 leads recovered today · Active", link: "/admin/lead-recovery"  },
-  { icon: "📍", name: "Local Presence",      status: "Warning",      statusColor: "#F59E0B", pct: 38, summary: "3 platforms unverified",           link: "/admin/local-presence" },
-  { icon: "✨", name: "AI Visibility",       status: "Needs Work",   statusColor: "#EF4444", pct: 38, summary: "2/8 prompts detected",             link: "/admin/ai-visibility"  },
-  { icon: "⚡", name: "Connected Accounts",  status: "Healthy",      statusColor: "#10B981", pct: 75, summary: "4/8 platforms connected",          link: "/admin/connections"    },
-  { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#00AEEF", pct: 70, summary: "Queued for publish",               link: "/admin/social-publishing" },
-  { icon: "🤖", name: "Auto Content Engine", status: "Ready",        statusColor: "#00AEEF", pct: 74, summary: "Content pipeline active",          link: "/admin/auto-content"   },
-  { icon: "🛰", name: "System Diagnostics",  status: "Monitoring",   statusColor: "#8B5CF6", pct: 80, summary: "All core systems nominal",         link: "/admin/diagnostics"    },
+  { icon: "📞", name: "Lead Recovery AI",    status: "Active",       statusColor: "#10B981", pct: null, summary: "Telnyx connected · Monitoring calls",  link: "/admin/lead-recovery"     },
+  { icon: "📍", name: "Local Presence",      status: "Setup needed", statusColor: "#F59E0B", pct: null, summary: "3 platforms not yet claimed",          link: "/admin/local-presence"    },
+  { icon: "✨", name: "AI Visibility",       status: "Pending scan", statusColor: "#EF4444", pct: null, summary: "No scan data yet",                     link: "/admin/ai-visibility"     },
+  { icon: "⚡", name: "Connected Accounts",  status: "Partial",      statusColor: "#00AEEF", pct: null, summary: "4 of 8 platforms connected",           link: "/admin/connections"       },
+  { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Queue open · No score yet",            link: "/admin/social-publishing" },
+  { icon: "🤖", name: "Auto Content Engine", status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Content pipeline active",              link: "/admin/auto-content"      },
+  { icon: "🛰", name: "System Diagnostics",  status: "Monitoring",   statusColor: "#8B5CF6", pct: null, summary: "All core systems nominal",             link: "/admin/diagnostics"       },
 ];
 
 const SNAPSHOTS = [
@@ -92,7 +98,7 @@ const SNAPSHOTS = [
     color: "#8B5CF6",
     link: "/admin/ai-visibility",
     rows: [
-      { label: "Visibility score",   value: "38/100",     valueColor: "#EF4444" },
+      { label: "Visibility score",   value: "Pending",    valueColor: "#475569" },
       { label: "Prompts detected",   value: "2 of 8",     valueColor: "#F59E0B" },
       { label: "Competitor gap",     value: "High",       valueColor: "#F87171" },
       { label: "Actions pending",    value: "7",          valueColor: "#94A3B8" },
@@ -111,14 +117,9 @@ const QUICK_ACTIONS = [
   { label: "Connected Accounts",        icon: "⚡", link: "/admin/connections",        color: "#00AEEF" },
 ];
 
-const ACTIVITY = [
-  { time: "Just now",  text: "Google Business Profile token refreshed successfully", icon: "✓", color: "#10B981" },
-  { time: "2 min ago", text: "AI Visibility Engine — scan completed (38/100)",       icon: "✨", color: "#8B5CF6" },
-  { time: "14m ago",  text: "Lead Recovery AI V2 deployed",                          icon: "📞", color: "#10B981" },
-  { time: "1h ago",   text: "Local Presence Engine launched",                        icon: "📍", color: "#00AEEF" },
-  { time: "2h ago",   text: "Instagram connected and verified",                      icon: "📸", color: "#E1306C" },
-  { time: "3h ago",   text: "Facebook ready to publish",                             icon: "📘", color: "#1877F2" },
-];
+// Activity feed — will populate with real timestamped events once modules
+// begin generating live signals (calls received, scans run, posts published, etc.)
+const ACTIVITY: { time: string; text: string; icon: string; color: string }[] = [];
 
 const NEXT_ACTIONS = [
   { rank: 1, action: "Claim Apple Business Connect",                  impact: "High", time: "30 min" },
@@ -323,25 +324,26 @@ export default function DashboardPage() {
               padding: "24px 26px",
               boxShadow: "0 0 40px rgba(0,174,239,0.06)",
             }}>
-              {/* Big score */}
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 24 }}>
-                <div style={{ fontSize: 72, fontWeight: 900, lineHeight: 1, color: "#00AEEF", letterSpacing: "-2px" }}>64</div>
+              {/* Big score — pending live data */}
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 8 }}>
+                <div style={{ fontSize: 72, fontWeight: 900, lineHeight: 1, color: "#475569", letterSpacing: "-2px" }}>—</div>
                 <div style={{ paddingBottom: 10 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: "#334155" }}>/100</div>
                   <div style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>Business Growth Score</div>
                 </div>
               </div>
-              {/* Breakdown bars */}
+              <div style={{ fontSize: 11, color: "#475569", marginBottom: 20, lineHeight: 1.5 }}>
+                Pending live scoring — score will be calculated once platform modules complete setup and begin reporting data.
+              </div>
+              {/* Breakdown bars — pending */}
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {HEALTH_BREAKDOWN.map(row => (
                   <div key={row.label}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                       <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 500 }}>{row.label}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: row.color }}>{row.pct}%</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#334155" }}>Pending</span>
                     </div>
-                    <div style={{ height: 6, background: "rgba(255,255,255,0.05)", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${row.pct}%`, background: row.color, borderRadius: 3, transition: "width 0.7s" }} />
-                    </div>
+                    <div style={{ height: 6, background: "rgba(255,255,255,0.05)", borderRadius: 3 }} />
                   </div>
                 ))}
               </div>
@@ -538,10 +540,10 @@ export default function DashboardPage() {
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
-                        { label: "New Customers",      value: String(gd.customers.new_customers),      color: "#00AEEF" },
-                        { label: "Returning",          value: String(gd.customers.returning_customers), color: "#8B5CF6" },
-                        { label: "Active Services",    value: String(gd.customers.active_services),    color: "#F59E0B" },
-                        { label: "Recurring Services", value: String(gd.customers.recurring_services), color: "#10B981" },
+                        { label: "New Customers",      value: gd.customers.new_customers      != null ? String(gd.customers.new_customers)      : "—", color: "#00AEEF" },
+                        { label: "Returning",          value: gd.customers.returning_customers != null ? String(gd.customers.returning_customers) : "—", color: "#8B5CF6" },
+                        { label: "Active Services",    value: gd.customers.active_services    != null ? String(gd.customers.active_services)    : "—", color: "#F59E0B" },
+                        { label: "Recurring Services", value: gd.customers.recurring_services != null ? String(gd.customers.recurring_services) : "—", color: "#10B981" },
                       ].map(m => (
                         <div key={m.label} style={{
                           background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
@@ -685,15 +687,17 @@ export default function DashboardPage() {
                   }}>{mod.status}</span>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{mod.name}</div>
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, color: "#475569" }}>Health</span>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: mod.statusColor }}>{mod.pct}%</span>
+                {mod.pct !== null && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: "#475569" }}>Health</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: mod.statusColor }}>{mod.pct}%</span>
+                    </div>
+                    <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${mod.pct}%`, background: mod.statusColor, borderRadius: 2 }} />
+                    </div>
                   </div>
-                  <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${mod.pct}%`, background: mod.statusColor, borderRadius: 2 }} />
-                  </div>
-                </div>
+                )}
                 <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{mod.summary}</div>
                 <Link to={mod.link}>
                   <button style={{
@@ -770,7 +774,7 @@ export default function DashboardPage() {
               background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
               borderRadius: 14, overflow: "hidden",
             }}>
-              {ACTIVITY.map((item, i) => (
+              {ACTIVITY.length > 0 ? ACTIVITY.map((item, i) => (
                 <div key={i} style={{
                   display: "flex", alignItems: "flex-start", gap: 12,
                   padding: "12px 16px",
@@ -787,7 +791,13 @@ export default function DashboardPage() {
                     <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{item.time}</div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div style={{ padding: "32px 20px", textAlign: "center" }}>
+                  <div style={{ fontSize: 20, marginBottom: 8 }}>📋</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#475569", marginBottom: 4 }}>No activity yet</div>
+                  <div style={{ fontSize: 11, color: "#334155" }}>Events will appear here as platform modules generate real signals.</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

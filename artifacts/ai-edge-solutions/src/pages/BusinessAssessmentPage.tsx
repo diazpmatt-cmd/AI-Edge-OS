@@ -563,10 +563,10 @@ export default function BusinessAssessmentPage() {
           <Divider>Revenue & Growth Opportunities Identified</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {[
-              { icon: "💰", label: "Revenue Recovery Opportunity",  value: "+$3,200/month",  color: "#10B981", note: "Missed call recovery + lead conversion optimization" },
-              { icon: "📍", label: "Local Visibility Opportunity",  value: "+28% discovery", color: "#00AEEF", note: "Apple, Bing, Nextdoor listings not yet claimed"        },
-              { icon: "✨", label: "AI Visibility Opportunity",     value: "+42% mentions",  color: "#8B5CF6", note: "AI search engines not recommending your business"      },
-              { icon: "⭐", label: "Lead Conversion Opportunity",   value: "+18% rate",      color: "#F59E0B", note: "Review velocity and trust signals below competitors"   },
+              { icon: "💰", label: "Revenue Recovery Opportunity",  value: "Estimate pending", color: "#10B981", note: "Missed call recovery + lead conversion optimization" },
+              { icon: "📍", label: "Local Visibility Opportunity",  value: "Estimate pending", color: "#00AEEF", note: "Apple, Bing, Nextdoor listings not yet claimed"        },
+              { icon: "✨", label: "AI Visibility Opportunity",     value: "Estimate pending", color: "#8B5CF6", note: "AI search engines not recommending your business"      },
+              { icon: "⭐", label: "Lead Conversion Opportunity",   value: "Estimate pending", color: "#F59E0B", note: "Review velocity and trust signals below competitors"   },
             ].map(op => (
               <div key={op.label} style={{
                 background: "rgba(11,22,41,0.7)", border: `1px solid ${op.color}20`,
@@ -646,10 +646,10 @@ export default function BusinessAssessmentPage() {
           <Divider>Projected Impact — Within 90 Days (with AI Edge)</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {[
-              { label: "+42%",      sub: "AI Visibility",        color: "#8B5CF6" },
-              { label: "+28%",      sub: "Local Discovery",      color: "#00AEEF" },
-              { label: "+18%",      sub: "Lead Conversion",      color: "#F59E0B" },
-              { label: "+$3,200",   sub: "Monthly Revenue Est.", color: "#10B981" },
+              { label: "Pending",  sub: "AI Visibility Est.",    color: "#8B5CF6" },
+              { label: "Pending",  sub: "Local Discovery Est.",  color: "#00AEEF" },
+              { label: "Pending",  sub: "Lead Conversion Est.",  color: "#F59E0B" },
+              { label: "Pending",  sub: "Revenue Est.",          color: "#10B981" },
             ].map(p => (
               <div key={p.sub} style={{
                 background: `${p.color}08`, border: `1px solid ${p.color}20`,

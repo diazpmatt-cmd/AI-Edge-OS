@@ -171,7 +171,7 @@ const PRIORITIES = [
 ];
 
 const DIAGNOSTICS = [
-  { label: "AI Visibility Scan",     status: "warning",      note: "Score 38/100 — needs significant improvement" },
+  { label: "AI Visibility Scan",     status: "pending",      note: "Score pending — no scan data yet" },
   { label: "Google Signal Health",   status: "warning",      note: "GBP connected, but quota throttled. Schema missing." },
   { label: "Bing Signal Health",     status: "missing",      note: "Bing Places not claimed" },
   { label: "Citation Health",        status: "warning",      note: "Low citation count — estimated < 20 active" },
@@ -200,6 +200,7 @@ const THREAT_STYLE: Record<string, { color: string; label: string }> = {
 
 const DIAG_STYLE: Record<string, { color: string; icon: string; label: string }> = {
   healthy:      { color: "#10B981", icon: "✓",  label: "Healthy"      },
+  pending:      { color: "#475569", icon: "–",  label: "Pending"      },
   warning:      { color: "#F59E0B", icon: "⚠",  label: "Warning"      },
   missing:      { color: "#EF4444", icon: "✕",  label: "Missing"      },
   coming_soon:  { color: "#8B5CF6", icon: "⋯",  label: "Coming Soon"  },
@@ -321,7 +322,7 @@ export default function AIVisibilityEnginePage() {
 
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 32 }}>
-          <KPICard icon="📡" label="AI Visibility Score"   value="38/100" sub="Needs significant improvement" color="#EF4444" glow />
+          <KPICard icon="📡" label="AI Visibility Score"   value="Pending" sub="No scan data yet" color="#EF4444" glow={false} />
           <KPICard icon="🎯" label="Prompt Coverage"       value="2/8"    sub="Appearing in 2 of 8 test prompts" color="#F59E0B" />
           <KPICard icon="⚔️" label="Competitor Gap"        value="High"   sub="Competitors avg 13 AI mentions"   color="#8B5CF6" />
           <KPICard icon="🔧" label="Optimization Status"   value="Needs Work" sub="7 critical actions pending"   color="#00AEEF" />

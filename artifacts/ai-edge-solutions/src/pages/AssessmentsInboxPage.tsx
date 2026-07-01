@@ -411,10 +411,10 @@ export default function AssessmentsInboxPage() {
                 {/* Opportunity Metrics */}
                 <DetailSection title="Opportunity Metrics">
                   {[
-                    { label: "Revenue Recovery",      value: "+$3,200/mo",  color: "#10B981" },
-                    { label: "AI Visibility",         value: "+42%",        color: "#8B5CF6" },
-                    { label: "Local Visibility",      value: "+28%",        color: "#00AEEF" },
-                    { label: "Lead Conversion",       value: "+18%",        color: "#F59E0B" },
+                    { label: "Revenue Recovery",      value: "Estimate pending", color: "#10B981" },
+                    { label: "AI Visibility",         value: "Estimate pending", color: "#8B5CF6" },
+                    { label: "Local Visibility",      value: "Estimate pending", color: "#00AEEF" },
+                    { label: "Lead Conversion",       value: "Estimate pending", color: "#F59E0B" },
                   ].map(op => (
                     <div key={op.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontSize: 12, color: "#64748B" }}>{op.label}</span>

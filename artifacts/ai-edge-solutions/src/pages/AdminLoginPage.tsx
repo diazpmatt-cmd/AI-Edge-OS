@@ -21,10 +21,10 @@ export default function AdminLoginPage() {
           fontSize: 11, color: "#00AEEF", fontWeight: 700,
           letterSpacing: "1.2px", textTransform: "uppercase", opacity: 0.9,
         }}>
-          Admin Command Center
+          Command Center
         </div>
         <p style={{ fontSize: 13, color: "#475569", marginTop: 6 }}>
-          This area is restricted to authorized users only.
+          Sign in to access your AI growth dashboard.
         </p>
       </div>
 
@@ -37,8 +37,9 @@ export default function AdminLoginPage() {
           elements: {
             rootBox: { width: "100%", maxWidth: 420 },
             card: { background: "#0B1629", border: "1px solid rgba(0,174,239,0.15)", borderRadius: 14, boxShadow: "0 0 40px rgba(0,174,239,0.07)" },
-            headerTitle: { color: "#FFFFFF" },
-            headerSubtitle: { color: "#6B7280" },
+            headerTitle: { display: "none" },
+            headerSubtitle: { display: "none" },
+            header: { display: "none" },
             socialButtonsBlockButton: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#FFFFFF" },
             dividerText: { color: "#475569" },
             dividerLine: { background: "rgba(255,255,255,0.07)" },

@@ -1,0 +1,145 @@
+Run a full Launch Readiness QA + Production Polish sprint for AI Edge Solutions.
+
+Goal:
+Audit the entire AI Edge platform like a real client would.
+
+We are now in final MVP polish phase.
+Focus on quality, UX, consistency, stability, and production readiness.
+
+This is NOT a big feature build.
+This is a full product QA + polish pass.
+
+--------------------------------------------------
+AUDIT PUBLIC PAGES
+--------------------------------------------------
+
+Test:
+- Homepage
+- /pricing
+- /business-assessment
+- /contact
+- /privacy-policy
+- /terms-of-service
+
+Check for:
+- broken buttons
+- dead links
+- missing CTAs
+- bad spacing
+- mobile responsiveness
+- inconsistent branding
+- poor copy
+- visual issues
+
+--------------------------------------------------
+AUDIT ADMIN ROUTES
+--------------------------------------------------
+
+Test all admin pages:
+
+- /admin/dashboard
+- /admin/connections
+- /admin/lead-recovery
+- /admin/ai-receptionist
+- /admin/local-presence
+- /admin/ai-visibility
+- /admin/assessments
+- /admin/publishing
+- /admin/auto-content
+- /admin/diagnostics
+
+Check for:
+- broken routes
+- broken buttons
+- dead actions
+- console errors
+- UI inconsistencies
+- layout bugs
+- overflow issues
+- stale demo labels
+
+--------------------------------------------------
+FUNCTIONAL QA
+--------------------------------------------------
+
+Verify:
+- all buttons clickable
+- all navigation works
+- all links valid
+- all CTAs route correctly
+- no missing components
+- no crashes
+- no major console errors
+
+Flag:
+Critical / Warning / Minor issues
+
+--------------------------------------------------
+UI / UX QA
+--------------------------------------------------
+
+Audit:
+- spacing consistency
+- typography consistency
+- status badge consistency
+- module naming consistency
+- empty state design
+- alerts wording
+- CTA clarity
+
+Ensure consistent naming:
+
+Use consistent labels:
+- Command Center
+- Connected Accounts
+- Lead Recovery AI
+- AI Receptionist
+- Local Presence Engine
+- AI Visibility Engine
+- Business Assessments
+- System Diagnostics
+
+--------------------------------------------------
+MOBILE QA
+--------------------------------------------------
+
+Check:
+- mobile layout
+- card stacking
+- table overflow
+- button sizing
+- readability
+
+Identify any mobile breakpoints needing work.
+
+--------------------------------------------------
+PRODUCTION POLISH
+--------------------------------------------------
+
+Improve:
+- scary wording
+- confusing alerts
+- quota warnings
+- stale placeholder text
+- demo labels
+- empty state messaging
+
+Example:
+Replace alarming wording with calm professional messaging.
+
+--------------------------------------------------
+OUTPUT FORMAT
+--------------------------------------------------
+
+Return results as:
+
+1. Critical Issues
+2. Warnings
+3. Minor Polish Suggestions
+4. Recommended Fixes
+5. Overall Launch Readiness Score
+
+Also fix anything easy and safe immediately.
+
+Goal:
+Make AI Edge feel polished, premium, and production-ready.

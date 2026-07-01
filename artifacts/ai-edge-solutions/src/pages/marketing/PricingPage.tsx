@@ -221,7 +221,7 @@ export default function PricingPage() {
 
       {/* ═══════════════════════════════════════════════════ PRICING CARDS ══ */}
       <section style={{ padding: "0 24px 48px", maxWidth: 1280, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+        <div className="pricing-cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
           {PLANS.map(plan => (
             <PlanCard key={plan.name} plan={plan} onCta={() => navigate("/contact")} />
           ))}
@@ -253,7 +253,7 @@ export default function PricingPage() {
             boxShadow: "0 4px 20px rgba(0,174,239,0.4)",
           }}>⚡ {ECOSYSTEM.badge}</div>
 
-          <div style={{ position: "relative", zIndex: 2, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 52, alignItems: "flex-start" }}>
+          <div className="pricing-ecosystem-inner" style={{ position: "relative", zIndex: 2, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 52, alignItems: "flex-start" }}>
             <div>
               <h2 style={{ fontSize: 34, fontWeight: 900, letterSpacing: "-1px", marginBottom: 8, color: "#FFF" }}>{ECOSYSTEM.name}</h2>
               <p style={{ fontSize: 15, color: "#6B7280", lineHeight: 1.6, marginBottom: 24 }}>{ECOSYSTEM.bestFor}</p>
@@ -295,7 +295,7 @@ export default function PricingPage() {
           <div style={{ fontSize: 11, fontWeight: 800, color: "#00AEEF", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 12 }}>Compare</div>
           <h2 style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, letterSpacing: "-1px", color: "#FFF" }}>Feature Comparison</h2>
         </div>
-        <div style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 18, overflow: "hidden" }}>
+        <div className="pricing-comparison-scroll" style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 18, overflow: "hidden" }}>
           {/* Header */}
           <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 1fr 1fr 1fr", background: "rgba(0,174,239,0.05)", borderBottom: "1px solid rgba(0,174,239,0.12)" }}>
             <div style={{ padding: "16px 20px", fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px" }}>Feature</div>
@@ -327,7 +327,7 @@ export default function PricingPage() {
           <h2 style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 900, letterSpacing: "-1px", color: "#FFF" }}>Optional Add-Ons</h2>
           <p style={{ fontSize: 15, color: "#475569", marginTop: 10 }}>Bolt on exactly what you need — no bloat, no bundles you'll never use.</p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+        <div className="addons-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           {ADDONS.map(a => (
             <div key={a.name} style={{
               background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
@@ -343,7 +343,7 @@ export default function PricingPage() {
 
       {/* ═══════════════════════════════════════════════════════ SETUP ══ */}
       <section style={{ padding: "0 24px 80px", maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{
+        <div className="setup-grid" style={{
           background: "rgba(11,22,41,0.8)", border: "1px solid rgba(0,174,239,0.12)",
           borderRadius: 20, padding: "40px 44px",
           display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center",
@@ -384,7 +384,7 @@ export default function PricingPage() {
           background: "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(0,174,239,0.04) 100%)",
           border: "1px solid rgba(139,92,246,0.2)", borderRadius: 20, padding: "40px 44px",
           display: "grid", gridTemplateColumns: "1fr auto", gap: 40, alignItems: "center",
-        }}>
+        }} className="performance-grid">
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: "#8B5CF6", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 14 }}>Performance Pricing</div>
             <h2 style={{ fontSize: "clamp(22px, 3vw, 32px)", fontWeight: 900, letterSpacing: "-0.5px", color: "#FFF", marginBottom: 12 }}>Prefer Performance-Based Pricing?</h2>
@@ -481,6 +481,21 @@ export default function PricingPage() {
       </section>
 
       <Footer />
+
+      <style>{`
+        @media (max-width: 768px) {
+          .pricing-cards-grid { grid-template-columns: 1fr !important; }
+          .addons-grid { grid-template-columns: 1fr !important; }
+          .setup-grid { grid-template-columns: 1fr !important; gap: 28px !important; padding: 28px 22px !important; }
+          .performance-grid { grid-template-columns: 1fr !important; gap: 24px !important; padding: 28px 22px !important; }
+          .pricing-comparison-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .pricing-comparison-scroll > div { min-width: 600px; }
+        }
+        @media (max-width: 520px) {
+          .pricing-ecosystem-inner { grid-template-columns: 1fr !important; gap: 28px !important; }
+          .pricing-ecosystem-features { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

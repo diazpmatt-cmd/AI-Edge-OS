@@ -20,7 +20,7 @@ export default function PrivacyPage() {
           <h2 style={H2_STYLE}>1. Introduction</h2>
           <p style={P_STYLE}>
             AI Edge Solutions ("we," "our," or "us") operates this platform and provides AI-powered marketing automation
-            services to local businesses, including Bed Bugs &amp; Beyond. This Privacy Policy explains how we collect,
+            services to local service businesses. This Privacy Policy explains how we collect,
             use, disclose, and safeguard your information when you visit our website or use our services, including any
             social media integrations, automation tools, and SMS text messaging programs.
           </p>
@@ -77,8 +77,8 @@ export default function PrivacyPage() {
           <h2 style={{ ...H2_STYLE, color: "#00AEEF" }}>5. SMS Messaging &amp; Text Communications</h2>
           <p style={P_STYLE}>
             By providing your mobile phone number and submitting a contact or quote request form, or by texting or calling
-            our business number, you consent to receive text messages from <strong style={{ color: "#D1D5DB" }}>Bed Bugs &amp; Beyond</strong>{" "}
-            (powered by AI Edge Solutions) at the number you provided. These messages may include:
+            our business number, you consent to receive text messages from <strong style={{ color: "#D1D5DB" }}>AI Edge Solutions</strong>{" "}
+            and our client businesses at the number you provided. These messages may include:
           </p>
           <ul style={UL_STYLE}>
             <li>Appointment reminders and confirmations</li>

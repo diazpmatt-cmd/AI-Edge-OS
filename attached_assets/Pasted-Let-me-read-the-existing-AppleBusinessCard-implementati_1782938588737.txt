@@ -1,0 +1,72 @@
+Let me read the existing AppleBusinessCard implementation to understand what's already there before enhancing it:
+
+
+2 actions
+The existing AppleBusinessCard has 4 tabs (Setup Checklist, Profile Tracker, API Readiness, Diagnostics). I need to add a 5th "Business Info" tab with all the copy-ready content. Three precise edits to the existing component:
+
+
+3 actions
+Now add "Business Info" to the TABS array and add copyText helper:
+
+
+2 actions
+Now insert the full Business Info tab content before the Profile Tracker tab:
+
+
+4 actions
+Clean build — 13.20s, 0 errors. Write the commit message and deliver:
+
+
+2 actions
+Done. Here's the full delivery:
+
+Apple Business Connect — Business Info Tab
+One file changed: artifacts/ai-edge-solutions/src/pages/LocalPresenceEnginePage.tsx
+
+The existing Apple Business Connect card now has 5 tabs: Setup Checklist · Business Info ← new · Profile Tracker · API Readiness · Diagnostics
+
+What's in the Business Info tab
+Required Business Information — pre-filled table, copy button on phone:
+
+Field	Value
+Business Name	Bed Bugs & Beyond
+Phone Number	(251) 324-9090
+Website	https://aiedgesolutions.online
+Primary Category	Pest Control Service
+Secondary Category	Exterminator
+Address / Area	Baldwin County, Alabama (Service Area)
+Verification	Phone call to (251) 324-9090
+Copy-Ready Content
+Business Description (click Copy → paste into Apple)
+
+Bed Bugs & Beyond is Baldwin County's trusted local pest control company, specializing in fast, effective elimination of bed bugs, roaches, ants, spiders, fleas, rodents, mosquitoes, and common household pests. We serve homeowners, rental properties, vacation rentals, and businesses throughout Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. Locally owned, fast response, guaranteed results. Call (251) 324-9090 to schedule today.
+
+Service List
+
+Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control
+
+Service Area List
+
+Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama
+
+Logo & Photo Requirements — 4 rows (Logo, Cover, Service photo, Team photo) with specs and red "Missing" badges until assets are uploaded.
+
+Verification Status — prominent "Setup Pending" pill. Stays pending until the user confirms submission in the Profile Tracker tab.
+
+Next Action — 7-step numbered guide from sign-in to phone verification.
+
+Build: ✅ Clean — 13.20s, 1863 modules, 0 errors

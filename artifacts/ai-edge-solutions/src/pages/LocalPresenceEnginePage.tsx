@@ -4040,7 +4040,8 @@ export default function LocalPresenceEnginePage() {
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business submitted — verification pending (do not mark Connected until Nextdoor confirms profile is live)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Yelp submitted — verification pending (do not mark Connected until Yelp profile is live and publicly searchable)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Angi submitted — verification pending (do not mark Connected until Angi profile is live and publicly searchable)", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor, Yelp, Angi data unconfirmed", severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Thumbtack submitted — verification/profile approval pending (do not mark Connected until profile is live and publicly searchable)", severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor, Yelp, Angi, Thumbtack data unconfirmed", severity: "warning" },
   ];
 
   return (

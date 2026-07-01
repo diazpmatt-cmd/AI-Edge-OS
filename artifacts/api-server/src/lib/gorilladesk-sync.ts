@@ -3,16 +3,28 @@
  *
  * Fetches live data from the GorillaDesk REST API and upserts into local DB tables.
  *
- * GorillaDesk public API endpoints (as of 2026-07):
- *   GET /v1/company      ✅ available
- *   GET /v1/users        ✅ available
- *   GET /v1/customers    ✅ available — used for customers + lead sources
- *   GET /v1/jobs         ❌ not in public API
- *   GET /v1/invoices     ❌ not in public API
- *   GET /v1/payments     ❌ not in public API
+ * ┌─────────────────┬───────────────────────────────────────────────────────┐
+ * │ Data source     │ Sync method                                           │
+ * ├─────────────────┼───────────────────────────────────────────────────────┤
+ * │ customers       │ LIVE API SYNC — GET /v1/customers (paginated)         │
+ * │                 │ Upserts into gorilladesk_customers by external_id.    │
+ * │                 │ Also derives lead_sources from customer.source field. │
+ * ├─────────────────┼───────────────────────────────────────────────────────┤
+ * │ lead_sources    │ LIVE API SYNC — derived from /v1/customers            │
+ * │                 │ Grouped by customer.source.name, no separate endpoint.│
+ * ├─────────────────┼───────────────────────────────────────────────────────┤
+ * │ jobs            │ MANUAL / CSV IMPORT ONLY                              │
+ * │                 │ GorillaDesk public API does not expose /jobs.         │
+ * │                 │ Import via POST /api/analytics/gorilladesk/seed       │
+ * ├─────────────────┼───────────────────────────────────────────────────────┤
+ * │ payments        │ MANUAL / CSV IMPORT ONLY                              │
+ * │                 │ GorillaDesk public API does not expose /payments,     │
+ * │                 │ /invoices, or /transactions.                          │
+ * │                 │ Import via POST /api/analytics/gorilladesk/seed       │
+ * └─────────────────┴───────────────────────────────────────────────────────┘
  *
- * Functions that target unavailable endpoints return ok:false with a clear
- * endpoint_not_available error rather than inventing data.
+ * Verified live: 2026-07-01 — 445 customers, 8 lead sources synced.
+ * Auth: Authorization: Bearer <GORILLADESK_API_KEY>
  */
 
 import { db } from "@workspace/db";

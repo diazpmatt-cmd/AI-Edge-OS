@@ -1463,7 +1463,7 @@ function NextdoorBusinessCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Nextdoor Business</span>
-              <StatusBadge status="setup_in_progress" />
+              <StatusBadge status="pending" />
             </div>
             <p style={{ fontSize: 12.5, color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
               Neighborhood discovery, local referrals, community trust &amp; neighbor recommendations.
@@ -4037,7 +4037,7 @@ export default function LocalPresenceEnginePage() {
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Bing Places submitted — verification pending (do not mark Connected until Bing confirms)", severity: "warning" },
-    { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business setup in progress — page claim pending",  severity: "warning" },
+    { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business submitted — verification pending (do not mark Connected until Nextdoor confirms profile is live)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "NAP consistency: Apple, Bing, Nextdoor data unconfirmed",   severity: "warning" },
   ];
 

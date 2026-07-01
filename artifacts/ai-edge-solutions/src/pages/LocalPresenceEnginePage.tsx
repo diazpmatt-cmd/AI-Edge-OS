@@ -827,7 +827,7 @@ const BING_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
 
 function BingPlacesCard() {
   const [drawerOpen,   setDrawerOpen]   = useState(false);
-  const [activeTab,    setActiveTab]    = useState<"checklist" | "profile" | "api" | "diagnostics">("checklist");
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics">("checklist");
   const [checklist,    setChecklist]    = useState(BING_CHECKLIST);
   const [notes,        setNotes]        = useState("");
   const [listingUrl,   setListingUrl]   = useState("");
@@ -836,6 +836,7 @@ function BingPlacesCard() {
   const [verifyMethod, setVerifyMethod] = useState("Phone");
   const [verifyStatus, setVerifyStatus] = useState("Pending");
   const [savedMsg,     setSavedMsg]     = useState(false);
+  const [copiedKey,    setCopiedKey]    = useState<string | null>(null);
 
   const completedCount  = checklist.filter(s => s.status === "complete").length;
   const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
@@ -845,9 +846,16 @@ function BingPlacesCard() {
     setChecklist(prev => prev.map((s, i) => i === idx ? { ...s, status: "complete" } : s));
   }
   function handleSave() { setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500); }
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2200);
+    });
+  }
 
   const TABS: { key: typeof activeTab; label: string }[] = [
     { key: "checklist",   label: "Setup Checklist" },
+    { key: "bizinfo",     label: "Business Info" },
     { key: "profile",     label: "Profile Tracker" },
     { key: "api",         label: "API Readiness" },
     { key: "diagnostics", label: "Diagnostics" },
@@ -1016,6 +1024,220 @@ function BingPlacesCard() {
                 </div>
               </div>
             )}
+
+            {/* ── Business Info ── */}
+            {activeTab === "bizinfo" && (() => {
+              const BIZ_DESCRIPTION =
+`Bed Bugs & Beyond is Baldwin County's trusted local pest control company, serving Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Elberta, and Robertsdale. We specialize in bed bug elimination, roach and ant control, spider and flea treatments, rodent removal, mosquito control, and general pest management. Locally owned, fast response, guaranteed results. Call (251) 324-9090 to schedule your inspection today.`;
+
+              const SERVICE_LIST =
+`Bed Bug Treatment
+Roach Control
+Ant Control
+Spider Control
+Flea Control
+Rodent Control
+Mosquito Control
+General Pest Control`;
+
+              const SERVICE_AREAS =
+`Foley, Alabama
+Gulf Shores, Alabama
+Orange Beach, Alabama
+Fairhope, Alabama
+Daphne, Alabama
+Elberta, Alabama
+Robertsdale, Alabama
+Baldwin County, Alabama`;
+
+              const BUSINESS_HOURS =
+`Monday:    7:00 AM – 6:00 PM
+Tuesday:   7:00 AM – 6:00 PM
+Wednesday: 7:00 AM – 6:00 PM
+Thursday:  7:00 AM – 6:00 PM
+Friday:    7:00 AM – 6:00 PM
+Saturday:  8:00 AM – 2:00 PM
+Sunday:    Closed`;
+
+              const REQUIRED_FIELDS: { label: string; value: string; copyKey?: string; note?: string }[] = [
+                { label: "Business Name",      value: "Bed Bugs & Beyond",                       note: "Exact name — must match GBP exactly (NAP consistency)" },
+                { label: "Phone Number",       value: "(251) 324-9090",        copyKey: "phone", note: "Must match Google Business Profile" },
+                { label: "Website",            value: NAP.website,                               note: "⚠ Confirm this is BB&B's actual business website" },
+                { label: "Primary Category",   value: "Pest Control Service",                    note: "Select from Bing's business category picker" },
+                { label: "Secondary Category", value: "Exterminator",                            note: "Optional — add if available in Bing's list" },
+                { label: "Service Area",       value: "Baldwin County, Alabama",                 note: "Service-area business — hide street address if no storefront" },
+                { label: "Business Hours",     value: "Mon–Fri 7am–6pm, Sat 8am–2pm",           note: "Enter each day individually in Bing's hours editor" },
+                { label: "Verification Method",value: "Phone PIN or Postcard PIN",               note: "Microsoft mails or calls with a 6-digit PIN" },
+              ];
+
+              const PHOTO_REQS: { item: string; spec: string; status: "missing" | "ready" }[] = [
+                { item: "Logo",          spec: "PNG/JPG, square 1:1, min 400×400 px",        status: "missing" },
+                { item: "Cover photo",   spec: "JPG/PNG, landscape, min 720×480 px",         status: "missing" },
+                { item: "Service photo", spec: "Treatment or inspection photo preferred",     status: "missing" },
+                { item: "Team photo",    spec: "Uniformed technician on-site",               status: "missing" },
+                { item: "Vehicle photo", spec: "Branded truck/van if available",             status: "missing" },
+              ];
+
+              type CopyBlockProps = { label: string; copyKey: string; value: string; rows?: number };
+              function CopyBlock({ label, copyKey, value, rows = 4 }: CopyBlockProps) {
+                const copied = copiedKey === copyKey;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
+                      <button
+                        onClick={() => copyText(copyKey, value)}
+                        style={{
+                          padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: copied ? "rgba(16,185,129,0.12)" : `rgba(0,173,239,0.1)`,
+                          border: copied ? "1px solid rgba(16,185,129,0.3)" : `1px solid rgba(0,173,239,0.25)`,
+                          color: copied ? "#10B981" : BING_BLUE, transition: "all 0.2s",
+                        }}
+                      >{copied ? "✓ Copied" : "Copy"}</button>
+                    </div>
+                    <textarea
+                      readOnly rows={rows} value={value}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "10px 12px", borderRadius: 9, fontSize: 12, lineHeight: 1.6,
+                        color: "#CBD5E1", background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        outline: "none", fontFamily: "inherit", resize: "none", cursor: "text",
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 18, lineHeight: 1.5 }}>
+                    Setup guidance only — not analytics. Status stays <strong style={{ color: BING_BLUE }}>Setup Pending</strong> until the Bing listing is submitted and the verification PIN is entered. Use the copy buttons to paste content directly into Bing Places for Business.
+                  </div>
+
+                  {/* ── Required fields ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Required Business Information
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {REQUIRED_FIELDS.map(f => (
+                      <div key={f.label} style={{
+                        display: "grid", gridTemplateColumns: "160px 1fr auto", gap: 12, alignItems: "start",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: f.label === "Website" ? "rgba(245,158,11,0.04)" : "rgba(255,255,255,0.025)",
+                        border: f.label === "Website" ? "1px solid rgba(245,158,11,0.2)" : "1px solid rgba(255,255,255,0.06)",
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", paddingTop: 1 }}>{f.label}</div>
+                        <div>
+                          <div style={{ fontSize: 12.5, color: "#E2E8F0", fontWeight: 500 }}>{f.value}</div>
+                          {f.note && <div style={{ fontSize: 11, color: f.label === "Website" ? "#F59E0B" : "#475569", marginTop: 2 }}>{f.note}</div>}
+                        </div>
+                        {f.copyKey && (
+                          <button
+                            onClick={() => copyText(f.copyKey!, f.value)}
+                            style={{
+                              padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : `rgba(0,173,239,0.08)`,
+                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : `1px solid rgba(0,173,239,0.2)`,
+                              color: copiedKey === f.copyKey ? "#10B981" : BING_BLUE, whiteSpace: "nowrap", flexShrink: 0,
+                            }}
+                          >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Copy-ready blocks ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Copy-Ready Content
+                  </div>
+                  <CopyBlock label="Business Description" copyKey="bing-desc"     value={BIZ_DESCRIPTION} rows={4} />
+                  <CopyBlock label="Service List"         copyKey="bing-services" value={SERVICE_LIST}    rows={9} />
+                  <CopyBlock label="Service Area List"    copyKey="bing-areas"    value={SERVICE_AREAS}   rows={9} />
+                  <CopyBlock label="Business Hours"       copyKey="bing-hours"    value={BUSINESS_HOURS}  rows={8} />
+
+                  {/* ── Photo requirements ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Logo &amp; Photo Requirements
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 22 }}>
+                    {PHOTO_REQS.map(p => (
+                      <div key={p.item} style={{
+                        display: "grid", gridTemplateColumns: "100px 1fr auto", gap: 12, alignItems: "center",
+                        padding: "9px 14px", borderRadius: 9,
+                        background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.15)",
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
+                        <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: "#EF4444", background: "rgba(239,68,68,0.1)", whiteSpace: "nowrap" }}>Missing</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Verification steps ── */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>
+                    Verification Steps
+                  </div>
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 18,
+                    background: `rgba(0,173,239,0.04)`, border: `1px solid rgba(0,173,239,0.18)`,
+                    fontSize: 12.5, color: "#94A3B8", lineHeight: 1.7,
+                  }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong style={{ color: "#CBD5E1" }}>Option A — Phone PIN</strong><br />
+                      Bing calls <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong> with an automated message containing a 6-digit PIN. Answer the call and enter the PIN into Bing Places within 15 minutes.
+                    </div>
+                    <div>
+                      <strong style={{ color: "#CBD5E1" }}>Option B — Postcard PIN</strong><br />
+                      Microsoft mails a postcard to the business address with a PIN. Takes 10–14 business days. Recommended only if phone verification fails.
+                    </div>
+                  </div>
+
+                  {/* ── Verification status + next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10, marginBottom: 14,
+                    background: `rgba(0,173,239,0.05)`, border: `1px solid rgba(0,173,239,0.2)`,
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>Listing Verification Status</div>
+                      <div style={{ fontSize: 11.5, color: "#475569" }}>
+                        Status updates to <strong style={{ color: "#CBD5E1" }}>Verified</strong> after PIN is entered and Microsoft approves the listing (3–5 business days).
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+                      background: `rgba(0,173,239,0.12)`, border: `1px solid rgba(0,173,239,0.3)`, color: BING_BLUE,
+                    }}>Setup Pending</span>
+                  </div>
+
+                  {/* ── Next action ── */}
+                  <div style={{
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
+                      <li>Go to <a href="https://www.bingplaces.com" target="_blank" rel="noopener noreferrer" style={{ color: BING_BLUE }}>bingplaces.com</a> — sign in with a Microsoft account</li>
+                      <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or create new</li>
+                      <li>Enter all fields from the table above; paste <strong style={{ color: "#CBD5E1" }}>Description</strong>, <strong style={{ color: "#CBD5E1" }}>Services</strong>, <strong style={{ color: "#CBD5E1" }}>Areas</strong>, and <strong style={{ color: "#CBD5E1" }}>Hours</strong> using copy buttons</li>
+                      <li>Upload logo and photos per the specs above (minimum 5 photos required)</li>
+                      <li>Choose verification: <strong style={{ color: "#CBD5E1" }}>Phone PIN</strong> (faster) or Postcard PIN</li>
+                      <li>Answer the verification call to <strong style={{ color: "#CBD5E1" }}>(251) 324-9090</strong> and enter the PIN in Bing Places</li>
+                      <li>Wait 3–5 business days for Microsoft review and listing activation</li>
+                      <li>Update verification status in the <strong style={{ color: "#CBD5E1" }}>Profile Tracker</strong> tab once complete</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <a href="https://www.bingplaces.com" target="_blank" rel="noopener noreferrer"
+                      style={{ padding: "8px 16px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: `rgba(0,173,239,0.1)`, border: `1px solid rgba(0,173,239,0.3)`, color: BING_BLUE, textDecoration: "none", display: "inline-block" }}>
+                      ↗ Open Bing Places for Business
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Profile Tracker ── */}
             {activeTab === "profile" && (

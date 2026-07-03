@@ -1,0 +1,136 @@
+TELNYX / BB&B LIVE ACTIVATION AUDIT
+
+We need to verify whether Bed Bugs & Beyond is actually live on AI Edge Solutions.
+
+Please answer with verified facts only. Do not assume.
+
+Client:
+Bed Bugs & Beyond
+
+Known numbers:
+BB&B public/main number: (251) 324-9090
+AI Edge / Telnyx BB&B number: (251) 244-5002
+
+Audit these areas:
+
+1. TELNYX ENVIRONMENT
+- Which Telnyx env vars exist?
+- Is TELNYX_API_KEY present?
+- Is TELNYX_PUBLIC_KEY present?
+- Is TELNYX_CONNECTION_ID present?
+- Is TELNYX_MESSAGING_PROFILE_ID present?
+- Are any BB&B-specific Telnyx numbers stored in env/config?
+
+2. TELNYX WEBHOOK ROUTES
+List every Telnyx route currently registered in the API server.
+
+Check for:
+- /api/telnyx/voice
+- /api/telnyx/voice/gather
+- /api/telnyx/voice/recording
+- /api/telnyx/sms
+- /api/telnyx/webhook
+- /api/leads
+
+For each route:
+- Does it exist?
+- What method does it use?
+- What does it do?
+- Does it write to DB?
+- Does it send SMS?
+- Does it transfer calls?
+- Does it create callback requests?
+
+3. TELNYX NUMBER CONFIGURATION
+Using the Telnyx API if possible, verify:
+- Does number (251) 244-5002 exist in the Telnyx account?
+- Is it active?
+- Is voice enabled?
+- Is SMS enabled?
+- What voice connection/app is attached?
+- What messaging profile is attached?
+- What webhook URLs are configured?
+- Are webhook URLs pointing to production domain:
+  https://aiedgesolutions.online
+  or an old Replit URL?
+
+4. VOICE FLOW
+Audit the current AI receptionist / voice flow.
+
+Answer:
+- What happens when someone calls (251) 244-5002?
+- Does the route answer the call?
+- Does it speak a greeting?
+- Does it gather keypad input?
+- What happens on press 1?
+- What happens on press 2?
+- What happens on press 3?
+- What number does it transfer to?
+- Is that transfer number set to BB&B / Michael?
+- Is voicemail/recording enabled?
+- Are callback requests saved?
+
+5. SMS / LEAD RECOVERY FLOW
+Audit current missed-call / SMS flow.
+
+Answer:
+- What triggers an SMS text-back?
+- Which route sends the SMS?
+- What SMS message is sent?
+- What number is SMS sent from?
+- What number is SMS sent to?
+- Are inbound SMS replies stored?
+- Are STOP/HELP keywords handled?
+- Does the flow comply with the approved 10DLC campaign copy?
+
+6. DATABASE
+List all tables related to:
+- leads
+- calls
+- sms
+- telnyx
+- lead recovery
+- callback requests
+- recordings
+
+For each table:
+- row count
+- latest 5 records
+- whether records are test data or real data
+
+7. LIVE TRAFFIC
+Check whether any real calls or texts have hit the system.
+
+Answer:
+- How many total Telnyx webhook events exist?
+- How many are test rows?
+- How many appear to be real BB&B traffic?
+- Has (251) 324-9090 ever appeared in logs?
+- Has (251) 244-5002 ever received a real inbound call?
+- Has any real missed-call text-back been sent?
+
+8. MAIN NUMBER FORWARDING
+Can the code/config confirm whether BB&B main number (251) 324-9090 is forwarding to Telnyx number (251) 244-5002)?
+
+If not possible from code, say:
+"Cannot verify from AI Edge code. Must verify with phone carrier or live call test."
+
+9. PRODUCTION READINESS
+Based on the audit, classify each item:
+
+- Telnyx number active: yes/no/unknown
+- Voice webhook configured: yes/no/unknown
+- SMS webhook configured: yes/no/unknown
+- AI receptionist functional: yes/no/unknown
+- Missed-call text-back functional: yes/no/unknown
+- 10DLC approved/active: yes/no/unknown
+- Main number forwarding active: yes/no/unknown
+- Real BB&B traffic flowing: yes/no/unknown
+
+10. FINAL ANSWER
+Give a blunt summary:
+
+A) What is fully live right now?
+B) What is built but not connected?
+C) What is missing before BB&B is truly live?
+D) What is the single next action needed?

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 
 // ── Signal definitions ─────────────────────────────────────────────────────────
 
@@ -332,6 +333,7 @@ function OverallSummary({ scores }: { scores: { name: string; pct: number; color
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function VoiceSearchEnginePage() {
+  const { colors: t } = useTheme();
   const [siriConfirmed,   setSiriConfirmed]   = useState<Set<string>>(new Set(["apple_bbc", "yelp_siri"]));
   const [alexaConfirmed,  setAlexaConfirmed]  = useState<Set<string>>(new Set(["bing_alexa", "yelp_alexa"]));
   const [googleConfirmed, setGoogleConfirmed] = useState<Set<string>>(new Set());
@@ -372,8 +374,8 @@ export default function VoiceSearchEnginePage() {
               fontSize: 20, boxShadow: "0 0 20px rgba(0,174,239,0.3)",
             }}>🔊</div>
             <div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: "#FFFFFF", margin: 0 }}>Voice Search Engine</h1>
-              <p style={{ fontSize: 13, color: "#64748B", margin: 0, marginTop: 2 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: t.text, margin: 0 }}>Voice Search Engine</h1>
+              <p style={{ fontSize: 13, color: t.text2, margin: 0, marginTop: 2 }}>
                 Track Siri, Alexa &amp; Google Assistant readiness — calculated from your confirmed platform completions only.
               </p>
             </div>

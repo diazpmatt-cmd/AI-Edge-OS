@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Priority = "high" | "medium" | "low";
@@ -105,6 +106,7 @@ function Pct({ value, total, color }: { value: number; total: number; color: str
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function LocalBizAIPage() {
+  const { colors: t } = useTheme();
   const [expandedRec,      setExpandedRec]      = useState<number | null>(null);
   const [expandedReview,   setExpandedReview]   = useState<number | null>(null);
   const [calFilter,        setCalFilter]        = useState<CalStatus | "all">("all");
@@ -130,10 +132,10 @@ export default function LocalBizAIPage() {
             </div>
           </div>
 
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 8px" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>
             🧠 LocalBizAI
           </h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: "0 0 16px", lineHeight: 1.5, maxWidth: 620 }}>
+          <p style={{ fontSize: 14, color: t.text2, margin: "0 0 16px", lineHeight: 1.5, maxWidth: 620 }}>
             Your AI-powered business growth assistant for daily execution and growth recommendations.{" "}
             <strong style={{ color: "#00AEEF" }}>{CLIENT.name}</strong> · {CLIENT.category} · {CLIENT.area}
           </p>

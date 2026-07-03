@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -86,6 +87,7 @@ type EditState = {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function ImageAssetManagerPage() {
+  const { colors: t } = useTheme();
   const apiFetch = useApiFetch();
   const { getToken } = useAuth();
   const qc = useQueryClient();
@@ -269,8 +271,8 @@ export default function ImageAssetManagerPage() {
     <AppShell>
       {/* ── Header ── */}
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 26, fontWeight: 900, color: "#FFFFFF", marginBottom: 4 }}>🖼 Image Asset Manager</div>
-        <div style={{ fontSize: 14, color: "#64748B" }}>
+        <div style={{ fontSize: 26, fontWeight: 900, color: t.text, marginBottom: 4 }}>🖼 Image Asset Manager</div>
+        <div style={{ fontSize: 14, color: t.text2 }}>
           Centralized image library for Publishing Center + Auto Content Engine
         </div>
       </div>

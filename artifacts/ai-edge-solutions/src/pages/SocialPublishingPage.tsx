@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/react";
 import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
+import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
 
 type Platform = "facebook" | "instagram" | "google";
@@ -121,6 +122,7 @@ export default function SocialPublishingPage() {
   const fileRef    = useRef<HTMLInputElement>(null);
   const search     = useSearch();
   const [, navigate] = useLocation();
+  const { colors: t } = useTheme();
 
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
@@ -330,8 +332,8 @@ export default function SocialPublishingPage() {
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 20, padding: "4px 14px", marginBottom: 10 }}>
               <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>📸 Social Publishing</span>
             </div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 6px" }}>Publishing Center</h1>
-            <p style={{ fontSize: 14, color: "#6B7280", margin: 0 }}>Create, schedule, and publish posts to Facebook and Instagram.</p>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 6px" }}>Publishing Center</h1>
+            <p style={{ fontSize: 14, color: t.text2, margin: 0 }}>Create, schedule, and publish posts to Facebook and Instagram.</p>
           </div>
           {!showForm && (
             <button onClick={() => setShowForm(true)} style={{ padding: "10px 20px", borderRadius: 9, fontSize: 13.5, fontWeight: 700, cursor: "pointer", background: "linear-gradient(135deg,#00AEEF,#0080CC)", border: "none", color: "#fff" }}>

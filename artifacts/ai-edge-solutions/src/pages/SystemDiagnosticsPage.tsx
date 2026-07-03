@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -147,6 +148,7 @@ function secsLeft(ts: string): number {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SystemDiagnosticsPage() {
+  const { colors: t } = useTheme();
   const authFetch = useApiFetch();
   const { getToken } = useAuth();
   const qc = useQueryClient();
@@ -439,10 +441,10 @@ export default function SystemDiagnosticsPage() {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 26, fontWeight: 900, color: "#FFFFFF", margin: 0, letterSpacing: "-0.5px" }}>
+            <h1 style={{ fontSize: 26, fontWeight: 900, color: t.text, margin: 0, letterSpacing: "-0.5px" }}>
               🛰 System Diagnostics
             </h1>
-            <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0" }}>
+            <p style={{ fontSize: 13, color: t.text2, margin: "4px 0 0" }}>
               Real-time health monitoring, logs, and control actions
             </p>
           </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -82,6 +83,7 @@ const SOURCE_META: Record<string, { label: string; color: string }> = {
 };
 
 export default function ConnectionsPage() {
+  const { colors: t } = useTheme();
   const authFetch = useApiFetch();
   const qc = useQueryClient();
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -611,10 +613,10 @@ export default function ConnectionsPage() {
               ⬡ Command Center
             </span>
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 8px" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>
             Connected Accounts
           </h1>
-          <p style={{ fontSize: 15, color: "#6B7280", margin: 0 }}>
+          <p style={{ fontSize: 15, color: t.text2, margin: 0 }}>
             Manage your platform connections and publishing integrations.
           </p>
           <div style={{ display: "flex", gap: 12, marginTop: 16 }}>

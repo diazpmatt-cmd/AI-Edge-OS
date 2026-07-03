@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { useTheme } from "@/contexts/theme-context";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -100,13 +101,15 @@ export default function AIReceptionistPage() {
     }
   }
 
+  const { colors: t, isDark } = useTheme();
+
   const callsAnswered = telnyxStats?.missedCalls  ?? 0;
   const callsRouted   = telnyxStats?.sent         ?? 0;
   const callbacks     = telnyxStats?.totalReplies ?? 0;
 
   return (
     <AppShell>
-      <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: "#FFFFFF" }}>
+      <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: t.text }}>
 
         {/* ── Executive Header ── */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
@@ -141,28 +144,29 @@ export default function AIReceptionistPage() {
             { icon: "💰", label: "Revenue Protected",          value: "—",                   color: "#10B981" },
           ].map(k => (
             <div key={k.label} style={{
-              background: "linear-gradient(160deg, rgba(11,22,41,0.98), rgba(3,6,18,0.9))",
+              background: t.card,
               border: `1px solid ${k.color}18`, borderTop: `2px solid ${k.color}50`,
               borderRadius: 14, padding: "16px 14px",
+              boxShadow: isDark ? "none" : t.shadow,
             }}>
               <div style={{ fontSize: 18, marginBottom: 6 }}>{k.icon}</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: k.color, marginBottom: 2 }}>{k.value}</div>
-              <div style={{ fontSize: 10, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", lineHeight: 1.3 }}>{k.label}</div>
+              <div style={{ fontSize: 10, color: t.text3, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", lineHeight: 1.3 }}>{k.label}</div>
             </div>
           ))}
         </div>
 
         {/* ── Tab Bar ── */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 0 }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              padding: "9px 16px", borderRadius: "8px 8px 0 0", fontSize: 13, fontWeight: activeTab === t.id ? 700 : 500,
+        <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${t.border}`, paddingBottom: 0 }}>
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              padding: "9px 16px", borderRadius: "8px 8px 0 0", fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500,
               cursor: "pointer", border: "none",
-              background: activeTab === t.id ? "rgba(0,174,239,0.12)" : "transparent",
-              color: activeTab === t.id ? "#00AEEF" : "#64748B",
-              borderBottom: activeTab === t.id ? "2px solid #00AEEF" : "2px solid transparent",
+              background: activeTab === tab.id ? "rgba(0,174,239,0.12)" : "transparent",
+              color: activeTab === tab.id ? "#00AEEF" : t.text3,
+              borderBottom: activeTab === tab.id ? "2px solid #00AEEF" : "2px solid transparent",
               transition: "all 0.15s",
-            }}>{t.label}</button>
+            }}>{tab.label}</button>
           ))}
         </div>
 

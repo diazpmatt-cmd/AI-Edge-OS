@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "@/contexts/theme-context";
 import { AppShell } from "@/components/app-shell";
 import { loadProfile, type Keyword, type ArticleDraft } from "@/lib/business-data";
 import { fetchKeywords, insertKeywords, clearKeywords } from "@/lib/keywords-store";
@@ -158,22 +159,24 @@ const NEXT_ACTIONS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SectionDivider({ title, right }: { title: string; right?: React.ReactNode }) {
+  const { colors: t } = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1.1px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: t.text3, letterSpacing: "1.1px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
+      <div style={{ flex: 1, height: 1, background: t.border }} />
       {right}
     </div>
   );
 }
 
 function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label: string; value: string; sub: string; color: string; glow?: boolean }) {
+  const { colors: t } = useTheme();
   return (
     <div style={{
-      background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+      background: t.card,
       border: `1px solid ${color}22`,
       borderRadius: 14, padding: "18px 20px",
-      boxShadow: glow ? `0 0 28px ${color}18` : "none",
+      boxShadow: glow ? `0 0 28px ${color}18` : t.shadow,
       position: "relative", overflow: "hidden",
     }}>
       <div style={{
@@ -181,9 +184,9 @@ function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label
         background: `${color}0C`, border: `1px solid ${color}14`,
         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
       }}>{icon}</div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: t.text3, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
       <div style={{ fontSize: 30, fontWeight: 900, color, lineHeight: 1, marginBottom: 4 }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#64748B" }}>{sub}</div>
+      <div style={{ fontSize: 11, color: t.text3 }}>{sub}</div>
     </div>
   );
 }
@@ -194,6 +197,7 @@ function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label
 
 export default function DashboardPage() {
   const profile = useMemo(() => loadProfile(), []);
+  const { colors: t } = useTheme();
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [articles, setArticles] = useState<ArticleDraft[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,12 +300,12 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 30, fontWeight: 900, color: "#FFFFFF", letterSpacing: "-0.6px", margin: "0 0 6px" }}>
+              <h1 style={{ fontSize: 30, fontWeight: 900, color: t.text, letterSpacing: "-0.6px", margin: "0 0 6px" }}>
                 Command Center
               </h1>
-              <p style={{ fontSize: 14, color: "#6B7280", margin: 0, maxWidth: 560 }}>
+              <p style={{ fontSize: 14, color: t.text2, margin: 0, maxWidth: 560 }}>
                 AI-powered growth, visibility, and lead recovery control center for{" "}
-                <strong style={{ color: "#CBD5E1" }}>Bed Bugs &amp; Beyond</strong> — Baldwin County, Alabama.
+                <strong style={{ color: t.text }}>Bed Bugs &amp; Beyond</strong> — Baldwin County, Alabama.
               </p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

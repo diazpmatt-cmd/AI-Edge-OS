@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data
@@ -276,6 +277,7 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AIVisibilityEnginePage() {
+  const { colors: t } = useTheme();
   const [activePromptFilter, setActivePromptFilter] = useState<"all" | "gap" | "partial" | "found">("all");
 
   const filteredPrompts = activePromptFilter === "all"
@@ -303,11 +305,11 @@ export default function AIVisibilityEnginePage() {
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 6px" }}>
+              <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 6px" }}>
                 AI Visibility Engine
               </h1>
-              <p style={{ fontSize: 14, color: "#6B7280", margin: 0, maxWidth: 580 }}>
-                Track whether <strong style={{ color: "#CBD5E1" }}>Bed Bugs &amp; Beyond</strong> appears in AI-powered search across ChatGPT, Google AI Overviews, Bing Copilot, Perplexity, and Siri. Identify gaps and fix them before competitors do.
+              <p style={{ fontSize: 14, color: t.text2, margin: 0, maxWidth: 580 }}>
+                Track whether <strong style={{ color: t.text }}>Bed Bugs &amp; Beyond</strong> appears in AI-powered search across ChatGPT, Google AI Overviews, Bing Copilot, Perplexity, and Siri. Identify gaps and fix them before competitors do.
               </p>
             </div>
             <div style={{

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "@/contexts/theme-context";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -103,22 +104,24 @@ function timeAgo(iso: string) {
 
 // ── Shared UI ──────────────────────────────────────────────────────────────────
 function SectionDivider({ title, right }: { title: string; right?: React.ReactNode }) {
+  const { colors: t } = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1.2px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
+      <div style={{ fontSize: 11, fontWeight: 700, color: t.text3, letterSpacing: "1.2px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
+      <div style={{ flex: 1, height: 1, background: t.border }} />
       {right}
     </div>
   );
 }
 
 function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label: string; value: string | number; sub?: string; color: string; glow?: boolean }) {
+  const { colors: t } = useTheme();
   return (
     <div style={{
-      background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.8))",
+      background: t.card,
       border: `1px solid ${color}22`,
       borderRadius: 14, padding: "20px 22px",
-      boxShadow: glow ? `0 0 24px ${color}18` : "none",
+      boxShadow: glow ? `0 0 24px ${color}18` : t.shadow,
       position: "relative", overflow: "hidden",
     }}>
       <div style={{
@@ -126,9 +129,9 @@ function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label
         background: `${color}0C`, border: `1px solid ${color}14`,
         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
       }}>{icon}</div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: t.text3, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
       <div style={{ fontSize: 34, fontWeight: 900, color, lineHeight: 1, marginBottom: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "#64748B" }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11.5, color: t.text3 }}>{sub}</div>}
     </div>
   );
 }
@@ -205,6 +208,8 @@ export default function LeadRecoveryPage() {
     refetchInterval: 60000,
   });
 
+  const { colors: t } = useTheme();
+
   const patchMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<Lead> }) =>
       authFetch(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
@@ -254,10 +259,10 @@ export default function LeadRecoveryPage() {
 
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 6px" }}>
+              <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 6px" }}>
                 Lead Recovery AI
               </h1>
-              <p style={{ fontSize: 14, color: "#6B7280", margin: 0, maxWidth: 540 }}>
+              <p style={{ fontSize: 14, color: t.text2, margin: 0, maxWidth: 540 }}>
                 Automatically recover missed calls with instant AI-powered SMS follow-up, lead qualification, and appointment booking.
               </p>
             </div>

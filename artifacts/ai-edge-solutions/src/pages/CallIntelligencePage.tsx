@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
+import { useTheme } from "@/contexts/theme-context";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -62,12 +63,9 @@ function formatDuration(secs: number | null): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function formatTimestamp(ts: string): string {
-  const d = new Date(ts);
-  return d.toLocaleString("en-US", {
-    month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit", hour12: true,
-  });
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 function callTypeLabel(ct: string): { label: string; color: string; bg: string } {
@@ -119,24 +117,19 @@ function leadStatusBadge(s: string | null) {
 function MetricCard({
   icon, label, value, sub, accent,
 }: {
-  icon: string;
-  label: string;
-  value: string | number;
-  sub?: string;
-  accent?: string;
+  icon: string; label: string; value: string | number; sub?: string; accent?: string;
 }) {
+  const { colors: t, isDark } = useTheme();
   const accentColor = accent ?? "#C0C0C0";
   return (
     <div style={{
-      background: "linear-gradient(135deg, #0D1B30 0%, #0A1422 100%)",
-      border: `1px solid rgba(192,192,192,0.12)`,
+      background: t.card,
+      border: `1px solid ${t.border}`,
       borderRadius: 14,
       padding: "22px 24px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
-      position: "relative",
-      overflow: "hidden",
+      display: "flex", flexDirection: "column", gap: 6,
+      position: "relative", overflow: "hidden",
+      boxShadow: isDark ? "none" : t.shadow,
     }}>
       <div style={{
         position: "absolute", top: 0, left: 0, right: 0, height: 2,
@@ -146,12 +139,10 @@ function MetricCard({
       <div style={{ fontSize: 28, fontWeight: 800, color: accentColor, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
         {value}
       </div>
-      <div style={{ fontSize: 12.5, color: "rgba(148,163,184,0.8)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+      <div style={{ fontSize: 12.5, color: t.text2, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.6px" }}>
         {label}
       </div>
-      {sub && (
-        <div style={{ fontSize: 11, color: "rgba(100,116,139,0.8)", marginTop: 2 }}>{sub}</div>
-      )}
+      {sub && <div style={{ fontSize: 11, color: t.text3, marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -161,6 +152,7 @@ function MetricCard({
 export default function CallIntelligencePage() {
   const [period, setPeriod] = useState<Period>("30days");
   const apiFetch = useApiFetch();
+  const { colors: t, isDark } = useTheme();
 
   const { data, isLoading, isError } = useQuery<CallIntelligenceData>({
     queryKey: ["call-intelligence", period],
@@ -179,7 +171,7 @@ export default function CallIntelligencePage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <span style={{ fontSize: 22 }}>📞</span>
-              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.3px" }}>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: t.text, letterSpacing: "-0.3px" }}>
                 Call Intelligence
               </h1>
               <div style={{
@@ -191,13 +183,13 @@ export default function CallIntelligencePage() {
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.5px", textTransform: "uppercase" }}>Live</span>
               </div>
             </div>
-            <p style={{ margin: 0, color: "rgba(148,163,184,0.7)", fontSize: 13.5 }}>
+            <p style={{ margin: 0, color: t.text2, fontSize: 13.5 }}>
               Bed Bugs &amp; Beyond · AI Reception Analytics · (251) 286-3200
             </p>
           </div>
 
           {/* Period Filter */}
-          <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 4, border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div style={{ display: "flex", gap: 4, background: t.cardSubtle, borderRadius: 10, padding: 4, border: `1px solid ${t.border}` }}>
             {(["today", "7days", "30days"] as Period[]).map(p => (
               <button
                 key={p}
@@ -205,7 +197,7 @@ export default function CallIntelligencePage() {
                 style={{
                   padding: "7px 16px", borderRadius: 7, border: "none", cursor: "pointer",
                   background: period === p ? "rgba(0,174,239,0.18)" : "transparent",
-                  color: period === p ? "#00AEEF" : "rgba(148,163,184,0.6)",
+                  color: period === p ? "#00AEEF" : t.text3,
                   fontSize: 13, fontWeight: period === p ? 700 : 500,
                   outline: period === p ? "1px solid rgba(0,174,239,0.3)" : "none",
                   transition: "all 0.15s",
@@ -220,7 +212,7 @@ export default function CallIntelligencePage() {
 
       {/* ── Metric Cards ───────────────────────────────────────────────────── */}
       {isLoading ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "rgba(148,163,184,0.5)" }}>
+        <div style={{ textAlign: "center", padding: "60px 0", color: t.text3 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>
           <div style={{ fontSize: 14 }}>Loading call intelligence data…</div>
         </div>
@@ -234,77 +226,30 @@ export default function CallIntelligencePage() {
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-            <MetricCard
-              icon="📲"
-              label="Total Calls Received"
-              value={m?.total_calls ?? 0}
-              sub={`${PERIOD_LABELS[period]} · all inbound`}
-              accent="#00AEEF"
-            />
-            <MetricCard
-              icon="📵"
-              label="Missed Calls"
-              value={m?.missed_calls ?? 0}
-              sub="Unanswered · text-back sent"
-              accent="#F87171"
-            />
-            <MetricCard
-              icon="🔀"
-              label="Calls Transferred"
-              value={m?.transferred_calls ?? 0}
-              sub="Live agent handoff"
-              accent="#10B981"
-            />
-            <MetricCard
-              icon="🔔"
-              label="Callback Requests"
-              value={m?.callback_requests ?? 0}
-              sub="Pressed 2 in IVR"
-              accent="#F59E0B"
-            />
-            <MetricCard
-              icon="🎙️"
-              label="Voicemails"
-              value={m?.voicemails ?? 0}
-              sub="Pressed 3 in IVR"
-              accent="#A78BFA"
-            />
-            <MetricCard
-              icon="💬"
-              label="SMS Conversations"
-              value={m?.sms_conversations ?? 0}
-              sub="Inbound + outbound"
-              accent="#34D399"
-            />
-            <MetricCard
-              icon="🎯"
-              label="Leads Captured"
-              value={m?.leads_captured ?? 0}
-              sub="Unique callers tracked"
-              accent="#C0C0C0"
-            />
-            <MetricCard
-              icon="📈"
-              label="Recovery Rate"
-              value={m?.recovery_rate != null ? `${m.recovery_rate}%` : "—"}
-              sub="Missed → engaged"
-              accent="#00AEEF"
-            />
+            <MetricCard icon="📲" label="Total Calls Received" value={m?.total_calls ?? 0} sub={`${PERIOD_LABELS[period]} · all inbound`} accent="#00AEEF" />
+            <MetricCard icon="📵" label="Missed Calls" value={m?.missed_calls ?? 0} sub="Unanswered · text-back sent" accent="#F87171" />
+            <MetricCard icon="🔀" label="Calls Transferred" value={m?.transferred_calls ?? 0} sub="Live agent handoff" accent="#10B981" />
+            <MetricCard icon="🔔" label="Callback Requests" value={m?.callback_requests ?? 0} sub="Pressed 2 in IVR" accent="#F59E0B" />
+            <MetricCard icon="🎙️" label="Voicemails" value={m?.voicemails ?? 0} sub="Pressed 3 in IVR" accent="#A78BFA" />
+            <MetricCard icon="💬" label="SMS Conversations" value={m?.sms_conversations ?? 0} sub="Inbound + outbound" accent="#34D399" />
+            <MetricCard icon="🎯" label="Leads Captured" value={m?.leads_captured ?? 0} sub="Unique callers tracked" accent="#C0C0C0" />
+            <MetricCard icon="📈" label="Recovery Rate" value={m?.recovery_rate != null ? `${m.recovery_rate}%` : "—"} sub="Missed → engaged" accent="#00AEEF" />
           </div>
 
           {/* ── Recent Call Activity ──────────────────────────────────────── */}
           <div style={{
-            background: "linear-gradient(135deg, #0D1B30 0%, #0A1422 100%)",
-            border: "1px solid rgba(192,192,192,0.1)",
+            background: t.card,
+            border: `1px solid ${t.border}`,
             borderRadius: 16, overflow: "hidden",
+            boxShadow: isDark ? "none" : t.shadow,
           }}>
             <div style={{
-              padding: "18px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+              padding: "18px 24px", borderBottom: `1px solid ${t.border}`,
               display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 16 }}>📋</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#F1F5F9" }}>Recent Call Activity</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Recent Call Activity</span>
                 <span style={{
                   fontSize: 11, fontWeight: 600, color: "rgba(0,174,239,0.8)",
                   background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.2)",
@@ -313,30 +258,27 @@ export default function CallIntelligencePage() {
                   {activity.length} records
                 </span>
               </div>
-              <span style={{ fontSize: 11.5, color: "rgba(100,116,139,0.6)" }}>
+              <span style={{ fontSize: 11.5, color: t.text3 }}>
                 {PERIOD_LABELS[period]} · auto-refreshes every minute
               </span>
             </div>
 
             {activity.length === 0 ? (
-              <div style={{ padding: "48px 24px", textAlign: "center", color: "rgba(100,116,139,0.6)" }}>
+              <div style={{ padding: "48px 24px", textAlign: "center", color: t.text3 }}>
                 <div style={{ fontSize: 32, marginBottom: 10 }}>📭</div>
                 <div style={{ fontSize: 14, fontWeight: 500 }}>No call activity for this period yet.</div>
-                <div style={{ fontSize: 12.5, marginTop: 6 }}>
-                  Calls to (251) 286-3200 will appear here in real time.
-                </div>
+                <div style={{ fontSize: 12.5, marginTop: 6 }}>Calls to (251) 286-3200 will appear here in real time.</div>
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <tr style={{ borderBottom: `1px solid ${t.border}`, background: t.tableHead }}>
                       {["Timestamp", "Caller", "Call Type", "Outcome", "Duration", "Lead Status"].map(h => (
                         <th key={h} style={{
                           padding: "11px 16px", textAlign: "left",
-                          fontSize: 11, fontWeight: 700, color: "rgba(100,116,139,0.7)",
-                          textTransform: "uppercase", letterSpacing: "0.6px",
-                          whiteSpace: "nowrap",
+                          fontSize: 11, fontWeight: 700, color: t.text3,
+                          textTransform: "uppercase", letterSpacing: "0.6px", whiteSpace: "nowrap",
                         }}>{h}</th>
                       ))}
                     </tr>
@@ -348,46 +290,36 @@ export default function CallIntelligencePage() {
                       const ls = leadStatusBadge(row.lead_status);
                       return (
                         <tr key={row.id} style={{
-                          borderBottom: i < activity.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                          borderBottom: i < activity.length - 1 ? `1px solid ${t.border}` : "none",
                           transition: "background 0.1s",
                         }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.025)"}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = t.cardHover}
                           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                         >
-                          <td style={{ padding: "12px 16px", color: "rgba(148,163,184,0.7)", whiteSpace: "nowrap", fontSize: 12.5 }}>
+                          <td style={{ padding: "12px 16px", color: t.text2, whiteSpace: "nowrap", fontSize: 12.5 }}>
                             {formatTimestamp(row.timestamp)}
                           </td>
-                          <td style={{ padding: "12px 16px", color: "#E2E8F0", fontWeight: 600, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "12px 16px", color: t.text, fontWeight: 600, fontFamily: "monospace", whiteSpace: "nowrap" }}>
                             {formatPhone(row.caller_number)}
                           </td>
                           <td style={{ padding: "12px 16px" }}>
-                            <span style={{
-                              display: "inline-block",
-                              padding: "3px 10px", borderRadius: 6,
-                              background: ct.bg, color: ct.color,
-                              fontSize: 12, fontWeight: 700,
-                            }}>
+                            <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 6, background: ct.bg, color: ct.color, fontSize: 12, fontWeight: 700 }}>
                               {ct.label}
                             </span>
                           </td>
                           <td style={{ padding: "12px 16px", color: oc.color, fontWeight: 600, fontSize: 12.5 }}>
                             {oc.label}
                           </td>
-                          <td style={{ padding: "12px 16px", color: "rgba(148,163,184,0.6)", fontFamily: "monospace", fontSize: 12.5 }}>
+                          <td style={{ padding: "12px 16px", color: t.text3, fontFamily: "monospace", fontSize: 12.5 }}>
                             {formatDuration(row.duration_secs)}
                           </td>
                           <td style={{ padding: "12px 16px" }}>
                             {ls ? (
-                              <span style={{
-                                display: "inline-block",
-                                padding: "3px 10px", borderRadius: 6,
-                                background: ls.style.bg, color: ls.style.color,
-                                fontSize: 11.5, fontWeight: 700,
-                              }}>
+                              <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 6, background: ls.style.bg, color: ls.style.color, fontSize: 11.5, fontWeight: 700 }}>
                                 {ls.label}
                               </span>
                             ) : (
-                              <span style={{ color: "rgba(100,116,139,0.4)", fontSize: 12 }}>—</span>
+                              <span style={{ color: t.text3, fontSize: 12 }}>—</span>
                             )}
                           </td>
                         </tr>
@@ -399,24 +331,16 @@ export default function CallIntelligencePage() {
             )}
           </div>
 
-          {/* ── Data source note ─────────────────────────────────────────── */}
-          <div style={{ marginTop: 14, textAlign: "center", fontSize: 11.5, color: "rgba(71,85,105,0.6)" }}>
+          <div style={{ marginTop: 14, textAlign: "center", fontSize: 11.5, color: t.text3 }}>
             Data from Telnyx IVR webhooks · New calls appear within seconds · SMS text-backs tracked automatically
           </div>
         </>
       )}
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-        @media (max-width: 900px) {
-          .ci-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-        @media (max-width: 600px) {
-          .ci-grid { grid-template-columns: 1fr !important; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @media (max-width: 900px) { .ci-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 600px) { .ci-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </AppShell>
   );

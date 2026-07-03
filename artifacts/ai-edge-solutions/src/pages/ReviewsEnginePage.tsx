@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AppShell } from "../components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -184,6 +185,7 @@ function StatusPill({ status }: { status: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ReviewsEnginePage() {
+  const { colors: t } = useTheme();
   const apiFetch = useApiFetch();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [stats, setStats]         = useState<PlatformStat[]>([]);
@@ -290,10 +292,10 @@ export default function ReviewsEnginePage() {
 
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: t.text, margin: 0 }}>
             ⭐ Reviews Engine
           </h1>
-          <p style={{ color: "#6B7280", fontSize: 14, marginTop: 4 }}>
+          <p style={{ color: t.text2, fontSize: 14, marginTop: 4 }}>
             Bed Bugs & Beyond — review requests, tracking, templates &amp; response library
           </p>
         </div>

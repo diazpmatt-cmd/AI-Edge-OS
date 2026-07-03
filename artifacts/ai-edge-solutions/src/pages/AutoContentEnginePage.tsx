@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -337,6 +338,7 @@ function whyGenerated(city: string | null, topic: string | null, angle: string |
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function AutoContentEnginePage() {
+  const { colors: t } = useTheme();
   const authFetch = useApiFetch();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
@@ -503,10 +505,10 @@ export default function AutoContentEnginePage() {
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 26, fontWeight: 800, color: "#FFFFFF", margin: 0, letterSpacing: "-0.3px" }}>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, margin: 0, letterSpacing: "-0.3px" }}>
                 🤖 Auto Content Engine
               </h1>
-              <p style={{ fontSize: 13.5, color: "#64748B", margin: "4px 0 0" }}>
+              <p style={{ fontSize: 13.5, color: t.text2, margin: "4px 0 0" }}>
                 AI-powered local posts — rotating city, topic, and angle automatically.
               </p>
             </div>

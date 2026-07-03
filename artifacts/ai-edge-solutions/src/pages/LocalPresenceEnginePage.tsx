@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { useTheme } from "@/contexts/theme-context";
 import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -5156,6 +5157,7 @@ function SubmissionTracker() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LocalPresenceEnginePage() {
+  const { colors: t } = useTheme();
   const authFetch = useApiFetch();
   const qc = useQueryClient();
   const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -5221,10 +5223,10 @@ export default function LocalPresenceEnginePage() {
             </div>
           </div>
 
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.5px", margin: "0 0 8px" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>
             Local Presence Engine
           </h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: "0 0 16px", lineHeight: 1.5, maxWidth: 620 }}>
+          <p style={{ fontSize: 14, color: t.text2, margin: "0 0 16px", lineHeight: 1.5, maxWidth: 620 }}>
             <strong style={{ color: "#00AEEF" }}>Get Found Everywhere</strong> — Manage local visibility across Google, Apple Maps, Bing, AI search,
             and neighborhood discovery channels. One dashboard, all listings.
           </p>

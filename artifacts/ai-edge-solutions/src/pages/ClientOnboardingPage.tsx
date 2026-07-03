@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { AppShell } from "../components/app-shell";
+import { useTheme } from "@/contexts/theme-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type StepStatus = "complete" | "in-progress" | "pending";
@@ -374,6 +375,7 @@ function Step7Content() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ClientOnboardingPage() {
+  const { colors: t } = useTheme();
   const [expanded, setExpanded] = useState<number | null>(1);
   const [activationChecked, setActivationChecked] = useState<Record<string, boolean>>({});
 

@@ -34,7 +34,7 @@ router.get("/call-intelligence", async (req, res) => {
     const period = (req.query.period as string) || "30days";
     const since  = periodStart(period);
 
-    // ── Metrics from calls table (new structured data) ────────────────────────
+    // ── Metrics from calls table (primary source) ─────────────────────────────
     const callRows = await db
       .select({ callType: callsTable.callType, outcome: callsTable.outcome, durationSecs: callsTable.durationSecs })
       .from(callsTable)
@@ -42,14 +42,15 @@ router.get("/call-intelligence", async (req, res) => {
 
     let c_total = 0, c_missed = 0, c_transferred = 0, c_callbacks = 0, c_voicemails = 0;
     for (const r of callRows) {
-      if (r.callType !== "missed") c_total++;
-      if (r.callType === "missed")       c_missed++;
-      if (r.callType === "transferred")  c_transferred++;
-      if (r.callType === "callback")     c_callbacks++;
-      if (r.callType === "voicemail")    c_voicemails++;
+      c_total++;                                           // every row is one call
+      if (r.callType === "missed")      c_missed++;
+      if (r.callType === "transferred") c_transferred++;
+      if (r.callType === "callback")    c_callbacks++;
+      if (r.callType === "voicemail")   c_voicemails++;
     }
 
-    // ── Metrics from leads table (historical data) ────────────────────────────
+    // ── Historical fallback from leads table ──────────────────────────────────
+    // Used for: missed calls before calls table existed, and SMS / lead data
     const leadRows = await db
       .select({ eventType: leadsTable.eventType, status: leadsTable.status, phone: leadsTable.phone, message: leadsTable.message })
       .from(leadsTable)
@@ -60,26 +61,19 @@ router.get("/call-intelligence", async (req, res) => {
         )
       );
 
-    let l_total = 0, l_missed = 0, l_transferred = 0, l_callbacks = 0, l_voicemails = 0;
-    let l_sms_inbound = 0, l_sms_outbound = 0, l_replies = 0;
+    // Only count call-type leads that predate the calls table (avoid double-count)
+    // The calls table was created 2026-07-03; use leads only for SMS & lead capture
+    let l_sms_inbound = 0, l_sms_outbound = 0, l_replies = 0, l_missed = 0;
     const uniquePhones = new Set<string>();
 
     for (const r of leadRows) {
       if (r.phone) uniquePhones.add(r.phone);
       const et = r.eventType ?? "";
-      const msg = (r.message ?? "").toLowerCase();
-
-      if (et === "telnyx_voice_call") {
-        if (msg.includes("transfer")) l_transferred++;
-        else l_total++;
-      }
-      if (et === "incoming_call")           l_total++;
-      if (et === "missed_call" || et === "call_hangup_missed") l_missed++;
-      if (et === "telnyx_callback_request") l_callbacks++;
-      if (et === "telnyx_voicemail")        l_voicemails++;
       if (et === "sms" || et === "telnyx_sms_reply" || et === "message_received") l_sms_inbound++;
       if (et === "telnyx_textback_sent")    l_sms_outbound++;
       if (et === "telnyx_sms_reply")        l_replies++;
+      // Count historical missed calls not yet in calls table
+      if (et === "missed_call" || et === "call_hangup_missed") l_missed++;
     }
 
     // ── SMS counts from sms_conversations table ───────────────────────────────
@@ -88,21 +82,26 @@ router.get("/call-intelligence", async (req, res) => {
       .from(smsConversationsTable)
       .where(gte(smsConversationsTable.createdAt, since));
 
-    const sms_total = (smsRow?.total ?? 0) + l_sms_inbound + l_sms_outbound;
+    const sms_from_table = smsRow?.total ?? 0;
+    // Deduplicate: sms_conversations table is the authoritative source going forward;
+    // only add leads SMS count if conversations table is still empty (pre-launch)
+    const sms_conversations = sms_from_table > 0
+      ? sms_from_table
+      : l_sms_inbound + l_sms_outbound;
 
     // ── Combined metrics ──────────────────────────────────────────────────────
-    const total_calls        = c_total + l_total + c_transferred + l_transferred;
-    const missed_calls       = c_missed + l_missed;
-    const transferred_calls  = c_transferred + l_transferred;
-    const callback_requests  = c_callbacks + l_callbacks;
-    const voicemails         = c_voicemails + l_voicemails;
-    const sms_conversations  = sms_total;
-    const leads_captured     = uniquePhones.size;
-    const recovery_rate      = missed_calls > 0
+    // total_calls = all rows in calls table + historical missed not yet there
+    const total_calls       = c_total + l_missed;
+    const missed_calls      = c_missed + l_missed;
+    const transferred_calls = c_transferred;
+    const callback_requests = c_callbacks;
+    const voicemails        = c_voicemails;
+    const leads_captured    = uniquePhones.size;
+    const recovery_rate     = missed_calls > 0
       ? Math.round(((l_replies + c_callbacks) / missed_calls) * 100)
       : null;
 
-    // ── Recent Call Activity — from calls table first, then leads ─────────────
+    // ── Recent Call Activity ──────────────────────────────────────────────────
     const recentCalls = await db
       .select()
       .from(callsTable)
@@ -110,16 +109,16 @@ router.get("/call-intelligence", async (req, res) => {
       .orderBy(desc(callsTable.createdAt))
       .limit(50);
 
+    // Historical leads-based activity (for rows that predate calls table)
     const recentLeads = await db
       .select()
       .from(leadsTable)
       .where(
         and(
           gte(leadsTable.createdAt, since),
-          sql`${leadsTable.eventType} IN (
-            'telnyx_voice_call','incoming_call','missed_call','call_hangup_missed',
-            'telnyx_callback_request','telnyx_voicemail','telnyx_sms_reply','sms'
-          ) AND ${leadsTable.phone} NOT LIKE '+1555%' AND ${leadsTable.phone} NOT LIKE '+10000000%'`
+          sql`${leadsTable.eventType} IN ('missed_call','call_hangup_missed','telnyx_sms_reply','sms')`,
+          sql`${leadsTable.phone} NOT LIKE '+1555%'`,
+          sql`${leadsTable.phone} NOT LIKE '+10000000%'`
         )
       )
       .orderBy(desc(leadsTable.createdAt))
@@ -133,43 +132,43 @@ router.get("/call-intelligence", async (req, res) => {
       outcome: string;
       duration_secs: number | null;
       lead_status: string | null;
-      source: "calls" | "leads";
     };
 
     const callActivity: ActivityRow[] = recentCalls.map(r => ({
-      id:           r.id,
-      timestamp:    r.createdAt.toISOString(),
+      id:            r.id,
+      timestamp:     r.createdAt.toISOString(),
       caller_number: r.callerNumber || "Unknown",
-      call_type:    r.callType,
-      outcome:      r.outcome,
+      call_type:     r.callType,
+      outcome:       r.outcome,
       duration_secs: r.durationSecs,
-      lead_status:  null,
-      source:       "calls",
+      lead_status:   null,
     }));
 
     const leadActivity: ActivityRow[] = recentLeads.map(r => {
       const et = r.eventType ?? "";
-      const msg = (r.message ?? "").toLowerCase();
-      let call_type = "incoming";
-      let outcome = "answered";
+      let call_type = "incoming", outcome = "answered";
       if (et === "missed_call" || et === "call_hangup_missed") { call_type = "missed"; outcome = "missed"; }
-      else if (et === "telnyx_callback_request") { call_type = "callback"; outcome = "callback_requested"; }
-      else if (et === "telnyx_voicemail") { call_type = "voicemail"; outcome = "voicemail_left"; }
-      else if (msg.includes("transfer")) { call_type = "transferred"; outcome = "transferred"; }
-      else if (et === "sms" || et === "telnyx_sms_reply") { call_type = "sms"; outcome = "replied"; }
+      else if (et === "telnyx_sms_reply") { call_type = "sms"; outcome = "replied"; }
+      else if (et === "sms") { call_type = "sms"; outcome = "received"; }
       return {
-        id:           r.id,
-        timestamp:    r.createdAt.toISOString(),
+        id:            r.id,
+        timestamp:     r.createdAt.toISOString(),
         caller_number: r.phone || "Unknown",
         call_type,
         outcome,
         duration_secs: null,
-        lead_status:  r.status ?? null,
-        source:       "leads",
+        lead_status:   r.status ?? null,
       };
     });
 
-    const allActivity = [...callActivity, ...leadActivity]
+    // Merge and deduplicate (calls table is authoritative; leads fills historical gaps)
+    const callIds = new Set(recentCalls.map(r => r.callerNumber + r.createdAt.toISOString().slice(0, 13)));
+    const filteredLeadActivity = leadActivity.filter(r => {
+      const key = r.caller_number + r.timestamp.slice(0, 13);
+      return !callIds.has(key);
+    });
+
+    const allActivity = [...callActivity, ...filteredLeadActivity]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 50);
 

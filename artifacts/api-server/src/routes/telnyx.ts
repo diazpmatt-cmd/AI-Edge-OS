@@ -194,23 +194,40 @@ router.post("/telnyx/webhook", async (req, res) => {
       if (isMissed) {
         console.log(`[TELNYX] Missed call detected from ${from || "unknown"} — cause: ${hangupCause}`);
 
-        await Promise.all([
-          db.insert(leadsTable).values({
-            clientName: getClientName(),
-            source:     "telnyx_missed_call",
-            phone:      from,
-            message:    `Missed call — hangup cause: ${hangupCause}`,
-            eventType:  "missed_call",
-            status:     "new",
-          }),
-          db.insert(callsTable).values({
+        const since30m = new Date(Date.now() - 30 * 60 * 1000);
+        const durNum   = Number(duration) || null;
+
+        await db.insert(leadsTable).values({
+          clientName: getClientName(),
+          source:     "telnyx_missed_call",
+          phone:      from,
+          message:    `Missed call — hangup cause: ${hangupCause}`,
+          eventType:  "missed_call",
+          status:     "new",
+        });
+
+        // Try to update an existing incoming record for this caller first
+        const updated = await db.update(callsTable)
+          .set({ callType: "missed", outcome: "missed", durationSecs: durNum })
+          .where(
+            and(
+              eq(callsTable.callerNumber, from),
+              eq(callsTable.callType, "incoming"),
+              gte(callsTable.createdAt, since30m),
+            )
+          )
+          .returning({ id: callsTable.id });
+
+        // If no existing incoming record found, insert a standalone missed record
+        if (updated.length === 0) {
+          await db.insert(callsTable).values({
             callerNumber: from,
             calledNumber: process.env.TELNYX_FROM_NUMBER ?? "",
             callType:     "missed",
-            durationSecs: Number(duration) || null,
+            durationSecs: durNum,
             outcome:      "missed",
-          }),
-        ]);
+          });
+        }
 
         // ── Text-back with dedup guard ────────────────────────────────────────
         if (!from) {
@@ -408,7 +425,9 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     const body    = req.body as any;
     const digit   = (body?.Digits ?? body?.digits ?? "").toString().trim();
     const from    = body?.From ?? body?.from ?? body?.Caller ?? "";
+    const callSid = body?.CallSid ?? body?.call_sid ?? "";
     const forward = process.env.BUSINESS_FORWARD_NUMBER ?? "+12543249090";
+    const since5m = new Date(Date.now() - 5 * 60 * 1000);
 
     console.log(`[TELNYX] Menu selection: "${digit}" from ${from || "unknown"}`);
 
@@ -425,13 +444,17 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           eventType:  "telnyx_voice_call",
           status:     "contacted",
         }),
-        db.insert(callsTable).values({
-          callerNumber:  from,
-          calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
-          callType:      "transferred",
-          digitsPressed: "1",
-          outcome:       "transferred",
-        }),
+        // UPDATE the existing incoming record rather than inserting a duplicate
+        db.update(callsTable)
+          .set({ callType: "transferred", digitsPressed: "1", outcome: "transferred" })
+          .where(
+            and(
+              eq(callsTable.callerNumber, from),
+              eq(callsTable.callType, "incoming"),
+              gte(callsTable.createdAt, since5m),
+              ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+            )
+          ),
       ]);
       res.send(texml(`
         <Say voice="alice">Please hold while we connect you.</Say>
@@ -449,13 +472,16 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           eventType:  "telnyx_callback_request",
           status:     "new",
         }),
-        db.insert(callsTable).values({
-          callerNumber:  from,
-          calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
-          callType:      "callback",
-          digitsPressed: "2",
-          outcome:       "callback_requested",
-        }),
+        db.update(callsTable)
+          .set({ callType: "callback", digitsPressed: "2", outcome: "callback_requested" })
+          .where(
+            and(
+              eq(callsTable.callerNumber, from),
+              eq(callsTable.callType, "incoming"),
+              gte(callsTable.createdAt, since5m),
+              ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+            )
+          ),
       ]);
       res.send(texml(`
         <Say voice="alice">Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!</Say>
@@ -465,13 +491,18 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     } else if (digit === "3") {
       const recordUrl = `${baseUrl(req)}/api/telnyx/voice/recording`;
       console.log(`[TELNYX] Voicemail recording started for ${from || "unknown"}`);
-      await db.insert(callsTable).values({
-        callerNumber:  from,
-        calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
-        callType:      "voicemail",
-        digitsPressed: "3",
-        outcome:       "pending",
-      }).catch(e => console.error("[TELNYX] callsTable insert error (voicemail start):", e));
+      // Mark incoming record as voicemail-in-progress; /recording will finalize it
+      await db.update(callsTable)
+        .set({ callType: "voicemail", digitsPressed: "3", outcome: "pending" })
+        .where(
+          and(
+            eq(callsTable.callerNumber, from),
+            eq(callsTable.callType, "incoming"),
+            gte(callsTable.createdAt, since5m),
+            ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+          )
+        )
+        .catch(e => console.error("[TELNYX] callsTable update error (voicemail start):", e));
       res.send(texml(`
         <Say voice="alice">Please leave your message after the beep. Press star or hang up when finished.</Say>
         <Record action="${recordUrl}" method="POST" maxLength="120" playBeep="true" finishOnKey="*"/>
@@ -506,6 +537,7 @@ router.post("/telnyx/voice/recording", async (req, res) => {
     const durSecs  = duration ? Number(duration) : null;
     console.log(`[TELNYX] Voicemail recorded from ${from || "unknown"}${durLabel} — ${recordingUrl || "no URL"}`);
 
+    const since10m = new Date(Date.now() - 10 * 60 * 1000);
     await Promise.all([
       db.insert(leadsTable).values({
         clientName: getClientName(),
@@ -517,14 +549,16 @@ router.post("/telnyx/voice/recording", async (req, res) => {
         eventType:  "telnyx_voicemail",
         status:     "new",
       }),
-      db.insert(callsTable).values({
-        callerNumber: from,
-        calledNumber: process.env.TELNYX_FROM_NUMBER ?? "",
-        callType:     "voicemail",
-        durationSecs: durSecs,
-        outcome:      "voicemail_left",
-        recordingUrl: recordingUrl || null,
-      }),
+      // UPDATE the voicemail-in-progress record set by gather (no new row)
+      db.update(callsTable)
+        .set({ outcome: "voicemail_left", durationSecs: durSecs, recordingUrl: recordingUrl || null })
+        .where(
+          and(
+            eq(callsTable.callerNumber, from),
+            eq(callsTable.callType, "voicemail"),
+            gte(callsTable.createdAt, since10m),
+          )
+        ),
     ]);
 
     res.set("Content-Type", "text/xml");

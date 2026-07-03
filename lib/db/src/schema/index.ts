@@ -12,3 +12,4 @@ export * from "./reviews";
 export * from "./calls";
 export * from "./sms-conversations";
 export * from "./client-onboarding";
+export * from "./ai-visibility";

@@ -1,0 +1,146 @@
+PHASE 5 — BUILD AI VISIBILITY ENGINE
+
+Build the next core AI Edge module:
+AI Visibility Engine
+
+OBJECTIVE:
+Create a dashboard that helps local businesses track and improve how visible they are across search engines, maps, directories, and AI search platforms.
+
+NEW SIDEBAR MODULE:
+AI Visibility Engine
+
+ROUTE:
+/admin/ai-visibility
+
+DESIGN:
+Use existing AI Edge Command Center styling.
+Must support global Light / Dark theme.
+Use large KPI cards, colored module tiles, and clean executive dashboard layout.
+
+MAIN DASHBOARD SECTIONS:
+
+1. VISIBILITY SCORE CARDS
+Create top KPI cards:
+- Overall Visibility Score
+- Search Visibility
+- Maps Visibility
+- AI Search Visibility
+- Authority Score
+- Review Strength
+- Competitor Gap
+
+Use sample/demo scoring logic for now if no live API data exists.
+
+2. GET FOUND EVERYWHERE CHANNELS
+Create channel status cards for:
+- Google Search
+- Bing Search
+- Google Maps
+- Apple Maps
+- Bing Places
+- Waze
+- Yelp
+- Facebook
+- Nextdoor
+- ChatGPT
+- Claude
+- Gemini
+- Perplexity
+- Copilot
+- Grok
+- Siri / Voice Search
+- Alexa / Voice Search
+- Google Assistant
+
+Each card should show:
+- Status: Connected / Needs Setup / Opportunity / Monitoring
+- Score
+- Priority
+- Recommended action
+
+3. COMPETITOR INTELLIGENCE
+Create section:
+- Top Local Competitors
+- Review Gap
+- Keyword Gap
+- Backlink Gap
+- AI Visibility Gap
+- Opportunity Score
+
+Use placeholder competitors for now:
+- Local Competitor A
+- Local Competitor B
+- Local Competitor C
+
+4. AUTHORITY ENGINE
+Create section tracking:
+- Citation Health
+- NAP Consistency
+- Backlink Opportunities
+- Directory Listings
+- Structured Data
+- llms.txt / AI crawler readiness
+
+5. AI SEARCH READINESS
+Create section for:
+- ChatGPT recommendation readiness
+- Gemini readiness
+- Perplexity readiness
+- Claude readiness
+- Copilot readiness
+- Grok readiness
+
+Include recommendations:
+- Improve service pages
+- Add FAQ content
+- Add structured data
+- Improve reviews
+- Strengthen citations
+- Add local backlinks
+
+6. ACTION PLAN
+Create prioritized action list:
+- Critical
+- High
+- Medium
+- Low
+
+Each action should include:
+- task name
+- reason
+- expected impact
+- status
+
+DATABASE:
+Create ai_visibility_audits table:
+- id
+- client_id
+- business_name
+- overall_score
+- search_score
+- maps_score
+- ai_search_score
+- authority_score
+- review_score
+- competitor_gap_score
+- channels_json
+- competitors_json
+- recommendations_json
+- created_at
+- updated_at
+
+API ROUTES:
+Create:
+- GET /api/ai-visibility
+- GET /api/ai-visibility/:clientId
+- POST /api/ai-visibility/audit
+- PUT /api/ai-visibility/:id
+
+For now, use demo/fallback data if no audit exists.
+
+GOAL:
+AI Visibility Engine should become part of the “Get Found Everywhere Engine” and help businesses see where they are missing visibility across search, maps, AI search, voice search, citations, backlinks, and competitors.
+
+IMPORTANT:
+This should be built as a real scalable module, not just static UI.
+Use database-ready structure and API-ready structure for future live integrations.

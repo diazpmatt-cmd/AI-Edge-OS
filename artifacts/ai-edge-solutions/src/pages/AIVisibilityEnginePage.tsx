@@ -1,630 +1,457 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
+import { useApiFetch } from "@/lib/api";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Data
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const CHANNELS = [
-  {
-    id: "chatgpt",
-    name: "ChatGPT Search",
-    icon: "🤖",
-    status: "Not Verified",
-    statusColor: "#EF4444",
-    signal: 0,
-    lastChecked: "Never",
-    missingFactor: "No web citations or verified business data",
-    action: "Improve Citations",
-  },
-  {
-    id: "google_ai",
-    name: "Google AI Overviews",
-    icon: "🔍",
-    status: "Partial Signal",
-    statusColor: "#F59E0B",
-    signal: 42,
-    lastChecked: "Today",
-    missingFactor: "Missing structured schema and low review velocity",
-    action: "Add Schema",
-  },
-  {
-    id: "bing_copilot",
-    name: "Bing Copilot",
-    icon: "🪟",
-    status: "Weak Signal",
-    statusColor: "#F97316",
-    signal: 18,
-    lastChecked: "Today",
-    missingFactor: "Bing Places not claimed",
-    action: "Claim Bing Places",
-  },
-  {
-    id: "perplexity",
-    name: "Perplexity AI",
-    icon: "🧠",
-    status: "Not Verified",
-    statusColor: "#EF4444",
-    signal: 5,
-    lastChecked: "Never",
-    missingFactor: "No high-quality citations or authority content",
-    action: "Build Authority",
-  },
-  {
-    id: "apple_siri",
-    name: "Apple / Siri Discovery",
-    icon: "🍎",
-    status: "Missing Listing",
-    statusColor: "#EF4444",
-    signal: 0,
-    lastChecked: "Never",
-    missingFactor: "Apple Business Connect not claimed",
-    action: "Claim Apple Listing",
-  },
-];
+interface Channel {
+  id: string; name: string; category: string;
+  status: string; score: number; priority: string; action: string;
+}
+interface Competitor {
+  name: string; reviewGap: number; keywordGap: string;
+  backlinkGap: string; aiGap: number; opportunityScore: number;
+}
+interface Recommendation {
+  priority: string; task: string; reason: string; impact: string; status: string;
+}
+interface AuditData {
+  businessName: string;
+  overallScore: number; searchScore: number; mapsScore: number;
+  aiSearchScore: number; authorityScore: number; reviewScore: number;
+  competitorGapScore: number;
+  channelsJson: string; competitorsJson: string; recommendationsJson: string;
+}
 
-const PROMPT_TESTS = [
-  {
-    prompt: "Best pest control company in Foley AL",
-    result: "Not mentioned",
-    competitors: 3,
-    status: "gap",
-    fix: "Create Foley location-specific service page",
-  },
-  {
-    prompt: "Bed bug treatment near Gulf Shores",
-    result: "Mentioned indirectly",
-    competitors: 2,
-    status: "partial",
-    fix: "Add FAQ schema + strengthen GBP categories",
-  },
-  {
-    prompt: "Who removes bed bugs in Baldwin County Alabama?",
-    result: "Not mentioned",
-    competitors: 4,
-    status: "gap",
-    fix: "Add local citations + authority content",
-  },
-  {
-    prompt: "Emergency pest control near Orange Beach",
-    result: "Not mentioned",
-    competitors: 3,
-    status: "gap",
-    fix: "Create Orange Beach emergency service page",
-  },
-  {
-    prompt: "Affordable roach exterminator in Fairhope",
-    result: "Not mentioned",
-    competitors: 2,
-    status: "gap",
-    fix: "Add comparison/affordability content + reviews",
-  },
-  {
-    prompt: "Pest control Spanish Fort Alabama",
-    result: "Not mentioned",
-    competitors: 2,
-    status: "gap",
-    fix: "Create Spanish Fort service page + citations",
-  },
-  {
-    prompt: "Termite inspection Gulf Shores",
-    result: "Not mentioned",
-    competitors: 3,
-    status: "gap",
-    fix: "Add termite service schema + local mentions",
-  },
-  {
-    prompt: "Bed Bugs and Beyond pest control reviews",
-    result: "Brand recognized",
-    competitors: 0,
-    status: "found",
-    fix: "Maintain review velocity, add review schema",
-  },
-];
+// ─── Demo fallback (identical to API demo) ────────────────────────────────────
 
-const COMPETITORS = [
-  { name: "Havard Pest Control",           mentions: 18, reviews: "High",   authority: "High",   content: "Strong",  threat: "high"   },
-  { name: "Beebe's Pest & Termite Control", mentions: 11, reviews: "Medium", authority: "Medium", content: "Medium",  threat: "medium" },
-  { name: "Knox Pest Control",             mentions: 9,  reviews: "Medium", authority: "Medium", content: "Weak",    threat: "medium" },
-  { name: "Arrow Exterminators",           mentions: 24, reviews: "High",   authority: "High",   content: "Strong",  threat: "high"   },
-  { name: "Wayne's Pest Control",          mentions: 6,  reviews: "Low",    authority: "Low",    content: "Weak",    threat: "low"    },
-];
-
-const GAPS = [
-  { title: "Missing AI-optimized service pages",       severity: "critical", impact: "High", action: "Create city-specific landing pages for each service area" },
-  { title: "Weak citation authority",                  severity: "critical", impact: "High", action: "Build local business citations on 20+ directories" },
-  { title: "Limited review velocity",                  severity: "high",     impact: "High", action: "Launch automated review request campaign after each job" },
-  { title: "Apple/Bing/Nextdoor listings incomplete",  severity: "high",     impact: "High", action: "Claim and optimize all 3 missing platform listings" },
-  { title: "Missing FAQ schema",                       severity: "high",     impact: "Medium", action: "Add FAQPage JSON-LD schema to all service pages" },
-  { title: "Missing location-specific content",        severity: "medium",   impact: "Medium", action: "Write 1 dedicated page per city served (6 pages needed)" },
-  { title: "No AI-readable business summary",          severity: "medium",   impact: "Medium", action: "Create an 'About' page optimized for AI entity recognition" },
-  { title: "Limited backlink authority",               severity: "low",      impact: "Medium", action: "Pursue local chamber links, news citations, and sponsorships" },
-];
-
-const CONTENT_PAGES = [
-  { title: "Bed Bug Treatment in Foley AL",              type: "Location Page",  priority: "high"   },
-  { title: "Bed Bug Treatment in Gulf Shores AL",        type: "Location Page",  priority: "high"   },
-  { title: "Roach Exterminator in Baldwin County AL",    type: "Service Page",   priority: "high"   },
-  { title: "Emergency Pest Control in Orange Beach AL",  type: "Location Page",  priority: "high"   },
-  { title: "Pest Control FAQ for Baldwin County",        type: "FAQ Page",       priority: "medium" },
-  { title: "Why Bed Bugs & Beyond is Different",         type: "Authority Page", priority: "medium" },
-  { title: "Local Pest Control Service Area Page",       type: "Area Page",      priority: "medium" },
-];
-
-const SCHEMA_RECS = [
-  { type: "LocalBusiness",  status: "Missing", impact: "High"   },
-  { type: "PestControl",    status: "Missing", impact: "High"   },
-  { type: "FAQPage",        status: "Missing", impact: "High"   },
-  { type: "Review",         status: "Partial", impact: "Medium" },
-  { type: "Service",        status: "Missing", impact: "Medium" },
-  { type: "Breadcrumb",     status: "Missing", impact: "Low"    },
-];
-
-const PRIORITIES = [
-  { rank: 1, action: "Claim & optimize Apple Business Connect",   effort: "30 min", impact: "High"   },
-  { rank: 2, action: "Claim & optimize Bing Places for Business", effort: "30 min", impact: "High"   },
-  { rank: 3, action: "Create AI-readable business summary page",  effort: "2 hrs",  impact: "High"   },
-  { rank: 4, action: "Create city-specific pest control pages",   effort: "1 day",  impact: "High"   },
-  { rank: 5, action: "Add FAQ schema to all service pages",       effort: "2 hrs",  impact: "Medium" },
-  { rank: 6, action: "Launch review request campaign",            effort: "1 day",  impact: "High"   },
-  { rank: 7, action: "Build local backlinks & citations",         effort: "Ongoing",impact: "Medium" },
-];
-
-const DIAGNOSTICS = [
-  { label: "AI Visibility Scan",     status: "pending",      note: "Score pending — no scan data yet" },
-  { label: "Google Signal Health",   status: "warning",      note: "GBP connected, but quota throttled. Schema missing." },
-  { label: "Bing Signal Health",     status: "missing",      note: "Bing Places not claimed" },
-  { label: "Citation Health",        status: "warning",      note: "Low citation count — estimated < 20 active" },
-  { label: "Schema Health",          status: "missing",      note: "No LocalBusiness, FAQ, or Service schema detected" },
-  { label: "Review Signal Health",   status: "warning",      note: "Review volume below competitor average" },
-  { label: "Local Content Health",   status: "missing",      note: "No city-specific pages found" },
-  { label: "AI Content Scanner",     status: "coming_soon",  note: "Automated AI mention monitoring — coming soon" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers + small components
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SEVERITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  critical: { bg: "rgba(239,68,68,0.1)",   color: "#F87171", label: "Critical" },
-  high:     { bg: "rgba(245,158,11,0.1)",  color: "#FCD34D", label: "High"     },
-  medium:   { bg: "rgba(0,174,239,0.1)",   color: "#00AEEF", label: "Medium"   },
-  low:      { bg: "rgba(100,116,139,0.1)", color: "#94A3B8", label: "Low"      },
+const DEMO: AuditData = {
+  businessName: "Bed Bugs & Beyond",
+  overallScore: 34, searchScore: 42, mapsScore: 51,
+  aiSearchScore: 18, authorityScore: 29, reviewScore: 61, competitorGapScore: 27,
+  channelsJson: JSON.stringify([
+    { id: "google_search",    name: "Google Search",    category: "search",    status: "Connected",   score: 58, priority: "high",     action: "Add LocalBusiness schema" },
+    { id: "bing_search",      name: "Bing Search",      category: "search",    status: "Needs Setup", score: 22, priority: "high",     action: "Claim Bing Places listing" },
+    { id: "google_maps",      name: "Google Maps",      category: "maps",      status: "Connected",   score: 64, priority: "high",     action: "Add more photos & posts" },
+    { id: "apple_maps",       name: "Apple Maps",       category: "maps",      status: "Needs Setup", score: 0,  priority: "critical", action: "Claim Apple Business Connect" },
+    { id: "bing_places",      name: "Bing Places",      category: "maps",      status: "Needs Setup", score: 0,  priority: "high",     action: "Claim Bing Places for Business" },
+    { id: "waze",             name: "Waze",             category: "maps",      status: "Opportunity", score: 15, priority: "medium",   action: "Add Waze business listing" },
+    { id: "yelp",             name: "Yelp",             category: "directory", status: "Connected",   score: 44, priority: "medium",   action: "Increase review velocity" },
+    { id: "facebook",         name: "Facebook",         category: "directory", status: "Connected",   score: 52, priority: "medium",   action: "Enable recommendations" },
+    { id: "nextdoor",         name: "Nextdoor",         category: "directory", status: "Opportunity", score: 8,  priority: "medium",   action: "Create Nextdoor business page" },
+    { id: "chatgpt",          name: "ChatGPT",          category: "ai",        status: "Monitoring",  score: 12, priority: "critical", action: "Build citation authority" },
+    { id: "claude",           name: "Claude",           category: "ai",        status: "Monitoring",  score: 9,  priority: "high",     action: "Add structured data + FAQ" },
+    { id: "gemini",           name: "Gemini",           category: "ai",        status: "Monitoring",  score: 21, priority: "high",     action: "Strengthen GBP signals" },
+    { id: "perplexity",       name: "Perplexity",       category: "ai",        status: "Monitoring",  score: 7,  priority: "high",     action: "Build high-authority citations" },
+    { id: "copilot",          name: "Copilot",          category: "ai",        status: "Monitoring",  score: 14, priority: "high",     action: "Claim Bing Places + schema" },
+    { id: "grok",             name: "Grok",             category: "ai",        status: "Monitoring",  score: 5,  priority: "low",      action: "Monitor for future integration" },
+    { id: "siri",             name: "Siri / Voice",     category: "voice",     status: "Needs Setup", score: 0,  priority: "high",     action: "Claim Apple Business Connect" },
+    { id: "alexa",            name: "Alexa / Voice",    category: "voice",     status: "Opportunity", score: 6,  priority: "medium",   action: "Add Yext or Alexa listing" },
+    { id: "google_assistant", name: "Google Assistant", category: "voice",     status: "Connected",   score: 38, priority: "medium",   action: "Optimize for voice queries" },
+  ]),
+  competitorsJson: JSON.stringify([
+    { name: "Havard Pest Control",            reviewGap: -24, keywordGap: "High",   backlinkGap: "High",   aiGap: -16, opportunityScore: 78 },
+    { name: "Beebe's Pest & Termite",         reviewGap: -8,  keywordGap: "Medium", backlinkGap: "Medium", aiGap: -9,  opportunityScore: 55 },
+    { name: "Knox Pest Control",              reviewGap: -3,  keywordGap: "Low",    backlinkGap: "Low",    aiGap: -7,  opportunityScore: 42 },
+    { name: "Arrow Exterminators",            reviewGap: -41, keywordGap: "High",   backlinkGap: "High",   aiGap: -22, opportunityScore: 91 },
+  ]),
+  recommendationsJson: JSON.stringify([
+    { priority: "critical", task: "Claim Apple Business Connect",          reason: "Siri & Apple Maps send zero customers without this",           impact: "High",   status: "pending" },
+    { priority: "critical", task: "Add LocalBusiness JSON-LD schema",      reason: "AI platforms can't identify business as a local entity",       impact: "High",   status: "pending" },
+    { priority: "critical", task: "Build 20+ citation listings",           reason: "Citation count is 18 below competitor average",               impact: "High",   status: "pending" },
+    { priority: "high",     task: "Claim Bing Places for Business",        reason: "Copilot AI pulls from Bing Places — currently missing",       impact: "High",   status: "pending" },
+    { priority: "high",     task: "Add FAQPage schema to service pages",   reason: "FAQ schema is top signal for AI search snippet selection",    impact: "Medium", status: "pending" },
+    { priority: "high",     task: "Launch post-job review request campaign",reason: "Review velocity is 68% below competitor average",            impact: "High",   status: "pending" },
+    { priority: "high",     task: "Create 6 city-specific service pages",  reason: "Location pages unlock long-tail AI visibility per city",      impact: "High",   status: "pending" },
+    { priority: "medium",   task: "Add llms.txt to website root",          reason: "Allows AI crawlers to index business info directly",          impact: "Medium", status: "pending" },
+    { priority: "medium",   task: "Create AI-optimized About page",        reason: "Entity recognition needs a clear, crawlable business bio",    impact: "Medium", status: "pending" },
+    { priority: "medium",   task: "Build local backlink profile",          reason: "Chamber links + news citations improve authority signals",    impact: "Medium", status: "pending" },
+    { priority: "low",      task: "Set up Nextdoor business page",         reason: "Nextdoor drives hyper-local neighborhood word-of-mouth",      impact: "Low",    status: "pending" },
+    { priority: "low",      task: "Add Waze business listing",             reason: "Captures nearby navigation-intent customers",                 impact: "Low",    status: "pending" },
+  ]),
 };
 
-const THREAT_STYLE: Record<string, { color: string; label: string }> = {
-  high:   { color: "#EF4444", label: "High"   },
-  medium: { color: "#F59E0B", label: "Medium" },
-  low:    { color: "#10B981", label: "Low"    },
+// ─── Authority engine items ───────────────────────────────────────────────────
+
+const AUTHORITY_ITEMS = [
+  { label: "Citation Health",          icon: "📋", score: 28, status: "weak",    note: "~12 active citations vs. competitor avg 30+" },
+  { label: "NAP Consistency",          icon: "🏢", score: 71, status: "good",    note: "Name, Address, Phone is consistent on major platforms" },
+  { label: "Backlink Opportunities",   icon: "🔗", score: 19, status: "weak",    note: "3 local backlinks found — target 20+ for AI authority" },
+  { label: "Directory Listings",       icon: "📁", score: 44, status: "medium",  note: "8 of 18 major directories claimed" },
+  { label: "Structured Data (Schema)", icon: "🏷", score: 0,  status: "missing", note: "No LocalBusiness, FAQ, or Service schema detected" },
+  { label: "llms.txt / AI Crawler",    icon: "🤖", score: 0,  status: "missing", note: "No llms.txt found — AI crawlers cannot index business data" },
+];
+
+const AI_READINESS = [
+  { platform: "ChatGPT",    icon: "🤖", score: 12, recs: ["Add FAQ schema", "Build citations", "Create AI-readable About page"] },
+  { platform: "Gemini",     icon: "💎", score: 21, recs: ["Strengthen GBP", "Add review schema", "Publish weekly GBP posts"] },
+  { platform: "Perplexity", icon: "🧠", score: 7,  recs: ["High-authority citations", "Add backlinks", "Create expert content"] },
+  { platform: "Claude",     icon: "✦",  score: 9,  recs: ["Structured data", "FAQ content", "Authoritative service pages"] },
+  { platform: "Copilot",    icon: "🪟", score: 14, recs: ["Claim Bing Places", "Add schema", "Increase Bing citations"] },
+  { platform: "Grok",       icon: "✗",  score: 5,  recs: ["Monitor integration", "Build general authority", "Social presence"] },
+];
+
+// ─── Style helpers ────────────────────────────────────────────────────────────
+
+const STATUS_STYLE: Record<string, { color: string; label: string }> = {
+  "Connected":   { color: "#10B981", label: "Connected"   },
+  "Needs Setup": { color: "#EF4444", label: "Needs Setup" },
+  "Opportunity": { color: "#F59E0B", label: "Opportunity" },
+  "Monitoring":  { color: "#8B5CF6", label: "Monitoring"  },
 };
 
-const DIAG_STYLE: Record<string, { color: string; icon: string; label: string }> = {
-  healthy:      { color: "#10B981", icon: "✓",  label: "Healthy"      },
-  pending:      { color: "#475569", icon: "–",  label: "Pending"      },
-  warning:      { color: "#F59E0B", icon: "⚠",  label: "Warning"      },
-  missing:      { color: "#EF4444", icon: "✕",  label: "Missing"      },
-  coming_soon:  { color: "#8B5CF6", icon: "⋯",  label: "Coming Soon"  },
+const PRIORITY_STYLE: Record<string, { color: string }> = {
+  critical: { color: "#EF4444" },
+  high:     { color: "#F59E0B" },
+  medium:   { color: "#00AEEF" },
+  low:      { color: "#64748B" },
 };
 
-const PROMPT_STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
-  gap:     { color: "#F87171", bg: "rgba(239,68,68,0.1)",   label: "Gap Found" },
-  partial: { color: "#FCD34D", bg: "rgba(245,158,11,0.1)",  label: "Partial"   },
-  found:   { color: "#10B981", bg: "rgba(16,185,129,0.1)",  label: "Detected"  },
+const AUTHORITY_STATUS: Record<string, { color: string; label: string }> = {
+  missing: { color: "#EF4444", label: "Missing" },
+  weak:    { color: "#F59E0B", label: "Weak"    },
+  medium:  { color: "#00AEEF", label: "Fair"    },
+  good:    { color: "#10B981", label: "Good"    },
 };
 
-const PRIORITY_COLOR: Record<string, string> = {
-  high:   "#EF4444",
-  medium: "#F59E0B",
-  low:    "#94A3B8",
+const CATEGORY_ICONS: Record<string, string> = {
+  search: "🔍", maps: "🗺️", directory: "📁", ai: "🤖", voice: "🔊",
+};
+const CATEGORY_LABELS: Record<string, string> = {
+  search: "Search Engines", maps: "Maps & Navigation", directory: "Directories & Social", ai: "AI Search Platforms", voice: "Voice Assistants",
 };
 
-function SectionDivider({ title, right }: { title: string; right?: React.ReactNode }) {
+// ─── Small components ─────────────────────────────────────────────────────────
+
+function SectionDivider({ title, sub, isDark }: { title: string; sub?: string; isDark: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "1.2px", textTransform: "uppercase", whiteSpace: "nowrap" }}>{title}</div>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
-      {right}
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: isDark ? "#475569" : "#4B5563", letterSpacing: "1px", textTransform: "uppercase" }}>{title}</div>
+        {sub && <div style={{ fontSize: 10, color: isDark ? "#334155" : "#9CA3AF", marginTop: 1 }}>{sub}</div>}
+      </div>
+      <div style={{ flex: 1, height: 1, background: isDark ? "rgba(255,255,255,0.05)" : "#E5E7EB" }} />
     </div>
   );
 }
 
-function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label: string; value: string | number; sub?: string; color: string; glow?: boolean }) {
+function ScoreRing({ score, size = 56, color }: { score: number; size?: number; color: string }) {
+  const r = (size - 6) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
   return (
-    <div style={{
-      background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.8))",
-      border: `1px solid ${color}22`,
-      borderRadius: 14, padding: "20px 22px",
-      boxShadow: glow ? `0 0 28px ${color}18` : "none",
-      position: "relative", overflow: "hidden",
-    }}>
-      <div style={{
-        position: "absolute", top: -18, right: -18, width: 72, height: 72, borderRadius: "50%",
-        background: `${color}0C`, border: `1px solid ${color}14`,
-        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
-      }}>{icon}</div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>{label}</div>
-      <div style={{ fontSize: 34, fontWeight: 900, color, lineHeight: 1, marginBottom: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#64748B" }}>{sub}</div>}
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)", flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={5}
+        strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
+        style={{ transition: "stroke-dasharray 0.8s ease" }} />
+    </svg>
+  );
+}
+
+function Bar({ value, color, isDark }: { value: number; color: string; isDark: boolean }) {
+  return (
+    <div style={{ height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 3, transition: "width 0.7s ease" }} />
     </div>
   );
 }
 
-function SignalBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden", width: "100%", marginTop: 8 }}>
-      <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 3, transition: "width 0.6s" }} />
-    </div>
-  );
-}
-
-function StatusBadge({ label, color }: { label: string; color: string }) {
+function StatusChip({ label, color }: { label: string; color: string }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 5,
-      background: `${color}18`, color, fontSize: 10, fontWeight: 700,
-      padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
+      background: `${color}18`, color, fontSize: 9, fontWeight: 800,
+      padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap",
       border: `1px solid ${color}30`,
     }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      <span style={{ width: 4, height: 4, borderRadius: "50%", background: color, flexShrink: 0 }} />
       {label}
     </span>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AIVisibilityEnginePage() {
-  const { colors: t } = useTheme();
-  const [activePromptFilter, setActivePromptFilter] = useState<"all" | "gap" | "partial" | "found">("all");
+  const { colors: t, isDark } = useTheme();
+  const apiFetch = useApiFetch();
 
-  const filteredPrompts = activePromptFilter === "all"
-    ? PROMPT_TESTS
-    : PROMPT_TESTS.filter(p => p.status === activePromptFilter);
+  const [audit, setAudit]         = useState<AuditData>(DEMO);
+  const [loading, setLoading]     = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter]     = useState<string>("all");
 
-  const gapCount    = PROMPT_TESTS.filter(p => p.status === "gap").length;
-  const partialCount = PROMPT_TESTS.filter(p => p.status === "partial").length;
-  const foundCount  = PROMPT_TESTS.filter(p => p.status === "found").length;
+  useEffect(() => {
+    apiFetch<AuditData>("/ai-visibility/default")
+      .then(data => setAudit(data))
+      .catch(() => setAudit(DEMO))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const channels: Channel[]         = JSON.parse(audit.channelsJson       || "[]");
+  const competitors: Competitor[]   = JSON.parse(audit.competitorsJson    || "[]");
+  const recommendations: Recommendation[] = JSON.parse(audit.recommendationsJson || "[]");
+
+  const filteredChannels = categoryFilter === "all"
+    ? channels
+    : channels.filter(c => c.category === categoryFilter);
+
+  const criticalRecs = recommendations.filter(r => r.priority === "critical");
+  const highRecs     = recommendations.filter(r => r.priority === "high");
+  const mediumRecs   = recommendations.filter(r => r.priority === "medium");
+  const lowRecs      = recommendations.filter(r => r.priority === "low");
+
+  const displayRecs = actionFilter === "all" ? recommendations
+    : actionFilter === "critical" ? criticalRecs
+    : actionFilter === "high"     ? highRecs
+    : actionFilter === "medium"   ? mediumRecs
+    : lowRecs;
+
+  // ── Theme-aware card styles ──
+  const card = {
+    background: isDark ? "rgba(11,22,41,0.8)" : "#FFFFFF",
+    border: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid #E5E7EB",
+    borderRadius: 14,
+  } as const;
+
+  const kpiCards = [
+    { icon: "⚡", label: "Overall Visibility",  value: audit.overallScore,       color: audit.overallScore  >= 70 ? "#10B981" : audit.overallScore  >= 40 ? "#F59E0B" : "#EF4444", suffix: "/100" },
+    { icon: "🔍", label: "Search Visibility",   value: audit.searchScore,        color: "#00AEEF",  suffix: "/100" },
+    { icon: "🗺️", label: "Maps Visibility",     value: audit.mapsScore,          color: "#10B981",  suffix: "/100" },
+    { icon: "🤖", label: "AI Search",           value: audit.aiSearchScore,      color: "#8B5CF6",  suffix: "/100" },
+    { icon: "🏛️", label: "Authority Score",     value: audit.authorityScore,     color: "#F59E0B",  suffix: "/100" },
+    { icon: "⭐", label: "Review Strength",     value: audit.reviewScore,        color: "#FBBF24",  suffix: "/100" },
+    { icon: "⚔️", label: "Competitor Gap",      value: audit.competitorGapScore, color: "#EF4444",  suffix: "/100" },
+  ];
+
+  const categories = [
+    { id: "all",       label: `All (${channels.length})` },
+    { id: "search",    label: `Search (${channels.filter(c => c.category === "search").length})` },
+    { id: "maps",      label: `Maps (${channels.filter(c => c.category === "maps").length})` },
+    { id: "directory", label: `Directories (${channels.filter(c => c.category === "directory").length})` },
+    { id: "ai",        label: `AI (${channels.filter(c => c.category === "ai").length})` },
+    { id: "voice",     label: `Voice (${channels.filter(c => c.category === "voice").length})` },
+  ];
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1140, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
 
         {/* ── Header ── */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 26 }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 8,
-            background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.22)",
-            borderRadius: 20, padding: "4px 14px", marginBottom: 14,
+            background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)",
+            borderRadius: 20, padding: "4px 14px", marginBottom: 12,
           }}>
-            <span style={{ fontSize: 12, color: "#A78BFA", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              ✨ AI Visibility Engine — V1
+            <span style={{ fontSize: 12, color: "#FBBF24", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
+              ✨ AI Visibility Engine
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 6px" }}>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 5px" }}>
                 AI Visibility Engine
               </h1>
-              <p style={{ fontSize: 14, color: t.text2, margin: 0, maxWidth: 580 }}>
-                Track whether <strong style={{ color: t.text }}>Bed Bugs &amp; Beyond</strong> appears in AI-powered search across ChatGPT, Google AI Overviews, Bing Copilot, Perplexity, and Siri. Identify gaps and fix them before competitors do.
+              <p style={{ fontSize: 13, color: t.text2, margin: 0, maxWidth: 620 }}>
+                Track & improve how visible <strong style={{ color: t.text }}>Bed Bugs &amp; Beyond</strong> is across search engines, maps, directories, AI search platforms, and voice assistants.
               </p>
             </div>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-              background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
-              borderRadius: 10, padding: "8px 14px",
-            }}>
-              <span style={{ fontSize: 11, color: "#F59E0B", fontWeight: 600 }}>⚡ Live integrations coming in V2</span>
-            </div>
+            {loading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 10, padding: "7px 13px" }}>
+                <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading latest audit…</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── KPI Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 32 }}>
-          <KPICard icon="📡" label="AI Visibility Score"   value="Pending" sub="No scan data yet" color="#EF4444" glow={false} />
-          <KPICard icon="🎯" label="Prompt Coverage"       value="2/8"    sub="Appearing in 2 of 8 test prompts" color="#F59E0B" />
-          <KPICard icon="⚔️" label="Competitor Gap"        value="High"   sub="Competitors avg 13 AI mentions"   color="#8B5CF6" />
-          <KPICard icon="🔧" label="Optimization Status"   value="Needs Work" sub="7 critical actions pending"   color="#00AEEF" />
+        {/* ── 1. KPI Score Cards ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, marginBottom: 30 }}>
+          {kpiCards.map(k => (
+            <div key={k.label} style={{
+              ...card,
+              padding: "16px 14px",
+              boxShadow: `0 0 20px ${k.color}10`,
+              borderTop: `2px solid ${k.color}50`,
+            }}>
+              <div style={{ fontSize: 18, marginBottom: 8 }}>{k.icon}</div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: isDark ? "#475569" : "#6B7280", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{k.label}</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
+                <span style={{ fontSize: 28, fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.value}</span>
+                <span style={{ fontSize: 11, color: isDark ? "#475569" : "#9CA3AF" }}>{k.suffix}</span>
+              </div>
+              <Bar value={k.value} color={k.color} isDark={isDark} />
+            </div>
+          ))}
         </div>
 
-        {/* ── AI Search Channel Cards ── */}
-        <div style={{ marginBottom: 32 }}>
-          <SectionDivider title="AI Search Channels" right={
-            <span style={{ fontSize: 10, color: "#334155", whiteSpace: "nowrap" }}>Signal strength based on estimated data signals</span>
-          } />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-            {CHANNELS.map(ch => (
-              <div key={ch.id} style={{
-                background: "linear-gradient(160deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-                border: "1px solid rgba(255,255,255,0.07)",
-                borderTop: `2px solid ${ch.statusColor}33`,
-                borderRadius: 14, padding: "18px 16px",
-                display: "flex", flexDirection: "column", gap: 10,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>{ch.icon}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{ch.name}</span>
-                </div>
-                <StatusBadge label={ch.status} color={ch.statusColor} />
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, color: "#475569", fontWeight: 600 }}>Signal</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: ch.statusColor }}>{ch.signal}%</span>
-                  </div>
-                  <SignalBar value={ch.signal} color={ch.statusColor} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 3 }}>Missing</div>
-                  <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{ch.missingFactor}</div>
-                </div>
-                <div style={{ fontSize: 9, color: "#334155" }}>Last checked: {ch.lastChecked}</div>
-                <button style={{
-                  marginTop: "auto", padding: "7px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                  cursor: "pointer", border: `1px solid ${ch.statusColor}30`,
-                  background: `${ch.statusColor}0C`, color: ch.statusColor,
-                }}>
-                  {ch.action} →
-                </button>
-              </div>
+        {/* ── 2. Get Found Everywhere ── */}
+        <div style={{ marginBottom: 30 }}>
+          <SectionDivider title="Get Found Everywhere — 18 Channels" sub="Status, score, and recommended action for each platform" isDark={isDark} />
+
+          {/* Category filter tabs */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                style={{
+                  padding: "5px 12px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                  cursor: "pointer", border: "none",
+                  background: categoryFilter === cat.id
+                    ? "rgba(251,191,36,0.15)"
+                    : (isDark ? "rgba(255,255,255,0.05)" : "#F3F4F6"),
+                  color: categoryFilter === cat.id
+                    ? "#FBBF24"
+                    : (isDark ? "#64748B" : "#6B7280"),
+                  transition: "all 0.15s",
+                }}
+              >{cat.label}</button>
             ))}
           </div>
-        </div>
 
-        {/* ── Prompt Testing Dashboard ── */}
-        <div style={{ marginBottom: 32 }}>
-          <SectionDivider title={`Prompt Testing — ${PROMPT_TESTS.length} queries simulated`} right={
-            <div style={{ display: "flex", gap: 4 }}>
-              {[
-                { id: "all",     label: `All (${PROMPT_TESTS.length})`, color: "#64748B" },
-                { id: "gap",     label: `Gap (${gapCount})`,            color: "#EF4444" },
-                { id: "partial", label: `Partial (${partialCount})`,    color: "#F59E0B" },
-                { id: "found",   label: `Found (${foundCount})`,        color: "#10B981" },
-              ].map(f => (
-                <button
-                  key={f.id}
-                  onClick={() => setActivePromptFilter(f.id as any)}
-                  style={{
-                    padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: "none",
-                    background: activePromptFilter === f.id ? `${f.color}18` : "transparent",
-                    color: activePromptFilter === f.id ? f.color : "#475569",
-                    transition: "all 0.15s",
-                  }}
-                >{f.label}</button>
-              ))}
+          {/* Group by category when showing all */}
+          {categoryFilter === "all" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {["search", "maps", "directory", "ai", "voice"].map(cat => {
+                const catChannels = channels.filter(c => c.category === cat);
+                if (!catChannels.length) return null;
+                return (
+                  <div key={cat}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 14 }}>{CATEGORY_ICONS[cat]}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: isDark ? "#475569" : "#6B7280", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                        {CATEGORY_LABELS[cat]}
+                      </span>
+                    </div>
+                    <ChannelGrid channels={catChannels} card={card} isDark={isDark} />
+                  </div>
+                );
+              })}
             </div>
-          } />
-          <div style={{
-            background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 14, overflow: "hidden",
-          }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  {["Prompt", "B&B Result", "Competitors", "Status", "Recommended Fix"].map(h => (
-                    <th key={h} style={{ padding: "12px 16px", fontSize: 10, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPrompts.map((row, i) => {
-                  const st = PROMPT_STATUS_STYLE[row.status];
-                  return (
-                    <tr key={i} style={{ borderBottom: i < filteredPrompts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                      <td style={{ padding: "13px 16px", fontSize: 12, color: "#CBD5E1", maxWidth: 240 }}>
-                        <span style={{ fontStyle: "italic", color: "#94A3B8" }}>"{row.prompt}"</span>
-                      </td>
-                      <td style={{ padding: "13px 16px", fontSize: 12, color: row.status === "found" ? "#10B981" : row.status === "partial" ? "#FCD34D" : "#F87171", fontWeight: 600, whiteSpace: "nowrap" }}>
-                        {row.result}
-                      </td>
-                      <td style={{ padding: "13px 16px" }}>
-                        <span style={{
-                          display: "inline-block", minWidth: 28, textAlign: "center",
-                          background: row.competitors > 2 ? "rgba(239,68,68,0.1)" : "rgba(245,158,11,0.1)",
-                          color: row.competitors > 2 ? "#F87171" : "#FCD34D",
-                          fontSize: 12, fontWeight: 800, borderRadius: 6, padding: "2px 8px",
-                        }}>{row.competitors}</span>
-                      </td>
-                      <td style={{ padding: "13px 16px" }}>
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: 5,
-                          background: st.bg, color: st.color, fontSize: 10, fontWeight: 700,
-                          padding: "3px 9px", borderRadius: 20,
-                        }}>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
-                          {st.label}
-                        </span>
-                      </td>
-                      <td style={{ padding: "13px 16px", fontSize: 11, color: "#64748B", maxWidth: 220 }}>{row.fix}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          ) : (
+            <ChannelGrid channels={filteredChannels} card={card} isDark={isDark} />
+          )}
         </div>
 
-        {/* ── Competitor Mentions ── */}
-        <div style={{ marginBottom: 32 }}>
-          <SectionDivider title="Competitor AI Visibility" />
-          <div style={{
-            background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 14, overflow: "hidden",
-          }}>
+        {/* ── 3. Competitor Intelligence ── */}
+        <div style={{ marginBottom: 30 }}>
+          <SectionDivider title="Competitor Intelligence" sub="Review, keyword, backlink, and AI visibility gaps" isDark={isDark} />
+          <div style={{ ...card, overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  {["Competitor", "AI Mentions", "Review Strength", "Local Authority", "Content Depth", "Threat Level"].map(h => (
-                    <th key={h} style={{ padding: "12px 16px", fontSize: 10, fontWeight: 700, color: "#475569", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
+                <tr style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
+                  {["Competitor", "Review Gap", "Keyword Gap", "Backlink Gap", "AI Gap", "Opportunity Score"].map(h => (
+                    <th key={h} style={{ padding: "11px 16px", fontSize: 9, fontWeight: 800, color: isDark ? "#475569" : "#6B7280", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {COMPETITORS.map((c, i) => {
-                  const thr = THREAT_STYLE[c.threat];
-                  return (
-                    <tr key={i} style={{ borderBottom: i < COMPETITORS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                      <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{c.name}</td>
-                      <td style={{ padding: "13px 16px" }}>
-                        <span style={{ fontSize: 14, fontWeight: 900, color: c.mentions > 15 ? "#EF4444" : c.mentions > 8 ? "#F59E0B" : "#64748B" }}>{c.mentions}</span>
-                      </td>
-                      <td style={{ padding: "13px 16px" }}><LevelDot level={c.reviews} /></td>
-                      <td style={{ padding: "13px 16px" }}><LevelDot level={c.authority} /></td>
-                      <td style={{ padding: "13px 16px" }}><LevelDot level={c.content} /></td>
-                      <td style={{ padding: "13px 16px" }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 800, color: thr.color,
-                          background: `${thr.color}15`, border: `1px solid ${thr.color}30`,
-                          padding: "3px 10px", borderRadius: 20,
-                        }}>{thr.label}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {competitors.map((c, i) => (
+                  <tr key={i} style={{ borderBottom: i < competitors.length - 1 ? (isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6") : "none" }}>
+                    <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: t.text }}>{c.name}</td>
+                    <td style={{ padding: "13px 16px" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: c.reviewGap < -15 ? "#EF4444" : c.reviewGap < -5 ? "#F59E0B" : "#10B981" }}>
+                        {c.reviewGap}
+                      </span>
+                    </td>
+                    <td style={{ padding: "13px 16px" }}><GapBadge level={c.keywordGap} /></td>
+                    <td style={{ padding: "13px 16px" }}><GapBadge level={c.backlinkGap} /></td>
+                    <td style={{ padding: "13px 16px" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: Math.abs(c.aiGap) > 15 ? "#EF4444" : "#F59E0B" }}>
+                        {c.aiGap}
+                      </span>
+                    </td>
+                    <td style={{ padding: "13px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, maxWidth: 80, height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${c.opportunityScore}%`, background: c.opportunityScore > 70 ? "#EF4444" : "#F59E0B", borderRadius: 3 }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: c.opportunityScore > 70 ? "#EF4444" : "#F59E0B" }}>{c.opportunityScore}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-            <div style={{
-              borderTop: "1px solid rgba(255,255,255,0.06)",
-              padding: "12px 16px", display: "flex", alignItems: "center", gap: 10,
-              background: "rgba(239,68,68,0.03)",
-            }}>
-              <span style={{ fontSize: 12 }}>📊</span>
-              <span style={{ fontSize: 12, color: "#94A3B8" }}>
-                <strong style={{ color: "#F87171" }}>Bed Bugs &amp; Beyond</strong> has an estimated <strong style={{ color: "#F87171" }}>2 AI mentions</strong> vs. competitor average of <strong style={{ color: "#FCD34D" }}>13.6</strong>. Closing this gap is the #1 growth lever.
+            <div style={{ padding: "11px 16px", borderTop: isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6", background: isDark ? "rgba(239,68,68,0.03)" : "#FEF2F2" }}>
+              <span style={{ fontSize: 11, color: isDark ? "#94A3B8" : "#6B7280" }}>
+                📊 <strong style={{ color: "#F87171" }}>Bed Bugs &amp; Beyond</strong> has an estimated <strong style={{ color: "#F87171" }}>2 AI mentions</strong> vs. competitor average of <strong style={{ color: "#FBBF24" }}>14</strong>. Closing this gap is the #1 growth lever.
               </span>
             </div>
           </div>
         </div>
 
-        {/* ── Recommendation Gaps ── */}
-        <div style={{ marginBottom: 32 }}>
-          <SectionDivider title={`Recommendation Gaps — ${GAPS.length} identified`} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-            {GAPS.map((gap, i) => {
-              const sv = SEVERITY_STYLE[gap.severity];
+        {/* ── 4. Authority Engine ── */}
+        <div style={{ marginBottom: 30 }}>
+          <SectionDivider title="Authority Engine" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {AUTHORITY_ITEMS.map(item => {
+              const st = AUTHORITY_STATUS[item.status];
               return (
-                <div key={i} style={{
-                  background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-                  borderLeft: `3px solid ${sv.color}`,
-                  borderRadius: 12, padding: "14px 16px",
-                  display: "flex", flexDirection: "column", gap: 8,
+                <div key={item.label} style={{
+                  ...card,
+                  padding: "16px 18px",
+                  borderLeft: `3px solid ${st.color}60`,
                 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{gap.title}</span>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontSize: 9, fontWeight: 800, color: sv.color, background: sv.bg, padding: "2px 8px", borderRadius: 6 }}>{sv.label}</span>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: "#64748B", background: "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 6 }}>Impact: {gap.impact}</span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.5 }}>→ {gap.action}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── Content + Schema Recommendations ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 32 }}>
-          {/* Content pages */}
-          <div>
-            <SectionDivider title="Recommended Content Pages" />
-            <div style={{
-              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-              borderRadius: 14, overflow: "hidden",
-            }}>
-              {CONTENT_PAGES.map((page, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "12px 16px",
-                  borderBottom: i < CONTENT_PAGES.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                }}>
-                  <span style={{
-                    width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                    background: PRIORITY_COLOR[page.priority],
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>{page.title}</div>
-                    <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{page.type}</div>
-                  </div>
-                  <span style={{
-                    fontSize: 9, fontWeight: 800,
-                    color: PRIORITY_COLOR[page.priority],
-                    background: `${PRIORITY_COLOR[page.priority]}14`,
-                    padding: "2px 8px", borderRadius: 6,
-                  }}>{page.priority.charAt(0).toUpperCase() + page.priority.slice(1)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Schema */}
-          <div>
-            <SectionDivider title="Schema Markup Needed" />
-            <div style={{
-              background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-              borderRadius: 14, overflow: "hidden",
-            }}>
-              {SCHEMA_RECS.map((s, i) => {
-                const isMissing = s.status === "Missing";
-                const isPartial = s.status === "Partial";
-                const col = isMissing ? "#EF4444" : isPartial ? "#F59E0B" : "#10B981";
-                return (
-                  <div key={i} style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "13px 16px",
-                    borderBottom: i < SCHEMA_RECS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                  }}>
-                    <span style={{ fontSize: 15 }}>{isMissing ? "✕" : isPartial ? "◑" : "✓"}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                      background: `${st.color}12`, border: `1px solid ${st.color}25`,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                    }}>{item.icon}</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{s.type} Schema</div>
-                      <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>Impact: {s.impact}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 1 }}>{item.label}</div>
+                      <StatusChip label={st.label} color={st.color} />
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: col, background: `${col}14`, padding: "2px 8px", borderRadius: 6, border: `1px solid ${col}22` }}>{s.status}</span>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: st.color, lineHeight: 1 }}>{item.score}</div>
+                      <div style={{ fontSize: 9, color: isDark ? "#475569" : "#9CA3AF" }}>/100</div>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-            <div style={{
-              marginTop: 12, background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.18)",
-              borderRadius: 12, padding: "12px 14px",
-              fontSize: 12, color: "#94A3B8", lineHeight: 1.6,
-            }}>
-              💡 <strong style={{ color: "#A78BFA" }}>Schema tip:</strong> AI assistants parse structured data to identify businesses as authoritative local entities. Missing LocalBusiness schema is the highest-impact fix right now.
-            </div>
+                  <Bar value={item.score} color={st.color} isDark={isDark} />
+                  <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", marginTop: 8, lineHeight: 1.4 }}>{item.note}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* ── What To Fix Next ── */}
-        <div style={{ marginBottom: 32 }}>
-          <SectionDivider title="Priority Action Plan" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {PRIORITIES.map((p, i) => {
-              const impactColor = p.impact === "High" ? "#10B981" : "#F59E0B";
+        {/* ── 5. AI Search Readiness ── */}
+        <div style={{ marginBottom: 30 }}>
+          <SectionDivider title="AI Search Readiness" sub="How ready each AI platform is to recommend this business" isDark={isDark} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            {AI_READINESS.map(p => {
+              const col = p.score >= 50 ? "#10B981" : p.score >= 25 ? "#F59E0B" : "#EF4444";
               return (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-                  borderRadius: 12, padding: "14px 18px",
-                }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-                    background: p.rank <= 3 ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.05)",
-                    border: p.rank <= 3 ? "1px solid rgba(0,174,239,0.35)" : "1px solid rgba(255,255,255,0.08)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 13, fontWeight: 900, color: p.rank <= 3 ? "#00AEEF" : "#475569",
-                  }}>{p.rank}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{p.action}</div>
+                <div key={p.platform} style={{ ...card, padding: "18px 18px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+                      background: `${col}10`, border: `1px solid ${col}25`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 20, fontWeight: 900,
+                    }}>{p.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 3 }}>{p.platform}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${p.score}%`, background: col, borderRadius: 3 }} />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: col }}>{p.score}%</span>
+                      </div>
+                    </div>
+                    <ScoreRing score={p.score} size={44} color={col} />
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, color: "#64748B", background: "rgba(255,255,255,0.04)", padding: "3px 10px", borderRadius: 6 }}>
-                      ⏱ {p.effort}
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: impactColor, background: `${impactColor}12`, padding: "3px 10px", borderRadius: 6, border: `1px solid ${impactColor}20` }}>
-                      {p.impact} Impact
-                    </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {p.recs.map((rec, j) => (
+                      <div key={j} style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
+                        <span style={{ color: col, fontSize: 10, marginTop: 1, flexShrink: 0 }}>→</span>
+                        <span style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.4 }}>{rec}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
@@ -632,32 +459,65 @@ export default function AIVisibilityEnginePage() {
           </div>
         </div>
 
-        {/* ── Diagnostics ── */}
-        <div style={{ marginBottom: 16 }}>
-          <SectionDivider title="Diagnostics" />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-            {DIAGNOSTICS.map((d, i) => {
-              const ds = DIAG_STYLE[d.status];
+        {/* ── 6. Action Plan ── */}
+        <div style={{ marginBottom: 30 }}>
+          <SectionDivider title={`Action Plan — ${recommendations.length} items`} sub="Prioritized tasks to improve AI visibility" isDark={isDark} />
+
+          {/* Filter tabs */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[
+              { id: "all",      label: `All (${recommendations.length})`,    color: "#94A3B8" },
+              { id: "critical", label: `Critical (${criticalRecs.length})`,  color: "#EF4444" },
+              { id: "high",     label: `High (${highRecs.length})`,          color: "#F59E0B" },
+              { id: "medium",   label: `Medium (${mediumRecs.length})`,      color: "#00AEEF" },
+              { id: "low",      label: `Low (${lowRecs.length})`,            color: "#64748B" },
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setActionFilter(f.id)}
+                style={{
+                  padding: "5px 12px", borderRadius: 20, fontSize: 10, fontWeight: 700,
+                  cursor: "pointer", border: "none",
+                  background: actionFilter === f.id ? `${f.color}18` : (isDark ? "rgba(255,255,255,0.05)" : "#F3F4F6"),
+                  color: actionFilter === f.id ? f.color : (isDark ? "#64748B" : "#6B7280"),
+                  transition: "all 0.15s",
+                }}
+              >{f.label}</button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {displayRecs.map((rec, i) => {
+              const ps = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.low;
+              const impactColor = rec.impact === "High" ? "#10B981" : rec.impact === "Medium" ? "#00AEEF" : "#64748B";
               return (
                 <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
-                  borderLeft: `3px solid ${ds.color}40`,
-                  borderRadius: 12, padding: "13px 16px",
+                  ...card,
+                  padding: "14px 18px",
+                  display: "flex", alignItems: "flex-start", gap: 14,
+                  borderLeft: `3px solid ${ps.color}60`,
                 }}>
                   <div style={{
-                    width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
-                    background: `${ds.color}12`, border: `1px solid ${ds.color}25`,
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    background: `${ps.color}12`, border: `1px solid ${ps.color}25`,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 13, color: ds.color, fontWeight: 900,
-                  }}>{ds.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{d.label}</div>
-                    <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>{d.note}</div>
+                    fontSize: 10, fontWeight: 900, color: ps.color,
+                    textTransform: "uppercase",
+                  }}>
+                    {rec.priority === "critical" ? "!" : rec.priority.charAt(0).toUpperCase()}
                   </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: ds.color, background: `${ds.color}14`, border: `1px solid ${ds.color}25`, padding: "3px 9px", borderRadius: 6, flexShrink: 0 }}>
-                    {ds.label}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 3 }}>{rec.task}</div>
+                    <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.4 }}>{rec.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: ps.color, background: `${ps.color}12`, border: `1px solid ${ps.color}25`, padding: "3px 8px", borderRadius: 20 }}>
+                      {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
+                    </span>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: impactColor, background: `${impactColor}12`, border: `1px solid ${impactColor}25`, padding: "3px 8px", borderRadius: 20 }}>
+                      {rec.impact} Impact
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -669,16 +529,57 @@ export default function AIVisibilityEnginePage() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper sub-component
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Channel grid sub-component ───────────────────────────────────────────────
 
-function LevelDot({ level }: { level: string }) {
-  const col = level === "High" || level === "Strong" ? "#10B981" : level === "Medium" ? "#F59E0B" : "#64748B";
+function ChannelGrid({ channels, card, isDark }: { channels: Channel[]; card: React.CSSProperties; isDark: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: col, flexShrink: 0 }} />
-      <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{level}</span>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10 }}>
+      {channels.map(ch => {
+        const st = STATUS_STYLE[ch.status] || { color: "#64748B", label: ch.status };
+        const ps = PRIORITY_STYLE[ch.priority] || PRIORITY_STYLE.low;
+        return (
+          <div key={ch.id} style={{
+            ...card,
+            padding: "14px 13px",
+            display: "flex", flexDirection: "column", gap: 8,
+            borderTop: `2px solid ${st.color}40`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{CATEGORY_ICONS[ch.category] || "🌐"}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: isDark ? "#E2E8F0" : "#111827", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ch.name}</span>
+            </div>
+            <StatusChip label={st.label} color={st.color} />
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 9, color: isDark ? "#475569" : "#9CA3AF", fontWeight: 700 }}>Score</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: st.color }}>{ch.score}%</span>
+              </div>
+              <div style={{ height: 4, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${ch.score}%`, background: st.color, borderRadius: 2 }} />
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: ps.color, textTransform: "uppercase", letterSpacing: "0.4px" }}>
+                {ch.priority}
+              </span>
+            </div>
+            <div style={{ fontSize: 9, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.35, borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : "1px solid #F3F4F6", paddingTop: 6, marginTop: "auto" }}>
+              → {ch.action}
+            </div>
+          </div>
+        );
+      })}
     </div>
+  );
+}
+
+// ─── Gap badge ────────────────────────────────────────────────────────────────
+
+function GapBadge({ level }: { level: string }) {
+  const col = level === "High" ? "#EF4444" : level === "Medium" ? "#F59E0B" : "#10B981";
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color: col, background: `${col}12`, border: `1px solid ${col}25`, padding: "2px 9px", borderRadius: 6 }}>
+      {level}
+    </span>
   );
 }

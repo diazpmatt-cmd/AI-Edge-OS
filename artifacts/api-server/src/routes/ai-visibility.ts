@@ -264,7 +264,7 @@ router.post("/ai-visibility/email-report", async (req, res) => {
 
     const filename = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}.pdf`;
     await transporter.sendMail({
-      from: `"AI Edge Solutions" <${smtpUser}>`,
+      from: `"AI Edge Solutions" <${process.env.SMTP_FROM ?? smtpUser}>`,
       to: recipientEmail,
       subject: `AI Visibility Audit Report — ${audit.businessName}`,
       html: `

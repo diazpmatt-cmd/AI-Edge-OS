@@ -38,6 +38,8 @@ interface DeployResult {
   deployedAt: string;
   workspace: string;
   modulesActivated: string[];
+  visibilityAuditId: string;
+  clientId: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -414,59 +416,105 @@ function Step6Deploy({
   const valueColor = isDark ? "#E2E8F0" : "#111827";
 
   if (deployed && deployResult) {
+    const allModules = [
+      { id: "ai_receptionist",   label: "AI Receptionist",      icon: "📞" },
+      { id: "lead_recovery",     label: "Lead Recovery AI",     icon: "🎯" },
+      { id: "call_intelligence", label: "Call Intelligence",    icon: "📊" },
+      { id: "review_automation", label: "Review Automation",    icon: "⭐" },
+      { id: "ai_visibility",     label: "AI Visibility Engine", icon: "✨" },
+      { id: "publishing_center", label: "Publishing Center",    icon: "📸" },
+    ];
+    const activeSet = new Set(deployResult.modulesActivated);
+
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 0" }}>
-        <div style={{
-          width: 72, height: 72, borderRadius: "50%",
-          background: "rgba(16,185,129,0.15)", border: "2px solid #10B981",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32,
-        }}>
-          ✅
-        </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: isDark ? "#FFFFFF" : "#111827", marginBottom: 6 }}>
-            {deployResult.client.businessName} is Live!
-          </div>
-          <div style={{ fontSize: 13, color: isDark ? "#94A3B8" : "#374151" }}>
-            Client workspace deployed successfully
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+        {/* Success banner */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0 8px" }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: "50%",
+            background: "rgba(16,185,129,0.15)", border: "2px solid #10B981",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
+          }}>✅</div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: isDark ? "#FFFFFF" : "#111827", marginBottom: 4 }}>
+              {deployResult.client.businessName} is Live!
+            </div>
+            <div style={{ fontSize: 12, color: isDark ? "#94A3B8" : "#374151" }}>
+              Client workspace deployed and all modules provisioned
+            </div>
           </div>
         </div>
 
-        <div style={{ width: "100%", background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, padding: 16 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* Deployment metadata */}
+        <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
-              ["Client ID",       deployResult.client.id.slice(0, 12) + "…"],
-              ["Workspace",       deployResult.workspace],
-              ["Deployed At",     new Date(deployResult.deployedAt).toLocaleTimeString()],
-              ["Modules Active",  `${deployResult.modulesActivated.length} modules`],
+              ["Client ID",    deployResult.clientId.slice(0, 14) + "…"],
+              ["Workspace",    deployResult.workspace],
+              ["Deployed At",  new Date(deployResult.deployedAt).toLocaleTimeString()],
+              ["Status",       "Active"],
             ].map(([k, v]) => (
               <div key={k}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{k}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: valueColor }}>{v}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{k}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: v === "Active" ? "#10B981" : valueColor }}>{v}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ width: "100%", background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 10, padding: "12px 14px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            ✓ Modules Activated
+        {/* Module deployment summary */}
+        <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "9px 14px", borderBottom: `1px solid ${cardBorder}`, fontSize: 10, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Module Deployment Summary
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {deployResult.modulesActivated.map(id => {
-              const m = MODULES.find(x => x.id === id);
-              return m ? (
-                <span key={id} style={{
-                  fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20,
-                  background: "rgba(16,185,129,0.12)", color: "#10B981",
-                  border: "1px solid rgba(16,185,129,0.25)",
+          {allModules.map(m => {
+            const active = activeSet.has(m.id);
+            return (
+              <div key={m.id} style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+                borderBottom: `1px solid ${cardBorder}`,
+                background: active ? (isDark ? "rgba(16,185,129,0.04)" : "#F0FDF4") : "transparent",
+              }}>
+                <span style={{ fontSize: 16 }}>{m.icon}</span>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: active ? (isDark ? "#E2E8F0" : "#111827") : (isDark ? "#334155" : "#9CA3AF") }}>{m.label}</span>
+                <span style={{
+                  fontSize: 9, fontWeight: 800, padding: "2px 9px", borderRadius: 20,
+                  background: active ? "rgba(16,185,129,0.12)" : (isDark ? "rgba(255,255,255,0.04)" : "#F3F4F6"),
+                  color: active ? "#10B981" : (isDark ? "#334155" : "#9CA3AF"),
+                  border: active ? "1px solid rgba(16,185,129,0.25)" : `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB"}`,
                 }}>
-                  {m.icon} {m.label}
+                  {active ? "✓ Active" : "Not Selected"}
                 </span>
-              ) : null;
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
+
+        {/* AI Visibility audit created notice */}
+        <div style={{
+          background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)",
+          borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>✨</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#FBBF24", marginBottom: 2 }}>AI Visibility Audit Created</div>
+            <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280" }}>Initial visibility audit generated — 30/100 overall score with 12 action items.</div>
+          </div>
+          <a
+            href={`/admin/ai-visibility?clientId=${deployResult.clientId}`}
+            style={{
+              display: "inline-block", padding: "7px 14px", borderRadius: 8,
+              fontSize: 11, fontWeight: 700, textDecoration: "none",
+              background: "rgba(251,191,36,0.15)", color: "#FBBF24",
+              border: "1px solid rgba(251,191,36,0.3)", whiteSpace: "nowrap",
+              cursor: "pointer",
+            }}
+          >
+            Open Audit →
+          </a>
+        </div>
+
       </div>
     );
   }

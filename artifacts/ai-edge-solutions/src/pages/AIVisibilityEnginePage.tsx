@@ -178,17 +178,22 @@ export default function AIVisibilityEnginePage() {
   const { colors: t, isDark } = useTheme();
   const apiFetch = useApiFetch();
 
+  // Read clientId from URL query string (?clientId=xxx)
+  const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "default";
+  const isClientView = clientId !== "default";
+
   const [audit, setAudit]         = useState<AuditData>(DEMO);
   const [loading, setLoading]     = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [actionFilter, setActionFilter]     = useState<string>("all");
 
   useEffect(() => {
-    apiFetch<AuditData>("/ai-visibility/default")
+    setLoading(true);
+    apiFetch<AuditData>(`/ai-visibility/${clientId}`)
       .then(data => setAudit(data))
       .catch(() => setAudit(DEMO))
       .finally(() => setLoading(false));
-  }, []);
+  }, [clientId]);
 
   const channels: Channel[]         = JSON.parse(audit.channelsJson       || "[]");
   const competitors: Competitor[]   = JSON.parse(audit.competitorsJson    || "[]");
@@ -256,14 +261,29 @@ export default function AIVisibilityEnginePage() {
                 AI Visibility Engine
               </h1>
               <p style={{ fontSize: 13, color: t.text2, margin: 0, maxWidth: 620 }}>
-                Track & improve how visible <strong style={{ color: t.text }}>Bed Bugs &amp; Beyond</strong> is across search engines, maps, directories, AI search platforms, and voice assistants.
+                {isClientView && audit.businessName
+                  ? <>Visibility audit for <strong style={{ color: t.text }}>{audit.businessName}</strong> — track & improve presence across all channels.</>
+                  : <>Track & improve visibility across search engines, maps, directories, AI search platforms, and voice assistants.</>
+                }
               </p>
             </div>
-            {loading && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 10, padding: "7px 13px" }}>
-                <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading latest audit…</span>
-              </div>
-            )}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {isClientView && audit.businessName && !loading && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
+                  borderRadius: 10, padding: "7px 13px",
+                }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981" }} />
+                  <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{audit.businessName}</span>
+                </div>
+              )}
+              {loading && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 10, padding: "7px 13px" }}>
+                  <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading audit…</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

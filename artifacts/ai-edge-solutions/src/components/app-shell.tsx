@@ -7,27 +7,27 @@ import { type ReactNode } from "react";
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const NAV_ITEMS = [
-  { to: "/admin/dashboard",           icon: "⬡",  label: "Command Center" },
-  { to: "/admin/bizai",               icon: "🧠", label: "BizAI" },
-  { to: "/admin/onboarding",          icon: "🚀", label: "Client Onboarding" },
-  { to: "/admin/connections",         icon: "⚡",  label: "Connected Accounts" },
-  { to: "/admin/distribution",        icon: "◈",  label: "Distribution" },
-  { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },
-  { to: "/admin/lead-recovery",       icon: "📞", label: "Lead Recovery AI" },
-  { to: "/admin/call-intelligence",  icon: "📊", label: "Call Intelligence" },
-  { to: "/admin/ai-receptionist",    icon: "🎙", label: "AI Receptionist" },
-  { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
-  { to: "/admin/auto-content",        icon: "🤖", label: "Auto Content Engine" },
-  { to: "/admin/image-assets",        icon: "🖼",  label: "Image Asset Manager" },
-  { to: "/admin/ai-visibility",        icon: "✨", label: "AI Visibility Engine" },
-  { to: "/admin/local-presence",       icon: "📍", label: "Local Presence Engine" },
-  { to: "/admin/voice-search",         icon: "🔊", label: "Voice Search Engine" },
-  { to: "/admin/reviews",             icon: "⭐", label: "Reviews Engine" },
-  { to: "/admin/assessments",         icon: "📊", label: "Business Assessments" },
-  { to: "/admin/diagnostics",         icon: "🛰",  label: "System Diagnostics" },
+  { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
+  { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },
+  { to: "/admin/onboarding",         icon: "👤", label: "Client\nOnboarding",        bg: "#0D1A2E", accent: "#38BDF8" },
+  { to: "/admin/connections",        icon: "🔗", label: "Connected\nAccounts",       bg: "#261200", accent: "#F59E0B" },
+  { to: "/admin/distribution",       icon: "📦", label: "Distribution",              bg: "#0A2020", accent: "#06B6D4" },
+  { to: "/admin/repurpose",          icon: "🎯", label: "Repurpose",                 bg: "#26071A", accent: "#F472B6" },
+  { to: "/admin/lead-recovery",      icon: "📞", label: "Lead\nRecovery AI",         bg: "#0A2010", accent: "#4ADE80" },
+  { to: "/admin/call-intelligence",  icon: "📊", label: "Call\nIntelligence",        bg: "#0D1828", accent: "#60A5FA" },
+  { to: "/admin/ai-receptionist",    icon: "🤖", label: "AI\nReceptionist",          bg: "#180D2E", accent: "#A78BFA" },
+  { to: "/admin/social-publishing",  icon: "✈",  label: "Publishing\nCenter",        bg: "#281400", accent: "#FB923C" },
+  { to: "/admin/auto-content",       icon: "⚡", label: "Auto Content\nEngine",      bg: "#0A0E26", accent: "#818CF8" },
+  { to: "/admin/image-assets",       icon: "🖼",  label: "Image Asset\nManager",     bg: "#0A1226", accent: "#67E8F9" },
+  { to: "/admin/ai-visibility",      icon: "✨", label: "AI Visibility\nEngine",     bg: "#221800", accent: "#FBBF24" },
+  { to: "/admin/local-presence",     icon: "📍", label: "Local Presence\nEngine",    bg: "#0A1E1E", accent: "#2DD4BF" },
+  { to: "/admin/voice-search",       icon: "🔊", label: "Voice Search\nEngine",      bg: "#1A1026", accent: "#818CF8" },
+  { to: "/admin/reviews",            icon: "⭐", label: "Reviews\nEngine",           bg: "#261A00", accent: "#FCD34D" },
+  { to: "/admin/assessments",        icon: "📋", label: "Business\nAssessments",     bg: "#1A1A0A", accent: "#86EFAC" },
+  { to: "/admin/diagnostics",        icon: "🛰",  label: "System\nDiagnostics",      bg: "#0A1A1A", accent: "#94A3B8" },
 ];
 
-const SIDEBAR_W = 240;
+const SIDEBAR_W = 252;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -48,60 +48,80 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside style={{
         position: "fixed", inset: "0 auto 0 0", width: SIDEBAR_W,
         background: "linear-gradient(180deg, #0B1629 0%, #060E1E 100%)",
-        borderRight: "1px solid rgba(0,174,239,0.1)",
+        borderRight: "1px solid rgba(0,174,239,0.12)",
         display: "flex", flexDirection: "column", zIndex: 30,
       }}
         className="app-sidebar"
       >
         {/* Logo */}
-        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(0,174,239,0.08)" }}>
+        <div style={{ padding: "18px 16px 14px", borderBottom: "1px solid rgba(0,174,239,0.08)", flexShrink: 0 }}>
           <Link to="/">
-            <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 40, width: "auto", objectFit: "contain" }} />
+            <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 38, width: "auto", objectFit: "contain" }} />
           </Link>
-          <div style={{ fontSize: 10, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", marginTop: 8, opacity: 0.8 }}>
+          <div style={{ fontSize: 9.5, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.9px", textTransform: "uppercase", marginTop: 6, opacity: 0.8 }}>
             Command Center
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {NAV_ITEMS.map(({ to, icon, label }) => {
-            const active = location.startsWith(to);
-            return (
-              <Link key={to} to={to} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 12px", borderRadius: 9, textDecoration: "none",
-                background: active ? "rgba(0,174,239,0.12)" : "transparent",
-                border: active ? "1px solid rgba(0,174,239,0.25)" : "1px solid transparent",
-                color: active ? "#00AEEF" : "rgba(192,200,220,0.7)",
-                fontSize: 13.5, fontWeight: active ? 700 : 500,
-                transition: "all 0.15s",
-              }}
-                onMouseEnter={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-                    (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-                  }
+        {/* Navigation grid */}
+        <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px 10px", scrollbarWidth: "none" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {NAV_ITEMS.map(({ to, icon, label, bg, accent }) => {
+              const active = location.startsWith(to);
+              const lines = label.split("\n");
+              return (
+                <Link key={to} to={to} style={{
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  padding: "14px 6px 12px",
+                  borderRadius: 12, textDecoration: "none",
+                  background: active
+                    ? `linear-gradient(135deg, ${bg} 0%, ${bg}CC 100%)`
+                    : `linear-gradient(135deg, ${bg} 0%, ${bg}99 100%)`,
+                  border: active
+                    ? `1.5px solid ${accent}`
+                    : `1.5px solid ${accent}33`,
+                  boxShadow: active ? `0 0 12px ${accent}33` : "none",
+                  cursor: "pointer", transition: "all 0.15s",
+                  minHeight: 78,
                 }}
-                onMouseLeave={e => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color = "rgba(192,200,220,0.7)";
-                  }
-                }}
-              >
-                <span style={{ fontSize: 13, opacity: active ? 1 : 0.7 }}>{icon}</span>
-                {label}
-              </Link>
-            );
-          })}
+                  onMouseEnter={e => {
+                    if (!active) {
+                      (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}88`;
+                      (e.currentTarget as HTMLElement).style.boxShadow = `0 0 8px ${accent}22`;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!active) {
+                      (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}33`;
+                      (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                    }
+                  }}
+                >
+                  <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 7, filter: active ? "none" : "saturate(0.85) brightness(0.9)" }}>
+                    {icon}
+                  </span>
+                  <div style={{ textAlign: "center" }}>
+                    {lines.map((line, i) => (
+                      <div key={i} style={{
+                        fontSize: 10.5, fontWeight: 600, lineHeight: 1.25,
+                        color: active ? "#FFFFFF" : "rgba(200,215,235,0.75)",
+                        letterSpacing: "0.2px",
+                      }}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "8px 4px" }} />
-
+          {/* Back to website */}
           <a href="/" style={{
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "9px 12px", borderRadius: 9, textDecoration: "none",
-            color: "rgba(148,163,184,0.5)", fontSize: 13, fontWeight: 500,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            marginTop: 8, padding: "8px 12px", borderRadius: 9, textDecoration: "none",
+            color: "rgba(148,163,184,0.45)", fontSize: 11.5, fontWeight: 500,
             border: "1px solid transparent", transition: "all 0.15s",
           }}
             onMouseEnter={e => {
@@ -109,32 +129,31 @@ export function AppShell({ children }: { children: ReactNode }) {
               (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)";
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.color = "rgba(148,163,184,0.5)";
+              (e.currentTarget as HTMLElement).style.color = "rgba(148,163,184,0.45)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            <span style={{ fontSize: 13, opacity: 0.6 }}>↩</span>
-            Back to Website
+            <span style={{ opacity: 0.6 }}>↩</span> Back to Website
           </a>
         </nav>
 
         {/* User info + sign out */}
-        <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(0,174,239,0.08)" }}>
+        <div style={{ padding: "12px 12px", borderTop: "1px solid rgba(0,174,239,0.08)", flexShrink: 0 }}>
           {user ? (
             <>
-              <div style={{ fontSize: 11, color: "#475569", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 10.5, color: "#475569", marginBottom: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {user.primaryEmailAddress?.emailAddress}
               </div>
               <button
                 onClick={handleSignOut}
                 style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 8,
+                  width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                   padding: "7px 12px", borderRadius: 8, cursor: "pointer",
                   background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-                  color: "#EF4444", fontSize: 12.5, fontWeight: 600,
+                  color: "#EF4444", fontSize: 12, fontWeight: 600,
                 }}
               >
-                <LogOut style={{ width: 13, height: 13 }} /> Sign out
+                <LogOut style={{ width: 12, height: 12 }} /> Sign out
               </button>
             </>
           ) : (
@@ -162,15 +181,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 32, width: "auto" }} />
         </Link>
         <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {NAV_ITEMS.map(({ to, label }) => (
+          {NAV_ITEMS.map(({ to, label, accent }) => (
             <Link key={to} to={to} style={{
-              padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontSize: 12,
-              background: location.startsWith(to) ? "rgba(0,174,239,0.15)" : "transparent",
-              color: location.startsWith(to) ? "#00AEEF" : "rgba(192,192,192,0.7)",
-              border: location.startsWith(to) ? "1px solid rgba(0,174,239,0.3)" : "1px solid transparent",
+              padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontSize: 11,
+              background: location.startsWith(to) ? `${accent}22` : "transparent",
+              color: location.startsWith(to) ? accent : "rgba(192,192,192,0.7)",
+              border: location.startsWith(to) ? `1px solid ${accent}55` : "1px solid transparent",
               fontWeight: 600,
             }}>
-              {label}
+              {label.replace("\n", " ")}
             </Link>
           ))}
           {user
@@ -188,6 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       <style>{`
+        .app-sidebar nav::-webkit-scrollbar { display: none; }
         @media (max-width: 900px) {
           .app-sidebar { display: none !important; }
           .app-main { padding-left: 0 !important; }

@@ -211,7 +211,7 @@ export default function AIVisibilityEnginePage() {
     try {
       const token = await getToken().catch(() => null);
       const base  = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const res   = await fetch(`${base}/api/ai-visibility/export-pdf`, {
+      const res   = await fetch(`${base}/api/ai-visibility/download-pdf`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -254,35 +254,27 @@ export default function AIVisibilityEnginePage() {
     }
   }
 
-  // ── Generate new audit ──
-  async function handleGenerateAudit() {
-    if (!confirm(`Generate a new AI visibility audit for ${audit.businessName}?`)) return;
+  // ── Generate report ──
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [reportReady, setReportReady]         = useState(false);
+
+  async function handleGenerateReport() {
+    setGenerateLoading(true);
+    setReportReady(false);
     try {
-      await apiFetch("/ai-visibility/audit", {
-        method: "POST",
-        body: JSON.stringify({
-          clientId,
-          businessName: audit.businessName,
-          overallScore: Math.max(0, Math.min(100, audit.overallScore + Math.round((Math.random() - 0.4) * 8))),
-          searchScore:  Math.max(0, Math.min(100, audit.searchScore  + Math.round((Math.random() - 0.4) * 8))),
-          mapsScore:    Math.max(0, Math.min(100, audit.mapsScore    + Math.round((Math.random() - 0.4) * 8))),
-          aiSearchScore: Math.max(0, Math.min(100, audit.aiSearchScore + Math.round((Math.random() - 0.4) * 6))),
-          authorityScore: Math.max(0, Math.min(100, audit.authorityScore + Math.round((Math.random() - 0.4) * 6))),
-          reviewScore:  Math.max(0, Math.min(100, audit.reviewScore  + Math.round((Math.random() - 0.4) * 5))),
-          competitorGapScore: Math.max(0, Math.min(100, audit.competitorGapScore + Math.round((Math.random() - 0.4) * 6))),
-          channelsJson: JSON.parse(audit.channelsJson || "[]"),
-          competitorsJson: JSON.parse(audit.competitorsJson || "[]"),
-          recommendationsJson: JSON.parse(audit.recommendationsJson || "[]"),
-        }),
+      await apiFetch("/ai-visibility/generate-report", {
+        method: "POST", body: JSON.stringify({ clientId }),
       });
-      // Refresh
-      setLoading(true);
+      setReportReady(true);
+      // Refresh scores on screen
       apiFetch<AuditData>(`/ai-visibility/${clientId}`)
-        .then(data => setAudit(data))
-        .catch(() => {})
-        .finally(() => setLoading(false));
+        .then(data => { setAudit(data); })
+        .catch(() => {});
+      setTimeout(() => setReportReady(false), 4000);
     } catch {
-      alert("Failed to generate audit.");
+      alert("Failed to generate report. Please try again.");
+    } finally {
+      setGenerateLoading(false);
     }
   }
 
@@ -374,19 +366,36 @@ export default function AIVisibilityEnginePage() {
                   <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading audit…</span>
                 </div>
               )}
-              {/* ── Action buttons ── */}
+              {/* ── 3 action buttons ── */}
+              <button
+                onClick={handleGenerateReport}
+                disabled={generateLoading || loading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: reportReady ? "#10B981" : "rgba(139,92,246,0.12)",
+                  border: `1px solid ${reportReady ? "#10B981" : "rgba(139,92,246,0.4)"}`,
+                  borderRadius: 10, padding: "8px 16px",
+                  cursor: generateLoading ? "wait" : "pointer",
+                  color: reportReady ? "#fff" : "#8B5CF6",
+                  fontSize: 12, fontWeight: 700,
+                  transition: "all 0.25s",
+                  opacity: generateLoading ? 0.7 : 1,
+                }}
+              >
+                {generateLoading ? "⏳ Generating…" : reportReady ? "✓ Report Ready" : "✦ Generate Report"}
+              </button>
               <button
                 onClick={handleExportPDF}
                 disabled={pdfLoading || loading}
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   background: "#00AEEF", border: "none", borderRadius: 10,
-                  padding: "8px 14px", cursor: pdfLoading ? "wait" : "pointer",
+                  padding: "8px 16px", cursor: pdfLoading ? "wait" : "pointer",
                   color: "#fff", fontSize: 12, fontWeight: 700,
                   opacity: pdfLoading ? 0.7 : 1,
                 }}
               >
-                {pdfLoading ? "⏳" : "📄"} {pdfLoading ? "Generating…" : "Export PDF"}
+                {pdfLoading ? "⏳ Building…" : "↓ Download PDF"}
               </button>
               <button
                 onClick={() => { setEmailModal(true); setEmailStatus(null); setEmailInput(""); }}
@@ -394,23 +403,11 @@ export default function AIVisibilityEnginePage() {
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.35)",
-                  borderRadius: 10, padding: "8px 14px", cursor: "pointer",
+                  borderRadius: 10, padding: "8px 16px", cursor: "pointer",
                   color: "#00AEEF", fontSize: 12, fontWeight: 700,
                 }}
               >
-                ✉️ Email Report
-              </button>
-              <button
-                onClick={handleGenerateAudit}
-                disabled={loading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.35)",
-                  borderRadius: 10, padding: "8px 14px", cursor: "pointer",
-                  color: "#8B5CF6", fontSize: 12, fontWeight: 700,
-                }}
-              >
-                ✨ New Audit
+                ✉ Email Report
               </button>
             </div>
           </div>

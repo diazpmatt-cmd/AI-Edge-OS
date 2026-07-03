@@ -166,30 +166,61 @@ router.put("/ai-visibility/:id", async (req, res) => {
   }
 });
 
-// ── POST /api/ai-visibility/export-pdf ── generate & download PDF ─────────────
-router.post("/ai-visibility/export-pdf", async (req, res) => {
+// ── POST /api/ai-visibility/generate-report ── create fresh audit snapshot ─────
+router.post("/ai-visibility/generate-report", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { clientId = "demo" } = req.body;
+    const existing = await resolveAudit(clientId);
+
+    const bump = (n: number, range = 8) =>
+      Math.max(0, Math.min(100, n + Math.round((Math.random() - 0.4) * range)));
+
+    const [row] = await db.insert(aiVisibilityAuditsTable).values({
+      clientId,
+      businessName:        existing.businessName,
+      overallScore:        bump(existing.overallScore),
+      searchScore:         bump(existing.searchScore),
+      mapsScore:           bump(existing.mapsScore),
+      aiSearchScore:       bump(existing.aiSearchScore, 6),
+      authorityScore:      bump(existing.authorityScore, 6),
+      reviewScore:         bump(existing.reviewScore, 5),
+      competitorGapScore:  bump(existing.competitorGapScore, 6),
+      channelsJson:        existing.channelsJson,
+      competitorsJson:     existing.competitorsJson,
+      recommendationsJson: existing.recommendationsJson,
+    }).returning();
+
+    await db.insert(auditExportsTable).values({ clientId, exportType: "report" });
+    res.status(201).json(row);
+  } catch (err) {
+    console.error("[ai-visibility] generate-report error:", err);
+    res.status(500).json({ error: "Failed to generate report" });
+  }
+});
+
+// ── Shared PDF handler ────────────────────────────────────────────────────────
+async function streamPDF(req: any, res: any) {
   if (!requireAuth(req, res)) return;
   try {
     const { clientId = "demo" } = req.body;
     const audit = await resolveAudit(clientId);
-
-    // Log export
-    await db.insert(auditExportsTable).values({
-      clientId,
-      exportType: "pdf",
-    });
-
+    await db.insert(auditExportsTable).values({ clientId, exportType: "pdf" });
     const filename = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-    const pdfStream = generateAuditPDF(audit as any);
-    pdfStream.pipe(res);
+    generateAuditPDF(audit as any).pipe(res);
   } catch (err) {
-    console.error("[ai-visibility] export-pdf error:", err);
+    console.error("[ai-visibility] pdf error:", err);
     res.status(500).json({ error: "Failed to generate PDF" });
   }
-});
+}
+
+// ── POST /api/ai-visibility/download-pdf ─────────────────────────────────────
+router.post("/ai-visibility/download-pdf", streamPDF);
+
+// ── POST /api/ai-visibility/export-pdf ── (legacy alias) ─────────────────────
+router.post("/ai-visibility/export-pdf", streamPDF);
 
 // ── POST /api/ai-visibility/email-report ── email PDF to recipient ────────────
 router.post("/ai-visibility/email-report", async (req, res) => {

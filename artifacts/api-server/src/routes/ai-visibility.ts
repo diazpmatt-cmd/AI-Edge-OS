@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { aiVisibilityAuditsTable } from "@workspace/db/schema";
+import { aiVisibilityAuditsTable, auditExportsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import nodemailer from "nodemailer";
+import { generateAuditPDF } from "../services/pdf-generator.js";
 
 const router = Router();
 
@@ -44,10 +46,10 @@ const DEMO_AUDIT = {
     { id: "google_assistant", name: "Google Assistant",  category: "voice",     status: "Connected",    score: 38, priority: "medium",   action: "Optimize for voice queries" },
   ]),
   competitorsJson: JSON.stringify([
-    { name: "Havard Pest Control",            reviewGap: -24, keywordGap: "High", backlinkGap: "High",   aiGap: -16, opportunityScore: 78 },
+    { name: "Havard Pest Control",            reviewGap: -24, keywordGap: "High",   backlinkGap: "High",   aiGap: -16, opportunityScore: 78 },
     { name: "Beebe's Pest & Termite Control", reviewGap: -8,  keywordGap: "Medium", backlinkGap: "Medium", aiGap: -9,  opportunityScore: 55 },
-    { name: "Knox Pest Control",              reviewGap: -3,  keywordGap: "Low",  backlinkGap: "Low",    aiGap: -7,  opportunityScore: 42 },
-    { name: "Arrow Exterminators",            reviewGap: -41, keywordGap: "High", backlinkGap: "High",   aiGap: -22, opportunityScore: 91 },
+    { name: "Knox Pest Control",              reviewGap: -3,  keywordGap: "Low",    backlinkGap: "Low",    aiGap: -7,  opportunityScore: 42 },
+    { name: "Arrow Exterminators",            reviewGap: -41, keywordGap: "High",   backlinkGap: "High",   aiGap: -22, opportunityScore: 91 },
   ]),
   recommendationsJson: JSON.stringify([
     { priority: "critical", task: "Claim Apple Business Connect",        reason: "Siri & Apple Maps send zero customers without this listing", impact: "High",   status: "pending" },
@@ -65,14 +67,23 @@ const DEMO_AUDIT = {
   ]),
 };
 
-// ── GET /api/ai-visibility ── list all audits ────────────────────────────────
+// ── Helper: resolve audit by clientId (or demo) ──────────────────────────────
+async function resolveAudit(clientId: string) {
+  if (clientId === "demo") return { ...DEMO_AUDIT, id: "demo", createdAt: new Date(), updatedAt: new Date() };
+  const [row] = await db
+    .select()
+    .from(aiVisibilityAuditsTable)
+    .where(eq(aiVisibilityAuditsTable.clientId, clientId))
+    .orderBy(desc(aiVisibilityAuditsTable.createdAt))
+    .limit(1);
+  return row ?? { ...DEMO_AUDIT, id: "demo", createdAt: new Date(), updatedAt: new Date() };
+}
+
+// ── GET /api/ai-visibility ── list all audits ─────────────────────────────────
 router.get("/ai-visibility", async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
-    const rows = await db
-      .select()
-      .from(aiVisibilityAuditsTable)
-      .orderBy(desc(aiVisibilityAuditsTable.createdAt));
+    const rows = await db.select().from(aiVisibilityAuditsTable).orderBy(desc(aiVisibilityAuditsTable.createdAt));
     res.json(rows);
   } catch (err) {
     console.error("[ai-visibility] list error:", err);
@@ -80,29 +91,19 @@ router.get("/ai-visibility", async (req, res) => {
   }
 });
 
-// ── GET /api/ai-visibility/:clientId ── single (with demo fallback) ──────────
+// ── GET /api/ai-visibility/:clientId ── single (with demo fallback) ───────────
 router.get("/ai-visibility/:clientId", async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
-    const [row] = await db
-      .select()
-      .from(aiVisibilityAuditsTable)
-      .where(eq(aiVisibilityAuditsTable.clientId, req.params.clientId))
-      .orderBy(desc(aiVisibilityAuditsTable.createdAt))
-      .limit(1);
-
-    if (!row) {
-      // Return demo/fallback data so the dashboard is never empty
-      return res.json({ ...DEMO_AUDIT, id: "demo", createdAt: new Date(), updatedAt: new Date() });
-    }
-    res.json(row);
+    const audit = await resolveAudit(req.params.clientId);
+    res.json(audit);
   } catch (err) {
     console.error("[ai-visibility] get error:", err);
     res.status(500).json({ error: "Failed to load audit" });
   }
 });
 
-// ── POST /api/ai-visibility/audit ── create audit ───────────────────────────
+// ── POST /api/ai-visibility/audit ── create audit ────────────────────────────
 router.post("/ai-visibility/audit", async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
@@ -135,7 +136,7 @@ router.post("/ai-visibility/audit", async (req, res) => {
   }
 });
 
-// ── PUT /api/ai-visibility/:id ── update ─────────────────────────────────────
+// ── PUT /api/ai-visibility/:id ── update ──────────────────────────────────────
 router.put("/ai-visibility/:id", async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
@@ -162,6 +163,112 @@ router.put("/ai-visibility/:id", async (req, res) => {
   } catch (err) {
     console.error("[ai-visibility] update error:", err);
     res.status(500).json({ error: "Failed to update audit" });
+  }
+});
+
+// ── POST /api/ai-visibility/export-pdf ── generate & download PDF ─────────────
+router.post("/ai-visibility/export-pdf", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { clientId = "demo" } = req.body;
+    const audit = await resolveAudit(clientId);
+
+    // Log export
+    await db.insert(auditExportsTable).values({
+      clientId,
+      exportType: "pdf",
+    });
+
+    const filename = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    const pdfStream = generateAuditPDF(audit as any);
+    pdfStream.pipe(res);
+  } catch (err) {
+    console.error("[ai-visibility] export-pdf error:", err);
+    res.status(500).json({ error: "Failed to generate PDF" });
+  }
+});
+
+// ── POST /api/ai-visibility/email-report ── email PDF to recipient ────────────
+router.post("/ai-visibility/email-report", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { clientId = "demo", recipientEmail } = req.body;
+    if (!recipientEmail) return void res.status(400).json({ error: "recipientEmail is required" });
+
+    const audit = await resolveAudit(clientId);
+
+    // Check SMTP config
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      // Log the attempt but return config-needed message
+      await db.insert(auditExportsTable).values({ clientId, exportType: "email", recipientEmail });
+      return void res.status(202).json({
+        status: "queued",
+        message: "Email logged. Configure SMTP_HOST, SMTP_USER, SMTP_PASS environment variables to enable sending.",
+      });
+    }
+
+    // Collect PDF into a buffer
+    const pdfStream = generateAuditPDF(audit as any);
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      pdfStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      pdfStream.on("end", resolve);
+      pdfStream.on("error", reject);
+    });
+    const pdfBuffer = Buffer.concat(chunks);
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: Number(process.env.SMTP_PORT ?? 587),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: { user: smtpUser, pass: smtpPass },
+    });
+
+    const filename = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}.pdf`;
+    await transporter.sendMail({
+      from: `"AI Edge Solutions" <${smtpUser}>`,
+      to: recipientEmail,
+      subject: `AI Visibility Audit Report — ${audit.businessName}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#030612;padding:32px 24px;text-align:center;border-bottom:3px solid #00AEEF;">
+            <h1 style="color:#00AEEF;margin:0;font-size:22px;">AI Edge Solutions</h1>
+            <p style="color:#C0C0C0;margin:8px 0 0;font-size:13px;">AI Visibility Audit Report</p>
+          </div>
+          <div style="padding:32px 24px;background:#ffffff;">
+            <p style="color:#374151;font-size:15px;line-height:1.6;">
+              Attached is the <strong>AI Visibility Audit Report</strong> for <strong>${audit.businessName}</strong>.
+            </p>
+            <p style="color:#374151;font-size:14px;line-height:1.6;">
+              This report shows opportunities to improve search rankings, map visibility,
+              AI search recommendations, and lead generation.
+            </p>
+            <div style="background:#F3F4F6;border-radius:8px;padding:16px 20px;margin:24px 0;">
+              <p style="margin:0 0 8px;font-weight:700;color:#111827;">Overall Visibility Score</p>
+              <div style="font-size:36px;font-weight:800;color:#00AEEF;">${audit.overallScore}<span style="font-size:16px;color:#6B7280;">/100</span></div>
+            </div>
+            <p style="color:#374151;font-size:13px;">Open the attached PDF for the full audit, action plan, and package recommendation.</p>
+          </div>
+          <div style="padding:16px 24px;background:#F9FAFB;text-align:center;border-top:1px solid #E5E7EB;">
+            <p style="color:#9CA3AF;font-size:12px;margin:0;">AI Edge Solutions · aiedgesolutions.com</p>
+          </div>
+        </div>
+      `,
+      attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+    });
+
+    await db.insert(auditExportsTable).values({ clientId, exportType: "email", recipientEmail });
+    res.json({ status: "sent", message: `Report sent to ${recipientEmail}` });
+  } catch (err) {
+    console.error("[ai-visibility] email-report error:", err);
+    res.status(500).json({ error: "Failed to send email" });
   }
 });
 

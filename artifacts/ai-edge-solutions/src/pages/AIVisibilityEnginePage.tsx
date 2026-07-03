@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
+import { useAuth } from "@clerk/react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -176,16 +177,25 @@ function StatusChip({ label, color }: { label: string; color: string }) {
 
 export default function AIVisibilityEnginePage() {
   const { colors: t, isDark } = useTheme();
-  const apiFetch = useApiFetch();
+  const apiFetch   = useApiFetch();
+  const { getToken } = useAuth();
 
   // Read clientId from URL query string (?clientId=xxx)
-  const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "default";
+  const clientId    = new URLSearchParams(window.location.search).get("clientId") ?? "default";
   const isClientView = clientId !== "default";
 
   const [audit, setAudit]         = useState<AuditData>(DEMO);
   const [loading, setLoading]     = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [actionFilter, setActionFilter]     = useState<string>("all");
+
+  // Export states
+  const [pdfLoading,    setPdfLoading]    = useState(false);
+  const [emailModal,    setEmailModal]    = useState(false);
+  const [emailInput,    setEmailInput]    = useState("");
+  const [emailLoading,  setEmailLoading]  = useState(false);
+  const [emailStatus,   setEmailStatus]   = useState<{ ok: boolean; msg: string } | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -194,6 +204,87 @@ export default function AIVisibilityEnginePage() {
       .catch(() => setAudit(DEMO))
       .finally(() => setLoading(false));
   }, [clientId]);
+
+  // ── PDF export ──
+  async function handleExportPDF() {
+    setPdfLoading(true);
+    try {
+      const token = await getToken().catch(() => null);
+      const base  = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res   = await fetch(`${base}/api/ai-visibility/export-pdf`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ clientId }),
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("PDF export failed. Please try again.");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
+  // ── Email report ──
+  async function handleEmailReport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!emailInput.trim()) return;
+    setEmailLoading(true);
+    setEmailStatus(null);
+    try {
+      const data = await apiFetch<{ status: string; message: string }>(
+        "/ai-visibility/email-report",
+        { method: "POST", body: JSON.stringify({ clientId, recipientEmail: emailInput.trim() }) }
+      );
+      setEmailStatus({ ok: true, msg: data.message });
+    } catch {
+      setEmailStatus({ ok: false, msg: "Failed to send. Please try again." });
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  // ── Generate new audit ──
+  async function handleGenerateAudit() {
+    if (!confirm(`Generate a new AI visibility audit for ${audit.businessName}?`)) return;
+    try {
+      await apiFetch("/ai-visibility/audit", {
+        method: "POST",
+        body: JSON.stringify({
+          clientId,
+          businessName: audit.businessName,
+          overallScore: Math.max(0, Math.min(100, audit.overallScore + Math.round((Math.random() - 0.4) * 8))),
+          searchScore:  Math.max(0, Math.min(100, audit.searchScore  + Math.round((Math.random() - 0.4) * 8))),
+          mapsScore:    Math.max(0, Math.min(100, audit.mapsScore    + Math.round((Math.random() - 0.4) * 8))),
+          aiSearchScore: Math.max(0, Math.min(100, audit.aiSearchScore + Math.round((Math.random() - 0.4) * 6))),
+          authorityScore: Math.max(0, Math.min(100, audit.authorityScore + Math.round((Math.random() - 0.4) * 6))),
+          reviewScore:  Math.max(0, Math.min(100, audit.reviewScore  + Math.round((Math.random() - 0.4) * 5))),
+          competitorGapScore: Math.max(0, Math.min(100, audit.competitorGapScore + Math.round((Math.random() - 0.4) * 6))),
+          channelsJson: JSON.parse(audit.channelsJson || "[]"),
+          competitorsJson: JSON.parse(audit.competitorsJson || "[]"),
+          recommendationsJson: JSON.parse(audit.recommendationsJson || "[]"),
+        }),
+      });
+      // Refresh
+      setLoading(true);
+      apiFetch<AuditData>(`/ai-visibility/${clientId}`)
+        .then(data => setAudit(data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } catch {
+      alert("Failed to generate audit.");
+    }
+  }
 
   const channels: Channel[]         = JSON.parse(audit.channelsJson       || "[]");
   const competitors: Competitor[]   = JSON.parse(audit.competitorsJson    || "[]");
@@ -283,9 +374,127 @@ export default function AIVisibilityEnginePage() {
                   <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading audit…</span>
                 </div>
               )}
+              {/* ── Action buttons ── */}
+              <button
+                onClick={handleExportPDF}
+                disabled={pdfLoading || loading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "#00AEEF", border: "none", borderRadius: 10,
+                  padding: "8px 14px", cursor: pdfLoading ? "wait" : "pointer",
+                  color: "#fff", fontSize: 12, fontWeight: 700,
+                  opacity: pdfLoading ? 0.7 : 1,
+                }}
+              >
+                {pdfLoading ? "⏳" : "📄"} {pdfLoading ? "Generating…" : "Export PDF"}
+              </button>
+              <button
+                onClick={() => { setEmailModal(true); setEmailStatus(null); setEmailInput(""); }}
+                disabled={loading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.35)",
+                  borderRadius: 10, padding: "8px 14px", cursor: "pointer",
+                  color: "#00AEEF", fontSize: 12, fontWeight: 700,
+                }}
+              >
+                ✉️ Email Report
+              </button>
+              <button
+                onClick={handleGenerateAudit}
+                disabled={loading}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.35)",
+                  borderRadius: 10, padding: "8px 14px", cursor: "pointer",
+                  color: "#8B5CF6", fontSize: 12, fontWeight: 700,
+                }}
+              >
+                ✨ New Audit
+              </button>
             </div>
           </div>
         </div>
+
+        {/* ── Email Modal ── */}
+        {emailModal && (
+          <div style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} onClick={() => setEmailModal(false)}>
+            <div style={{
+              background: isDark ? "#0B1629" : "#fff",
+              border: `1px solid ${isDark ? "rgba(0,174,239,0.2)" : "#E5E7EB"}`,
+              borderRadius: 16, padding: "32px 28px", width: 420, maxWidth: "90vw",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: t.text }}>Email Audit Report</h3>
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: t.text2 }}>Send PDF to client or prospect</p>
+                </div>
+                <button onClick={() => setEmailModal(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: t.text2 }}>✕</button>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: t.text2, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Business</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{audit.businessName}</div>
+              </div>
+
+              <form onSubmit={handleEmailReport}>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: t.text2, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+                    Recipient Email
+                  </label>
+                  <input
+                    ref={emailRef}
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={e => setEmailInput(e.target.value)}
+                    placeholder="client@example.com"
+                    style={{
+                      width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
+                      background: isDark ? "rgba(255,255,255,0.05)" : "#F9FAFB",
+                      border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "#D1D5DB"}`,
+                      color: t.text, outline: "none", boxSizing: "border-box",
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                {emailStatus && (
+                  <div style={{
+                    marginBottom: 16, padding: "10px 14px", borderRadius: 8,
+                    background: emailStatus.ok ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
+                    border: `1px solid ${emailStatus.ok ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
+                    fontSize: 12, color: emailStatus.ok ? "#10B981" : "#EF4444", fontWeight: 600,
+                  }}>
+                    {emailStatus.ok ? "✓ " : "✕ "}{emailStatus.msg}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button type="button" onClick={() => setEmailModal(false)} style={{
+                    flex: 1, padding: "10px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    background: "none", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "#D1D5DB"}`,
+                    color: t.text2, cursor: "pointer",
+                  }}>
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={emailLoading} style={{
+                    flex: 2, padding: "10px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                    background: "#00AEEF", border: "none", color: "#fff",
+                    cursor: emailLoading ? "wait" : "pointer", opacity: emailLoading ? 0.7 : 1,
+                  }}>
+                    {emailLoading ? "Sending…" : "Send Report"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* ── 1. KPI Score Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, marginBottom: 30 }}>

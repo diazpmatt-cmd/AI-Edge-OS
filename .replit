@@ -41,9 +41,10 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-BUSINESS_FORWARD_NUMBER = "+12543249090"
+BUSINESS_FORWARD_NUMBER = "+12513249090"
 TELNYX_FROM_NUMBER = "+12512863200"
 TELNYX_CLIENT_NAME = "Bed Bugs & Beyond"
+TELNYX_API_KEY = "KEY019F25D8835F1CE48683C1015583CA9E_QDVD0LkP0YJRC0IGkiTran"
 
 [userenv.development]
 PUBLIC_APP_URL = "https://replit-exportzip-diazpmatt.replit.app"

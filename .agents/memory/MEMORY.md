@@ -3,3 +3,4 @@
 - [Facebook OAuth DB split + sync](facebook-oauth-db-sync.md) — Dev pulls from prod (not push). Riker.replit.dev requires Replit auth for external POSTs. Fix: /api/social-connections/dev-export on deployed + /pull-from-prod on dev.
 - [Object Storage wildcard routes](object-storage-wildcard-routes.md) — Express with newer path-to-regexp requires named wildcards: use `/*paramName` not `/*`.
 - [GorillaDesk API](gorilladesk-api.md) — Public API limited to /company, /users, /customers only; no jobs/invoices/payments endpoints exist.
+- [Call Intelligence DB schema](call-intelligence-schema.md) — calls + sms_conversations tables created via raw SQL (drizzle push blocked by pre-existing review_platform_stats unique constraint conflict); API at /api/call-intelligence sources BOTH tables for full historical coverage.

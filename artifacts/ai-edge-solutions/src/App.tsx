@@ -51,6 +51,7 @@ const AIVisibilityEnginePage        = lazy(() => import("./pages/AIVisibilityEng
 const BusinessAssessmentPage        = lazy(() => import("./pages/BusinessAssessmentPage"));
 const AssessmentsInboxPage          = lazy(() => import("./pages/AssessmentsInboxPage"));
 const AIReceptionistPage            = lazy(() => import("./pages/AIReceptionistPage"));
+const CallIntelligencePage          = lazy(() => import("./pages/CallIntelligencePage"));
 const ClientOnboardingPage          = lazy(() => import("./pages/ClientOnboardingPage"));
 const LocalBizAIPage                = lazy(() => import("./pages/LocalBizAIPage"));
 
@@ -151,6 +152,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/ai-receptionist">
           <Authenticated><AIReceptionistPage /></Authenticated>
+        </Route>
+        <Route path="/admin/call-intelligence">
+          <Authenticated><CallIntelligencePage /></Authenticated>
         </Route>
         <Route path="/admin/bizai">
           <Authenticated><LocalBizAIPage /></Authenticated>

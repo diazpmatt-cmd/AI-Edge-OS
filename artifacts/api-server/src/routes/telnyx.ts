@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { leadsTable } from "@workspace/db/schema";
+import { leadsTable, callsTable, smsConversationsTable } from "@workspace/db/schema";
 
 const router = Router();
 
@@ -112,10 +112,20 @@ router.post("/telnyx/sms", async (req, res) => {
     const body    = req.body as any;
     const payload = body?.data?.payload ?? body?.payload ?? body;
 
-    const from = payload?.from?.phone_number ?? payload?.from ?? "";
-    const text = (payload?.text ?? payload?.body ?? "").trim();
+    const from    = payload?.from?.phone_number ?? payload?.from ?? "";
+    const text    = (payload?.text ?? payload?.body ?? "").trim();
+    const msgId   = payload?.id ?? payload?.message_id ?? undefined;
 
     console.log(`[TELNYX] Inbound SMS from ${from || "unknown"}: "${text.slice(0, 80)}"`);
+
+    // Write to sms_conversations table
+    await db.insert(smsConversationsTable).values({
+      customerNumber: from,
+      direction:      "inbound",
+      message:        text,
+      messageId:      msgId,
+      status:         "received",
+    }).catch(e => console.error("[TELNYX] sms_conversations insert error:", e));
 
     // ── Parse text-back replies ───────────────────────────────────────────────
     const digit = text.replace(/\s+/g, "").slice(0, 1);
@@ -184,14 +194,23 @@ router.post("/telnyx/webhook", async (req, res) => {
       if (isMissed) {
         console.log(`[TELNYX] Missed call detected from ${from || "unknown"} — cause: ${hangupCause}`);
 
-        await db.insert(leadsTable).values({
-          clientName: getClientName(),
-          source:     "telnyx_missed_call",
-          phone:      from,
-          message:    `Missed call — hangup cause: ${hangupCause}`,
-          eventType:  "missed_call",
-          status:     "new",
-        });
+        await Promise.all([
+          db.insert(leadsTable).values({
+            clientName: getClientName(),
+            source:     "telnyx_missed_call",
+            phone:      from,
+            message:    `Missed call — hangup cause: ${hangupCause}`,
+            eventType:  "missed_call",
+            status:     "new",
+          }),
+          db.insert(callsTable).values({
+            callerNumber: from,
+            calledNumber: process.env.TELNYX_FROM_NUMBER ?? "",
+            callType:     "missed",
+            durationSecs: Number(duration) || null,
+            outcome:      "missed",
+          }),
+        ]);
 
         // ── Text-back with dedup guard ────────────────────────────────────────
         if (!from) {
@@ -206,14 +225,23 @@ router.post("/telnyx/webhook", async (req, res) => {
 
             if (result.ok) {
               console.log(`[TELNYX] Text-back sent to ${from}${result.messageId ? ` (msgId: ${result.messageId})` : ""}`);
-              await db.insert(leadsTable).values({
-                clientName: getClientName(),
-                source:     "telnyx_textback",
-                phone:      from,
-                message:    `Text-back sent${result.messageId ? ` — message ID: ${result.messageId}` : ""}`,
-                eventType:  "telnyx_textback_sent",
-                status:     "contacted",
-              });
+              await Promise.all([
+                db.insert(leadsTable).values({
+                  clientName: getClientName(),
+                  source:     "telnyx_textback",
+                  phone:      from,
+                  message:    `Text-back sent${result.messageId ? ` — message ID: ${result.messageId}` : ""}`,
+                  eventType:  "telnyx_textback_sent",
+                  status:     "contacted",
+                }),
+                db.insert(smsConversationsTable).values({
+                  customerNumber: from,
+                  direction:      "outbound",
+                  message:        TEXT_BACK_MESSAGE,
+                  messageId:      result.messageId ?? null,
+                  status:         "sent",
+                }),
+              ]);
             } else {
               console.error(`[TELNYX] Text-back failed to ${from} — ${result.error}`);
               await db.insert(leadsTable).values({
@@ -326,20 +354,30 @@ router.get("/telnyx/textback-stats", async (_req, res) => {
 
 router.post("/telnyx/voice", async (req, res) => {
   try {
-    const body = req.body as any;
-    const from = body?.From ?? body?.from ?? body?.Caller ?? "";
-    const to   = body?.To   ?? body?.to   ?? body?.Called  ?? process.env.TELNYX_FROM_NUMBER ?? "";
+    const body    = req.body as any;
+    const from    = body?.From ?? body?.from ?? body?.Caller ?? "";
+    const to      = body?.To   ?? body?.to   ?? body?.Called  ?? process.env.TELNYX_FROM_NUMBER ?? "";
+    const callSid = body?.CallSid ?? body?.call_sid ?? "";
 
     console.log(`[TELNYX] Incoming call from ${from || "unknown"} to ${to || "unknown"}`);
 
-    await db.insert(leadsTable).values({
-      clientName: getClientName(),
-      source:     "telnyx_voice_call",
-      phone:      from,
-      message:    "Incoming voice call — awaiting menu selection",
-      eventType:  "telnyx_voice_call",
-      status:     "new",
-    });
+    await Promise.all([
+      db.insert(leadsTable).values({
+        clientName: getClientName(),
+        source:     "telnyx_voice_call",
+        phone:      from,
+        message:    "Incoming voice call — awaiting menu selection",
+        eventType:  "telnyx_voice_call",
+        status:     "new",
+      }),
+      db.insert(callsTable).values({
+        callSid:      callSid || null,
+        callerNumber: from,
+        calledNumber: to,
+        callType:     "incoming",
+        outcome:      "pending",
+      }),
+    ]);
 
     const gatherUrl = `${baseUrl(req)}/api/telnyx/voice/gather`;
     const greeting =
@@ -378,14 +416,23 @@ router.post("/telnyx/voice/gather", async (req, res) => {
 
     if (digit === "1") {
       console.log(`[TELNYX] Transfer initiated to ${forward}`);
-      await db.insert(leadsTable).values({
-        clientName: getClientName(),
-        source:     "telnyx_voice_call",
-        phone:      from,
-        message:    `Caller pressed 1 — live transfer initiated to ${forward}`,
-        eventType:  "telnyx_voice_call",
-        status:     "contacted",
-      });
+      await Promise.all([
+        db.insert(leadsTable).values({
+          clientName: getClientName(),
+          source:     "telnyx_voice_call",
+          phone:      from,
+          message:    `Caller pressed 1 — live transfer initiated to ${forward}`,
+          eventType:  "telnyx_voice_call",
+          status:     "contacted",
+        }),
+        db.insert(callsTable).values({
+          callerNumber:  from,
+          calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
+          callType:      "transferred",
+          digitsPressed: "1",
+          outcome:       "transferred",
+        }),
+      ]);
       res.send(texml(`
         <Say voice="alice">Please hold while we connect you.</Say>
         <Dial>${forward}</Dial>
@@ -393,14 +440,23 @@ router.post("/telnyx/voice/gather", async (req, res) => {
 
     } else if (digit === "2") {
       console.log(`[TELNYX] Callback request from ${from || "unknown"}`);
-      await db.insert(leadsTable).values({
-        clientName: getClientName(),
-        source:     "telnyx_callback_request",
-        phone:      from,
-        message:    "Caller requested a callback via voice menu (pressed 2)",
-        eventType:  "telnyx_callback_request",
-        status:     "new",
-      });
+      await Promise.all([
+        db.insert(leadsTable).values({
+          clientName: getClientName(),
+          source:     "telnyx_callback_request",
+          phone:      from,
+          message:    "Caller requested a callback via voice menu (pressed 2)",
+          eventType:  "telnyx_callback_request",
+          status:     "new",
+        }),
+        db.insert(callsTable).values({
+          callerNumber:  from,
+          calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
+          callType:      "callback",
+          digitsPressed: "2",
+          outcome:       "callback_requested",
+        }),
+      ]);
       res.send(texml(`
         <Say voice="alice">Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!</Say>
         <Hangup/>
@@ -409,6 +465,13 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     } else if (digit === "3") {
       const recordUrl = `${baseUrl(req)}/api/telnyx/voice/recording`;
       console.log(`[TELNYX] Voicemail recording started for ${from || "unknown"}`);
+      await db.insert(callsTable).values({
+        callerNumber:  from,
+        calledNumber:  process.env.TELNYX_FROM_NUMBER ?? "",
+        callType:      "voicemail",
+        digitsPressed: "3",
+        outcome:       "pending",
+      }).catch(e => console.error("[TELNYX] callsTable insert error (voicemail start):", e));
       res.send(texml(`
         <Say voice="alice">Please leave your message after the beep. Press star or hang up when finished.</Say>
         <Record action="${recordUrl}" method="POST" maxLength="120" playBeep="true" finishOnKey="*"/>
@@ -440,18 +503,29 @@ router.post("/telnyx/voice/recording", async (req, res) => {
     const duration     = body?.RecordingDuration ?? body?.duration ?? body?.recording_duration ?? "";
 
     const durLabel = duration ? ` (${duration}s)` : "";
+    const durSecs  = duration ? Number(duration) : null;
     console.log(`[TELNYX] Voicemail recorded from ${from || "unknown"}${durLabel} — ${recordingUrl || "no URL"}`);
 
-    await db.insert(leadsTable).values({
-      clientName: getClientName(),
-      source:     "telnyx_voicemail",
-      phone:      from,
-      message:    recordingUrl
-        ? `Voicemail recording${durLabel}: ${recordingUrl}`
-        : `Voicemail received${durLabel} — recording URL not provided`,
-      eventType:  "telnyx_voicemail",
-      status:     "new",
-    });
+    await Promise.all([
+      db.insert(leadsTable).values({
+        clientName: getClientName(),
+        source:     "telnyx_voicemail",
+        phone:      from,
+        message:    recordingUrl
+          ? `Voicemail recording${durLabel}: ${recordingUrl}`
+          : `Voicemail received${durLabel} — recording URL not provided`,
+        eventType:  "telnyx_voicemail",
+        status:     "new",
+      }),
+      db.insert(callsTable).values({
+        callerNumber: from,
+        calledNumber: process.env.TELNYX_FROM_NUMBER ?? "",
+        callType:     "voicemail",
+        durationSecs: durSecs,
+        outcome:      "voicemail_left",
+        recordingUrl: recordingUrl || null,
+      }),
+    ]);
 
     res.set("Content-Type", "text/xml");
     res.send(texml(`

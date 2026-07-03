@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { to: "/admin/distribution",        icon: "◈",  label: "Distribution" },
   { to: "/admin/repurpose",           icon: "✦",  label: "Repurpose" },
   { to: "/admin/lead-recovery",       icon: "📞", label: "Lead Recovery AI" },
+  { to: "/admin/call-intelligence",  icon: "📊", label: "Call Intelligence" },
   { to: "/admin/ai-receptionist",    icon: "🎙", label: "AI Receptionist" },
   { to: "/admin/social-publishing",   icon: "📸", label: "Publishing Center" },
   { to: "/admin/auto-content",        icon: "🤖", label: "Auto Content Engine" },

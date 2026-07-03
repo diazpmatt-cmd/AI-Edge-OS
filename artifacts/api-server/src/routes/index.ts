@@ -21,6 +21,7 @@ import telnyxAnalyticsRouter from "./telnyx-analytics";
 import insightsRouter from "./insights";
 import reviewsRouter from "./reviews";
 import callIntelligenceRouter from "./call-intelligence";
+import clientOnboardingRouter from "./client-onboarding";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(telnyxAnalyticsRouter);
 router.use(insightsRouter);
 router.use(reviewsRouter);
 router.use(callIntelligenceRouter);
+router.use(clientOnboardingRouter);
 
 export default router;

@@ -160,7 +160,7 @@ function AppRouter() {
         <Route path="/admin/bizai">
           <Authenticated><LocalBizAIPage /></Authenticated>
         </Route>
-        <Route path="/admin/onboarding">
+        <Route path="/admin/client-onboarding">
           <Authenticated><ClientOnboardingPage /></Authenticated>
         </Route>
 

@@ -374,7 +374,7 @@ Rules: caption is 2-3 sentences, mentions the specific city by name, names the p
 
   const generated = await Promise.all(
     slots.map(async ({ date, city, topic, angle }) => {
-      const prompt = `Business: ${clientName ?? "Bed Bugs & Beyond"}
+      const prompt = `Business: ${clientName || "Bed Bugs & Beyond"}
 City: ${city}
 Pest/Service: ${topic}
 Post Angle: ${angle}
@@ -392,7 +392,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
         const topicTag = topic.replace(/\s+/g, "");
         return {
           date, city, topic, angle,
-          caption: `${topic} problem in ${city}? ${clientName ?? "Bed Bugs & Beyond"} is your local expert. ${ctaText ?? "Call Now"}`,
+          caption: `${topic} problem in ${city}? ${clientName || "Bed Bugs & Beyond"} is your local expert. ${ctaText ?? "Call Now"}`,
           hashtags: [`#PestControl`, `#${topicTag}`, `#${cityShort}AL`, `#GulfCoastAL`, `#PestFree`],
           imagePrompt: `A professional pest control technician inspecting a home exterior in a sunny suburban neighborhood.`,
           error: err?.message as string,
@@ -413,7 +413,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
 
   const postStatus = approvalMode === "draft_only" ? "draft" : "scheduled";
   const insertedIds: string[] = [];
-  const effectiveClient = clientName ?? "Bed Bugs & Beyond";
+  const effectiveClient = clientName || "Bed Bugs & Beyond";
 
   for (const post of generated) {
     const captionFull = post.hashtags?.length

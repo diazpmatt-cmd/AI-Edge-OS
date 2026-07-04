@@ -12,6 +12,7 @@ export const revenueAttributionTable = pgTable("revenue_attribution", {
   serviceType:      text("service_type"),
   notes:            text("notes"),
   gorilladeskJobId: text("gorilladesk_job_id"),
+  matchedAt:        timestamp("matched_at", { withTimezone: true }),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

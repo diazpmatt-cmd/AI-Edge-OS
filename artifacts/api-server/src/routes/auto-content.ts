@@ -209,6 +209,45 @@ router.put("/auto-content/settings", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Timezone utility ──────────────────────────────────────────────────────────
+
+// Convert a wall-clock hour:minute in America/Chicago to the correct UTC Date.
+// Uses Intl.DateTimeFormat.formatToParts to read the real Chicago offset on
+// any given calendar date, so CDT (UTC-5) and CST (UTC-6) are both handled
+// correctly without adding an external package.
+function chicagoHourToUtc(calDate: Date, hour: number, minute: number): Date {
+  // Start with a UTC candidate at the nominal time — this will be off by the
+  // Chicago UTC offset, but gives us a reference point close enough to read
+  // the real offset from Intl.
+  const candidate = new Date(
+    Date.UTC(calDate.getFullYear(), calDate.getMonth(), calDate.getDate(), hour, minute),
+  );
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone:  "America/Chicago",
+    year:      "numeric",
+    month:     "2-digit",
+    day:       "2-digit",
+    hour:      "2-digit",
+    minute:    "2-digit",
+    hour12:    false,
+  }).formatToParts(candidate);
+
+  const get = (type: string) =>
+    parseInt(parts.find(p => p.type === type)?.value ?? "0", 10);
+
+  // Chicago wall-clock for our UTC candidate
+  const chicagoH   = get("hour") % 24; // formatToParts can return 24 at midnight
+  const chicagoMin = get("minute");
+
+  // Difference in minutes between desired and actual Chicago wall-clock
+  let diffMin = (hour * 60 + minute) - (chicagoH * 60 + chicagoMin);
+  if (diffMin >  720) diffMin -= 1440;
+  if (diffMin < -720) diffMin += 1440;
+
+  return new Date(candidate.getTime() + diffMin * 60_000);
+}
+
 // ── Rotation logic ────────────────────────────────────────────────────────────
 
 function buildScheduleSlots(
@@ -242,7 +281,8 @@ function buildScheduleSlots(
     const date = new Date(start);
     date.setDate(date.getDate() + dayOff);
     const [h, m] = times[idx % times.length].split(":").map(Number);
-    date.setHours(h, m, 0, 0);
+    // Interpret posting times as America/Chicago wall-clock (CDT/CST-aware)
+    date.setTime(chicagoHourToUtc(date, h, m).getTime());
 
     const available = allCombos.filter(c => !usedKeys.has(`${c.city}:${c.topic}`));
     const pool = available.length ? available : (() => { usedKeys.clear(); return allCombos; })();

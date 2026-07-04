@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { socialPostsTable, socialConnectionsTable, imageAssetsTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -148,8 +149,24 @@ router.delete("/social-posts/:id", async (req, res) => {
 
 // ── Publish ───────────────────────────────────────────────────────────────────
 router.post("/social-posts/:id/publish", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  // Internal scheduler bypass — lets the scheduler call this route without a
+  // Clerk session. Validated via the shared in-process SCHEDULER_SECRET.
+  const isScheduler =
+    !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;
+
+  let userId: string;
+  if (isScheduler) {
+    const [p] = await db
+      .select({ userId: socialPostsTable.userId })
+      .from(socialPostsTable)
+      .where(eq(socialPostsTable.id, req.params.id));
+    if (!p) { res.status(404).json({ error: "Post not found" }); return; }
+    userId = p.userId;
+  } else {
+    const auth = getAuth(req);
+    if (!auth.userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+    userId = auth.userId;
+  }
 
   const post = await db.select().from(socialPostsTable)
     .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))

@@ -5,6 +5,7 @@ import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/theme-context";
 import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
+import { PublishingHubTab } from "@/components/LocalPresencePublishingHub";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -238,7 +239,7 @@ function AppleStepBadge({ status }: { status: AppleStepStatus }) {
 
 function AppleBusinessCard() {
   const [drawerOpen,    setDrawerOpen]    = useState(false);
-  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics">("checklist");
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics" | "publishing_hub">("checklist");
   const [checklist,     setChecklist]     = useState(APPLE_CHECKLIST);
   const [notes,         setNotes]         = useState("");
   const [placeCardUrl,  setPlaceCardUrl]  = useState("");
@@ -279,11 +280,12 @@ function AppleBusinessCard() {
   }
 
   const TABS: { key: typeof activeTab; label: string }[] = [
-    { key: "checklist",  label: "Setup Checklist" },
-    { key: "bizinfo",    label: "Business Info" },
-    { key: "profile",    label: "Profile Tracker" },
-    { key: "api",        label: "API Readiness" },
-    { key: "diagnostics",label: "Diagnostics" },
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "api",           label: "API Readiness" },
+    { key: "diagnostics",   label: "Diagnostics" },
+    { key: "publishing_hub",label: "📣 Publishing Hub" },
   ];
 
   return (
@@ -871,6 +873,9 @@ Baldwin County, Alabama`;
                 </div>
               </div>
             )}
+            {activeTab === "publishing_hub" && (
+              <PublishingHubTab platform="apple" />
+            )}
           </div>
         </div>
       )}
@@ -914,7 +919,7 @@ const BING_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
 
 function BingPlacesCard() {
   const [drawerOpen,   setDrawerOpen]   = useState(false);
-  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics">("checklist");
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "api" | "diagnostics" | "publishing_hub">("checklist");
   const [checklist,    setChecklist]    = useState(BING_CHECKLIST);
   const [notes,        setNotes]        = useState("");
   const [listingUrl,   setListingUrl]   = useState("");
@@ -941,11 +946,12 @@ function BingPlacesCard() {
   }
 
   const TABS: { key: typeof activeTab; label: string }[] = [
-    { key: "checklist",   label: "Setup Checklist" },
-    { key: "bizinfo",     label: "Business Info" },
-    { key: "profile",     label: "Profile Tracker" },
-    { key: "api",         label: "API Readiness" },
-    { key: "diagnostics", label: "Diagnostics" },
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "api",           label: "API Readiness" },
+    { key: "diagnostics",   label: "Diagnostics" },
+    { key: "publishing_hub",label: "📣 Publishing Hub" },
   ];
 
   const BING_BLUE = "#00ADEF";
@@ -1434,6 +1440,9 @@ Sunday:    Closed`;
                 </div>
               </div>
             )}
+            {activeTab === "publishing_hub" && (
+              <PublishingHubTab platform="bing" />
+            )}
           </div>
         </div>
       )}
@@ -1493,7 +1502,7 @@ const ND_NEIGHBORHOOD_STYLE: Record<string, { color: string; bg: string; border:
 
 function NextdoorBusinessCard() {
   const [drawerOpen,    setDrawerOpen]    = useState(false);
-  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "neighborhoods" | "diagnostics">("checklist");
+  const [activeTab,     setActiveTab]     = useState<"checklist" | "bizinfo" | "profile" | "neighborhoods" | "diagnostics" | "publishing_hub">("checklist");
   const [checklist,     setChecklist]     = useState(NEXTDOOR_CHECKLIST);
   const [pageUrl,       setPageUrl]       = useState("");
   const [acctEmail,     setAcctEmail]     = useState("");
@@ -1528,6 +1537,7 @@ function NextdoorBusinessCard() {
     { key: "profile",       label: "Profile Tracker" },
     { key: "neighborhoods", label: "Neighborhood Visibility" },
     { key: "diagnostics",   label: "Diagnostics" },
+    { key: "publishing_hub",label: "📣 Publishing Hub" },
   ];
 
   return (
@@ -2009,6 +2019,9 @@ Baldwin County, Alabama`;
                   })}
                 </div>
               </div>
+            )}
+            {activeTab === "publishing_hub" && (
+              <PublishingHubTab platform="nextdoor" />
             )}
           </div>
         </div>

@@ -34,6 +34,9 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 // Serve uploaded social-post images (public — no auth required for image display)
 app.use("/api/uploads", express.static("uploads"));
 
+// Serve custom audio greetings (public — fetched by Telnyx during calls)
+app.use("/api/audio", express.static("public/audio"));
+
 // PUBLIC routes — mounted before Clerk middleware (no auth required)
 // OAuth callbacks: Google/Meta/TikTok redirects verified via state tokens
 // Telnyx webhooks: incoming SMS/calls from Telnyx servers (verified by source IP / payload)

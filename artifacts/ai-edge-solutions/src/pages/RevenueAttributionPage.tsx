@@ -51,8 +51,8 @@ const DEMO_LEADS: Lead[] = [
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   pending:   { label: "Pending",   color: "#F59E0B", bg: "#F59E0B22" },
   unmatched: { label: "Unmatched", color: "#6B7280", bg: "#6B728022" },
-  matched:   { label: "Matched",   color: "#00AEEF", bg: "#00AEEF22" },
-  won:       { label: "Won ✓",     color: "#10B981", bg: "#10B98122" },
+  matched:   { label: "Matched",   color: "#3B82F6", bg: "#3B82F622" },
+  won:       { label: "Won ✓",     color: "#22C55E", bg: "#22C55E22" },
   lost:      { label: "Lost",      color: "#EF4444", bg: "#EF444422" },
 };
 

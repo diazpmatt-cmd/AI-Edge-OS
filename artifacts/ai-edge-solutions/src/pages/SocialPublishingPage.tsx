@@ -51,17 +51,17 @@ const CTA_OPTIONS = [
 ];
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  draft:     { bg: "rgba(148,163,184,0.12)", color: "#94A3B8" },
-  scheduled: { bg: "rgba(0,174,239,0.12)",   color: "#00AEEF" },
-  published: { bg: "rgba(16,185,129,0.12)",  color: "#10B981" },
+  draft:     { bg: "rgba(107,114,128,0.12)", color: "#6B7280" },
+  scheduled: { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B" },
+  published: { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
   partial:   { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B" },
   failed:    { bg: "rgba(239,68,68,0.12)",   color: "#EF4444" },
 };
 
 const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; label: string }> = {
-  facebook:  { bg: "rgba(59,89,152,0.18)",  color: "#6B9EFF", icon: "f", label: "Facebook" },
-  instagram: { bg: "rgba(225,48,108,0.15)", color: "#FF6B9D", icon: "✦", label: "Instagram" },
-  google:    { bg: "rgba(234,67,53,0.1)",   color: "#EA4335", icon: "G", label: "Google Business" },
+  facebook:  { bg: "rgba(59,130,246,0.12)",  color: "#93C5FD", icon: "f", label: "Facebook" },
+  instagram: { bg: "rgba(107,114,128,0.12)", color: "#9CA3AF", icon: "✦", label: "Instagram" },
+  google:    { bg: "rgba(107,114,128,0.12)", color: "#9CA3AF", icon: "G", label: "Google Business" },
 };
 
 const COMING_SOON_PLATFORMS = [

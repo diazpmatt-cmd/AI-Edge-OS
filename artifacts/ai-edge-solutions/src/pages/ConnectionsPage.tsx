@@ -66,12 +66,12 @@ function getDisplayAccountName(provider: string, dbConn: DbConnection | undefine
 }
 
 const STATUS_META: Record<StatusKind, { label: string; bg: string; color: string; dot: string }> = {
-  connected:          { label: "Connected",              bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" },
-  connected_readonly: { label: "Connected (Read Only)",  bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" },
-  needs_reconnect: { label: "Needs Reconnection", bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
-  needs_review:    { label: "Needs Review",       bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" },
-  not_connected:   { label: "Not Connected",      bg: "rgba(148,163,184,0.1)", color: "#94A3B8", dot: "#475569" },
-  coming_soon:     { label: "Coming Soon",        bg: "rgba(148,163,184,0.1)", color: "#64748B", dot: "#334155" },
+  connected:          { label: "Connected",              bg: "rgba(34,197,94,0.15)",  color: "#22C55E", dot: "#22C55E" },
+  connected_readonly: { label: "Connected (Read Only)",  bg: "rgba(34,197,94,0.15)",  color: "#22C55E", dot: "#22C55E" },
+  needs_reconnect: { label: "Needs Reconnection", bg: "rgba(245,158,11,0.15)", color: "#F59E0B", dot: "#F59E0B" },
+  needs_review:    { label: "Needs Review",       bg: "rgba(245,158,11,0.15)", color: "#F59E0B", dot: "#F59E0B" },
+  not_connected:   { label: "Not Connected",      bg: "rgba(107,114,128,0.1)", color: "#6B7280", dot: "#475569" },
+  coming_soon:     { label: "Coming Soon",        bg: "rgba(107,114,128,0.1)", color: "#6B7280", dot: "#334155" },
   blocked:         { label: "Pending Google Verification", bg: "rgba(245,158,11,0.1)", color: "#F59E0B", dot: "#F59E0B" },
 };
 

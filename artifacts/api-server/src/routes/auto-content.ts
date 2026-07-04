@@ -487,6 +487,11 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
           if (cityLow  && cArr.includes(cityLow))  s += 20;
           if (s > bestScore) { bestScore = s; bestAsset = asset; }
         }
+        // Branding fallback: if no specific match, use any branding-category image
+        if (bestScore < 70) {
+          const brandingAsset = assets.find(a => a.category === "branding");
+          if (brandingAsset) { bestAsset = brandingAsset; bestScore = 70; }
+        }
         if (bestScore >= 70 && bestAsset) {
           await db.update(socialPostsTable).set({
             matchedImageId:    bestAsset.id,

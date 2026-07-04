@@ -1,4 +1,5 @@
 - [AI Edge Solutions brand](ai-edge-brand.md) — Electric blue #00AEEF, metallic silver #C0C0C0, black/dark navy #030612; AE monogram SVG logo with gradient; all marketing pages use inline styles (no Tailwind).
+- [Bed Bugs & Beyond brand](bbb-brand.md) — Logo at /api/uploads/social-posts/bbb-brand-logo.png; colors #0D2B45/#0077B6/#F26C21; EVERY post must include this logo; branding fallback in V4 matcher ensures auto-attach.
 - [Clerk auth pattern for API calls](clerk-api-auth.md) — All API fetches MUST use `useApiFetch()` hook (Bearer token); cookie-only `apiFetch` never works through the Vite proxy.
 - [Facebook OAuth DB split + sync](facebook-oauth-db-sync.md) — Dev pulls from prod (not push). Riker.replit.dev requires Replit auth for external POSTs. Fix: /api/social-connections/dev-export on deployed + /pull-from-prod on dev.
 - [Object Storage wildcard routes](object-storage-wildcard-routes.md) — Express with newer path-to-regexp requires named wildcards: use `/*paramName` not `/*`.

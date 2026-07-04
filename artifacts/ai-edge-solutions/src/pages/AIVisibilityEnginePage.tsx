@@ -105,14 +105,14 @@ const STATUS_STYLE: Record<string, { color: string; label: string }> = {
 const PRIORITY_STYLE: Record<string, { color: string }> = {
   critical: { color: "#EF4444" },
   high:     { color: "#F59E0B" },
-  medium:   { color: "#00AEEF" },
-  low:      { color: "#64748B" },
+  medium:   { color: "#3B82F6" },
+  low:      { color: "#6B7280" },
 };
 
 const AUTHORITY_STATUS: Record<string, { color: string; label: string }> = {
   missing: { color: "#EF4444", label: "Missing" },
   weak:    { color: "#F59E0B", label: "Weak"    },
-  medium:  { color: "#00AEEF", label: "Fair"    },
+  medium:  { color: "#3B82F6", label: "Fair"    },
   good:    { color: "#22C55E", label: "Good"    },
 };
 
@@ -604,7 +604,7 @@ export default function AIVisibilityEnginePage() {
             </table>
             <div style={{ padding: "11px 16px", borderTop: isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6", background: isDark ? "rgba(239,68,68,0.03)" : "#FEF2F2" }}>
               <span style={{ fontSize: 11, color: isDark ? "#94A3B8" : "#6B7280" }}>
-                📊 <strong style={{ color: "#F87171" }}>Bed Bugs &amp; Beyond</strong> has an estimated <strong style={{ color: "#F87171" }}>2 AI mentions</strong> vs. competitor average of <strong style={{ color: "#FBBF24" }}>14</strong>. Closing this gap is the #1 growth lever.
+                📊 <strong style={{ color: "#EF4444" }}>Bed Bugs &amp; Beyond</strong> has an estimated <strong style={{ color: "#EF4444" }}>2 AI mentions</strong> vs. competitor average of <strong style={{ color: "#FBBF24" }}>14</strong>. Closing this gap is the #1 growth lever.
               </span>
             </div>
           </div>
@@ -695,7 +695,7 @@ export default function AIVisibilityEnginePage() {
               { id: "all",      label: `All (${recommendations.length})`,    color: "#94A3B8" },
               { id: "critical", label: `Critical (${criticalRecs.length})`,  color: "#EF4444" },
               { id: "high",     label: `High (${highRecs.length})`,          color: "#F59E0B" },
-              { id: "medium",   label: `Medium (${mediumRecs.length})`,      color: "#00AEEF" },
+              { id: "medium",   label: `Medium (${mediumRecs.length})`,      color: "#3B82F6" },
               { id: "low",      label: `Low (${lowRecs.length})`,            color: "#64748B" },
             ].map(f => (
               <button
@@ -715,7 +715,7 @@ export default function AIVisibilityEnginePage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {displayRecs.map((rec, i) => {
               const ps = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.low;
-              const impactColor = rec.impact === "High" ? "#22C55E" : rec.impact === "Medium" ? "#00AEEF" : "#64748B";
+              const impactColor = rec.impact === "High" ? "#22C55E" : rec.impact === "Medium" ? "#3B82F6" : "#6B7280";
               return (
                 <div key={i} style={{
                   ...card,

@@ -172,11 +172,11 @@ const STATUS_STYLE: Record<ChannelStatus, {
   connected:    { label: "Connected",      color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.25)",   dot: "#22C55E" },
   pending:      { label: "Setup Pending",  color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)",  dot: "#F59E0B" },
   not_started:  { label: "Not Started",    color: "#64748B", bg: "rgba(71,85,105,0.15)",   border: "rgba(71,85,105,0.2)",    dot: "#475569" },
-  needs_action: { label: "Needs Action",   color: "#F87171", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)",   dot: "#EF4444" },
+  needs_action: { label: "Needs Action",   color: "#EF4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)",   dot: "#EF4444" },
 };
 
 const PRIORITY_STYLE: Record<ChannelPriority, { label: string; color: string; bg: string }> = {
-  high:   { label: "High",   color: "#F87171", bg: "rgba(239,68,68,0.1)"   },
+  high:   { label: "High",   color: "#EF4444", bg: "rgba(239,68,68,0.1)"   },
   medium: { label: "Medium", color: "#F59E0B", bg: "rgba(245,158,11,0.1)"  },
   low:    { label: "Low",    color: "#475569", bg: "rgba(71,85,105,0.12)"  },
 };

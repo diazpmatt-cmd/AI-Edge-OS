@@ -483,7 +483,7 @@ export default function BusinessAssessmentPage() {
   const SEVERITY_STYLE: Record<string, { color: string; label: string }> = {
     critical: { color: "#EF4444", label: "Critical" },
     high:     { color: "#F59E0B", label: "High"     },
-    medium:   { color: "#00AEEF", label: "Medium"   },
+    medium:   { color: "#3B82F6", label: "Medium"   },
   };
 
   return (

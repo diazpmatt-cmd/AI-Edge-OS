@@ -34,11 +34,11 @@ type Assessment = {
 // Status config
 // ─────────────────────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  new:                   { label: "New",                  color: "#00AEEF", bg: "rgba(0,174,239,0.12)"    },
+  new:                   { label: "New",                  color: "#3B82F6", bg: "rgba(59,130,246,0.12)"  },
   contacted:             { label: "Contacted",            color: "#F59E0B", bg: "rgba(245,158,11,0.12)"   },
   qualified:             { label: "Qualified",            color: "#3B82F6", bg: "rgba(59,130,246,0.12)"   },
-  strategy_call_booked:  { label: "Call Booked",          color: "#06B6D4", bg: "rgba(6,182,212,0.12)"    },
-  proposal_sent:         { label: "Proposal Sent",        color: "#F97316", bg: "rgba(249,115,22,0.12)"   },
+  strategy_call_booked:  { label: "Call Booked",          color: "#22C55E", bg: "rgba(34,197,94,0.12)"   },
+  proposal_sent:         { label: "Proposal Sent",        color: "#3B82F6", bg: "rgba(59,130,246,0.12)"  },
   won:                   { label: "Won",                  color: "#22C55E", bg: "rgba(34,197,94,0.12)"   },
   lost:                  { label: "Lost",                 color: "#EF4444", bg: "rgba(239,68,68,0.12)"    },
 };

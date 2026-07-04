@@ -881,7 +881,7 @@ export default function ConnectionsPage() {
                     {fbNeedsUpgrade && fbStat && fbStat.missingScopes.length > 0 && (
                       <p style={{ fontSize: 11.5, color: "#F59E0B", margin: "0 0 8px", lineHeight: 1.6 }}>
                         ⚠️ Missing permissions for publishing:{" "}
-                        <code style={{ fontSize: 11, color: "#FCD34D" }}>
+                        <code style={{ fontSize: 11, color: "#F59E0B" }}>
                           {fbStat.missingScopes.join(", ")}
                         </code>
                       </p>

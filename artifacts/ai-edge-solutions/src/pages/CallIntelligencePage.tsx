@@ -70,8 +70,8 @@ function formatTimestamp(iso: string): string {
 
 function callTypeLabel(ct: string): { label: string; color: string; bg: string } {
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    incoming:    { label: "Incoming",    color: "#00AEEF", bg: "rgba(0,174,239,0.12)"   },
-    missed:      { label: "Missed",      color: "#F87171", bg: "rgba(239,68,68,0.12)"   },
+    incoming:    { label: "Incoming",    color: "#3B82F6", bg: "rgba(59,130,246,0.12)"  },
+    missed:      { label: "Missed",      color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
     transferred: { label: "Transferred", color: "#22C55E", bg: "rgba(34,197,94,0.12)"  },
     callback:    { label: "Callback",    color: "#F59E0B", bg: "rgba(245,158,11,0.12)"  },
     voicemail:   { label: "Voicemail",   color: "#3B82F6", bg: "rgba(59,130,246,0.12)"  },
@@ -82,7 +82,7 @@ function callTypeLabel(ct: string): { label: string; color: string; bg: string }
 
 function outcomeLabel(o: string): { label: string; color: string } {
   const map: Record<string, { label: string; color: string }> = {
-    pending:            { label: "In Progress",   color: "#00AEEF" },
+    pending:            { label: "In Progress",   color: "#3B82F6" },
     answered:           { label: "Answered",      color: "#22C55E" },
     transferred:        { label: "Transferred",   color: "#22C55E" },
     missed:             { label: "Missed",        color: "#EF4444" },
@@ -90,7 +90,7 @@ function outcomeLabel(o: string): { label: string; color: string } {
     callback_requested: { label: "Callback Req",  color: "#F59E0B" },
     replied:            { label: "Replied",       color: "#34D399" },
     no_answer:          { label: "No Answer",     color: "#EF4444" },
-    error:              { label: "Error",         color: "#F87171" },
+    error:              { label: "Error",         color: "#EF4444" },
   };
   return map[o] ?? { label: o, color: "#94A3B8" };
 }
@@ -98,11 +98,11 @@ function outcomeLabel(o: string): { label: string; color: string } {
 function leadStatusBadge(s: string | null) {
   if (!s) return null;
   const map: Record<string, { bg: string; color: string }> = {
-    new:                  { bg: "rgba(0,174,239,0.12)",    color: "#00AEEF" },
+    new:                  { bg: "rgba(59,130,246,0.12)",   color: "#3B82F6" },
     contacted:            { bg: "rgba(245,158,11,0.12)",   color: "#F59E0B" },
     quote_request:        { bg: "rgba(59,130,246,0.12)",   color: "#3B82F6" },
     appointment_request:  { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
-    emergency_request:    { bg: "rgba(239,68,68,0.12)",    color: "#F87171" },
+    emergency_request:    { bg: "rgba(239,68,68,0.12)",    color: "#EF4444" },
     qualified:            { bg: "rgba(59,130,246,0.12)",   color: "#3B82F6" },
     booked:               { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
     closed:               { bg: "rgba(100,116,139,0.12)",  color: "#94A3B8" },
@@ -219,7 +219,7 @@ export default function CallIntelligencePage() {
       ) : isError ? (
         <div style={{
           background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-          borderRadius: 12, padding: "24px", textAlign: "center", color: "#F87171",
+          borderRadius: 12, padding: "24px", textAlign: "center", color: "#EF4444",
         }}>
           Failed to load data. Please refresh.
         </div>
@@ -227,7 +227,7 @@ export default function CallIntelligencePage() {
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
             <MetricCard icon="📲" label="Total Calls Received" value={m?.total_calls ?? 0} sub={`${PERIOD_LABELS[period]} · all inbound`} accent="#00AEEF" />
-            <MetricCard icon="📵" label="Missed Calls" value={m?.missed_calls ?? 0} sub="Unanswered · text-back sent" accent="#F87171" />
+            <MetricCard icon="📵" label="Missed Calls" value={m?.missed_calls ?? 0} sub="Unanswered · text-back sent" accent="#EF4444" />
             <MetricCard icon="🔀" label="Calls Transferred" value={m?.transferred_calls ?? 0} sub="Live agent handoff" accent="#22C55E" />
             <MetricCard icon="🔔" label="Callback Requests" value={m?.callback_requests ?? 0} sub="Pressed 2 in IVR" accent="#F59E0B" />
             <MetricCard icon="🎙️" label="Voicemails" value={m?.voicemails ?? 0} sub="Pressed 3 in IVR" accent="#3B82F6" />

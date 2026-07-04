@@ -38,8 +38,8 @@ const PLATFORM_META: Record<string, { label: string; icon: string; color: string
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   sent:      { bg: "#1E3A5F", text: "#60A5FA" },
   delivered: { bg: "#1A3A2A", text: "#4ADE80" },
-  clicked:   { bg: "#2D2A0F", text: "#FCD34D" },
-  reviewed:  { bg: "#1A2D3A", text: "#00AEEF" },
+  clicked:   { bg: "#2D2A0F", text: "#F59E0B" },
+  reviewed:  { bg: "#1A3A2A", text: "#22C55E" },
 };
 
 const SMS_TEMPLATES = [

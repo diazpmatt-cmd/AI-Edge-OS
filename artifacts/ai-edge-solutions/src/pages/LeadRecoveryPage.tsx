@@ -58,15 +58,15 @@ const PIPELINE_STAGES = [
 ];
 
 const LEAD_STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
-  missed:      { bg: "rgba(239,68,68,0.1)",    color: "#F87171", dot: "#EF4444" },
-  sms_sent:    { bg: "rgba(245,158,11,0.1)",   color: "#FCD34D", dot: "#F59E0B" },
-  responded:   { bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF" },
+  missed:      { bg: "rgba(239,68,68,0.1)",    color: "#EF4444", dot: "#EF4444" },
+  sms_sent:    { bg: "rgba(245,158,11,0.1)",   color: "#F59E0B", dot: "#F59E0B" },
+  responded:   { bg: "rgba(59,130,246,0.1)",   color: "#3B82F6", dot: "#3B82F6" },
   qualified:   { bg: "rgba(59,130,246,0.1)",   color: "#3B82F6", dot: "#3B82F6" },
-  booked:      { bg: "rgba(34,197,94,0.12)",  color: "#22C55E", dot: "#22C55E" },
-  new:         { bg: "rgba(0,174,239,0.12)",   color: "#00AEEF", dot: "#00AEEF" },
+  booked:      { bg: "rgba(34,197,94,0.12)",   color: "#22C55E", dot: "#22C55E" },
+  new:         { bg: "rgba(59,130,246,0.12)",  color: "#3B82F6", dot: "#3B82F6" },
   contacted:   { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B", dot: "#F59E0B" },
-  closed:      { bg: "rgba(34,197,94,0.08)",  color: "#6EE7B7", dot: "#6EE7B7" },
-  lost:        { bg: "rgba(148,163,184,0.1)",  color: "#64748B", dot: "#475569" },
+  closed:      { bg: "rgba(34,197,94,0.08)",   color: "#22C55E", dot: "#22C55E" },
+  lost:        { bg: "rgba(107,114,128,0.1)",  color: "#6B7280", dot: "#6B7280" },
   appointment_booked: { bg: "rgba(34,197,94,0.12)", color: "#22C55E", dot: "#22C55E" },
 };
 
@@ -283,7 +283,7 @@ export default function LeadRecoveryPage() {
                 disabled={testing !== null}
                 style={{
                   padding: "8px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171",
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444",
                   opacity: testing ? 0.6 : 1,
                 }}
               >
@@ -666,9 +666,9 @@ export default function LeadRecoveryPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                   {[
                     { label: "Text-backs Sent",    value: telnyxData.textbacks_sent,    color: "#22C55E", note: "Auto-sent on missed call" },
-                    { label: "Text-back Failed",   value: telnyxData.textbacks_failed,  color: "#F87171", note: "Delivery failures" },
+                    { label: "Text-back Failed",   value: telnyxData.textbacks_failed,  color: "#EF4444", note: "Delivery failures" },
                     { label: "SMS Received",       value: telnyxData.sms_received,      color: "#F59E0B", note: "Inbound SMS total" },
-                    { label: "SMS Replies",        value: telnyxData.sms_replies,       color: "#00AEEF", note: "Replies to text-back menu" },
+                    { label: "SMS Replies",        value: telnyxData.sms_replies,       color: "#3B82F6", note: "Replies to text-back menu" },
                   ].map(m => (
                     <div key={m.label} style={{
                       background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
@@ -730,7 +730,7 @@ export default function LeadRecoveryPage() {
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
                       ⚠ Revenue Estimate (not confirmed)
                     </div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: "#FCD34D" }}>{telnyxData.estimated_missed_revenue_fmt}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "#F59E0B" }}>{telnyxData.estimated_missed_revenue_fmt}</div>
                     <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
                       {telnyxData.estimated_missed_revenue_note}
                     </div>

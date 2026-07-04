@@ -546,7 +546,7 @@ export default function SocialPublishingPage() {
 
                 {/* Upload error */}
                 {uploadError && (
-                  <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171", fontSize: 12 }}>
+                  <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444", fontSize: 12 }}>
                     ⚠ {uploadError}
                   </div>
                 )}
@@ -713,7 +713,7 @@ export default function SocialPublishingPage() {
                       </div>
 
                       {post.errorMessage && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: "#F87171", background: "rgba(239,68,68,0.08)", borderRadius: 6, padding: "4px 8px" }}>
+                        <div style={{ marginTop: 6, fontSize: 11, color: "#EF4444", background: "rgba(239,68,68,0.08)", borderRadius: 6, padding: "4px 8px" }}>
                           ⚠ {post.errorMessage}
                         </div>
                       )}

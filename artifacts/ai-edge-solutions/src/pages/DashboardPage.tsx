@@ -69,9 +69,9 @@ const ALERTS = [
 ];
 
 const ALERT_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  critical: { color: "#F87171", bg: "rgba(239,68,68,0.07)",  border: "rgba(239,68,68,0.2)",  label: "Critical" },
-  warning:  { color: "#FCD34D", bg: "rgba(245,158,11,0.07)", border: "rgba(245,158,11,0.2)", label: "Warning"  },
-  healthy:  { color: "#22C55E", bg: "rgba(34,197,94,0.07)", border: "rgba(34,197,94,0.2)", label: "Healthy"  },
+  critical: { color: "#EF4444", bg: "rgba(239,68,68,0.07)",  border: "rgba(239,68,68,0.2)",  label: "Critical" },
+  warning:  { color: "#F59E0B", bg: "rgba(245,158,11,0.07)", border: "rgba(245,158,11,0.2)", label: "Warning"  },
+  healthy:  { color: "#22C55E", bg: "rgba(34,197,94,0.07)",  border: "rgba(34,197,94,0.2)",  label: "Healthy"  },
 };
 
 // Opportunity estimates require baseline performance data before they can be
@@ -88,9 +88,9 @@ const MODULES = [
   { icon: "📞", name: "Lead Recovery AI",    status: "Active",       statusColor: "#22C55E", pct: null, summary: "Telnyx connected · Monitoring calls",  link: "/admin/lead-recovery"     },
   { icon: "📍", name: "Local Presence",      status: "In Progress",  statusColor: "#3B82F6", pct: null, summary: "Bing verified · 2 platforms pending",  link: "/admin/local-presence"    },
   { icon: "✨", name: "AI Visibility",       status: "Pending scan", statusColor: "#EF4444", pct: null, summary: "No scan data yet",                     link: "/admin/ai-visibility"     },
-  { icon: "⚡", name: "Connected Accounts",  status: "Partial",      statusColor: "#00AEEF", pct: null, summary: "4 of 8 platforms connected",           link: "/admin/connections"       },
-  { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Queue open · No score yet",            link: "/admin/social-publishing" },
-  { icon: "🤖", name: "Auto Content Engine", status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Content pipeline active",              link: "/admin/auto-content"      },
+  { icon: "⚡", name: "Connected Accounts",  status: "Partial",      statusColor: "#F59E0B", pct: null, summary: "4 of 8 platforms connected",           link: "/admin/connections"       },
+  { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#22C55E", pct: null, summary: "Queue open · No score yet",            link: "/admin/social-publishing" },
+  { icon: "🤖", name: "Auto Content Engine", status: "Ready",        statusColor: "#22C55E", pct: null, summary: "Content pipeline active",              link: "/admin/auto-content"      },
   { icon: "🛰", name: "System Diagnostics",  status: "Monitoring",   statusColor: "#3B82F6", pct: null, summary: "All core systems nominal",             link: "/admin/diagnostics"       },
 ];
 
@@ -112,9 +112,9 @@ const SNAPSHOTS = [
     link: "/admin/local-presence",
     rows: [
       { label: "Google Business",    value: "Connected",  valueColor: "#22C55E" },
-      { label: "Apple Business",     value: "Pending",    valueColor: "#F87171" },
+      { label: "Apple Business",     value: "Pending",    valueColor: "#F59E0B" },
       { label: "Bing Places",        value: "Publishing",  valueColor: "#3B82F6" },
-      { label: "Nextdoor Business",  value: "Pending",    valueColor: "#F87171" },
+      { label: "Nextdoor Business",  value: "Pending",    valueColor: "#F59E0B" },
     ],
   },
   {
@@ -125,7 +125,7 @@ const SNAPSHOTS = [
     rows: [
       { label: "Visibility score",   value: "Pending",    valueColor: "#475569" },
       { label: "Prompts detected",   value: "2 of 8",     valueColor: "#F59E0B" },
-      { label: "Competitor gap",     value: "High",       valueColor: "#F87171" },
+      { label: "Competitor gap",     value: "High",       valueColor: "#EF4444" },
       { label: "Actions pending",    value: "7",          valueColor: "#94A3B8" },
     ],
   },
@@ -430,7 +430,7 @@ export default function DashboardPage() {
           <SectionDivider title="GorillaDesk Business Analytics" right={
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {syncError && (
-                <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {syncError}</span>
+                <span style={{ fontSize: 10, color: "#EF4444", fontWeight: 600 }}>⚠ {syncError}</span>
               )}
               {lastSyncedAt && !syncError && (
                 <span style={{ fontSize: 10, color: "#475569" }}>
@@ -438,7 +438,7 @@ export default function DashboardPage() {
                 </span>
               )}
               {gdError && !gdSyncing && (
-                <span style={{ fontSize: 10, color: "#F87171", fontWeight: 600 }}>⚠ {gdError}</span>
+                <span style={{ fontSize: 10, color: "#EF4444", fontWeight: 600 }}>⚠ {gdError}</span>
               )}
               {gdLoading && !gdSyncing && (
                 <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>
@@ -484,7 +484,7 @@ export default function DashboardPage() {
               borderRadius: 13, padding: "28px", textAlign: "center",
             }}>
               <div style={{ fontSize: 22, marginBottom: 8 }}>⚠</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#F87171", marginBottom: 4 }}>Analytics unavailable</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#EF4444", marginBottom: 4 }}>Analytics unavailable</div>
               <div style={{ fontSize: 11, color: "#64748B" }}>Could not load GorillaDesk data. The API may be unreachable.</div>
             </div>
           )}
@@ -512,7 +512,7 @@ export default function DashboardPage() {
                       {[
                         { label: "Monthly Revenue",    value: gd.revenue.monthly_revenue_fmt,     color: "#F59E0B" },
                         { label: "Collected",          value: gd.revenue.collected_revenue_fmt,   color: "#22C55E" },
-                        { label: "Outstanding",        value: gd.revenue.outstanding_revenue_fmt, color: "#F87171" },
+                        { label: "Outstanding",        value: gd.revenue.outstanding_revenue_fmt, color: "#EF4444" },
                         { label: "Avg Ticket",         value: gd.revenue.avg_ticket_fmt,          color: "#94A3B8" },
                       ].map(m => (
                         <div key={m.label} style={{
@@ -543,7 +543,7 @@ export default function DashboardPage() {
                       {[
                         { label: "Total Jobs",       value: String(gd.jobs.total),              color: "#94A3B8" },
                         { label: "Completed",        value: String(gd.jobs.completed),          color: "#22C55E" },
-                        { label: "Incomplete",       value: String(gd.jobs.incomplete),         color: "#F87171" },
+                        { label: "Incomplete",       value: String(gd.jobs.incomplete),         color: "#EF4444" },
                         { label: "Completion Rate",  value: `${gd.jobs.completion_rate}%`,      color: "#00AEEF" },
                       ].map(m => (
                         <div key={m.label} style={{
@@ -783,7 +783,7 @@ export default function DashboardPage() {
                   borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center", gap: 12,
                 }}>
                   <span style={{ fontSize: 11, color: "#F59E0B", fontWeight: 700 }}>⚠ Est. Missed Revenue:</span>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: "#FCD34D" }}>{telnyxData.estimated_missed_revenue_fmt}</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: "#F59E0B" }}>{telnyxData.estimated_missed_revenue_fmt}</span>
                   <span style={{ fontSize: 10, color: "#6B7280" }}>{telnyxData.estimated_missed_revenue_note}</span>
                 </div>
               )}
@@ -954,7 +954,7 @@ export default function DashboardPage() {
             {[
               { label: "Keywords Targeted", value: keywords.length, color: "#00AEEF" },
               { label: "Articles Planned",  value: totalArticles,   color: "#3B82F6" },
-              { label: "Drafts",            value: counts.draft ?? 0, color: "#F59E0B" },
+              { label: "Drafts",            value: counts.draft ?? 0, color: "#C4B5FD" },
               { label: "Published",         value: counts.published ?? 0, color: "#22C55E" },
             ].map(s => (
               <div key={s.label} style={{
@@ -1038,8 +1038,8 @@ export default function DashboardPage() {
                     published:         { color: "#22C55E", bg: "rgba(34,197,94,0.1)"  },
                     published_error:   { color: "#EF4444", bg: "rgba(239,68,68,0.1)"   },
                     ready_for_website: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)"  },
-                    scheduled:         { color: "#00AEEF", bg: "rgba(0,174,239,0.08)"  },
-                    draft:             { color: "#475569", bg: "rgba(255,255,255,0.03)" },
+                    scheduled:         { color: "#F59E0B", bg: "rgba(245,158,11,0.08)"  },
+                    draft:             { color: "#C4B5FD", bg: "rgba(196,181,253,0.08)" },
                   };
                   const st = stMap[a.status] ?? stMap.draft;
                   const label = a.status === "published_error" ? "Error" : a.status === "ready_for_website" ? "Ready" : a.status;

@@ -46,7 +46,7 @@ const PRIORITY_STYLE: Record<Priority, { color: string; bg: string; label: strin
 
 const CAL_STATUS_STYLE: Record<CalStatus, { color: string; bg: string; label: string }> = {
   published: { color: "#22C55E", bg: "rgba(34,197,94,0.1)",  label: "Published" },
-  scheduled: { color: "#00AEEF", bg: "rgba(0,174,239,0.1)",   label: "Scheduled" },
+  scheduled: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)",  label: "Scheduled" },
   pending:   { color: "#64748B", bg: "rgba(100,116,139,0.1)", label: "Pending"   },
 };
 
@@ -63,8 +63,8 @@ const OPPORTUNITY_STYLE: Record<"high" | "medium" | "low", { color: string; bg: 
 };
 
 const ALERT_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  critical: { color: "#F87171", bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.2)"   },
-  warning:  { color: "#FCD34D", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.2)"  },
+  critical: { color: "#EF4444", bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.2)"   },
+  warning:  { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.2)"  },
   info:     { color: "#93C5FD", bg: "rgba(59,130,246,0.07)",  border: "rgba(59,130,246,0.2)"  },
 };
 
@@ -497,7 +497,7 @@ export default function LocalBizAIPage() {
                   background: as.bg, border: `1px solid ${as.border}`,
                 }}>
                   <span style={{ fontSize: 12, flexShrink: 0, fontWeight: 700, color: as.color }}>{alert.icon}</span>
-                  <span style={{ flex: 1, fontSize: 12.5, color: as.color === "#F87171" ? "#FCA5A5" : as.color === "#FCD34D" ? "#FDE68A" : "#BFDBFE", lineHeight: 1.4 }}>
+                  <span style={{ flex: 1, fontSize: 12.5, color: as.color === "#EF4444" ? "#FCA5A5" : as.color === "#F59E0B" ? "#FDE68A" : "#BFDBFE", lineHeight: 1.4 }}>
                     {alert.text}
                   </span>
                   {alert.link && (

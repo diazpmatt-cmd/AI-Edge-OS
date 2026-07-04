@@ -16,10 +16,10 @@ const SEVERITY_DARK: Record<InsightSeverity, {
   badgeBorder: string;
   badgeText:   string;
 }> = {
-  critical:    { label: "Critical",    icon: "✕", color: "#F87171", bg: "rgba(239,68,68,0.06)",   border: "rgba(239,68,68,0.18)",   left: "#EF4444", badgeBg: "rgba(239,68,68,0.12)",   badgeBorder: "rgba(239,68,68,0.25)",   badgeText: "#F87171" },
-  warning:     { label: "Warning",     icon: "⚠", color: "#FCD34D", bg: "rgba(245,158,11,0.06)",  border: "rgba(245,158,11,0.18)",  left: "#F59E0B", badgeBg: "rgba(245,158,11,0.12)",  badgeBorder: "rgba(245,158,11,0.25)",  badgeText: "#FCD34D" },
+  critical:    { label: "Critical",    icon: "✕", color: "#EF4444", bg: "rgba(239,68,68,0.06)",   border: "rgba(239,68,68,0.18)",   left: "#EF4444", badgeBg: "rgba(239,68,68,0.12)",   badgeBorder: "rgba(239,68,68,0.25)",   badgeText: "#EF4444" },
+  warning:     { label: "Warning",     icon: "⚠", color: "#F59E0B", bg: "rgba(245,158,11,0.06)",  border: "rgba(245,158,11,0.18)",  left: "#F59E0B", badgeBg: "rgba(245,158,11,0.12)",  badgeBorder: "rgba(245,158,11,0.25)",  badgeText: "#F59E0B" },
   opportunity: { label: "Opportunity", icon: "▲", color: "#22C55E", bg: "rgba(34,197,94,0.06)",   border: "rgba(34,197,94,0.18)",   left: "#22C55E", badgeBg: "rgba(34,197,94,0.12)",   badgeBorder: "rgba(34,197,94,0.25)",   badgeText: "#22C55E" },
-  info:        { label: "Info",        icon: "●", color: "#38BDF8", bg: "rgba(0,174,239,0.06)",   border: "rgba(0,174,239,0.16)",   left: "#00AEEF", badgeBg: "rgba(0,174,239,0.12)",   badgeBorder: "rgba(0,174,239,0.25)",   badgeText: "#38BDF8" },
+  info:        { label: "Info",        icon: "●", color: "#3B82F6", bg: "rgba(59,130,246,0.06)",  border: "rgba(59,130,246,0.16)",  left: "#3B82F6", badgeBg: "rgba(59,130,246,0.12)",  badgeBorder: "rgba(59,130,246,0.25)",  badgeText: "#3B82F6" },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ function InsightCard({ insight, isDark }: { insight: Insight; isDark: boolean })
             border: isDark ? "1px solid rgba(245,158,11,0.25)" : "1px solid #FDE68A",
             borderRadius: 20, padding: "2px 9px",
             fontSize: 9, fontWeight: 700,
-            color: isDark ? "#FCD34D" : "#92400E",
+            color: isDark ? "#F59E0B" : "#92400E",
             letterSpacing: "0.5px", flexShrink: 0, marginTop: 1,
           }}>
             ~ ESTIMATE
@@ -302,7 +302,7 @@ export function AiInsightsPanel() {
           borderRadius: 13, padding: "28px", textAlign: "center",
         }}>
           <div style={{ fontSize: 20, marginBottom: 8 }}>⚠</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: isDark ? "#F87171" : "#B91C1C", marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isDark ? "#EF4444" : "#B91C1C", marginBottom: 4 }}>
             Insights unavailable
           </div>
           <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#4B5563" }}>{error}</div>

@@ -1486,7 +1486,7 @@ const NEXTDOOR_DIAGS: { check: string; status: AppleDiagStatus; note: string }[]
 
 const ND_NEIGHBORHOOD_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
   covered:      { color: "#22C55E", bg: "rgba(34,197,94,0.07)",  border: "rgba(34,197,94,0.2)",  label: "Covered"            },
-  pending:      { color: "#00AEEF", bg: "rgba(0,174,239,0.07)",   border: "rgba(0,174,239,0.15)",  label: "Pending"            },
+  pending:      { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.15)", label: "Pending"            },
   missing:      { color: "#EF4444", bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.18)",  label: "Missing"            },
   needs_recs:   { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.18)", label: "Needs Recommendations" },
 };
@@ -2277,7 +2277,7 @@ function PlatformCard({
               borderRadius: 8, padding: "7px 10px",
             }}>
               <span style={{ fontSize: 12, flexShrink: 0 }}>⚠</span>
-              <span style={{ fontSize: 12, color: "#FCD34D", lineHeight: 1.4 }}>{w}</span>
+              <span style={{ fontSize: 12, color: "#F59E0B", lineHeight: 1.4 }}>{w}</span>
             </div>
           ))}
         </div>
@@ -5184,7 +5184,7 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags, dbScore
                 borderRadius: 8, padding: "8px 12px",
               }}>
                 <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
-                <span style={{ fontSize: 12, color: d.severity === "warning" ? "#FCD34D" : "#94A3B8", lineHeight: 1.4 }}>{d.text}</span>
+                <span style={{ fontSize: 12, color: d.severity === "warning" ? "#F59E0B" : "#94A3B8", lineHeight: 1.4 }}>{d.text}</span>
               </div>
             ))}
           </div>

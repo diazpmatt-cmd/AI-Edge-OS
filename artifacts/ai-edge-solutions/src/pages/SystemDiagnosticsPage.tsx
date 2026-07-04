@@ -74,14 +74,14 @@ const HEALTH_COLOR: Record<HealthStatus, { dot: string; bg: string; border: stri
 };
 
 const LOG_LEVEL_STYLE: Record<string, { bg: string; color: string }> = {
-  info:  { bg: "rgba(0,174,239,0.1)",    color: "#00AEEF" },
+  info:  { bg: "rgba(59,130,246,0.1)",   color: "#3B82F6" },
   warn:  { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B" },
   error: { bg: "rgba(239,68,68,0.12)",   color: "#EF4444" },
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  draft:     { bg: "rgba(148,163,184,0.1)", color: "#94A3B8" },
-  scheduled: { bg: "rgba(0,174,239,0.1)",   color: "#00AEEF" },
+  draft:     { bg: "rgba(196,181,253,0.1)", color: "#C4B5FD" },
+  scheduled: { bg: "rgba(245,158,11,0.1)",  color: "#F59E0B" },
   pending:   { bg: "rgba(245,158,11,0.1)",  color: "#F59E0B" },
   published: { bg: "rgba(34,197,94,0.1)",  color: "#22C55E" },
   partial:   { bg: "rgba(245,158,11,0.1)",  color: "#F59E0B" },

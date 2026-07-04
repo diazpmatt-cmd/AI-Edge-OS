@@ -297,7 +297,7 @@ function MatchedImageBlock({ city, topic, angle }: { city: string | null; topic:
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled: "#00AEEF", draft: "#94A3B8", published: "#22C55E", failed: "#EF4444", pending: "#F59E0B",
+  scheduled: "#F59E0B", draft: "#C4B5FD", published: "#22C55E", failed: "#EF4444", pending: "#F59E0B",
 };
 
 const ANGLE_COLOR: Record<string, string> = {
@@ -482,7 +482,7 @@ export default function AutoContentEnginePage() {
           : "active";
 
   const statusColors = {
-    running:    { dot: "#00AEEF", bg: "rgba(0,174,239,0.1)",   border: "rgba(0,174,239,0.3)",    label: "Running",    pulse: true  },
+    running:    { dot: "#3B82F6", bg: "rgba(59,130,246,0.1)",  border: "rgba(59,130,246,0.25)",  label: "Running",    pulse: true  },
     active:     { dot: "#22C55E", bg: "rgba(34,197,94,0.1)",  border: "rgba(34,197,94,0.25)",  label: "Active",     pulse: false },
     configured: { dot: "#6B9EFF", bg: "rgba(107,158,255,0.08)",border: "rgba(107,158,255,0.22)", label: "Configured", pulse: false },
     paused:     { dot: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)",  label: "Paused",     pulse: false },

@@ -398,24 +398,24 @@ router.post("/telnyx/voice", async (req, res) => {
 
     const gatherUrl = `${baseUrl(req)}/api/telnyx/voice/gather`;
     const greeting =
-      "Thank you for calling Bed Bugs and Beyond. " +
-      "For immediate assistance, press 1. " +
+      "Hi, thank you for calling Bed Bugs and Beyond Pest Control. " +
+      "To speak directly with Michael, press 1. " +
       "To request a callback, press 2. " +
       "To leave a voicemail, press 3.";
 
     res.set("Content-Type", "text/xml");
     res.send(texml(`
       <Gather numDigits="1" action="${gatherUrl}" method="POST" timeout="10">
-        <Say voice="alice">${greeting}</Say>
+        <Say voice="Polly.Joanna">${greeting}</Say>
       </Gather>
-      <Say voice="alice">We did not receive your selection. Please call back and try again. Goodbye.</Say>
+      <Say voice="Polly.Joanna">We did not receive your selection. Please call back and try again. Goodbye.</Say>
       <Hangup/>
     `));
   } catch (err) {
     console.error("[TELNYX] Error handling inbound voice call:", err);
     res.set("Content-Type", "text/xml");
     res.send(texml(
-      `<Say voice="alice">We are sorry, we are unable to take your call right now. Please try again later.</Say><Hangup/>`
+      `<Say voice="Polly.Joanna">We are sorry, we are unable to take your call right now. Please try again later.</Say><Hangup/>`
     ));
   }
 });
@@ -457,7 +457,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           ),
       ]);
       res.send(texml(`
-        <Say voice="alice">Please hold while we connect you.</Say>
+        <Say voice="Polly.Joanna">Please hold while we connect you.</Say>
         <Dial>${forward}</Dial>
       `));
 
@@ -484,7 +484,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           ),
       ]);
       res.send(texml(`
-        <Say voice="alice">Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!</Say>
+        <Say voice="Polly.Joanna">Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!</Say>
         <Hangup/>
       `));
 
@@ -504,16 +504,16 @@ router.post("/telnyx/voice/gather", async (req, res) => {
         )
         .catch(e => console.error("[TELNYX] callsTable update error (voicemail start):", e));
       res.send(texml(`
-        <Say voice="alice">Please leave your message after the beep. Press star or hang up when finished.</Say>
+        <Say voice="Polly.Joanna">Please leave your message after the beep. Press star or hang up when finished.</Say>
         <Record action="${recordUrl}" method="POST" maxLength="120" playBeep="true" finishOnKey="*"/>
-        <Say voice="alice">We did not receive your message. Please call back and try again. Goodbye.</Say>
+        <Say voice="Polly.Joanna">We did not receive your message. Please call back and try again. Goodbye.</Say>
         <Hangup/>
       `));
 
     } else {
       console.log(`[TELNYX] Invalid menu selection "${digit}" from ${from || "unknown"}`);
       res.send(texml(`
-        <Say voice="alice">That was not a valid option. Please call back and try again. Goodbye.</Say>
+        <Say voice="Polly.Joanna">That was not a valid option. Please call back and try again. Goodbye.</Say>
         <Hangup/>
       `));
     }
@@ -521,7 +521,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     console.error("[TELNYX] Error handling voice gather:", err);
     res.set("Content-Type", "text/xml");
     res.send(texml(
-      `<Say voice="alice">We are sorry, something went wrong. Please call back and try again.</Say><Hangup/>`
+      `<Say voice="Polly.Joanna">We are sorry, something went wrong. Please call back and try again.</Say><Hangup/>`
     ));
   }
 });
@@ -563,7 +563,7 @@ router.post("/telnyx/voice/recording", async (req, res) => {
 
     res.set("Content-Type", "text/xml");
     res.send(texml(`
-      <Say voice="alice">Thank you for your message. We will get back to you soon. Have a great day!</Say>
+      <Say voice="Polly.Joanna">Thank you for your message. We will get back to you soon. Have a great day!</Say>
       <Hangup/>
     `));
   } catch (err) {

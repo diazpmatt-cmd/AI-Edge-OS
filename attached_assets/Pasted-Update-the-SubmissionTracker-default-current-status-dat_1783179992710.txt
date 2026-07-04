@@ -1,0 +1,77 @@
+Update the SubmissionTracker default/current status data for BB&B.
+
+Do not rebuild anything.
+Do not refactor the tracker.
+Do not touch OAuth logic.
+
+Goal:
+Make the Local Presence SubmissionTracker reflect the real current BB&B approval pipeline.
+
+Set statuses:
+
+1. Google Business Profile
+
+* status: “verification_pending”
+* notes: “GBP API access request submitted. Google quota currently 0 requests/min; waiting on approval.”
+* nextAction: “Watch for Google approval email. Case ID: 9-0761000041438.”
+* account: “Bed Bugs & Beyond”
+* listingUrl: “https://bedbugsandbeyond.net”
+
+2. Apple Business Connect
+
+* status: “verification_pending”
+* notes: “Apple Business Connect approval pending.”
+* nextAction: “Check Apple Business Connect approval status.”
+
+3. TikTok for Business
+
+* status: “verification_pending”
+* notes: “TikTok app/business review pending.”
+* nextAction: “Watch for TikTok review decision.”
+
+4. Bing Places
+
+* status: “verification_pending”
+* notes: “Bing Places synced from Google and verification/publishing is pending.”
+* nextAction: “Wait for Bing Places publishing/verification completion.”
+
+5. Nextdoor
+
+* status: “not_started”
+* notes: “Pending setup.”
+* nextAction: “Create or claim Nextdoor Business profile.”
+
+6. Yelp
+
+* status: “not_started”
+* notes: “Pending setup.”
+* nextAction: “Create or claim Yelp Business profile.”
+
+7. Angi for Pros
+
+* status: “not_started”
+* notes: “Pending setup.”
+* nextAction: “Create or claim Angi for Pros profile.”
+
+8. Thumbtack for Pros
+
+* status: “not_started”
+* notes: “Pending setup.”
+* nextAction: “Create or claim Thumbtack for Pros profile.”
+
+Important:
+Existing localStorage users may already have old tracker values. Do not wipe saved user data unless necessary.
+
+If TRACKER_INIT changes alone will not update existing localStorage users, add a safe non-destructive merge/update strategy that:
+
+* preserves user-entered fields when they are already filled
+* adds missing default notes/nextAction only when blank
+* does not overwrite existing manual edits
+
+Run TypeScript check.
+
+Return:
+
+* files changed
+* whether existing localStorage users receive these default status/notes safely
+* TypeScript result

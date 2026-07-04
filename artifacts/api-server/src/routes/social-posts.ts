@@ -190,6 +190,17 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     return data.data;
   };
 
+  // Converts any stored image path to a public HTTPS URL usable by Facebook/Instagram/GBP.
+  // /objects/{id}  → https://aiedgesolutions.online/api/storage/objects/{id}
+  // http(s)://...  → returned as-is
+  // anything else  → null (e.g. local /api/uploads/ paths are handled by buildImageForm, not here)
+  function resolveImageUrl(val: string | null | undefined): string | null {
+    if (!val) return null;
+    if (val.startsWith("http")) return val;
+    if (val.startsWith("/objects/")) return `https://aiedgesolutions.online/api/storage${val}`;
+    return null;
+  }
+
   const buildImageForm = async (imageData: string | null): Promise<{ blob: Blob; filename: string } | null> => {
     if (!imageData) return null;
     if (imageData.startsWith("/api/uploads/")) {
@@ -270,7 +281,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     try {
       const fbCaption = post.captionFacebook ?? post.caption;
       const fullCaption = buildCaption(fbCaption, post.ctaType, post.ctaValue);
-      const fbImageSource = post.imageData ?? post.matchedImageUrl ?? null;
+      const fbImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
       const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, fbImageSource);
       results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };
       fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
@@ -291,7 +302,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const imageUrl =
         fbPhotoUrl ??
         (post.imageData?.startsWith("http") ? post.imageData : null) ??
-        (post.matchedImageUrl?.startsWith("http") ? post.matchedImageUrl : null);
+        resolveImageUrl(post.matchedImageUrl);
       if (!imageUrl) throw new Error("Instagram requires a public image URL. Upload an image to the post or add images to the Image Assets library.");
 
       const igCaption = post.captionFacebook ?? post.caption;
@@ -338,7 +349,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       try {
         const token = await getGoogleAccessToken(gbpConn);
         const googleCaption = post.captionGoogle ?? post.caption;
-        const gbpImageSource = post.imageData ?? post.matchedImageUrl ?? null;
+        const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
         const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);
         results.google = { ok: true, postId: gbpResult.id };
       } catch (e: any) {

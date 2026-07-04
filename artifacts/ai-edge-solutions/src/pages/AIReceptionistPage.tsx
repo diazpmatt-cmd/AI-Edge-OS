@@ -57,7 +57,7 @@ const TABS = [
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AIReceptionistPage() {
-  const { apiFetch } = useApiFetch();
+  const apiFetch = useApiFetch();
   const { colors: t, isDark } = useTheme();
 
   const [activeTab, setActiveTab] = useState("overview");
@@ -339,7 +339,7 @@ export default function AIReceptionistPage() {
                       background: `${b.color}0D`, border: `1px solid ${b.color}30`,
                       borderRadius: 10, padding: "12px 14px",
                     }}>
-                      <div style={{ display: "flex", align: "center", gap: 6, marginBottom: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                         <span style={{ fontSize: 18 }}>{b.icon}</span>
                         <span style={{ fontSize: 18, fontWeight: 900, color: b.color }}>{b.key}</span>
                       </div>

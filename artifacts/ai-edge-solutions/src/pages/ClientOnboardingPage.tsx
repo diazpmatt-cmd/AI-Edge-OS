@@ -725,7 +725,7 @@ export default function ClientOnboardingPage() {
                         ? "2px solid #10B981"
                         : `2px solid ${isDark ? "rgba(255,255,255,0.1)" : "#DDE3EA"}`,
                     color: (done || active) ? "#FFFFFF" : (isDark ? "#475569" : "#94A3B8"),
-                    fontWeight: 800, fontSize: 13,
+                    fontWeight: 800,
                     boxShadow: active ? "0 0 12px rgba(0,174,239,0.4)" : "none",
                     transition: "all 0.2s",
                     flexShrink: 0,

@@ -69,7 +69,7 @@ const fmt$ = (n: number) =>
   n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toLocaleString()}`;
 
 export default function RevenueAttributionPage() {
-  const { apiFetch } = useApiFetch();
+  const apiFetch = useApiFetch();
   const { colors: t, isDark } = useTheme();
   const [leads, setLeads]       = useState<Lead[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -92,9 +92,7 @@ export default function RevenueAttributionPage() {
   const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/api/revenue-attribution?clientId=demo");
-      if (!res.ok) throw new Error("API error");
-      const data: Lead[] = await res.json();
+      const data = await apiFetch<Lead[]>("/api/revenue-attribution?clientId=demo");
       if (data.length === 0) { setLeads(DEMO_LEADS); setIsDemo(true); }
       else { setLeads(data); setIsDemo(false); }
     } catch {
@@ -107,8 +105,8 @@ export default function RevenueAttributionPage() {
 
   const loadSyncStatus = useCallback(async () => {
     try {
-      const res = await apiFetch("/api/revenue-attribution/sync-status?clientId=demo");
-      if (res.ok) setSyncStatus(await res.json());
+      const data = await apiFetch<any>("/api/revenue-attribution/sync-status?clientId=demo");
+      setSyncStatus(data);
     } catch {}
   }, [apiFetch]);
 
@@ -139,13 +137,11 @@ export default function RevenueAttributionPage() {
       if (selected._demo) {
         setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, ...payload } : l));
       } else {
-        const res = await apiFetch(`/api/revenue-attribution/${selected.id}`, {
+        const updated = await apiFetch<Lead>(`/api/revenue-attribution/${selected.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error("Save failed");
-        const updated: Lead = await res.json();
         setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
       }
       setSelected(null);
@@ -161,12 +157,11 @@ export default function RevenueAttributionPage() {
     setMatching(true);
     setMatchResult(null);
     try {
-      const res = await apiFetch("/api/revenue-attribution/match-gorilladesk", {
+      const data = await apiFetch<any>("/api/revenue-attribution/match-gorilladesk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: "demo" }),
       });
-      const data = await res.json();
       setMatchResult(data.message ?? `Matched ${data.matched} leads`);
       if (data.matched > 0) { loadLeads(); loadSyncStatus(); }
     } catch {
@@ -180,12 +175,11 @@ export default function RevenueAttributionPage() {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const res = await apiFetch("/api/revenue-attribution/sync-gorilladesk-jobs", {
+      const data = await apiFetch<any>("/api/revenue-attribution/sync-gorilladesk-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: "demo" }),
       });
-      const data = await res.json();
       setSyncResult(data);
       loadLeads();
       loadSyncStatus();

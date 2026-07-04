@@ -4,6 +4,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type TelnyxAnalytics = {
@@ -136,21 +137,6 @@ function KPICard({ icon, label, value, sub, color, glow }: { icon: string; label
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const s = LEAD_STATUS_STYLE[status] ?? LEAD_STATUS_STYLE.new;
-  const label = status.replace(/_/g, " ");
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      background: s.bg, color: s.color, fontSize: 10, fontWeight: 700,
-      padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap",
-      textTransform: "capitalize",
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
-      {label}
-    </span>
-  );
-}
 
 function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
   return (

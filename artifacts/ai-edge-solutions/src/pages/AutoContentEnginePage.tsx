@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -296,9 +297,6 @@ function MatchedImageBlock({ city, topic, angle }: { city: string | null; topic:
   );
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  scheduled: "#F59E0B", draft: "#C4B5FD", published: "#22C55E", failed: "#EF4444", pending: "#F59E0B",
-};
 
 const ANGLE_COLOR: Record<string, string> = {
   educational: "#6B9EFF", warning: "#F59E0B", promotional: "#22C55E", seasonal: "#3B82F6",
@@ -1004,7 +1002,6 @@ export default function AutoContentEnginePage() {
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {queueQuery.data.posts.map((p, idx) => {
                   const anglCol = ANGLE_COLOR[p.angle ?? ""] ?? "#94A3B8";
-                  const statCol = STATUS_COLOR[p.status] ?? "#94A3B8";
                   const riskSt = p.duplicateRisk ? RISK_STYLE[p.duplicateRisk] : null;
                   const isExpanded = expandedPostId === p.id;
                   const isOdd = idx % 2 === 1;
@@ -1023,13 +1020,7 @@ export default function AutoContentEnginePage() {
                         }}
                       >
                         {/* Status */}
-                        <span style={{
-                          fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
-                          background: `${statCol}18`, color: statCol, border: `1px solid ${statCol}30`,
-                          whiteSpace: "nowrap", display: "inline-block", textAlign: "center",
-                        }}>
-                          {p.status}
-                        </span>
+                        <StatusBadge status={p.status} size="xs" />
 
                         {/* Scheduled */}
                         <span style={{ fontSize: 11, color: "#64748B", whiteSpace: "nowrap" }}>

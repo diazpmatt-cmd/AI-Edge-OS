@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1037,14 +1038,10 @@ export default function SystemDiagnosticsPage() {
               </thead>
               <tbody>
                 {health.recentPosts.slice(0, 20).map(p => {
-                  const ss = STATUS_STYLE[p.status] ?? STATUS_STYLE.draft;
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                       <td style={{ padding: "6px 10px" }}>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                          background: ss.bg, color: ss.color, textTransform: "capitalize",
-                        }}>{p.status}</span>
+                        <StatusBadge status={p.status} size="xs" />
                       </td>
                       <td style={{ padding: "6px 10px", color: "#6B7280" }}>
                         {p.platforms.map(pl => PLATFORM_DISPLAY[pl]?.icon ?? pl).join(" ")}

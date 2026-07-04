@@ -5269,21 +5269,28 @@ const SUB_STATUS_META: Record<SubStatus, { label: string; color: string; bg: str
   needs_fix:            { label: "Needs Fix",            color: "#EF4444", bg: "rgba(239,68,68,0.1)",   border: "rgba(239,68,68,0.3)" },
 };
 const TRACKER_INIT: TrackerEntry[] = [
-  { key: "gbp",       name: "Google Business Profile", dotColor: "#4285F4", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Apple review", account: "", listingUrl: "", notes: "Website submitted: https://bedbugsandbeyond.net", nextAction: "Wait for Apple verification approval" },
-  { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Google sync", account: "", listingUrl: "", notes: "Verification complete. Synced with Google. Publishing ETA 7–12 days. Analytics not available until listing is live.", nextAction: "Wait for listing to go live in Bing Maps. Add logo + photos once live." },
-  { key: "nextdoor",  name: "Nextdoor",                dotColor: "#00B246", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "yelp",      name: "Yelp",                    dotColor: "#D32323", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "waze",      name: "Waze (WME)",              dotColor: "#00BBDE", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "angi",      name: "Angi for Pros",           dotColor: "#E8330A", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
-  { key: "thumbtack", name: "Thumbtack for Pros",      dotColor: "#009FD9", status: "not_started", submittedOn: "", verifyMethod: "", account: "", listingUrl: "", notes: "", nextAction: "" },
+  { key: "gbp",       name: "Google Business Profile", dotColor: "#4285F4", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "apple",     name: "Apple Business Connect",  dotColor: "#A3A3A3", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Apple review", account: "", listingUrl: "", notes: "Website submitted: https://bedbugsandbeyond.net",                                                                                                                        nextAction: "Wait for Apple verification approval" },
+  { key: "tiktok",    name: "TikTok for Business",     dotColor: "#010101", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "bing",      name: "Bing Places",             dotColor: "#008373", status: "verification_pending", submittedOn: "", verifyMethod: "Phone PIN / Google sync", account: "", listingUrl: "", notes: "Verification complete. Synced with Google. Publishing ETA 7–12 days. Analytics not available until listing is live.",                                                    nextAction: "Wait for listing to go live in Bing Maps. Add logo + photos once live." },
+  { key: "nextdoor",  name: "Nextdoor",                dotColor: "#00B246", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "yelp",      name: "Yelp",                    dotColor: "#D32323", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "waze",      name: "Waze (WME)",              dotColor: "#00BBDE", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "angi",      name: "Angi for Pros",           dotColor: "#E8330A", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
+  { key: "thumbtack", name: "Thumbtack for Pros",      dotColor: "#009FD9", status: "not_started",          submittedOn: "", verifyMethod: "",                       account: "", listingUrl: "", notes: "",                                                                                                                                                                       nextAction: "" },
 ];
 function SubmissionTracker() {
-  const [open,     setOpen]     = useState(false);
+  const [open,     setOpen]     = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState(false);
   const [entries,  setEntries]  = useState<TrackerEntry[]>(() => {
-    try { return JSON.parse(localStorage.getItem("lpe_tracker") ?? "null") ?? TRACKER_INIT; } catch { return TRACKER_INIT; }
+    try {
+      const saved: TrackerEntry[] | null = JSON.parse(localStorage.getItem("lpe_tracker") ?? "null");
+      if (!saved) return TRACKER_INIT;
+      const savedKeys = new Set(saved.map(e => e.key));
+      const missing = TRACKER_INIT.filter(e => !savedKeys.has(e.key));
+      return missing.length > 0 ? [...saved, ...missing] : saved;
+    } catch { return TRACKER_INIT; }
   });
 
   function update(key: string, field: keyof TrackerEntry, value: string) {

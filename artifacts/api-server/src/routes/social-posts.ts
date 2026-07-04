@@ -270,7 +270,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     try {
       const fbCaption = post.captionFacebook ?? post.caption;
       const fullCaption = buildCaption(fbCaption, post.ctaType, post.ctaValue);
-      const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, post.imageData ?? null);
+      const fbImageSource = post.imageData ?? post.matchedImageUrl ?? null;
+      const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, fbImageSource);
       results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };
       fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
     } catch (e: any) {
@@ -287,8 +288,11 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const igAccountId = igData.instagram_business_account?.id;
       if (!igAccountId) throw new Error("No Instagram Business Account linked to this Facebook Page.");
 
-      const imageUrl = fbPhotoUrl ?? (post.imageData?.startsWith("http") ? post.imageData : null);
-      if (!imageUrl) throw new Error("Instagram requires a public image URL. Select both Facebook and Instagram together — the Facebook upload will provide the hosted URL.");
+      const imageUrl =
+        fbPhotoUrl ??
+        (post.imageData?.startsWith("http") ? post.imageData : null) ??
+        (post.matchedImageUrl?.startsWith("http") ? post.matchedImageUrl : null);
+      if (!imageUrl) throw new Error("Instagram requires a public image URL. Upload an image to the post or add images to the Image Assets library.");
 
       const igCaption = post.captionFacebook ?? post.caption;
       const fullCaption = buildCaption(igCaption, post.ctaType, post.ctaValue);
@@ -334,7 +338,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       try {
         const token = await getGoogleAccessToken(gbpConn);
         const googleCaption = post.captionGoogle ?? post.caption;
-        const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, post.imageData ?? null);
+        const gbpImageSource = post.imageData ?? post.matchedImageUrl ?? null;
+        const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);
         results.google = { ok: true, postId: gbpResult.id };
       } catch (e: any) {
         results.google = { ok: false, error: e.message };

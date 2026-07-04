@@ -24,6 +24,7 @@ import callIntelligenceRouter from "./call-intelligence";
 import clientOnboardingRouter from "./client-onboarding";
 import aiVisibilityRouter from "./ai-visibility";
 import revenueAttributionRouter from "./revenue-attribution";
+import aiReceptionistRouter from "./ai-receptionist";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(callIntelligenceRouter);
 router.use(clientOnboardingRouter);
 router.use(aiVisibilityRouter);
 router.use(revenueAttributionRouter);
+router.use(aiReceptionistRouter);
 
 export default router;

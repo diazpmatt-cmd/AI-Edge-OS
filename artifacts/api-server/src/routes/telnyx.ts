@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { leadsTable, callsTable, smsConversationsTable } from "@workspace/db/schema";
+import { leadsTable, callsTable, smsConversationsTable, aiReceptionistSettingsTable } from "@workspace/db/schema";
 
 const router = Router();
 
@@ -26,6 +26,88 @@ const MISSED_CAUSES = new Set([
   "NORMAL_TEMPORARY_FAILURE",
   "RECOVERY_ON_TIMER_EXPIRE",
 ]);
+
+// ── AI Receptionist Settings (cached per client, TTL 5 min) ──────────────────
+
+type ClientSettings = {
+  businessName:       string;
+  transferPhone:      string;
+  greetingScript:     string | null;
+  callbackMessage:    string | null;
+  voicemailMessage:   string | null;
+  textRoutingMessage: string | null;
+  customGreetingUrl:  string | null;
+  voiceStyle:         string;
+  afterHoursMode:     string;
+};
+
+const settingsCache = new Map<string, { data: ClientSettings; expiresAt: number }>();
+
+const DEFAULT_CLIENT_SETTINGS: ClientSettings = {
+  businessName:       "Bed Bugs & Beyond",
+  transferPhone:      process.env.BUSINESS_FORWARD_NUMBER ?? "+12513249090",
+  greetingScript:     null,
+  callbackMessage:    null,
+  voicemailMessage:   null,
+  textRoutingMessage: "Hi! This is Bed Bugs & Beyond. You requested our info via text. Visit us at bedbugsbeyond.com or call (251) 324-9090. Reply with any questions!",
+  customGreetingUrl:  process.env.CUSTOM_BBB_GREETING_URL?.trim() || null,
+  voiceStyle:         "Polly.Joanna",
+  afterHoursMode:     "voicemail",
+};
+
+async function getClientSettings(clientId = "default"): Promise<ClientSettings> {
+  const cached = settingsCache.get(clientId);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  try {
+    const [row] = await db
+      .select()
+      .from(aiReceptionistSettingsTable)
+      .where(eq(aiReceptionistSettingsTable.clientId, clientId));
+    if (row) {
+      const data: ClientSettings = {
+        businessName:       row.businessName,
+        transferPhone:      row.transferPhone,
+        greetingScript:     row.greetingScript,
+        callbackMessage:    row.callbackMessage,
+        voicemailMessage:   row.voicemailMessage,
+        textRoutingMessage: row.textRoutingMessage,
+        customGreetingUrl:  row.customGreetingUrl ?? process.env.CUSTOM_BBB_GREETING_URL?.trim() ?? null,
+        voiceStyle:         row.voiceStyle,
+        afterHoursMode:     row.afterHoursMode,
+      };
+      settingsCache.set(clientId, { data, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return data;
+    }
+  } catch {
+    // fall through to defaults
+  }
+  return DEFAULT_CLIENT_SETTINGS;
+}
+
+/** Send an outbound SMS with a custom message. Never throws. */
+async function sendSms(
+  to: string,
+  text: string,
+): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const apiKey = process.env.TELNYX_API_KEY;
+  const from   = process.env.TELNYX_FROM_NUMBER ?? "+12512863200";
+  if (!apiKey) return { ok: false, error: "TELNYX_API_KEY not set" };
+  try {
+    const res = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({ from, to, text }),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = json?.errors?.[0]?.detail ?? res.statusText;
+      return { ok: false, error: `Telnyx ${res.status}: ${detail}` };
+    }
+    return { ok: true, messageId: json?.data?.id };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "Network error" };
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -397,23 +479,27 @@ router.post("/telnyx/voice", async (req, res) => {
     ]);
 
     const gatherUrl = `${baseUrl(req)}/api/telnyx/voice/gather`;
-    const greeting =
-      "Hi, thank you for calling Bed Bugs and Beyond Pest Control. " +
-      "To speak directly with Michael, press 1. " +
-      "To request a callback, press 2. " +
-      "To leave a voicemail, press 3.";
 
-    const customGreetingUrl = process.env.CUSTOM_BBB_GREETING_URL?.trim();
-    const greetingTexml = customGreetingUrl
-      ? `<Play>${customGreetingUrl}</Play>`
-      : `<Say voice="Polly.Joanna">${greeting}</Say>`;
+    // Load settings from DB (5-min cache, falls back to defaults)
+    const cfg = await getClientSettings("default");
+    const defaultGreeting =
+      `Hi, thank you for calling ${cfg.businessName}. ` +
+      "To speak directly with us, press 1. " +
+      "To request a callback, press 2. " +
+      "To leave a voicemail, press 3. " +
+      "To receive a text with our info, press 4.";
+    const greetingText = cfg.greetingScript || defaultGreeting;
+
+    const greetingTexml = cfg.customGreetingUrl
+      ? `<Play>${cfg.customGreetingUrl}</Play>`
+      : `<Say voice="${cfg.voiceStyle}">${greetingText}</Say>`;
 
     res.set("Content-Type", "text/xml");
     res.send(texml(`
       <Gather numDigits="1" action="${gatherUrl}" method="POST" timeout="10">
         ${greetingTexml}
       </Gather>
-      <Say voice="Polly.Joanna">We did not receive your selection. Please call back and try again. Goodbye.</Say>
+      <Say voice="${cfg.voiceStyle}">We did not receive your selection. Please call back and try again. Goodbye.</Say>
       <Hangup/>
     `));
   } catch (err) {
@@ -431,8 +517,11 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     const digit   = (body?.Digits ?? body?.digits ?? "").toString().trim();
     const from    = body?.From ?? body?.from ?? body?.Caller ?? "";
     const callSid = body?.CallSid ?? body?.call_sid ?? "";
-    const forward = process.env.BUSINESS_FORWARD_NUMBER ?? "+12543249090";
     const since5m = new Date(Date.now() - 5 * 60 * 1000);
+
+    // Load settings (cached)
+    const cfg     = await getClientSettings("default");
+    const forward = cfg.transferPhone;
 
     console.log(`[TELNYX] Menu selection: "${digit}" from ${from || "unknown"}`);
 
@@ -488,15 +577,16 @@ router.post("/telnyx/voice/gather", async (req, res) => {
             )
           ),
       ]);
+      const cbMsg = cfg.callbackMessage ?? "Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!";
       res.send(texml(`
-        <Say voice="Polly.Joanna">Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!</Say>
+        <Say voice="${cfg.voiceStyle}">${cbMsg}</Say>
         <Hangup/>
       `));
 
     } else if (digit === "3") {
       const recordUrl = `${baseUrl(req)}/api/telnyx/voice/recording`;
+      const vmPrompt  = cfg.voicemailMessage ?? "Please leave your name, phone number, and a brief description after the beep. Press star or hang up when finished.";
       console.log(`[TELNYX] Voicemail recording started for ${from || "unknown"}`);
-      // Mark incoming record as voicemail-in-progress; /recording will finalize it
       await db.update(callsTable)
         .set({ callType: "voicemail", digitsPressed: "3", outcome: "pending" })
         .where(
@@ -509,16 +599,72 @@ router.post("/telnyx/voice/gather", async (req, res) => {
         )
         .catch(e => console.error("[TELNYX] callsTable update error (voicemail start):", e));
       res.send(texml(`
-        <Say voice="Polly.Joanna">Please leave your message after the beep. Press star or hang up when finished.</Say>
+        <Say voice="${cfg.voiceStyle}">${vmPrompt}</Say>
         <Record action="${recordUrl}" method="POST" maxLength="120" playBeep="true" finishOnKey="*"/>
-        <Say voice="Polly.Joanna">We did not receive your message. Please call back and try again. Goodbye.</Say>
+        <Say voice="${cfg.voiceStyle}">We did not receive your message. Please call back and try again. Goodbye.</Say>
         <Hangup/>
       `));
+
+    } else if (digit === "4") {
+      console.log(`[TELNYX] Text routing selected from ${from || "unknown"}`);
+      const smsText = cfg.textRoutingMessage ?? `Hi! This is ${cfg.businessName}. Thanks for calling — how can we help? Reply to this text anytime.`;
+
+      // Send SMS to caller
+      const smsResult = await sendSms(from, smsText);
+
+      // Log to DB (parallel, don't block response)
+      void Promise.all([
+        // Outbound SMS conversation row
+        db.insert(smsConversationsTable).values({
+          customerNumber: from,
+          direction:      "outbound",
+          message:        smsText,
+          messageId:      smsResult.messageId ?? null,
+          status:         smsResult.ok ? "sent" : "failed",
+        }).catch(e => console.error("[TELNYX] smsConversationsTable insert error (press4):", e)),
+
+        // Lead row
+        db.insert(leadsTable).values({
+          clientName: getClientName(),
+          source:     "text_routing",
+          phone:      from,
+          message:    `Caller pressed 4 — text routing SMS ${smsResult.ok ? "sent" : "failed"}: "${smsText.slice(0, 80)}"`,
+          eventType:  "text_routing",
+          status:     "new",
+        }).catch(e => console.error("[TELNYX] leadsTable insert error (press4):", e)),
+
+        // Update call record
+        db.update(callsTable)
+          .set({ callType: "text_routing", digitsPressed: "4", outcome: "sms_sent" })
+          .where(
+            and(
+              eq(callsTable.callerNumber, from),
+              eq(callsTable.callType, "incoming"),
+              gte(callsTable.createdAt, since5m),
+              ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+            )
+          )
+          .catch(e => console.error("[TELNYX] callsTable update error (press4):", e)),
+      ]);
+
+      if (smsResult.ok) {
+        console.log(`[TELNYX] Text routing SMS sent to ${from} (${smsResult.messageId})`);
+        res.send(texml(`
+          <Say voice="${cfg.voiceStyle}">Great! We have sent you a text message with our information. Feel free to reply to that text anytime. Have a great day!</Say>
+          <Hangup/>
+        `));
+      } else {
+        console.warn(`[TELNYX] Text routing SMS failed for ${from}: ${smsResult.error}`);
+        res.send(texml(`
+          <Say voice="${cfg.voiceStyle}">We were unable to send a text message. Please call back or try pressing 2 to request a callback. Goodbye.</Say>
+          <Hangup/>
+        `));
+      }
 
     } else {
       console.log(`[TELNYX] Invalid menu selection "${digit}" from ${from || "unknown"}`);
       res.send(texml(`
-        <Say voice="Polly.Joanna">That was not a valid option. Please call back and try again. Goodbye.</Say>
+        <Say voice="${cfg.voiceStyle}">That was not a valid option. Please press 1, 2, 3, or 4. Please call back and try again. Goodbye.</Say>
         <Hangup/>
       `));
     }

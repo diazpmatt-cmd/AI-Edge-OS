@@ -15,3 +15,4 @@ export * from "./client-onboarding";
 export * from "./ai-visibility";
 export * from "./audit-exports";
 export * from "./revenue-attribution";
+export * from "./ai-receptionist-settings";

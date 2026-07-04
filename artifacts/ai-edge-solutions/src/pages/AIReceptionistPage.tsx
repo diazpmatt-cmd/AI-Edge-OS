@@ -1,604 +1,618 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
-import { toast } from "sonner";
 import { useTheme } from "@/contexts/theme-context";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constants
+// Types + Constants
 // ─────────────────────────────────────────────────────────────────────────────
-const TELNYX_NUMBER   = "+1 (251) 286-3200";
-const FORWARD_NUMBER  = "+1 (251) 324-9090";
-const BUSINESS_NAME   = "Bed Bugs & Beyond";
 
+type Settings = {
+  id: string | null;
+  clientId: string;
+  businessName: string;
+  transferPhone: string;
+  greetingScript: string;
+  callbackMessage: string;
+  voicemailMessage: string;
+  textRoutingMessage: string;
+  customGreetingUrl: string;
+  voiceStyle: string;
+  businessHoursJson: string;
+  afterHoursMode: string;
+};
 
-const DEFAULT_INTAKE_QUESTIONS = [
-  { id: 1, text: "What pest issue are you dealing with?",                              purpose: "Identify service type",            required: true  },
-  { id: 2, text: "What city are you located in?",                                     purpose: "Confirm service area",             required: true  },
-  { id: 3, text: "Is this urgent or can it wait until the next business day?",        purpose: "Determine routing priority",       required: true  },
-  { id: 4, text: "Have you seen pest activity inside, outside, or both?",             purpose: "Assess scope for tech prep",       required: false },
-  { id: 5, text: "Would you like a callback or inspection appointment?",              purpose: "Capture intent for lead routing",  required: false },
+const DEFAULT_SETTINGS: Settings = {
+  id:                 null,
+  clientId:           "default",
+  businessName:       "Bed Bugs & Beyond",
+  transferPhone:      "+12513249090",
+  greetingScript:     "Hi, thank you for calling Bed Bugs and Beyond Pest Control. To speak directly with us, press 1. To request a callback, press 2. To leave a voicemail, press 3. To receive a text with our info, press 4.",
+  callbackMessage:    "Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!",
+  voicemailMessage:   "Please leave your name, phone number, and a brief description of the pest issue after the beep. Press star or hang up when finished.",
+  textRoutingMessage: "Hi! This is Bed Bugs & Beyond. You requested our info via text. Visit us at bedbugsbeyond.com or call (251) 324-9090. Reply with any questions!",
+  customGreetingUrl:  "",
+  voiceStyle:         "Polly.Joanna",
+  businessHoursJson:  "{}",
+  afterHoursMode:     "voicemail",
+};
+
+const TELNYX_NUMBER  = "+1 (251) 286-3200";
+const VOICE_OPTIONS  = ["Polly.Joanna", "Polly.Matthew", "Polly.Salli", "Polly.Joey", "Polly.Kendra"];
+const AFTER_HOURS_OPTIONS = [
+  { val: "voicemail",    label: "Send to Voicemail" },
+  { val: "transfer",     label: "Transfer Anyway"   },
+  { val: "sms",          label: "Send Text Only"    },
+  { val: "closed",       label: "Play Closed Message" },
 ];
 
-const DEFAULT_SCRIPTS = {
-  greeting:       `Thank you for calling Bed Bugs & Beyond. This is the AI receptionist. I can help route your call, take a message, or collect information so our team can call you back quickly. If this is urgent, I can transfer you now.`,
-  urgent:         `I understand this is urgent. Let me connect you directly to the Bed Bugs & Beyond team right away. Please hold for just a moment.`,
-  callback:       `I'd be happy to arrange a callback. Can I get your name, the best phone number to reach you, and a quick description of the pest issue? Our team will call you back as soon as possible.`,
-  afterHours:     `Thank you for calling Bed Bugs & Beyond. Our office is currently closed. Our hours are Monday through Friday, 8 AM to 5 PM. If you have a pest emergency, please press 1 to leave an urgent voicemail and we'll return your call first thing tomorrow morning.`,
-  voicemail:      `Please leave your name, phone number, and a brief description of the pest issue after the beep. Press star or hang up when finished. We'll call you back as soon as possible.`,
-  closing:        `Thank you for calling Bed Bugs & Beyond. We look forward to helping you. Have a great day!`,
-};
-
-const EMERGENCY_KEYWORDS = ["bed bugs", "infestation", "urgent", "emergency", "same day", "hotel", "rental", "children", "elderly"];
-
-const OUTCOME_CFG: Record<string, { color: string; bg: string }> = {
-  "Transferred":        { color: "#10B981", bg: "rgba(16,185,129,0.12)"  },
-  "Callback Requested": { color: "#00AEEF", bg: "rgba(0,174,239,0.12)"   },
-  "Voicemail":          { color: "#F59E0B", bg: "rgba(245,158,11,0.12)"  },
-  "Qualified Lead":     { color: "#8B5CF6", bg: "rgba(139,92,246,0.12)"  },
-  "Missed":             { color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
-  "Spam Blocked":       { color: "#64748B", bg: "rgba(100,116,139,0.12)" },
-};
-
 const TABS = [
-  { id: "overview",      label: "Overview"        },
-  { id: "callflow",      label: "Call Flow"       },
-  { id: "logs",          label: "Call Logs"       },
-  { id: "voicemail",     label: "Voicemail"       },
-  { id: "scripts",       label: "Scripts"         },
-  { id: "settings",      label: "Settings"        },
-  { id: "diagnostics",   label: "Diagnostics"     },
+  { id: "overview",  label: "Overview"  },
+  { id: "callflow",  label: "Call Flow" },
+  { id: "settings",  label: "⚙ Settings" },
+  { id: "test",      label: "🧪 Test"   },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AIReceptionistPage() {
-  const apiFetch = useApiFetch();
-  const [activeTab, setActiveTab] = useState("overview");
-  const [telnyxStats, setTelnyxStats] = useState<any>(null);
-  const [testingWebhook, setTestingWebhook] = useState(false);
-  const [simulatingCall, setSimulatingCall] = useState(false);
-  const [intakeQs, setIntakeQs] = useState(DEFAULT_INTAKE_QUESTIONS);
-  const [editingQ, setEditingQ] = useState<number | null>(null);
-  const [editQText, setEditQText] = useState("");
-  const [scripts, setScripts] = useState(DEFAULT_SCRIPTS);
-  const [editingScript, setEditingScript] = useState<string | null>(null);
-  const [editScriptText, setEditScriptText] = useState("");
-  const [settings, setSettings] = useState({
-    receptionistEnabled: true, keypadFallback: true, businessHoursRouting: true,
-    afterHoursMode: true, spamFiltering: true, recordVoicemails: true,
-    smsFollowUp: true, assignMissedToLeadRecovery: true,
-  });
-
-  useEffect(() => {
-    apiFetch("/api/telnyx/textback-stats")
-      .then(d => setTelnyxStats(d))
-      .catch(() => {});
-  }, []);
-
-  async function testWebhook() {
-    setTestingWebhook(true);
-    try {
-      await apiFetch("/api/telnyx/test-missed-call", { method: "POST", body: JSON.stringify({ phone: "+12510000001" }) });
-      toast.success("Test webhook fired — check Lead Recovery for the entry.");
-    } catch {
-      toast.error("Webhook test failed.");
-    } finally {
-      setTestingWebhook(false);
-    }
-  }
-
-  async function simulateCall() {
-    setSimulatingCall(true);
-    try {
-      await apiFetch("/api/telnyx/test-missed-call", { method: "POST", body: JSON.stringify({ phone: "+12510000002" }) });
-      toast.success("Simulated incoming call — logged to Lead Recovery.");
-    } catch {
-      toast.error("Simulation failed.");
-    } finally {
-      setSimulatingCall(false);
-    }
-  }
-
+  const { apiFetch } = useApiFetch();
   const { colors: t, isDark } = useTheme();
 
-  const callsAnswered = telnyxStats?.missedCalls  ?? 0;
-  const callsRouted   = telnyxStats?.sent         ?? 0;
-  const callbacks     = telnyxStats?.totalReplies ?? 0;
+  const [activeTab, setActiveTab] = useState("overview");
+  const [settings, setSettings]   = useState<Settings>(DEFAULT_SETTINGS);
+  const [form, setForm]           = useState<Settings>(DEFAULT_SETTINGS);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null);
+  const [testDigit, setTestDigit] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [smsTo, setSmsTo]         = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<string | null>(null);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const data = await apiFetch<Settings>("/api/ai-receptionist/settings?clientId=default");
+      const merged = { ...DEFAULT_SETTINGS, ...data };
+      setSettings(merged);
+      setForm(merged);
+    } catch {
+      // keep defaults
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, [apiFetch]);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const saved = await apiFetch<Settings>("/api/ai-receptionist/settings?clientId=default", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName:       form.businessName,
+          transferPhone:      form.transferPhone,
+          greetingScript:     form.greetingScript,
+          callbackMessage:    form.callbackMessage,
+          voicemailMessage:   form.voicemailMessage,
+          textRoutingMessage: form.textRoutingMessage,
+          customGreetingUrl:  form.customGreetingUrl || null,
+          voiceStyle:         form.voiceStyle,
+          afterHoursMode:     form.afterHoursMode,
+        }),
+      });
+      const merged = { ...DEFAULT_SETTINGS, ...saved };
+      setSettings(merged);
+      setForm(merged);
+      showToast("Settings saved — live on next call");
+    } catch {
+      showToast("Failed to save settings", false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testCallFlow = async (digit: string) => {
+    setTestDigit(digit);
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const data = await apiFetch<any>("/api/ai-receptionist/test-call-flow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digit, clientId: "default" }),
+      });
+      setTestResult(data);
+    } catch {
+      setTestResult({ error: "Test failed — check API server" });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const sendTestSms = async () => {
+    if (!smsTo) return;
+    setSmsSending(true);
+    setSmsResult(null);
+    try {
+      const data = await apiFetch<any>("/api/ai-receptionist/test-sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: smsTo, clientId: "default" }),
+      });
+      setSmsResult(data.ok ? `✅ SMS sent (ID: ${data.messageId ?? "ok"})` : `❌ ${data.error}`);
+    } catch {
+      setSmsResult("❌ Send failed — check Telnyx key");
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  // ── Styles ────────────────────────────────────────────────────────────────
+  const card: React.CSSProperties = {
+    background: isDark ? "#0B1629" : "#F8FAFC",
+    border: `1px solid ${isDark ? "rgba(0,174,239,0.12)" : "#E2E8F0"}`,
+    borderRadius: 12, padding: "20px 22px",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", boxSizing: "border-box",
+    background: isDark ? "#060E1E" : "#fff",
+    border: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`,
+    color: t.text, borderRadius: 8, padding: "9px 12px",
+    fontSize: 14, outline: "none", fontFamily: "inherit",
+  };
+
+  const label = (text: string, sub?: string) => (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{text}</div>
+      {sub && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+
+  const sectionHead = (icon: string, title: string) => (
+    <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14, display: "flex", alignItems: "center", gap: 7 }}>
+      <span>{icon}</span>{title}
+    </div>
+  );
+
+  const changed = JSON.stringify(form) !== JSON.stringify(settings);
 
   return (
     <AppShell>
-      <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: t.text }}>
+      <div style={{ padding: "24px 28px", maxWidth: 1100, margin: "0 auto", fontFamily: "'Inter', -apple-system, sans-serif", color: t.text }}>
 
-        {/* ── Executive Header ── */}
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.5px", margin: 0 }}>AI Receptionist</h1>
-              <span style={{
-                fontSize: 10, fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase",
-                color: "#10B981", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
-                borderRadius: 20, padding: "3px 10px",
-              }}>Voice Automation Active</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>AI Receptionist</h1>
+              <span style={{ fontSize: 10, fontWeight: 800, color: "#10B981", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "3px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Active</span>
             </div>
-            <p style={{ fontSize: 14, color: "#6B7280", margin: "0 0 10px" }}>
-              Answer calls, qualify leads, route urgent requests, and recover missed opportunities automatically.
+            <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>
+              Configure call routing, messages, and Press 4 text routing for {settings.businessName}.
             </p>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <PhoneChip label="Telnyx Number" value={TELNYX_NUMBER} color="#00AEEF" />
-              <PhoneChip label="Forward To" value={FORWARD_NUMBER} color="#10B981" />
-              <span style={{ fontSize: 11, color: "#334155", alignSelf: "center" }}>Last checked: {new Date().toLocaleTimeString()}</span>
-            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: isDark ? "#0A1020" : "#F1F5F9", border: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`, borderRadius: 10, padding: "8px 14px" }}>
+            <span style={{ fontSize: 11, color: "#6B7280" }}>Telnyx Number</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#00AEEF", fontFamily: "monospace" }}>{TELNYX_NUMBER}</span>
           </div>
         </div>
 
-        {/* ── KPI Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 24 }}>
-          {[
-            { icon: "📞", label: "Calls Answered Today",      value: String(callsAnswered), color: "#00AEEF" },
-            { icon: "↗",  label: "Calls Routed",              value: String(callsRouted),   color: "#10B981" },
-            { icon: "📲", label: "Callback Requests",          value: String(callbacks),     color: "#8B5CF6" },
-            { icon: "🎙", label: "Voicemails Captured",        value: "—",                   color: "#F59E0B" },
-            { icon: "🎯", label: "Lead Qualification Rate",    value: "—",                   color: "#06B6D4" },
-            { icon: "💰", label: "Revenue Protected",          value: "—",                   color: "#10B981" },
-          ].map(k => (
-            <div key={k.label} style={{
-              background: t.card,
-              border: `1px solid ${k.color}18`, borderTop: `2px solid ${k.color}50`,
-              borderRadius: 14, padding: "16px 14px",
-              boxShadow: isDark ? "none" : t.shadow,
-            }}>
-              <div style={{ fontSize: 18, marginBottom: 6 }}>{k.icon}</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: k.color, marginBottom: 2 }}>{k.value}</div>
-              <div style={{ fontSize: 10, color: t.text3, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", lineHeight: 1.3 }}>{k.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Tab Bar ── */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${t.border}`, paddingBottom: 0 }}>
+        {/* Tab Bar */}
+        <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`, marginBottom: 24 }}>
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-              padding: "9px 16px", borderRadius: "8px 8px 0 0", fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500,
-              cursor: "pointer", border: "none",
-              background: activeTab === tab.id ? "rgba(0,174,239,0.12)" : "transparent",
-              color: activeTab === tab.id ? "#00AEEF" : t.text3,
+              padding: "9px 16px", border: "none", borderRadius: "8px 8px 0 0",
+              fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500,
+              cursor: "pointer",
+              background: activeTab === tab.id ? "rgba(0,174,239,0.1)" : "transparent",
+              color: activeTab === tab.id ? "#00AEEF" : "#6B7280",
               borderBottom: activeTab === tab.id ? "2px solid #00AEEF" : "2px solid transparent",
-              transition: "all 0.15s",
             }}>{tab.label}</button>
           ))}
         </div>
 
-        {/* ════════════════════════════════════════════════════════ OVERVIEW ══ */}
+        {/* ══ OVERVIEW ════════════════════════════════════════════════════════ */}
         {activeTab === "overview" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-            {/* Receptionist Status */}
-            <div>
-              <SectionHeader icon="🟢" title="Receptionist System Status" />
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+            {/* KPI row */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+              {[
+                { icon: "📞", label: "IVR Options",    value: "4", color: "#00AEEF" },
+                { icon: "↗",  label: "Press 1: Transfer", value: "Live",   color: "#10B981" },
+                { icon: "📲", label: "Press 2: Callback", value: "Active", color: "#A78BFA" },
+                { icon: "🎙", label: "Press 3: Voicemail", value: "Active", color: "#F59E0B" },
+                { icon: "💬", label: "Press 4: Text",   value: "Active", color: "#06B6D4" },
+              ].map(k => (
+                <div key={k.label} style={{ ...card, display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ fontSize: 18 }}>{k.icon}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+                  <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, lineHeight: 1.3 }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* System status */}
+            <div style={card}>
+              {sectionHead("🟢", "System Status")}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {[
-                  { label: "Telnyx Voice Webhook",  status: "healthy",  val: "Healthy"       },
-                  { label: "Call Transfer",          status: "healthy",  val: "Active"        },
-                  { label: "Callback Capture",       status: "healthy",  val: "Active"        },
-                  { label: "Voicemail Recording",    status: "healthy",  val: "Active"        },
-                  { label: "AI Conversation Mode",   status: "preview",  val: "V2 Preview"    },
-                  { label: "Business Hours Routing", status: "healthy",  val: "Enabled"       },
-                ].map(s => {
-                  const c = s.status === "healthy" ? "#10B981" : s.status === "preview" ? "#8B5CF6" : "#F59E0B";
-                  return (
-                    <div key={s.label} style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      background: "rgba(11,22,41,0.8)", border: `1px solid ${c}15`,
-                      borderLeft: `3px solid ${c}60`, borderRadius: 10, padding: "12px 14px",
-                    }}>
-                      <span style={{ fontSize: 13, color: "#94A3B8" }}>{s.label}</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: c, background: `${c}12`, padding: "2px 10px", borderRadius: 12 }}>{s.val}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <ActionBtn onClick={testWebhook} loading={testingWebhook} label="⚡ Test Voice Webhook" color="#00AEEF" />
-                <ActionBtn onClick={simulateCall} loading={simulatingCall} label="📞 Simulate Incoming Call" color="#8B5CF6" />
-                <ActionBtn onClick={() => setActiveTab("diagnostics")} label="🛰 Open Diagnostics" color="#64748B" />
+                  ["Voice Webhook", "Healthy",  "#10B981"],
+                  ["Call Transfer",  "Active",   "#10B981"],
+                  ["Callback IVR",   "Active",   "#10B981"],
+                  ["Voicemail",      "Active",   "#10B981"],
+                  ["Press 4 Text",   "Active",   "#10B981"],
+                  ["Business Hours", "Enabled",  "#10B981"],
+                ].map(([label, val, c]) => (
+                  <div key={label} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    background: isDark ? "#0A1020" : "#F8FAFC",
+                    border: `1px solid ${c}20`, borderLeft: `3px solid ${c}`,
+                    borderRadius: 8, padding: "10px 12px",
+                  }}>
+                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>{label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{val}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Live Call Queue */}
-            <div>
-              <SectionHeader icon="📞" title="Live Call Queue" />
-              <div style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 14, overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1.4fr 1fr 80px 110px 70px", padding: "9px 16px", background: "rgba(0,174,239,0.04)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                  {["Caller","Phone","Intent","City","Urgency","Status","Duration"].map(h => (
-                    <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px" }}>{h}</div>
-                  ))}
-                </div>
-                <div style={{ padding: "36px 20px", textAlign: "center" }}>
-                  <div style={{ fontSize: 20, marginBottom: 8, opacity: 0.3 }}>📞</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No active calls</div>
-                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Live call queue will appear here when calls are routed through this number</div>
-                </div>
+            {/* Quick config summary */}
+            <div style={card}>
+              {sectionHead("⚡", "Live Configuration")}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {[
+                  ["Business Name",    settings.businessName],
+                  ["Transfer Number",  settings.transferPhone],
+                  ["Voice Style",      settings.voiceStyle],
+                  ["After Hours Mode", settings.afterHoursMode],
+                  ["Custom Greeting",  settings.customGreetingUrl ? "Custom audio set" : "Using TTS script"],
+                ].map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${isDark ? "#1E2D48" : "#F1F5F9"}` }}>
+                    <span style={{ fontSize: 12, color: "#6B7280" }}>{k}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{v}</span>
+                  </div>
+                ))}
               </div>
+              <button onClick={() => setActiveTab("settings")} style={{
+                marginTop: 14, background: "#00AEEF", border: "none", color: "#fff",
+                borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>Edit Settings →</button>
             </div>
-
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════ CALL FLOW ══ */}
+        {/* ══ CALL FLOW ═══════════════════════════════════════════════════════ */}
         {activeTab === "callflow" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
 
-            {/* Visual Call Flow */}
-            <div>
-              <SectionHeader icon="🔀" title="Visual Call Flow — Pest Control V1" />
+            {/* Visual flow */}
+            <div style={card}>
+              {sectionHead("🔀", "Visual Call Flow")}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
                 {[
-                  { icon: "📞", label: "Incoming Call",       sub: TELNYX_NUMBER,                       color: "#00AEEF" },
-                  { icon: "🤖", label: "AI Greeting",         sub: "Identity + welcome message",         color: "#8B5CF6" },
-                  { icon: "❓", label: "Identify Intent",     sub: "Pest type, urgency, city",           color: "#8B5CF6" },
-                  { icon: "🐛", label: "Ask Service Needed",  sub: "Which pest, location, frequency",    color: "#64748B" },
-                  { icon: "📍", label: "Ask City / Area",     sub: "Confirm within Baldwin County",      color: "#64748B" },
-                  { icon: "⚡", label: "Ask Urgency",         sub: "Same-day vs scheduled",              color: "#64748B" },
-                  { icon: "↗",  label: "Route by Intent",     sub: "Emergency / Callback / Voicemail",   color: "#10B981" },
+                  { icon: "📞", label: "Incoming Call",    sub: TELNYX_NUMBER,                  color: "#00AEEF" },
+                  { icon: "🤖", label: "AI Greeting",       sub: "Custom audio or TTS script",   color: "#A78BFA" },
+                  { icon: "⌨",  label: "IVR Menu — Press 1–4", sub: "Caller selects option",    color: "#6B7280" },
                 ].map((node, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
                     <div style={{
                       display: "flex", alignItems: "center", gap: 12, width: "100%",
-                      background: "rgba(11,22,41,0.8)", border: `1px solid ${node.color}25`,
-                      borderLeft: `3px solid ${node.color}`, borderRadius: 10, padding: "11px 16px",
+                      background: isDark ? "#060E1E" : "#F1F5F9",
+                      border: `1px solid ${node.color}30`, borderLeft: `3px solid ${node.color}`,
+                      borderRadius: 10, padding: "11px 16px",
                     }}>
-                      <span style={{ fontSize: 18, flexShrink: 0 }}>{node.icon}</span>
+                      <span style={{ fontSize: 18 }}>{node.icon}</span>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{i + 1}. {node.label}</div>
-                        <div style={{ fontSize: 11, color: "#475569" }}>{node.sub}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{i + 1}. {node.label}</div>
+                        <div style={{ fontSize: 11, color: "#6B7280" }}>{node.sub}</div>
                       </div>
                     </div>
-                    {i < 6 && <div style={{ width: 1, height: 18, background: "rgba(0,174,239,0.2)" }} />}
+                    {i < 2 && <div style={{ width: 1, height: 16, background: "rgba(0,174,239,0.25)" }} />}
                   </div>
                 ))}
 
-                {/* Branch outcomes */}
-                <div style={{ width: 1, height: 18, background: "rgba(0,174,239,0.2)" }} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, width: "100%" }}>
+                <div style={{ width: 1, height: 16, background: "rgba(0,174,239,0.25)" }} />
+
+                {/* 4 branches */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, width: "100%" }}>
                   {[
-                    { icon: "🚨", label: "Emergency",        action: "Transfer to business", color: "#EF4444" },
-                    { icon: "📲", label: "Callback",          action: "Capture name + issue", color: "#00AEEF" },
-                    { icon: "🎙", label: "Voicemail",         action: "Record + save log",    color: "#F59E0B" },
+                    { key: "1", icon: "↗",  label: "Press 1",   action: "Live Transfer",   color: "#10B981", sub: settings.transferPhone },
+                    { key: "2", icon: "📲", label: "Press 2",   action: "Callback",          color: "#00AEEF", sub: "Log lead + confirm" },
+                    { key: "3", icon: "🎙", label: "Press 3",   action: "Voicemail",         color: "#F59E0B", sub: "Record + save" },
+                    { key: "4", icon: "💬", label: "Press 4",   action: "Continue by Text",  color: "#06B6D4", sub: "SMS auto-sent" },
                   ].map(b => (
-                    <div key={b.label} style={{
-                      background: `${b.color}08`, border: `1px solid ${b.color}25`,
-                      borderRadius: 10, padding: "12px 10px", textAlign: "center",
+                    <div key={b.key} style={{
+                      background: `${b.color}0D`, border: `1px solid ${b.color}30`,
+                      borderRadius: 10, padding: "12px 14px",
                     }}>
-                      <div style={{ fontSize: 20, marginBottom: 5 }}>{b.icon}</div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: b.color, marginBottom: 3 }}>{b.label}</div>
-                      <div style={{ fontSize: 10, color: "#475569" }}>{b.action}</div>
+                      <div style={{ display: "flex", align: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 18 }}>{b.icon}</span>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: b.color }}>{b.key}</span>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: b.color }}>{b.action}</div>
+                      <div style={{ fontSize: 10, color: "#6B7280", marginTop: 2 }}>{b.sub}</div>
                     </div>
                   ))}
                 </div>
-
-                {/* Keypad fallback */}
-                <div style={{ width: "100%", marginTop: 16, padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>Keypad Fallback (V1 Preserved)</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {[["1","Transfer"],["2","Callback"],["3","Voicemail"]].map(([k, v]) => (
-                      <div key={k} style={{ flex: 1, textAlign: "center", background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 8, padding: "8px 6px" }}>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: "#00AEEF" }}>{k}</div>
-                        <div style={{ fontSize: 10, color: "#64748B" }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
 
-            {/* Intake Questions */}
-            <div>
-              <SectionHeader icon="❓" title="Intake Questions" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {intakeQs.map((q, idx) => (
-                  <div key={q.id} style={{
-                    background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
-                    borderRadius: 10, padding: "12px 14px",
-                  }}>
-                    {editingQ === q.id ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <textarea
-                          value={editQText}
-                          onChange={e => setEditQText(e.target.value)}
-                          rows={2}
-                          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 7, padding: "8px 10px", fontSize: 13, color: "#FFF", outline: "none", fontFamily: "inherit", resize: "none", width: "100%", boxSizing: "border-box" }}
-                        />
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => { setIntakeQs(prev => prev.map(x => x.id === q.id ? { ...x, text: editQText } : x)); setEditingQ(null); toast.success("Question updated."); }} style={btnStyle("#00AEEF")}>Save</button>
-                          <button onClick={() => setEditingQ(null)} style={btnStyle("#475569")}>Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: "#00AEEF" }}>{idx + 1}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0", marginBottom: 3 }}>{q.text}</div>
-                          <div style={{ fontSize: 11, color: "#475569" }}>Purpose: {q.purpose}</div>
-                        </div>
-                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: q.required ? "#10B981" : "#475569", background: q.required ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.04)", padding: "2px 8px", borderRadius: 10 }}>{q.required ? "Required" : "Optional"}</span>
-                          <button onClick={() => { setEditingQ(q.id); setEditQText(q.text); }} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14 }}>✏</button>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <button onClick={() => { if (idx > 0) setIntakeQs(prev => { const a = [...prev]; [a[idx-1], a[idx]] = [a[idx], a[idx-1]]; return a; }); }} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 10, padding: "1px 4px" }}>▲</button>
-                            <button onClick={() => { if (idx < intakeQs.length - 1) setIntakeQs(prev => { const a = [...prev]; [a[idx], a[idx+1]] = [a[idx+1], a[idx]]; return a; }); }} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 10, padding: "1px 4px" }}>▼</button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════ CALL LOGS ══ */}
-        {activeTab === "logs" && (
-          <div>
-            <SectionHeader icon="📋" title="Call Logs" />
-            <div style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(0,174,239,0.1)", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.2fr 1fr 1.2fr 70px 80px 100px", padding: "9px 16px", background: "rgba(0,174,239,0.04)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                {["Date/Time","Caller","Phone","Intent","Outcome","Duration","Recording","Transcript"].map(h => (
-                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{h}</div>
-                ))}
-              </div>
-              <div style={{ padding: "44px 20px", textAlign: "center" }}>
-                <div style={{ fontSize: 20, marginBottom: 8, opacity: 0.3 }}>📋</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No call logs yet</div>
-                <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Call history will appear here once live calls are routed through this number</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════ VOICEMAIL ══ */}
-        {activeTab === "voicemail" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-
-            {/* Callback Requests */}
-            <div>
-              <SectionHeader icon="📲" title="Callback Requests" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ padding: "32px 20px", textAlign: "center", background: "rgba(11,22,41,0.5)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
-                  <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>📲</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No callback requests</div>
-                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Callback requests captured by the AI receptionist will appear here</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Voicemails */}
-            <div>
-              <SectionHeader icon="🎙" title="Voicemails" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ padding: "32px 20px", textAlign: "center", background: "rgba(11,22,41,0.5)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12 }}>
-                  <div style={{ fontSize: 18, marginBottom: 8, opacity: 0.3 }}>🎙</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569" }}>No voicemails</div>
-                  <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>Voicemails recorded by the AI receptionist will appear here</div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* ═════════════════════════════════════════════════════════ SCRIPTS ══ */}
-        {activeTab === "scripts" && (
-          <div>
-            <SectionHeader icon="📝" title="AI Script & Greeting Builder" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {(Object.entries(scripts) as [string, string][]).map(([key, text]) => {
-                const scriptMeta: Record<string, { label: string; icon: string }> = {
-                  greeting:   { label: "Greeting",              icon: "👋" },
-                  urgent:     { label: "Urgent Issue Response", icon: "🚨" },
-                  callback:   { label: "Callback Capture",      icon: "📲" },
-                  afterHours: { label: "After-Hours Response",  icon: "🌙" },
-                  voicemail:  { label: "Voicemail Prompt",      icon: "🎙" },
-                  closing:    { label: "Closing Message",       icon: "👍" },
-                };
-                const meta = scriptMeta[key];
-                return (
-                  <div key={key} style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "16px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 16 }}>{meta.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{meta.label}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => toast.info(`Preview: "${text.slice(0, 60)}..."`)} style={{ ...btnStyle("#8B5CF6"), padding: "4px 12px", fontSize: 11 }}>▶ Preview</button>
-                        <button onClick={() => { setEditingScript(key); setEditScriptText(text); }} style={{ ...btnStyle("#00AEEF"), padding: "4px 12px", fontSize: 11 }}>✏ Edit</button>
-                      </div>
-                    </div>
-                    {editingScript === key ? (
-                      <div>
-                        <textarea value={editScriptText} onChange={e => setEditScriptText(e.target.value)} rows={4} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,174,239,0.3)", borderRadius: 7, padding: "9px 11px", fontSize: 13, color: "#FFF", outline: "none", fontFamily: "inherit", resize: "vertical", width: "100%", boxSizing: "border-box", marginBottom: 8, lineHeight: 1.6 }} />
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => { setScripts(prev => ({ ...prev, [key]: editScriptText })); setEditingScript(null); toast.success("Script updated."); }} style={btnStyle("#00AEEF")}>Save</button>
-                          <button onClick={() => setEditingScript(null)} style={btnStyle("#475569")}>Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.65, background: "rgba(255,255,255,0.03)", borderRadius: 7, padding: "10px 12px", fontStyle: "italic" }}>
-                        "{text}"
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════ SETTINGS ══ */}
-        {activeTab === "settings" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-
-            {/* Toggles */}
-            <div>
-              <SectionHeader icon="⚙" title="System Toggles" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {(Object.entries(settings) as [keyof typeof settings, boolean][]).map(([key, val]) => {
-                  const labels: Record<keyof typeof settings, string> = {
-                    receptionistEnabled:         "AI Receptionist Enabled",
-                    keypadFallback:              "Keypad Fallback Enabled",
-                    businessHoursRouting:        "Business Hours Routing",
-                    afterHoursMode:              "After-Hours Mode",
-                    spamFiltering:               "Spam Filtering",
-                    recordVoicemails:            "Record Voicemails",
-                    smsFollowUp:                 "Send SMS Follow-Up",
-                    assignMissedToLeadRecovery:  "Assign Missed Calls to Lead Recovery",
-                  };
-                  return (
-                    <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "11px 14px" }}>
-                      <span style={{ fontSize: 13, color: "#94A3B8" }}>{labels[key]}</span>
-                      <button
-                        onClick={() => { setSettings(prev => ({ ...prev, [key]: !prev[key] })); toast.success(`${labels[key]}: ${!val ? "Enabled" : "Disabled"}`); }}
-                        style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", background: val ? "#00AEEF" : "rgba(255,255,255,0.1)", transition: "background 0.2s", position: "relative" }}
-                      >
-                        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#FFF", position: "absolute", top: 3, left: val ? 23 : 3, transition: "left 0.2s" }} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Routing Settings */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <div>
-                <SectionHeader icon="↗" title="Routing Settings" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {/* Press 4 detail */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ ...card, borderColor: "#06B6D430" }}>
+                {sectionHead("💬", "Press 4 — Continue by Text")}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
                   {[
-                    { label: "Business Forward Number", value: FORWARD_NUMBER },
-                    { label: "Transfer Timeout",        value: "30 seconds"   },
-                    { label: "After-Hours Behavior",    value: "Voicemail"    },
-                    { label: "Emergency Keyword Route", value: "Transfer Now" },
-                  ].map(r => (
-                    <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "11px 14px" }}>
-                      <span style={{ fontSize: 12, color: "#64748B" }}>{r.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#00AEEF" }}>{r.value}</span>
+                    ["Trigger",          "Caller presses 4 during IVR"],
+                    ["Action",           "SMS sent to caller immediately"],
+                    ["Message source",   "Settings → Text Routing Message"],
+                    ["Call log",         "call_type = text_routing"],
+                    ["Outcome",          "outcome = sms_sent"],
+                    ["SMS log",          "sms_conversations (outbound)"],
+                    ["Lead log",         "source = text_routing"],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: `1px solid ${isDark ? "#1E2D48" : "#F1F5F9"}` }}>
+                      <span style={{ color: "#6B7280", flexShrink: 0 }}>{k}</span>
+                      <span style={{ fontWeight: 600, textAlign: "right", color: "#06B6D4" }}>{v}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <SectionHeader icon="🚨" title="Emergency Keywords" />
-                <div style={{ background: "rgba(11,22,41,0.8)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 10, padding: "14px" }}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {EMERGENCY_KEYWORDS.map(kw => (
-                      <span key={kw} style={{ fontSize: 11, fontWeight: 700, color: "#EF4444", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", padding: "3px 10px", borderRadius: 12 }}>{kw}</span>
-                    ))}
-                    <button onClick={() => toast.info("Keyword management coming in V2.")} style={{ fontSize: 11, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.1)", padding: "3px 10px", borderRadius: 12, cursor: "pointer" }}>+ Add</button>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#334155", marginTop: 10 }}>When detected, caller is immediately transferred to {FORWARD_NUMBER}</div>
+              <div style={card}>
+                {sectionHead("📋", "IVR Greeting Preview")}
+                <div style={{
+                  background: isDark ? "#060E1E" : "#F8FAFC",
+                  border: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`,
+                  borderRadius: 8, padding: "14px 16px",
+                  fontSize: 13, lineHeight: 1.7, color: t.text,
+                  fontStyle: "italic",
+                }}>
+                  "{settings.customGreetingUrl
+                    ? "🎵 Custom audio greeting plays"
+                    : (settings.greetingScript || DEFAULT_SETTINGS.greetingScript)}"
+                </div>
+                <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
+                  Voice: <strong>{settings.voiceStyle}</strong>
+                  {settings.customGreetingUrl && <span style={{ marginLeft: 10, color: "#10B981" }}>✓ Custom audio URL set</span>}
                 </div>
               </div>
             </div>
-
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════ DIAGNOSTICS ══ */}
-        {activeTab === "diagnostics" && (
+        {/* ══ SETTINGS ════════════════════════════════════════════════════════ */}
+        {activeTab === "settings" && (
           <div>
-            <SectionHeader icon="🛰" title="AI Receptionist Diagnostics" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {[
-                { label: "Telnyx webhook reachable",      status: "healthy",      detail: "/api/telnyx/voice responding"           },
-                { label: "Voice route responding",         status: "healthy",      detail: "POST /api/telnyx/voice active"          },
-                { label: "Gather route responding",        status: "healthy",      detail: "POST /api/telnyx/voice/gather active"   },
-                { label: "Recording route responding",     status: "healthy",      detail: "POST /api/telnyx/voice/recording active" },
-                { label: "Forward number configured",      status: "healthy",      detail: FORWARD_NUMBER                          },
-                { label: "SMS follow-up linked",           status: "healthy",      detail: "Telnyx SMS active"                     },
-                { label: "Lead Recovery linked",           status: "healthy",      detail: "leadsTable writes confirmed"           },
-                { label: "Recent call test status",        status: "warning",      detail: "No test run in last 24h"               },
-                { label: "AI Conversation V2",             status: "coming_soon",  detail: "LLM routing engine — in development"   },
-                { label: "Caller intent classification",   status: "coming_soon",  detail: "GPT-4 intent parsing — planned Q3"     },
-                { label: "Transcript generation",          status: "coming_soon",  detail: "Whisper API integration — planned"     },
-                { label: "Spam call detection",            status: "coming_soon",  detail: "Carrier-level spam scoring — planned"  },
-              ].map(d => {
-                const cfg = {
-                  healthy:     { color: "#10B981", label: "Healthy",     icon: "✓" },
-                  warning:     { color: "#F59E0B", label: "Warning",     icon: "⚠" },
-                  error:       { color: "#EF4444", label: "Error",       icon: "✕" },
-                  coming_soon: { color: "#8B5CF6", label: "Coming Soon", icon: "◌" },
-                }[d.status] ?? { color: "#64748B", label: d.status, icon: "?" };
-                return (
-                  <div key={d.label} style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    background: "rgba(11,22,41,0.8)", border: `1px solid ${cfg.color}15`,
-                    borderLeft: `3px solid ${cfg.color}50`, borderRadius: 10, padding: "12px 14px",
-                  }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: `${cfg.color}15`, border: `1px solid ${cfg.color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: cfg.color, fontWeight: 900 }}>{cfg.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{d.label}</div>
-                      <div style={{ fontSize: 11, color: "#475569" }}>{d.detail}</div>
+            {settingsLoading ? (
+              <div style={{ textAlign: "center", padding: 60, color: "#6B7280" }}>Loading settings…</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+                {/* Business identity */}
+                <div style={card}>
+                  {sectionHead("🏢", "Business Identity")}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div>
+                      {label("Business Name")}
+                      <input value={form.businessName} onChange={e => setForm(f => ({ ...f, businessName: e.target.value }))} style={inputStyle} />
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: cfg.color, background: `${cfg.color}12`, border: `1px solid ${cfg.color}25`, padding: "2px 9px", borderRadius: 12, flexShrink: 0 }}>{cfg.label}</span>
+                    <div>
+                      {label("Transfer Phone Number", "Press 1 routes here")}
+                      <input value={form.transferPhone} onChange={e => setForm(f => ({ ...f, transferPhone: e.target.value }))} placeholder="+12513249090" style={{ ...inputStyle, fontFamily: "monospace" }} />
+                    </div>
                   </div>
-                );
-              })}
+                </div>
+
+                {/* Voice + greeting */}
+                <div style={card}>
+                  {sectionHead("🎙", "Voice & Greeting")}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                      <div>
+                        {label("Voice Style", "Used for TTS responses")}
+                        <select value={form.voiceStyle} onChange={e => setForm(f => ({ ...f, voiceStyle: e.target.value }))} style={{ ...inputStyle }}>
+                          {VOICE_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        {label("Custom Greeting Audio URL", "Overrides the text greeting")}
+                        <input value={form.customGreetingUrl} onChange={e => setForm(f => ({ ...f, customGreetingUrl: e.target.value }))} placeholder="https://… (leave blank to use TTS)" style={inputStyle} />
+                      </div>
+                    </div>
+                    <div>
+                      {label("Greeting Script", "Read aloud if no custom audio URL is set")}
+                      <textarea rows={3} value={form.greetingScript} onChange={e => setForm(f => ({ ...f, greetingScript: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* IVR messages */}
+                <div style={card}>
+                  {sectionHead("⌨", "IVR Response Messages")}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div>
+                      {label("Press 2 — Callback Message", "Played after caller presses 2")}
+                      <textarea rows={2} value={form.callbackMessage} onChange={e => setForm(f => ({ ...f, callbackMessage: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                    </div>
+                    <div>
+                      {label("Press 3 — Voicemail Prompt", "Played before recording begins")}
+                      <textarea rows={2} value={form.voicemailMessage} onChange={e => setForm(f => ({ ...f, voicemailMessage: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                    </div>
+                    <div>
+                      {label("Press 4 — Text Routing Message", "SMS sent to caller when they press 4")}
+                      <textarea rows={3} value={form.textRoutingMessage} onChange={e => setForm(f => ({ ...f, textRoutingMessage: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                      <div style={{ fontSize: 11, color: "#6B7280", marginTop: 5 }}>{form.textRoutingMessage.length} characters</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Business hours */}
+                <div style={card}>
+                  {sectionHead("🕐", "After-Hours Mode")}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {AFTER_HOURS_OPTIONS.map(opt => (
+                      <button key={opt.val} onClick={() => setForm(f => ({ ...f, afterHoursMode: opt.val }))} style={{
+                        border: `2px solid ${form.afterHoursMode === opt.val ? "#00AEEF" : (isDark ? "#1E2D48" : "#E2E8F0")}`,
+                        background: form.afterHoursMode === opt.val ? "#00AEEF15" : "transparent",
+                        color: form.afterHoursMode === opt.val ? "#00AEEF" : "#6B7280",
+                        borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      }}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save bar */}
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  background: changed ? (isDark ? "#0A1A0A" : "#F0FDF4") : (isDark ? "#0A1020" : "#F8FAFC"),
+                  border: `1px solid ${changed ? "#10B98144" : (isDark ? "#1E2D48" : "#E2E8F0")}`,
+                  borderRadius: 10, padding: "14px 20px",
+                }}>
+                  <div style={{ fontSize: 13, color: changed ? "#10B981" : "#6B7280" }}>
+                    {changed ? "⚡ Unsaved changes — save to apply on next call" : "✓ Settings up to date"}
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {changed && (
+                      <button onClick={() => setForm(settings)} style={{
+                        background: "transparent", border: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`,
+                        color: "#6B7280", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      }}>Discard</button>
+                    )}
+                    <button onClick={saveSettings} disabled={saving || !changed} style={{
+                      background: (saving || !changed) ? "#10B98166" : "#10B981",
+                      border: "none", color: "#fff", borderRadius: 8, padding: "9px 24px",
+                      fontSize: 13, fontWeight: 700, cursor: (saving || !changed) ? "not-allowed" : "pointer",
+                    }}>{saving ? "Saving…" : "Save Settings"}</button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TEST ════════════════════════════════════════════════════════════ */}
+        {activeTab === "test" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+            {/* Call flow simulator */}
+            <div style={card}>
+              {sectionHead("📞", "Simulate Call Flow")}
+              <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 18px", lineHeight: 1.6 }}>
+                Click a digit to preview what the caller hears — responses use your current saved settings.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+                {[
+                  { digit: "1", icon: "↗",  label: "Live Transfer",    color: "#10B981" },
+                  { digit: "2", icon: "📲", label: "Callback",          color: "#00AEEF" },
+                  { digit: "3", icon: "🎙", label: "Voicemail",         color: "#F59E0B" },
+                  { digit: "4", icon: "💬", label: "Continue by Text",  color: "#06B6D4" },
+                ].map(opt => (
+                  <button key={opt.digit} onClick={() => testCallFlow(opt.digit)} disabled={testLoading} style={{
+                    background: testDigit === opt.digit ? `${opt.color}20` : (isDark ? "#060E1E" : "#F8FAFC"),
+                    border: `2px solid ${testDigit === opt.digit ? opt.color : (isDark ? "#1E2D48" : "#E2E8F0")}`,
+                    borderRadius: 10, padding: "16px 12px", cursor: "pointer", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: 24 }}>{opt.icon}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: opt.color, marginTop: 4 }}>{opt.digit}</div>
+                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{opt.label}</div>
+                  </button>
+                ))}
+              </div>
+
+              {testLoading && (
+                <div style={{ textAlign: "center", padding: "14px 0", color: "#6B7280", fontSize: 13 }}>Simulating…</div>
+              )}
+              {testResult && !testLoading && (
+                <div style={{
+                  background: isDark ? "#060E1E" : "#F8FAFC",
+                  border: `1px solid ${testResult.error ? "#EF444444" : "#00AEEF44"}`,
+                  borderRadius: 10, padding: "14px 16px",
+                }}>
+                  {testResult.error ? (
+                    <div style={{ fontSize: 13, color: "#EF4444" }}>{testResult.error}</div>
+                  ) : (<>
+                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+                      Press {testDigit} → {testResult.action}
+                    </div>
+                    <div style={{ fontSize: 13, color: t.text, lineHeight: 1.6, fontStyle: "italic" }}>
+                      "{testResult.response}"
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
+                      Voice: {testResult.voice} · Transfer: {testResult.settings?.transferPhone}
+                    </div>
+                  </>)}
+                </div>
+              )}
             </div>
 
-            <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-              <ActionBtn onClick={testWebhook} loading={testingWebhook} label="⚡ Run Webhook Test" color="#00AEEF" />
-              <ActionBtn onClick={simulateCall} loading={simulatingCall} label="📞 Simulate Missed Call" color="#8B5CF6" />
+            {/* SMS tester */}
+            <div style={card}>
+              {sectionHead("💬", "Test Press 4 SMS")}
+              <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 18px", lineHeight: 1.6 }}>
+                Send a real SMS to any number using your current Text Routing Message. Uses live Telnyx API.
+              </p>
+              <div style={{ marginBottom: 14 }}>
+                {label("Send to Phone Number", "Must be a real mobile number")}
+                <input
+                  type="tel" value={smsTo} placeholder="+12513249090"
+                  onChange={e => setSmsTo(e.target.value)}
+                  style={{ ...inputStyle, fontFamily: "monospace" }}
+                />
+              </div>
+              <div style={{ marginBottom: 18 }}>
+                {label("Message Preview")}
+                <div style={{
+                  background: isDark ? "#060E1E" : "#F1F5F9",
+                  border: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}`,
+                  borderRadius: 8, padding: "12px 14px",
+                  fontSize: 13, color: "#6B7280", lineHeight: 1.6, whiteSpace: "pre-wrap",
+                }}>{settings.textRoutingMessage || DEFAULT_SETTINGS.textRoutingMessage}</div>
+              </div>
+              <button onClick={sendTestSms} disabled={smsSending || !smsTo} style={{
+                background: (smsSending || !smsTo) ? "#06B6D466" : "#06B6D4",
+                border: "none", color: "#fff", borderRadius: 8, padding: "10px 22px",
+                fontSize: 13, fontWeight: 700, cursor: (smsSending || !smsTo) ? "not-allowed" : "pointer", width: "100%",
+              }}>{smsSending ? "Sending…" : "💬 Send Test SMS"}</button>
+              {smsResult && (
+                <div style={{
+                  marginTop: 14, borderRadius: 8, padding: "10px 14px",
+                  background: smsResult.startsWith("✅") ? "#10B98122" : "#EF444422",
+                  color: smsResult.startsWith("✅") ? "#10B981" : "#EF4444",
+                  fontSize: 13, fontWeight: 600,
+                }}>{smsResult}</div>
+              )}
             </div>
+
           </div>
         )}
 
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 2000,
+          background: toast.ok ? "#10B981" : "#EF4444",
+          color: "#fff", padding: "12px 20px", borderRadius: 10,
+          fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        }}>{toast.msg}</div>
+      )}
     </AppShell>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-function SectionHeader({ icon, title }: { icon: string; title: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-      <span style={{ fontSize: 14 }}>{icon}</span>
-      <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px" }}>{title}</span>
-      <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
-    </div>
-  );
-}
-
-function PhoneChip({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${color}08`, border: `1px solid ${color}25`, borderRadius: 8, padding: "4px 10px" }}>
-      <span style={{ fontSize: 10, color: "#475569", fontWeight: 600 }}>{label}:</span>
-      <span style={{ fontSize: 12, fontWeight: 800, color }}>{value}</span>
-    </div>
-  );
-}
-
-function ActionBtn({ onClick, loading, label, color, small }: { onClick: () => void; loading?: boolean; label: string; color: string; small?: boolean }) {
-  return (
-    <button onClick={onClick} disabled={loading} style={{
-      padding: small ? "6px 12px" : "9px 18px",
-      borderRadius: 9, fontSize: small ? 11 : 12, fontWeight: 700,
-      cursor: loading ? "wait" : "pointer",
-      background: `${color}10`, border: `1px solid ${color}35`,
-      color, opacity: loading ? 0.6 : 1, transition: "all 0.15s",
-    }}>{loading ? "..." : label}</button>
-  );
-}
-
-function btnStyle(color: string): React.CSSProperties {
-  return {
-    padding: "7px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-    cursor: "pointer", background: `${color}12`, border: `1px solid ${color}35`,
-    color, fontFamily: "inherit",
-  };
 }

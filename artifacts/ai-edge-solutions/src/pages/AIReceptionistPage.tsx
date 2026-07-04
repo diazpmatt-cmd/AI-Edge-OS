@@ -232,7 +232,7 @@ export default function AIReceptionistPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
               {[
                 { icon: "📞", label: "IVR Options",    value: "4", color: "#3B82F6" },
-                { icon: "↗",  label: "Press 1: Transfer", value: "Live",   color: "#22C55E" },
+                { icon: "↗",  label: "Press 1: Transfer", value: "Live",   color: "#3B82F6" },
                 { icon: "📲", label: "Press 2: Callback", value: "Active", color: "#3B82F6" },
                 { icon: "🎙", label: "Press 3: Voicemail", value: "Active", color: "#F59E0B" },
                 { icon: "💬", label: "Press 4: Text",   value: "Active", color: "#3B82F6" },
@@ -251,10 +251,10 @@ export default function AIReceptionistPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {[
                   ["Voice Webhook", "Healthy",  "#22C55E"],
-                  ["Call Transfer",  "Active",   "#22C55E"],
-                  ["Callback IVR",   "Active",   "#22C55E"],
-                  ["Voicemail",      "Active",   "#22C55E"],
-                  ["Press 4 Text",   "Active",   "#22C55E"],
+                  ["Call Transfer",  "Live",     "#3B82F6"],
+                  ["Callback IVR",   "Active",   "#3B82F6"],
+                  ["Voicemail",      "Active",   "#3B82F6"],
+                  ["Press 4 Text",   "Active",   "#3B82F6"],
                   ["Business Hours", "Enabled",  "#22C55E"],
                 ].map(([label, val, c]) => (
                   <div key={label} style={{

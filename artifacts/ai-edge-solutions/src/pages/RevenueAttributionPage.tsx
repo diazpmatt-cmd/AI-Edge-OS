@@ -51,7 +51,7 @@ const DEMO_LEADS: Lead[] = [
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   pending:   { label: "Pending",   color: "#F59E0B", bg: "#F59E0B22" },
   unmatched: { label: "Unmatched", color: "#6B7280", bg: "#6B728022" },
-  matched:   { label: "Matched",   color: "#3B82F6", bg: "#3B82F622" },
+  matched:   { label: "Matched",   color: "#22C55E", bg: "#22C55E22" },
   won:       { label: "Won ✓",     color: "#22C55E", bg: "#22C55E22" },
   lost:      { label: "Lost",      color: "#EF4444", bg: "#EF444422" },
 };
@@ -469,7 +469,7 @@ export default function RevenueAttributionPage() {
                 </div>
               )}
               <button onClick={runJobSync} disabled={syncing} style={{
-                background: syncing ? "#22C55E66" : "#22C55E",
+                background: syncing ? "#3B82F6" : "#22C55E",
                 border: "none", color: "#fff", borderRadius: 8,
                 padding: "11px 22px", fontSize: 13, fontWeight: 700,
                 cursor: syncing ? "not-allowed" : "pointer", width: "100%",
@@ -508,8 +508,8 @@ export default function RevenueAttributionPage() {
                 </p>
                 <button onClick={runGdMatch} disabled={matching} style={{
                   background: "transparent",
-                  border: `1px solid ${matching ? "#00AEEF44" : "#00AEEF"}`,
-                  color: "#00AEEF", borderRadius: 7,
+                  border: `1px solid ${matching ? "#3B82F644" : "#3B82F6"}`,
+                  color: "#3B82F6", borderRadius: 7,
                   padding: "8px 18px", fontSize: 12, fontWeight: 700,
                   cursor: matching ? "not-allowed" : "pointer", width: "100%",
                 }}>
@@ -606,7 +606,7 @@ export default function RevenueAttributionPage() {
                     { val: "won",       label: "Won ✓",    color: "#22C55E" },
                     { val: "lost",      label: "Lost",      color: "#EF4444" },
                     { val: "pending",   label: "Pending",   color: "#F59E0B" },
-                    { val: "matched",   label: "Matched",   color: "#00AEEF" },
+                    { val: "matched",   label: "Matched",   color: "#22C55E" },
                     { val: "unmatched", label: "Unmatched", color: "#6B7280" },
                   ].map(s => (
                     <button key={s.val} onClick={() => setForm(f => ({ ...f, status: s.val }))} style={{

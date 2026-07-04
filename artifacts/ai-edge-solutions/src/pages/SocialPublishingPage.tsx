@@ -51,7 +51,7 @@ const CTA_OPTIONS = [
 ];
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  draft:     { bg: "rgba(107,114,128,0.12)", color: "#6B7280" },
+  draft:     { bg: "rgba(196,181,253,0.12)",  color: "#C4B5FD" },
   scheduled: { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B" },
   published: { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
   partial:   { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B" },
@@ -613,7 +613,7 @@ export default function SocialPublishingPage() {
         {/* ── Stats bar ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
           {[
-            { label: "Drafts",    value: counts.draft,     color: "#94A3B8" },
+            { label: "Drafts",    value: counts.draft,     color: "#C4B5FD" },
             { label: "Scheduled", value: counts.scheduled, color: "#F59E0B" },
             { label: "Published", value: counts.published, color: "#22C55E" },
             { label: "Failed",    value: counts.failed,    color: "#EF4444" },

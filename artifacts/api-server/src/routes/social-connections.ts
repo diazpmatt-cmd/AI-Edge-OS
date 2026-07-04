@@ -969,7 +969,7 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
 
   const now = new Date();
 
-  // ── Single cooldown guard (quota OR button cooldown — same 10-min window) ────
+  // ── Cooldown guard — returns remaining cooldown info if still active ──────
   if (metadata.cooldownUntil) {
     const cd = new Date(metadata.cooldownUntil);
     if (cd > now) {
@@ -978,49 +978,130 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
         error: `Google quota cooldown active — try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`,
         cooldownUntil: cd.toISOString(),
         minsLeft,
+        google429Endpoint: metadata.google429Endpoint ?? null,
+        google429Reason:   metadata.google429Reason   ?? null,
+        google429At:       metadata.google429At       ?? null,
       });
       return;
     }
     delete metadata.cooldownUntil;
   }
 
-  const saveCooldown = async (durationMs = 15 * 60 * 1000) => {
+  // ── saveCooldown — never overwrites an unexpired cooldown ────────────────
+  const saveCooldown = async (
+    durationMs = 15 * 60 * 1000,
+    extra: Record<string, string | null> = {},
+  ) => {
+    // If a cooldown is already active (set by a concurrent request), don't reset it
+    if (metadata.cooldownUntil && new Date(metadata.cooldownUntil) > now) {
+      return metadata.cooldownUntil as string;
+    }
     const cooldownUntil = new Date(now.getTime() + durationMs).toISOString();
+    const updated = { ...metadata, cooldownUntil, ...extra };
     try {
       await db.update(socialConnectionsTable)
-        .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil }), updatedAt: now })
+        .set({ metadata: JSON.stringify(updated), updatedAt: now })
         .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+      Object.assign(metadata, updated);
     } catch {}
     return cooldownUntil;
   };
 
+  // ── Token freshness — refresh before calling Google if expired ────────────
+  let activeToken = row.accessToken ?? "";
+  const tokenExpired = !!(row.expiresAt && new Date(row.expiresAt) < now);
+  if (tokenExpired && row.refreshToken) {
+    console.log("[GBP-REFRESH-LOCATION] access token expired — refreshing before API call...");
+    try {
+      const rr = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID     ?? "",
+          client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+          refresh_token: row.refreshToken,
+          grant_type:    "refresh_token",
+        }).toString(),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (rr.ok) {
+        const rd = await rr.json() as { access_token?: string; expires_in?: number };
+        if (rd.access_token) {
+          activeToken = rd.access_token;
+          const expiresAt = rd.expires_in ? new Date(Date.now() + rd.expires_in * 1000) : undefined;
+          await db.update(socialConnectionsTable)
+            .set({ accessToken: activeToken, ...(expiresAt ? { expiresAt } : {}), updatedAt: now })
+            .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+          console.log("[GBP-REFRESH-LOCATION] token refreshed OK, expiresIn=" + rd.expires_in);
+        }
+      } else {
+        const errTxt = await rr.text();
+        console.warn("[GBP-REFRESH-LOCATION] token refresh failed HTTP " + rr.status + ": " + errTxt.slice(0, 200));
+      }
+    } catch (e: any) {
+      console.warn("[GBP-REFRESH-LOCATION] token refresh error: " + e?.message);
+    }
+  } else {
+    console.log(`[GBP-REFRESH-LOCATION] token freshness OK (expired=${tokenExpired}) — using stored token`);
+  }
+
   try {
-    const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
-      headers: { Authorization: `Bearer ${row.accessToken}` },
+    const ACCT_URL = "https://mybusinessaccountmanagement.googleapis.com/v1/accounts";
+    const acctRes = await fetch(ACCT_URL, {
+      headers: { Authorization: `Bearer ${activeToken}` },
       signal: AbortSignal.timeout(10000),
     });
     if (!acctRes.ok) {
-      if (acctRes.status === 429) {
-        const cooldownUntil = await saveCooldown();
-        res.status(429).json({ error: `Google quota cooldown active. Try again in 15 minutes.`, cooldownUntil, minsLeft: 15 }); return;
-      }
       const acctErrText = await acctRes.text();
+      let google429Reason: string | null = null;
+      try { google429Reason = (JSON.parse(acctErrText) as any)?.error?.message ?? null; } catch {}
+      console.warn(`[GBP-REFRESH-LOCATION] accounts API HTTP ${acctRes.status} — ${acctErrText.slice(0, 300)}`);
+      if (acctRes.status === 429) {
+        const cooldownUntil = await saveCooldown(15 * 60 * 1000, {
+          google429Endpoint: ACCT_URL,
+          google429Reason:   google429Reason ?? acctErrText.slice(0, 200),
+          google429At:       now.toISOString(),
+        });
+        res.status(429).json({
+          error:             "Google quota exceeded — Accounts API rate limited. Try again in 15 minutes.",
+          cooldownUntil,
+          minsLeft:          15,
+          google429Endpoint: ACCT_URL,
+          google429Reason:   google429Reason,
+        });
+        return;
+      }
       res.status(502).json({ error: `Accounts API: HTTP ${acctRes.status} — ${acctErrText.slice(0, 200)}` }); return;
     }
     const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
     const account = acctData.accounts?.[0];
     if (!account) { res.status(400).json({ error: "No Google Business Profile account found." }); return; }
 
-    const locRes = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress`,
-      { headers: { Authorization: `Bearer ${row.accessToken}` }, signal: AbortSignal.timeout(10000) },
+    const LOC_URL = `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storefrontAddress`;
+    const locRes = await fetch(LOC_URL,
+      { headers: { Authorization: `Bearer ${activeToken}` }, signal: AbortSignal.timeout(10000) },
     );
     if (!locRes.ok) {
+      const locErrText = await locRes.text();
+      let google429Reason: string | null = null;
+      try { google429Reason = (JSON.parse(locErrText) as any)?.error?.message ?? null; } catch {}
+      console.warn(`[GBP-REFRESH-LOCATION] locations API HTTP ${locRes.status} — ${locErrText.slice(0, 300)}`);
       if (locRes.status === 429) {
-        const cooldownUntil = await saveCooldown();
-        res.status(429).json({ error: `Google quota cooldown active. Try again in 15 minutes.`, cooldownUntil, minsLeft: 15 }); return;
+        const cooldownUntil = await saveCooldown(15 * 60 * 1000, {
+          google429Endpoint: LOC_URL,
+          google429Reason:   google429Reason ?? locErrText.slice(0, 200),
+          google429At:       now.toISOString(),
+        });
+        res.status(429).json({
+          error:             "Google quota exceeded — Business Information API rate limited. Try again in 15 minutes.",
+          cooldownUntil,
+          minsLeft:          15,
+          google429Endpoint: LOC_URL,
+          google429Reason:   google429Reason,
+        });
+        return;
       }
-      res.status(502).json({ error: `Locations API: HTTP ${locRes.status}` }); return;
+      res.status(502).json({ error: `Locations API: HTTP ${locRes.status} — ${locErrText.slice(0, 200)}` }); return;
     }
     const locData = await locRes.json() as { locations?: { name: string; title: string; storefrontAddress?: { addressLines?: string[]; locality?: string; administrativeArea?: string; postalCode?: string } }[] };
     const locs = locData.locations ?? [];

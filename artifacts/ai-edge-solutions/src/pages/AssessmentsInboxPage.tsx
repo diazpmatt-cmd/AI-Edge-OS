@@ -36,16 +36,16 @@ type Assessment = {
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
   new:                   { label: "New",                  color: "#00AEEF", bg: "rgba(0,174,239,0.12)"    },
   contacted:             { label: "Contacted",            color: "#F59E0B", bg: "rgba(245,158,11,0.12)"   },
-  qualified:             { label: "Qualified",            color: "#8B5CF6", bg: "rgba(139,92,246,0.12)"   },
+  qualified:             { label: "Qualified",            color: "#3B82F6", bg: "rgba(59,130,246,0.12)"   },
   strategy_call_booked:  { label: "Call Booked",          color: "#06B6D4", bg: "rgba(6,182,212,0.12)"    },
   proposal_sent:         { label: "Proposal Sent",        color: "#F97316", bg: "rgba(249,115,22,0.12)"   },
-  won:                   { label: "Won",                  color: "#10B981", bg: "rgba(16,185,129,0.12)"   },
+  won:                   { label: "Won",                  color: "#22C55E", bg: "rgba(34,197,94,0.12)"   },
   lost:                  { label: "Lost",                 color: "#EF4444", bg: "rgba(239,68,68,0.12)"    },
 };
 
 function opportunityLevel(score: number | null): { label: string; color: string } {
   const s = score ?? 0;
-  if (s < 45) return { label: "High",   color: "#10B981" };
+  if (s < 45) return { label: "High",   color: "#22C55E" };
   if (s < 65) return { label: "Medium", color: "#F59E0B" };
   return            { label: "Low",    color: "#94A3B8" };
 }
@@ -60,7 +60,7 @@ function revenuePotential(score: number | null): string {
 
 function scoreColor(n: number | null) {
   const v = n ?? 0;
-  if (v >= 70) return "#10B981";
+  if (v >= 70) return "#22C55E";
   if (v >= 50) return "#F59E0B";
   if (v >= 30) return "#F97316";
   return "#EF4444";
@@ -72,10 +72,10 @@ function fmtDate(iso: string) {
 
 const PIPELINE_ACTIONS = [
   { label: "Mark Contacted",        status: "contacted",            color: "#F59E0B" },
-  { label: "Mark Qualified",        status: "qualified",            color: "#8B5CF6" },
+  { label: "Mark Qualified",        status: "qualified",            color: "#3B82F6" },
   { label: "Schedule Strategy Call",status: "strategy_call_booked", color: "#06B6D4" },
   { label: "Send Proposal",         status: "proposal_sent",        color: "#F97316" },
-  { label: "Mark Won",              status: "won",                  color: "#10B981" },
+  { label: "Mark Won",              status: "won",                  color: "#22C55E" },
   { label: "Mark Lost",             status: "lost",                 color: "#EF4444" },
 ];
 
@@ -185,7 +185,7 @@ export default function AssessmentsInboxPage() {
               <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.5px", margin: 0 }}>Business Assessments</h1>
               <span style={{
                 fontSize: 10, fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase",
-                color: "#10B981", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
+                color: "#22C55E", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)",
                 borderRadius: 20, padding: "3px 10px",
               }}>Lead Pipeline Active</span>
             </div>
@@ -200,9 +200,9 @@ export default function AssessmentsInboxPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 28 }}>
           {[
             { icon: "📊", label: "Total Assessments",      value: String(total),          color: "#00AEEF" },
-            { icon: "🆕", label: "New Leads",              value: String(newLeads),        color: "#10B981" },
+            { icon: "🆕", label: "New Leads",              value: String(newLeads),        color: "#22C55E" },
             { icon: "📅", label: "Strategy Calls Booked",  value: String(callsBooked),     color: "#06B6D4" },
-            { icon: "🎯", label: "Conversion Rate",        value: `${convRate}%`,           color: "#8B5CF6" },
+            { icon: "🎯", label: "Conversion Rate",        value: `${convRate}%`,           color: "#3B82F6" },
             { icon: "💰", label: "Revenue Pipeline",       value: `$${(pipelineVal).toLocaleString()}`, color: "#F59E0B" },
           ].map(card => (
             <div key={card.label} style={{
@@ -312,7 +312,7 @@ export default function AssessmentsInboxPage() {
             <SectionHeader icon="💰" title="Revenue Forecast" mt={28} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
               {[
-                { label: "High Probability Pipeline",   value: `$${(highPipe * 2400).toLocaleString()}`,  color: "#10B981", sub: `${highPipe} leads · Score < 45` },
+                { label: "High Probability Pipeline",   value: `$${(highPipe * 2400).toLocaleString()}`,  color: "#22C55E", sub: `${highPipe} leads · Score < 45` },
                 { label: "Medium Probability Pipeline",  value: `$${(medPipe * 1500).toLocaleString()}`,   color: "#F59E0B", sub: `${medPipe} leads · Score 45–65` },
                 { label: "Low Probability Pipeline",     value: `$${(lowPipe * 900).toLocaleString()}`,    color: "#F97316", sub: `${lowPipe} leads · Score 65+`  },
                 { label: "Total Pipeline",               value: `$${(highPipe*2400+medPipe*1500+lowPipe*900).toLocaleString()}`, color: "#00AEEF", sub: "All active opportunities" },
@@ -331,14 +331,14 @@ export default function AssessmentsInboxPage() {
             <SectionHeader icon="✨" title="AI Edge Smart Insights" mt={24} />
             <div style={{
               background: "linear-gradient(160deg, rgba(11,22,41,0.9), rgba(3,6,18,0.8))",
-              border: "1px solid rgba(139,92,246,0.2)", borderRadius: 14, padding: "20px 20px",
+              border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: "20px 20px",
               display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
             }}>
               {[
-                { icon: "✨", text: "67% of leads have weak AI visibility (score < 45)", color: "#8B5CF6" },
+                { icon: "✨", text: "67% of leads have weak AI visibility (score < 45)", color: "#3B82F6" },
                 { icon: "🍎", text: "52% of leads missing Apple Business Connect",       color: "#00AEEF" },
                 { icon: "📋", text: "71% of leads missing schema markup",                color: "#F59E0B" },
-                { icon: "🏆", text: "Highest converting industry: Home Services",        color: "#10B981" },
+                { icon: "🏆", text: "Highest converting industry: Home Services",        color: "#22C55E" },
                 { icon: "📍", text: "58% have no Bing Places listing verified",          color: "#F97316" },
                 { icon: "⭐", text: "Low review velocity detected in 44% of leads",      color: "#EF4444" },
               ].map((ins, i) => (
@@ -411,8 +411,8 @@ export default function AssessmentsInboxPage() {
                 {/* Opportunity Metrics */}
                 <DetailSection title="Opportunity Metrics">
                   {[
-                    { label: "Revenue Recovery",      value: "Estimate pending", color: "#10B981" },
-                    { label: "AI Visibility",         value: "Estimate pending", color: "#8B5CF6" },
+                    { label: "Revenue Recovery",      value: "Estimate pending", color: "#22C55E" },
+                    { label: "AI Visibility",         value: "Estimate pending", color: "#3B82F6" },
                     { label: "Local Visibility",      value: "Estimate pending", color: "#00AEEF" },
                     { label: "Lead Conversion",       value: "Estimate pending", color: "#F59E0B" },
                   ].map(op => (

@@ -129,7 +129,7 @@ function readinessLabel(pct: number): { label: string; color: string } {
   if (pct <= 30)  return { label: "Building Foundation", color: "#EF4444" };
   if (pct <= 60)  return { label: "Gaining Presence",   color: "#F59E0B" };
   if (pct <= 85)  return { label: "Strong Presence",    color: "#3B82F6" };
-  return               { label: "Fully Optimized",      color: "#10B981" };
+  return               { label: "Fully Optimized",      color: "#22C55E" };
 }
 
 // ── Score gauge bar ────────────────────────────────────────────────────────────
@@ -198,9 +198,9 @@ function AssistantCard({ name, subtitle, icon, accentColor, signals, confirmed, 
 
         {/* Point summary */}
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 8, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}>
+          <div style={{ flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 8, background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>Earned</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "#10B981", lineHeight: 1.3 }}>{completedPoints} <span style={{ fontSize: 11, color: "#475569", fontWeight: 500 }}>/ {totalPoints} pts</span></div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#22C55E", lineHeight: 1.3 }}>{completedPoints} <span style={{ fontSize: 11, color: "#475569", fontWeight: 500 }}>/ {totalPoints} pts</span></div>
           </div>
           <div style={{ flex: 1, minWidth: 100, padding: "8px 12px", borderRadius: 8, background: `${accentColor}06`, border: `1px solid ${accentColor}18` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>Missing</div>
@@ -226,17 +226,17 @@ function AssistantCard({ name, subtitle, icon, accentColor, signals, confirmed, 
               return (
                 <div key={sig.id} style={{
                   padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                  background: done ? "rgba(16,185,129,0.05)" : "rgba(255,255,255,0.02)",
-                  border: `1px solid ${done ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)"}`,
+                  background: done ? "rgba(34,197,94,0.05)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${done ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)"}`,
                   transition: "all 0.15s",
                 }} onClick={() => onToggle(sig.id)}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{
                       width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                      background: done ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)",
-                      border: `1.5px solid ${done ? "rgba(16,185,129,0.5)" : "rgba(255,255,255,0.12)"}`,
+                      background: done ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.05)",
+                      border: `1.5px solid ${done ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.12)"}`,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 11, color: "#10B981", fontWeight: 800, transition: "all 0.15s",
+                      fontSize: 11, color: "#22C55E", fontWeight: 800, transition: "all 0.15s",
                     }}>{done ? "✓" : ""}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: done ? "#64748B" : "#CBD5E1", textDecoration: done ? "line-through" : "none" }}>
@@ -246,9 +246,9 @@ function AssistantCard({ name, subtitle, icon, accentColor, signals, confirmed, 
                     </div>
                     <span style={{
                       fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 20, flexShrink: 0,
-                      background: done ? "rgba(16,185,129,0.1)" : `${accentColor}0D`,
-                      border: done ? "1px solid rgba(16,185,129,0.25)" : `1px solid ${accentColor}20`,
-                      color: done ? "#10B981" : accentColor,
+                      background: done ? "rgba(34,197,94,0.1)" : `${accentColor}0D`,
+                      border: done ? "1px solid rgba(34,197,94,0.25)" : `1px solid ${accentColor}20`,
+                      color: done ? "#22C55E" : accentColor,
                     }}>{done ? "✓ Done" : `+${sig.points} pts`}</span>
                   </div>
                   <div style={{ marginTop: 5, marginLeft: 30, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -289,7 +289,7 @@ function AssistantCard({ name, subtitle, icon, accentColor, signals, confirmed, 
           )}
 
           {missing.length === 0 && (
-            <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", fontSize: 12.5, color: "#10B981", fontWeight: 700, textAlign: "center" }}>
+            <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 12.5, color: "#22C55E", fontWeight: 700, textAlign: "center" }}>
               ✓ All signals confirmed — {name} is fully optimized
             </div>
           )}

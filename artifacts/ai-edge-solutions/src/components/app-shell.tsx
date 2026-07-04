@@ -16,8 +16,8 @@ const NAV_ITEMS = [
   { to: "/admin/repurpose",          icon: "🎯", label: "Repurpose",                 bg: "#26071A", accent: "#F472B6" },
   { to: "/admin/lead-recovery",      icon: "📞", label: "Lead\nRecovery AI",         bg: "#0A2010", accent: "#4ADE80" },
   { to: "/admin/call-intelligence",  icon: "📊", label: "Call\nIntelligence",        bg: "#0D1828", accent: "#60A5FA" },
-  { to: "/admin/ai-receptionist",    icon: "🤖", label: "AI\nReceptionist",          bg: "#180D2E", accent: "#A78BFA" },
-  { to: "/admin/social-publishing",  icon: "✈",  label: "Publishing\nCenter",        bg: "#281400", accent: "#FB923C" },
+  { to: "/admin/ai-receptionist",    icon: "🤖", label: "AI\nReceptionist",          bg: "#180D2E", accent: "#3B82F6" },
+  { to: "/admin/social-publishing",  icon: "✈",  label: "Publishing\nCenter",        bg: "#281400", accent: "#F59E0B" },
   { to: "/admin/auto-content",       icon: "⚡", label: "Auto Content\nEngine",      bg: "#0A0E26", accent: "#818CF8" },
   { to: "/admin/image-assets",       icon: "🖼",  label: "Image Asset\nManager",     bg: "#0A1226", accent: "#67E8F9" },
   { to: "/admin/ai-visibility",      icon: "✨", label: "AI Visibility\nEngine",     bg: "#221800", accent: "#FBBF24" },
@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { to: "/admin/reviews",            icon: "⭐", label: "Reviews\nEngine",           bg: "#261A00", accent: "#FCD34D" },
   { to: "/admin/assessments",        icon: "📋", label: "Business\nAssessments",     bg: "#1A1A0A", accent: "#86EFAC" },
   { to: "/admin/diagnostics",        icon: "🛰",  label: "System\nDiagnostics",      bg: "#0A1A1A", accent: "#94A3B8" },
-  { to: "/admin/revenue-attribution", icon: "💰", label: "Revenue\nAttribution",      bg: "#0A1E0A", accent: "#10B981" },
+  { to: "/admin/revenue-attribution", icon: "💰", label: "Revenue\nAttribution",      bg: "#0A1E0A", accent: "#22C55E" },
 ];
 
 const SIDEBAR_W = 252;

@@ -72,9 +72,9 @@ function callTypeLabel(ct: string): { label: string; color: string; bg: string }
   const map: Record<string, { label: string; color: string; bg: string }> = {
     incoming:    { label: "Incoming",    color: "#00AEEF", bg: "rgba(0,174,239,0.12)"   },
     missed:      { label: "Missed",      color: "#F87171", bg: "rgba(239,68,68,0.12)"   },
-    transferred: { label: "Transferred", color: "#10B981", bg: "rgba(16,185,129,0.12)"  },
+    transferred: { label: "Transferred", color: "#22C55E", bg: "rgba(34,197,94,0.12)"  },
     callback:    { label: "Callback",    color: "#F59E0B", bg: "rgba(245,158,11,0.12)"  },
-    voicemail:   { label: "Voicemail",   color: "#A78BFA", bg: "rgba(139,92,246,0.12)"  },
+    voicemail:   { label: "Voicemail",   color: "#3B82F6", bg: "rgba(59,130,246,0.12)"  },
     sms:         { label: "SMS",         color: "#34D399", bg: "rgba(52,211,153,0.12)"  },
   };
   return map[ct] ?? { label: ct, color: "#94A3B8", bg: "rgba(148,163,184,0.08)" };
@@ -83,10 +83,10 @@ function callTypeLabel(ct: string): { label: string; color: string; bg: string }
 function outcomeLabel(o: string): { label: string; color: string } {
   const map: Record<string, { label: string; color: string }> = {
     pending:            { label: "In Progress",   color: "#00AEEF" },
-    answered:           { label: "Answered",      color: "#10B981" },
-    transferred:        { label: "Transferred",   color: "#10B981" },
+    answered:           { label: "Answered",      color: "#22C55E" },
+    transferred:        { label: "Transferred",   color: "#22C55E" },
     missed:             { label: "Missed",        color: "#EF4444" },
-    voicemail_left:     { label: "Voicemail",     color: "#A78BFA" },
+    voicemail_left:     { label: "Voicemail",     color: "#3B82F6" },
     callback_requested: { label: "Callback Req",  color: "#F59E0B" },
     replied:            { label: "Replied",       color: "#34D399" },
     no_answer:          { label: "No Answer",     color: "#EF4444" },
@@ -100,11 +100,11 @@ function leadStatusBadge(s: string | null) {
   const map: Record<string, { bg: string; color: string }> = {
     new:                  { bg: "rgba(0,174,239,0.12)",    color: "#00AEEF" },
     contacted:            { bg: "rgba(245,158,11,0.12)",   color: "#F59E0B" },
-    quote_request:        { bg: "rgba(139,92,246,0.12)",   color: "#A78BFA" },
-    appointment_request:  { bg: "rgba(16,185,129,0.12)",   color: "#10B981" },
+    quote_request:        { bg: "rgba(59,130,246,0.12)",   color: "#3B82F6" },
+    appointment_request:  { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
     emergency_request:    { bg: "rgba(239,68,68,0.12)",    color: "#F87171" },
-    qualified:            { bg: "rgba(139,92,246,0.12)",   color: "#A78BFA" },
-    booked:               { bg: "rgba(16,185,129,0.12)",   color: "#10B981" },
+    qualified:            { bg: "rgba(59,130,246,0.12)",   color: "#3B82F6" },
+    booked:               { bg: "rgba(34,197,94,0.12)",   color: "#22C55E" },
     closed:               { bg: "rgba(100,116,139,0.12)",  color: "#94A3B8" },
   };
   const style = map[s] ?? { bg: "rgba(148,163,184,0.08)", color: "#64748B" };
@@ -176,11 +176,11 @@ export default function CallIntelligencePage() {
               </h1>
               <div style={{
                 display: "flex", alignItems: "center", gap: 5,
-                background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)",
+                background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)",
                 borderRadius: 20, padding: "2px 10px",
               }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", animation: "pulse 2s infinite" }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.5px", textTransform: "uppercase" }}>Live</span>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22C55E", animation: "pulse 2s infinite" }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.5px", textTransform: "uppercase" }}>Live</span>
               </div>
             </div>
             <p style={{ margin: 0, color: t.text2, fontSize: 13.5 }}>
@@ -228,9 +228,9 @@ export default function CallIntelligencePage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
             <MetricCard icon="📲" label="Total Calls Received" value={m?.total_calls ?? 0} sub={`${PERIOD_LABELS[period]} · all inbound`} accent="#00AEEF" />
             <MetricCard icon="📵" label="Missed Calls" value={m?.missed_calls ?? 0} sub="Unanswered · text-back sent" accent="#F87171" />
-            <MetricCard icon="🔀" label="Calls Transferred" value={m?.transferred_calls ?? 0} sub="Live agent handoff" accent="#10B981" />
+            <MetricCard icon="🔀" label="Calls Transferred" value={m?.transferred_calls ?? 0} sub="Live agent handoff" accent="#22C55E" />
             <MetricCard icon="🔔" label="Callback Requests" value={m?.callback_requests ?? 0} sub="Pressed 2 in IVR" accent="#F59E0B" />
-            <MetricCard icon="🎙️" label="Voicemails" value={m?.voicemails ?? 0} sub="Pressed 3 in IVR" accent="#A78BFA" />
+            <MetricCard icon="🎙️" label="Voicemails" value={m?.voicemails ?? 0} sub="Pressed 3 in IVR" accent="#3B82F6" />
             <MetricCard icon="💬" label="SMS Conversations" value={m?.sms_conversations ?? 0} sub="Inbound + outbound" accent="#34D399" />
             <MetricCard icon="🎯" label="Leads Captured" value={m?.leads_captured ?? 0} sub="Unique callers tracked" accent="#C0C0C0" />
             <MetricCard icon="📈" label="Recovery Rate" value={m?.recovery_rate != null ? `${m.recovery_rate}%` : "—"} sub="Missed → engaged" accent="#00AEEF" />

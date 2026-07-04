@@ -169,7 +169,7 @@ const BASE_CHANNELS: PresenceChannel[] = [
 const STATUS_STYLE: Record<ChannelStatus, {
   label: string; color: string; bg: string; border: string; dot: string;
 }> = {
-  connected:    { label: "Connected",      color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.25)",  dot: "#10B981" },
+  connected:    { label: "Connected",      color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.25)",   dot: "#22C55E" },
   pending:      { label: "Setup Pending",  color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)",  dot: "#F59E0B" },
   not_started:  { label: "Not Started",    color: "#64748B", bg: "rgba(71,85,105,0.15)",   border: "rgba(71,85,105,0.2)",    dot: "#475569" },
   needs_action: { label: "Needs Action",   color: "#F87171", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)",   dot: "#EF4444" },
@@ -183,8 +183,8 @@ const PRIORITY_STYLE: Record<ChannelPriority, { label: string; color: string; bg
 
 const CATEGORY_COLOR: Record<ChannelCategory, string> = {
   Search:    "#00AEEF",
-  Maps:      "#10B981",
-  Social:    "#8B5CF6",
+  Maps:      "#22C55E",
+  Social:    "#3B82F6",
   Directory: "#F59E0B",
 };
 
@@ -247,7 +247,7 @@ export function LocalPresenceChecklist({ gbpConnected = false }: Props) {
           <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
             <div style={{
               height: "100%", width: `${donePct}%`,
-              background: "linear-gradient(90deg, #00AEEF, #10B981)",
+              background: "linear-gradient(90deg, #00AEEF, #22C55E)",
               borderRadius: 3, transition: "width 0.4s",
             }} />
           </div>
@@ -256,7 +256,7 @@ export function LocalPresenceChecklist({ gbpConnected = false }: Props) {
         {/* Status pills */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[
-            { label: "Connected",   count: connected,  color: "#10B981" },
+            { label: "Connected",   count: connected,  color: "#22C55E" },
             { label: "Pending",     count: pending,    color: "#F59E0B" },
             { label: "Not started", count: notStarted, color: "#475569" },
           ].map(s => (
@@ -315,7 +315,7 @@ export function LocalPresenceChecklist({ gbpConnected = false }: Props) {
               key={channel.id}
               style={{
                 background: channel.status === "connected"
-                  ? "linear-gradient(135deg, rgba(16,185,129,0.05), rgba(11,22,41,0.9))"
+                  ? "linear-gradient(135deg, rgba(34,197,94,0.05), rgba(11,22,41,0.9))"
                   : channel.status === "pending"
                   ? "linear-gradient(135deg, rgba(245,158,11,0.04), rgba(11,22,41,0.9))"
                   : "rgba(11,22,41,0.7)",
@@ -474,8 +474,8 @@ export function LocalPresenceChecklist({ gbpConnected = false }: Props) {
                         style={{
                           display: "inline-flex", alignItems: "center", gap: 5,
                           padding: "6px 14px", borderRadius: 8,
-                          background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
-                          color: "#10B981", fontSize: 11, fontWeight: 700,
+                          background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+                          color: "#22C55E", fontSize: 11, fontWeight: 700,
                           textDecoration: "none", flexShrink: 0,
                         }}
                       >

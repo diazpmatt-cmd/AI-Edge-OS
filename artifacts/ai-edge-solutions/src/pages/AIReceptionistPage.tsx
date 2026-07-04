@@ -198,7 +198,7 @@ export default function AIReceptionistPage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
               <h1 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>AI Receptionist</h1>
-              <span style={{ fontSize: 10, fontWeight: 800, color: "#10B981", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "3px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Active</span>
+              <span style={{ fontSize: 10, fontWeight: 800, color: "#22C55E", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "3px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Active</span>
             </div>
             <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>
               Configure call routing, messages, and Press 4 text routing for {settings.businessName}.
@@ -231,11 +231,11 @@ export default function AIReceptionistPage() {
             {/* KPI row */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
               {[
-                { icon: "📞", label: "IVR Options",    value: "4", color: "#00AEEF" },
-                { icon: "↗",  label: "Press 1: Transfer", value: "Live",   color: "#10B981" },
-                { icon: "📲", label: "Press 2: Callback", value: "Active", color: "#A78BFA" },
+                { icon: "📞", label: "IVR Options",    value: "4", color: "#3B82F6" },
+                { icon: "↗",  label: "Press 1: Transfer", value: "Live",   color: "#22C55E" },
+                { icon: "📲", label: "Press 2: Callback", value: "Active", color: "#3B82F6" },
                 { icon: "🎙", label: "Press 3: Voicemail", value: "Active", color: "#F59E0B" },
-                { icon: "💬", label: "Press 4: Text",   value: "Active", color: "#06B6D4" },
+                { icon: "💬", label: "Press 4: Text",   value: "Active", color: "#3B82F6" },
               ].map(k => (
                 <div key={k.label} style={{ ...card, display: "flex", flexDirection: "column", gap: 5 }}>
                   <div style={{ fontSize: 18 }}>{k.icon}</div>
@@ -250,12 +250,12 @@ export default function AIReceptionistPage() {
               {sectionHead("🟢", "System Status")}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {[
-                  ["Voice Webhook", "Healthy",  "#10B981"],
-                  ["Call Transfer",  "Active",   "#10B981"],
-                  ["Callback IVR",   "Active",   "#10B981"],
-                  ["Voicemail",      "Active",   "#10B981"],
-                  ["Press 4 Text",   "Active",   "#10B981"],
-                  ["Business Hours", "Enabled",  "#10B981"],
+                  ["Voice Webhook", "Healthy",  "#22C55E"],
+                  ["Call Transfer",  "Active",   "#22C55E"],
+                  ["Callback IVR",   "Active",   "#22C55E"],
+                  ["Voicemail",      "Active",   "#22C55E"],
+                  ["Press 4 Text",   "Active",   "#22C55E"],
+                  ["Business Hours", "Enabled",  "#22C55E"],
                 ].map(([label, val, c]) => (
                   <div key={label} style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -305,7 +305,7 @@ export default function AIReceptionistPage() {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
                 {[
                   { icon: "📞", label: "Incoming Call",    sub: TELNYX_NUMBER,                  color: "#00AEEF" },
-                  { icon: "🤖", label: "AI Greeting",       sub: "Custom audio or TTS script",   color: "#A78BFA" },
+                  { icon: "🤖", label: "AI Greeting",       sub: "Custom audio or TTS script",   color: "#3B82F6" },
                   { icon: "⌨",  label: "IVR Menu — Press 1–4", sub: "Caller selects option",    color: "#6B7280" },
                 ].map((node, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
@@ -330,7 +330,7 @@ export default function AIReceptionistPage() {
                 {/* 4 branches */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, width: "100%" }}>
                   {[
-                    { key: "1", icon: "↗",  label: "Press 1",   action: "Live Transfer",   color: "#10B981", sub: settings.transferPhone },
+                    { key: "1", icon: "↗",  label: "Press 1",   action: "Live Transfer",   color: "#22C55E", sub: settings.transferPhone },
                     { key: "2", icon: "📲", label: "Press 2",   action: "Callback",          color: "#00AEEF", sub: "Log lead + confirm" },
                     { key: "3", icon: "🎙", label: "Press 3",   action: "Voicemail",         color: "#F59E0B", sub: "Record + save" },
                     { key: "4", icon: "💬", label: "Press 4",   action: "Continue by Text",  color: "#06B6D4", sub: "SMS auto-sent" },
@@ -388,7 +388,7 @@ export default function AIReceptionistPage() {
                 </div>
                 <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
                   Voice: <strong>{settings.voiceStyle}</strong>
-                  {settings.customGreetingUrl && <span style={{ marginLeft: 10, color: "#10B981" }}>✓ Custom audio URL set</span>}
+                  {settings.customGreetingUrl && <span style={{ marginLeft: 10, color: "#22C55E" }}>✓ Custom audio URL set</span>}
                 </div>
               </div>
             </div>
@@ -480,10 +480,10 @@ export default function AIReceptionistPage() {
                 <div style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
                   background: changed ? (isDark ? "#0A1A0A" : "#F0FDF4") : (isDark ? "#0A1020" : "#F8FAFC"),
-                  border: `1px solid ${changed ? "#10B98144" : (isDark ? "#1E2D48" : "#E2E8F0")}`,
+                  border: `1px solid ${changed ? "#22C55E44" : (isDark ? "#1E2D48" : "#E2E8F0")}`,
                   borderRadius: 10, padding: "14px 20px",
                 }}>
-                  <div style={{ fontSize: 13, color: changed ? "#10B981" : "#6B7280" }}>
+                  <div style={{ fontSize: 13, color: changed ? "#22C55E" : "#6B7280" }}>
                     {changed ? "⚡ Unsaved changes — save to apply on next call" : "✓ Settings up to date"}
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
@@ -494,7 +494,7 @@ export default function AIReceptionistPage() {
                       }}>Discard</button>
                     )}
                     <button onClick={saveSettings} disabled={saving || !changed} style={{
-                      background: (saving || !changed) ? "#10B98166" : "#10B981",
+                      background: (saving || !changed) ? "#22C55E66" : "#22C55E",
                       border: "none", color: "#fff", borderRadius: 8, padding: "9px 24px",
                       fontSize: 13, fontWeight: 700, cursor: (saving || !changed) ? "not-allowed" : "pointer",
                     }}>{saving ? "Saving…" : "Save Settings"}</button>
@@ -518,7 +518,7 @@ export default function AIReceptionistPage() {
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
                 {[
-                  { digit: "1", icon: "↗",  label: "Live Transfer",    color: "#10B981" },
+                  { digit: "1", icon: "↗",  label: "Live Transfer",    color: "#22C55E" },
                   { digit: "2", icon: "📲", label: "Callback",          color: "#00AEEF" },
                   { digit: "3", icon: "🎙", label: "Voicemail",         color: "#F59E0B" },
                   { digit: "4", icon: "💬", label: "Continue by Text",  color: "#06B6D4" },
@@ -592,8 +592,8 @@ export default function AIReceptionistPage() {
               {smsResult && (
                 <div style={{
                   marginTop: 14, borderRadius: 8, padding: "10px 14px",
-                  background: smsResult.startsWith("✅") ? "#10B98122" : "#EF444422",
-                  color: smsResult.startsWith("✅") ? "#10B981" : "#EF4444",
+                  background: smsResult.startsWith("✅") ? "#22C55E22" : "#EF444422",
+                  color: smsResult.startsWith("✅") ? "#22C55E" : "#EF4444",
                   fontSize: 13, fontWeight: 600,
                 }}>{smsResult}</div>
               )}
@@ -608,7 +608,7 @@ export default function AIReceptionistPage() {
       {toast && (
         <div style={{
           position: "fixed", bottom: 24, right: 24, zIndex: 2000,
-          background: toast.ok ? "#10B981" : "#EF4444",
+          background: toast.ok ? "#22C55E" : "#EF4444",
           color: "#fff", padding: "12px 20px", borderRadius: 10,
           fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
         }}>{toast.msg}</div>

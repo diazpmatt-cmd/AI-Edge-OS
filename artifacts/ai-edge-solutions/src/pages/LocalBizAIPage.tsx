@@ -13,8 +13,8 @@ const CLIENT = { name: "Bed Bugs & Beyond", category: "Pest Control", area: "Bal
 const KPI_CARDS = [
   { icon: "🏆", label: "Growth Score",         value: "—",    sub: "Waiting for live data",          color: "#00AEEF", glow: false },
   { icon: "📍", label: "Visibility Score",      value: "—",    sub: "Connect local presence sources", color: "#F59E0B", glow: false },
-  { icon: "⭐", label: "Reviews This Month",    value: "—",    sub: "Connect review sources",         color: "#10B981", glow: false },
-  { icon: "📝", label: "Content Published",     value: "—",    sub: "Connect social publishing",      color: "#8B5CF6", glow: false },
+  { icon: "⭐", label: "Reviews This Month",    value: "—",    sub: "Connect review sources",         color: "#22C55E", glow: false },
+  { icon: "📝", label: "Content Published",     value: "—",    sub: "Connect social publishing",      color: "#3B82F6", glow: false },
   { icon: "📣", label: "Campaign Performance",  value: "—",    sub: "No active campaigns",            color: "#EC4899", glow: false },
   { icon: "✨", label: "AI Opportunity Score",  value: "—",    sub: "Waiting for live data",          color: "#F59E0B", glow: false },
 ];
@@ -45,13 +45,13 @@ const PRIORITY_STYLE: Record<Priority, { color: string; bg: string; label: strin
 };
 
 const CAL_STATUS_STYLE: Record<CalStatus, { color: string; bg: string; label: string }> = {
-  published: { color: "#10B981", bg: "rgba(16,185,129,0.1)",  label: "Published" },
+  published: { color: "#22C55E", bg: "rgba(34,197,94,0.1)",  label: "Published" },
   scheduled: { color: "#00AEEF", bg: "rgba(0,174,239,0.1)",   label: "Scheduled" },
   pending:   { color: "#64748B", bg: "rgba(100,116,139,0.1)", label: "Pending"   },
 };
 
 const CAMPAIGN_STATUS_STYLE: Record<CampaignStatus, { color: string; bg: string; label: string }> = {
-  active:    { color: "#10B981", bg: "rgba(16,185,129,0.1)", label: "Active"    },
+  active:    { color: "#22C55E", bg: "rgba(34,197,94,0.1)", label: "Active"    },
   paused:    { color: "#F59E0B", bg: "rgba(245,158,11,0.1)", label: "Paused"   },
   completed: { color: "#64748B", bg: "rgba(100,116,139,0.1)",label: "Completed" },
 };
@@ -59,7 +59,7 @@ const CAMPAIGN_STATUS_STYLE: Record<CampaignStatus, { color: string; bg: string;
 const OPPORTUNITY_STYLE: Record<"high" | "medium" | "low", { color: string; bg: string }> = {
   high:   { color: "#EF4444", bg: "rgba(239,68,68,0.1)"   },
   medium: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)"  },
-  low:    { color: "#10B981", bg: "rgba(16,185,129,0.1)"  },
+  low:    { color: "#22C55E", bg: "rgba(34,197,94,0.1)"  },
 };
 
 const ALERT_STYLE: Record<string, { color: string; bg: string; border: string }> = {
@@ -127,7 +127,7 @@ export default function LocalBizAIPage() {
               background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)",
               borderRadius: 20, padding: "4px 14px",
             }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981", display: "inline-block", boxShadow: "0 0 6px #10B981" }} />
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", display: "inline-block", boxShadow: "0 0 6px #22C55E" }} />
               <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>AI Advisor Active</span>
             </div>
           </div>
@@ -216,7 +216,7 @@ export default function LocalBizAIPage() {
                       </div>
                       <div style={{ display: "flex", gap: 14 }}>
                         <span style={{ fontSize: 11, color: "#475569" }}>⏱ {rec.time}</span>
-                        <span style={{ fontSize: 11, color: "#10B981", fontWeight: 600 }}>📈 {rec.impact}</span>
+                        <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 600 }}>📈 {rec.impact}</span>
                       </div>
                     </div>
                     <span style={{ fontSize: 11, color: "#334155" }}>{open ? "▲" : "▼"}</span>
@@ -297,7 +297,7 @@ export default function LocalBizAIPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
             {[
               { label: "Avg Rating",       value: "—",  color: "#F59E0B" },
-              { label: "This Month",       value: "—",  color: "#10B981" },
+              { label: "This Month",       value: "—",  color: "#22C55E" },
               { label: "Pending Response", value: String(pendingResponses || "—"), color: "#EF4444" },
               { label: "Review Velocity",  value: "—",  color: "#00AEEF" },
             ].map(s => (
@@ -337,7 +337,7 @@ export default function LocalBizAIPage() {
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                         {rev.responded
-                          ? <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", borderRadius: 20, padding: "2px 8px" }}>Responded</span>
+                          ? <span style={{ fontSize: 10, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", borderRadius: 20, padding: "2px 8px" }}>Responded</span>
                           : <span style={{ fontSize: 10, fontWeight: 700, color: "#EF4444", background: "rgba(239,68,68,0.1)", borderRadius: 20, padding: "2px 8px" }}>Needs Response</span>
                         }
                         {!rev.responded && (
@@ -357,7 +357,7 @@ export default function LocalBizAIPage() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: "#00AEEF", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 6 }}>✨ AI-Generated Response Suggestion</div>
                       <p style={{ fontSize: 12.5, color: "#CBD5E1", margin: "0 0 10px", lineHeight: 1.6, fontStyle: "italic" }}>"{rev.suggestion}"</p>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button style={{ padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "#10B981", border: "none", color: "#FFF" }}>Copy &amp; Use</button>
+                        <button style={{ padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "#22C55E", border: "none", color: "#FFF" }}>Copy &amp; Use</button>
                         <button style={{ padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#64748B" }}>Regenerate</button>
                       </div>
                     </div>
@@ -404,7 +404,7 @@ export default function LocalBizAIPage() {
                         { label: "Sent",         val: camp.sent,      total: camp.sent,      color: "#64748B" },
                         { label: "Opened",        val: camp.opened,    total: camp.sent,      color: "#00AEEF" },
                         { label: "Responded",     val: camp.responded, total: camp.opened,    color: "#F59E0B" },
-                        { label: "Converted",     val: camp.converted, total: camp.responded, color: "#10B981" },
+                        { label: "Converted",     val: camp.converted, total: camp.responded, color: "#22C55E" },
                       ].map(m => (
                         <div key={m.label}>
                           <div style={{ fontSize: 10, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{m.label}</div>
@@ -462,11 +462,11 @@ export default function LocalBizAIPage() {
                     </div>
                   </div>
                   <div style={{
-                    background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
+                    background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
                     borderRadius: 8, padding: "6px 12px", textAlign: "center", minWidth: 90, flexShrink: 0,
                   }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>Impact</div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#10B981" }}>{ins.impact}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#22C55E", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>Impact</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#22C55E" }}>{ins.impact}</div>
                   </div>
                 </div>
               );
@@ -481,10 +481,10 @@ export default function LocalBizAIPage() {
             {ALERTS.length === 0 && (
               <div style={{
                 display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderRadius: 10,
-                background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.15)",
+                background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
               }}>
                 <span style={{ fontSize: 16 }}>✓</span>
-                <span style={{ fontSize: 13, color: "#10B981", fontWeight: 600 }}>No active alerts — live data will generate alerts automatically</span>
+                <span style={{ fontSize: 13, color: "#22C55E", fontWeight: 600 }}>No active alerts — live data will generate alerts automatically</span>
               </div>
             )}
             {ALERTS.map((alert, i) => {
@@ -516,10 +516,10 @@ export default function LocalBizAIPage() {
             {ALERTS.every((_, i) => dismissedAlerts.includes(i)) && (
               <div style={{
                 display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderRadius: 10,
-                background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.15)",
+                background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
               }}>
                 <span style={{ fontSize: 16 }}>✓</span>
-                <span style={{ fontSize: 13, color: "#10B981", fontWeight: 600 }}>All alerts cleared — great work!</span>
+                <span style={{ fontSize: 13, color: "#22C55E", fontWeight: 600 }}>All alerts cleared — great work!</span>
               </div>
             )}
           </div>

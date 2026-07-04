@@ -209,8 +209,8 @@ export default function RevenueAttributionPage() {
   const PIPELINE = [
     { label: "Calls",   value: 73,             color: "#6B7280" },
     { label: "Leads",   value: leads.length,   color: "#00AEEF" },
-    { label: "Appts",   value: qualLeads.length, color: "#A78BFA" },
-    { label: "Jobs",    value: won.length,      color: "#10B981" },
+    { label: "Appts",   value: qualLeads.length, color: "#3B82F6" },
+    { label: "Jobs",    value: won.length,      color: "#22C55E" },
     { label: "Revenue", value: totalRev,        color: "#FBBF24", prefix: "$" },
   ];
   const maxPipeline = Math.max(...PIPELINE.map(p => p.value), 1);
@@ -288,12 +288,12 @@ export default function RevenueAttributionPage() {
           {sectionHead("KPI Dashboard", "📊", "Real-time AI Edge performance metrics")}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: 12, marginBottom: 8 }}>
             {kpiCard("Total Leads",     String(leads.length),                   "All AI Edge leads",           "#00AEEF")}
-            {kpiCard("Qualified",       String(qualLeads.length),               "Past initial screening",      "#A78BFA")}
-            {kpiCard("Closed Jobs",     String(won.length),                     "Won opportunities",           "#10B981")}
+            {kpiCard("Qualified",       String(qualLeads.length),               "Past initial screening",      "#3B82F6")}
+            {kpiCard("Closed Jobs",     String(won.length),                     "Won opportunities",           "#22C55E")}
             {kpiCard("Revenue",         `$${totalRev.toLocaleString()}`,         "Total revenue generated",     "#FBBF24")}
             {kpiCard("Conv. Rate",      `${convRate.toFixed(1)}%`,              "Leads → closed jobs",         "#00AEEF")}
             {kpiCard("Avg Ticket",      `$${Math.round(avgTicket).toLocaleString()}`, "Per closed job",        "#F472B6")}
-            {kpiCard("ROI",             roi > 0 ? `${roi}%` : "—",              "vs. AI Edge investment",      "#10B981")}
+            {kpiCard("ROI",             roi > 0 ? `${roi}%` : "—",              "vs. AI Edge investment",      "#22C55E")}
           </div>
 
           {divider}
@@ -345,12 +345,12 @@ export default function RevenueAttributionPage() {
                         </div>
                       </td>
                       <td style={{ padding: "13px 14px", fontSize: 13, fontWeight: 700, color: "#00AEEF" }}>{row.leads}</td>
-                      <td style={{ padding: "13px 14px", fontSize: 13, fontWeight: 700, color: "#10B981" }}>{row.sales}</td>
+                      <td style={{ padding: "13px 14px", fontSize: 13, fontWeight: 700, color: "#22C55E" }}>{row.sales}</td>
                       <td style={{ padding: "13px 14px", fontSize: 13, fontWeight: 700, color: "#FBBF24" }}>{row.revenue > 0 ? `$${row.revenue.toLocaleString()}` : "—"}</td>
                       <td style={{ padding: "13px 14px" }}>
                         <span style={{
-                          background: conv >= 50 ? "#10B98122" : conv >= 25 ? "#F59E0B22" : "#EF444422",
-                          color: conv >= 50 ? "#10B981" : conv >= 25 ? "#F59E0B" : "#EF4444",
+                          background: conv >= 50 ? "#22C55E22" : conv >= 25 ? "#F59E0B22" : "#EF444422",
+                          color: conv >= 50 ? "#22C55E" : conv >= 25 ? "#F59E0B" : "#EF4444",
                           padding: "3px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700,
                         }}>{conv}%</span>
                       </td>
@@ -425,8 +425,8 @@ export default function RevenueAttributionPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 16 }}>
               {[
                 { label: "GD Customers", value: String(syncStatus.realtimeStats?.gdCustomerCount ?? 0), color: "#00AEEF" },
-                { label: "GD Jobs",      value: String(syncStatus.realtimeStats?.gdJobCount ?? 0),      color: "#A78BFA" },
-                { label: "Leads Matched",value: String(syncStatus.realtimeStats?.matchedLeads ?? 0),    color: "#10B981" },
+                { label: "GD Jobs",      value: String(syncStatus.realtimeStats?.gdJobCount ?? 0),      color: "#3B82F6" },
+                { label: "Leads Matched",value: String(syncStatus.realtimeStats?.matchedLeads ?? 0),    color: "#22C55E" },
                 { label: "Revenue Matched", value: syncStatus.realtimeStats?.revenueMatched > 0
                   ? `$${Number(syncStatus.realtimeStats.revenueMatched).toLocaleString()}` : "—",       color: "#FBBF24" },
                 { label: "Unmatched",    value: String(syncStatus.realtimeStats?.unmatchedLeads ?? 0),  color: "#EF4444" },
@@ -469,7 +469,7 @@ export default function RevenueAttributionPage() {
                 </div>
               )}
               <button onClick={runJobSync} disabled={syncing} style={{
-                background: syncing ? "#10B98166" : "#10B981",
+                background: syncing ? "#22C55E66" : "#22C55E",
                 border: "none", color: "#fff", borderRadius: 8,
                 padding: "11px 22px", fontSize: 13, fontWeight: 700,
                 cursor: syncing ? "not-allowed" : "pointer", width: "100%",
@@ -479,11 +479,11 @@ export default function RevenueAttributionPage() {
               {syncResult && (
                 <div style={{
                   marginTop: 12,
-                  background: syncResult.ok ? "#10B98118" : "#EF444418",
-                  border: `1px solid ${syncResult.ok ? "#10B98144" : "#EF444444"}`,
+                  background: syncResult.ok ? "#22C55E18" : "#EF444418",
+                  border: `1px solid ${syncResult.ok ? "#22C55E44" : "#EF444444"}`,
                   borderRadius: 8, padding: "10px 14px",
                 }}>
-                  <div style={{ fontSize: 12, color: syncResult.ok ? "#10B981" : "#EF4444", fontWeight: 600, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: syncResult.ok ? "#22C55E" : "#EF4444", fontWeight: 600, marginBottom: 4 }}>
                     {syncResult.ok ? "✅ Sync complete" : "❌ Sync failed"}
                   </div>
                   {syncResult.ok && (
@@ -516,7 +516,7 @@ export default function RevenueAttributionPage() {
                   {matching ? "⏳ Matching…" : "🔄 Run Phone Match"}
                 </button>
                 {matchResult && (
-                  <div style={{ marginTop: 10, background: "#10B98118", border: "1px solid #10B98144", borderRadius: 7, padding: "8px 12px", fontSize: 12, color: "#10B981" }}>
+                  <div style={{ marginTop: 10, background: "#22C55E18", border: "1px solid #22C55E44", borderRadius: 7, padding: "8px 12px", fontSize: 12, color: "#22C55E" }}>
                     {matchResult}
                   </div>
                 )}
@@ -540,7 +540,7 @@ export default function RevenueAttributionPage() {
                     <span style={{ fontSize: 12, color: "#9CA3AF" }}>
                       {item.ok ? "✅" : "⚠️"} {item.label}
                     </span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: item.ok ? "#10B981" : "#6B7280" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: item.ok ? "#22C55E" : "#6B7280" }}>
                       {item.note}
                     </span>
                   </div>
@@ -554,7 +554,7 @@ export default function RevenueAttributionPage() {
           <div style={{
             marginTop: 16,
             background: isDark ? "#0A1A0A" : "#F0FDF4",
-            border: `1px solid ${isDark ? "#10B98133" : "#BBF7D0"}`,
+            border: `1px solid ${isDark ? "#22C55E33" : "#BBF7D0"}`,
             borderRadius: 10, padding: "14px 20px",
             display: "flex", gap: 32, flexWrap: "wrap", alignItems: "center",
           }}>
@@ -566,7 +566,7 @@ export default function RevenueAttributionPage() {
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600 }}>{s.label}</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#10B981" }}>{s.value}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#22C55E" }}>{s.value}</div>
               </div>
             ))}
           </div>
@@ -603,7 +603,7 @@ export default function RevenueAttributionPage() {
                 <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 7, textTransform: "uppercase" }}>Status</label>
                 <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
                   {[
-                    { val: "won",       label: "Won ✓",    color: "#10B981" },
+                    { val: "won",       label: "Won ✓",    color: "#22C55E" },
                     { val: "lost",      label: "Lost",      color: "#EF4444" },
                     { val: "pending",   label: "Pending",   color: "#F59E0B" },
                     { val: "matched",   label: "Matched",   color: "#00AEEF" },
@@ -676,7 +676,7 @@ export default function RevenueAttributionPage() {
                 fontSize: 13, fontWeight: 600, cursor: "pointer",
               }}>Cancel</button>
               <button onClick={saveCloseout} disabled={saving} style={{
-                flex: 2, background: saving ? "#10B98166" : "#10B981",
+                flex: 2, background: saving ? "#22C55E66" : "#22C55E",
                 border: "none", color: "#fff", borderRadius: 8, padding: "10px 0",
                 fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer",
               }}>{saving ? "Saving…" : "Save Closeout"}</button>
@@ -689,7 +689,7 @@ export default function RevenueAttributionPage() {
       {toast && (
         <div style={{
           position: "fixed", bottom: 24, right: 24, zIndex: 2000,
-          background: toast.ok ? "#10B981" : "#EF4444",
+          background: toast.ok ? "#22C55E" : "#EF4444",
           color: "#fff", padding: "12px 20px", borderRadius: 10,
           fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
         }}>{toast.msg}</div>

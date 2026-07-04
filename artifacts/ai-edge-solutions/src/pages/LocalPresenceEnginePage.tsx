@@ -41,17 +41,17 @@ const NAP = {
 
 // ── Status & health style maps ─────────────────────────────────────────────────
 const PRESENCE_STYLE: Record<PresenceStatus, { label: string; bg: string; color: string; dot: string; border: string }> = {
-  connected:    { label: "Connected",     bg: "rgba(16,185,129,0.15)",  color: "#10B981", dot: "#10B981", border: "rgba(16,185,129,0.25)"  },
+  connected:    { label: "Connected",     bg: "rgba(34,197,94,0.15)",   color: "#22C55E", dot: "#22C55E", border: "rgba(34,197,94,0.25)"   },
   pending:      { label: "Setup Pending", bg: "rgba(245,158,11,0.12)",  color: "#F59E0B", dot: "#F59E0B", border: "rgba(245,158,11,0.2)"   },
-  not_connected:{ label: "Not Connected", bg: "rgba(148,163,184,0.1)",  color: "#94A3B8", dot: "#475569", border: "rgba(255,255,255,0.07)" },
+  not_connected:{ label: "Not Connected", bg: "rgba(107,114,128,0.1)",  color: "#6B7280", dot: "#475569", border: "rgba(255,255,255,0.07)" },
   error:        { label: "Error",         bg: "rgba(239,68,68,0.12)",   color: "#EF4444", dot: "#EF4444", border: "rgba(239,68,68,0.25)"   },
-  coming_soon:      { label: "Coming Soon",      bg: "rgba(139,92,246,0.12)",  color: "#8B5CF6", dot: "#8B5CF6", border: "rgba(139,92,246,0.2)"   },
-  setup_in_progress:  { label: "Setup In Progress",  bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF", border: "rgba(0,174,239,0.25)"  },
-  verified_publishing:{ label: "Verified · Publishing", bg: "rgba(139,92,246,0.12)", color: "#A78BFA", dot: "#A78BFA", border: "rgba(139,92,246,0.3)"   },
+  coming_soon:      { label: "Coming Soon",      bg: "rgba(107,114,128,0.12)", color: "#6B7280", dot: "#6B7280", border: "rgba(107,114,128,0.2)"  },
+  setup_in_progress:  { label: "Setup In Progress",  bg: "rgba(59,130,246,0.1)",   color: "#3B82F6", dot: "#3B82F6", border: "rgba(59,130,246,0.25)" },
+  verified_publishing:{ label: "Verified · Publishing", bg: "rgba(34,197,94,0.12)",  color: "#22C55E", dot: "#22C55E", border: "rgba(34,197,94,0.3)"   },
 };
 
 const HEALTH_STYLE: Record<HealthStatus, { label: string; color: string; dot: string }> = {
-  healthy: { label: "Healthy", color: "#10B981", dot: "#10B981" },
+  healthy: { label: "Healthy", color: "#22C55E", dot: "#22C55E" },
   warning: { label: "Warning", color: "#F59E0B", dot: "#F59E0B" },
   error:   { label: "Error",   color: "#EF4444", dot: "#EF4444" },
   unknown: { label: "Unknown", color: "#475569", dot: "#334155" },
@@ -59,11 +59,11 @@ const HEALTH_STYLE: Record<HealthStatus, { label: string; color: string; dot: st
 
 // ── Platform card background derivation ───────────────────────────────────────
 function cardBg(status: PresenceStatus) {
-  if (status === "connected")         return "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "connected")         return "linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(11,22,41,0.9) 100%)";
   if (status === "error")             return "linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(11,22,41,0.9) 100%)";
   if (status === "pending")           return "linear-gradient(135deg, rgba(245,158,11,0.04) 0%, rgba(11,22,41,0.9) 100%)";
-  if (status === "setup_in_progress")   return "linear-gradient(135deg, rgba(0,174,239,0.05) 0%, rgba(11,22,41,0.9) 100%)";
-  if (status === "verified_publishing") return "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "setup_in_progress")   return "linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(11,22,41,0.9) 100%)";
+  if (status === "verified_publishing") return "linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(11,22,41,0.9) 100%)";
   return "rgba(11,22,41,0.6)";
 }
 
@@ -149,20 +149,20 @@ function Checklist({ items }: { items: CheckItem[] }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: "#64748B", letterSpacing: "0.6px", textTransform: "uppercase" }}>Setup Checklist</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: pct === 100 ? "#10B981" : "#F59E0B" }}>{done}/{items.length}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: pct === 100 ? "#22C55E" : "#F59E0B" }}>{done}/{items.length}</span>
       </div>
       <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 10, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#10B981" : "#F59E0B", borderRadius: 2, transition: "width 0.4s" }} />
+        <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#22C55E" : "#F59E0B", borderRadius: 2, transition: "width 0.4s" }} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {items.map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
             <span style={{
               width: 15, height: 15, borderRadius: 4, flexShrink: 0, marginTop: 1,
-              background: item.done ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${item.done ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.1)"}`,
+              background: item.done ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${item.done ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.1)"}`,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 8, color: item.done ? "#10B981" : "transparent",
+              fontSize: 8, color: item.done ? "#22C55E" : "transparent",
             }}>
               {item.done ? "✓" : ""}
             </span>
@@ -199,11 +199,11 @@ const APPLE_CHECKLIST: { label: string; status: AppleStepStatus; description: st
 
 type AppleDiagStatus = "healthy" | "warning" | "missing" | "pending" | "coming_soon";
 const APPLE_DIAG_STYLE: Record<AppleDiagStatus, { color: string; bg: string; border: string; dot: string }> = {
-  healthy:    { color: "#10B981", bg: "rgba(16,185,129,0.07)",   border: "rgba(16,185,129,0.2)",  dot: "#10B981" },
+  healthy:    { color: "#22C55E", bg: "rgba(34,197,94,0.07)",    border: "rgba(34,197,94,0.2)",   dot: "#22C55E" },
   warning:    { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",   border: "rgba(245,158,11,0.18)", dot: "#F59E0B" },
   missing:    { color: "#EF4444", bg: "rgba(239,68,68,0.07)",    border: "rgba(239,68,68,0.18)",  dot: "#EF4444" },
-  pending:    { color: "#00AEEF", bg: "rgba(0,174,239,0.07)",    border: "rgba(0,174,239,0.15)",  dot: "#00AEEF" },
-  coming_soon:{ color: "#8B5CF6", bg: "rgba(139,92,246,0.07)",   border: "rgba(139,92,246,0.15)", dot: "#8B5CF6" },
+  pending:    { color: "#3B82F6", bg: "rgba(59,130,246,0.07)",   border: "rgba(59,130,246,0.15)", dot: "#3B82F6" },
+  coming_soon:{ color: "#6B7280", bg: "rgba(107,114,128,0.07)",  border: "rgba(107,114,128,0.15)",dot: "#6B7280" },
 };
 
 const APPLE_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
@@ -223,8 +223,8 @@ const APPLE_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = 
 
 function AppleStepBadge({ status }: { status: AppleStepStatus }) {
   const map: Record<AppleStepStatus, { label: string; color: string; bg: string }> = {
-    complete:    { label: "Complete",    color: "#10B981", bg: "rgba(16,185,129,0.12)" },
-    "in-progress":{ label: "In Progress", color: "#00AEEF", bg: "rgba(0,174,239,0.12)"  },
+    complete:    { label: "Complete",    color: "#22C55E", bg: "rgba(34,197,94,0.12)"   },
+    "in-progress":{ label: "In Progress", color: "#3B82F6", bg: "rgba(59,130,246,0.12)" },
     pending:     { label: "Pending",     color: "#64748B", bg: "rgba(100,116,139,0.12)" },
     blocked:     { label: "Blocked",     color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
   };
@@ -252,10 +252,10 @@ function AppleBusinessCard() {
 
   const APPLE_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
     { value: "Not Started",          label: "Not Started",          color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
-    { value: "Submitted",            label: "Submitted",            color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Submitted",            label: "Submitted",            color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
     { value: "Verification Pending", label: "Verification Pending", color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
-    { value: "Verified",             label: "Verified",             color: "#00AEEF", bg: "rgba(0,174,239,0.12)",   border: "rgba(0,174,239,0.35)"   },
-    { value: "Live",                 label: "Live",                 color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+    { value: "Verified",             label: "Verified",             color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
+    { value: "Live",                 label: "Live",                 color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.35)"   },
   ];
 
   const completedCount    = checklist.filter(s => s.status === "complete").length;
@@ -354,7 +354,7 @@ function AppleBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: "#00AEEF", fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -413,18 +413,18 @@ function AppleBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(0,174,239,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(0,174,239,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(59,130,246,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.05)"}`,
                       transition: "all 0.15s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(59,130,246,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? "#00AEEF" : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? "#3B82F6" : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -437,7 +437,7 @@ function AppleBusinessCard() {
                           {step.status !== "complete" && (
                             <button
                               onClick={() => markStepComplete(idx)}
-                              style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981", transition: "all 0.15s" }}
+                              style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E", transition: "all 0.15s" }}
                             >Mark Done</button>
                           )}
                         </div>
@@ -510,9 +510,9 @@ Baldwin County, Alabama`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(0,174,239,0.1)",
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(0,174,239,0.25)",
-                          color: copied ? "#10B981" : "#00AEEF", transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(0,174,239,0.1)",
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(0,174,239,0.25)",
+                          color: copied ? "#22C55E" : "#00AEEF", transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -560,9 +560,9 @@ Baldwin County, Alabama`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(0,174,239,0.08)",
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(0,174,239,0.2)",
-                              color: copiedKey === f.copyKey ? "#10B981" : "#00AEEF", whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(0,174,239,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(0,174,239,0.2)",
+                              color: copiedKey === f.copyKey ? "#22C55E" : "#00AEEF", whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -587,15 +587,15 @@ Baldwin County, Alabama`;
                       <div key={p.item} style={{
                         display: "grid", gridTemplateColumns: "100px 1fr auto", gap: 12, alignItems: "center",
                         padding: "9px 14px", borderRadius: 9,
-                        background: p.status === "missing" ? "rgba(239,68,68,0.04)" : "rgba(16,185,129,0.04)",
-                        border: p.status === "missing" ? "1px solid rgba(239,68,68,0.15)" : "1px solid rgba(16,185,129,0.15)",
+                        background: p.status === "missing" ? "rgba(239,68,68,0.04)" : "rgba(34,197,94,0.04)",
+                        border: p.status === "missing" ? "1px solid rgba(239,68,68,0.15)" : "1px solid rgba(34,197,94,0.15)",
                       }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{p.item}</div>
                         <div style={{ fontSize: 11.5, color: "#475569" }}>{p.spec}</div>
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                          color: p.status === "missing" ? "#EF4444" : "#10B981",
-                          background: p.status === "missing" ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
+                          color: p.status === "missing" ? "#EF4444" : "#22C55E",
+                          background: p.status === "missing" ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
                         }}>{p.status === "missing" ? "Missing" : "Ready"}</span>
                       </div>
                     ))}
@@ -622,9 +622,9 @@ Baldwin County, Alabama`;
                   {/* ── Next action ── */}
                   <div style={{
                     marginTop: 14, padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://business.apple.com" target="_blank" rel="noopener noreferrer" style={{ color: "#00AEEF" }}>business.apple.com</a> and sign in with your Apple ID</li>
                       <li>Search for "Bed Bugs &amp; Beyond" in Baldwin County — claim the existing listing if found</li>
@@ -724,7 +724,7 @@ Baldwin County, Alabama`;
                         )}
                       </div>
                       {verifyStatus === "Live" && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
                           Ready to mark Connected
                         </span>
                       )}
@@ -788,7 +788,7 @@ Baldwin County, Alabama`;
                       onClick={handleSave}
                       style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#FFF" }}
                     >Save Setup Notes</button>
-                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                    {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
               );
@@ -1015,7 +1015,7 @@ function BingPlacesCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: BING_BLUE, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -1069,18 +1069,18 @@ function BingPlacesCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? `rgba(0,173,239,0.05)` : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? `rgba(0,173,239,0.2)` : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? `rgba(0,173,239,0.05)` : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? `rgba(0,173,239,0.2)` : "rgba(255,255,255,0.05)"}`,
                       transition: "all 0.15s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? `rgba(0,173,239,0.15)` : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? `rgba(0,173,239,0.3)` : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? `rgba(0,173,239,0.15)` : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? `rgba(0,173,239,0.3)` : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? BING_BLUE : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? BING_BLUE : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -1091,7 +1091,7 @@ function BingPlacesCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -1176,9 +1176,9 @@ Sunday:    Closed`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : `rgba(0,173,239,0.1)`,
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : `1px solid rgba(0,173,239,0.25)`,
-                          color: copied ? "#10B981" : BING_BLUE, transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : `rgba(0,173,239,0.1)`,
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : `1px solid rgba(0,173,239,0.25)`,
+                          color: copied ? "#22C55E" : BING_BLUE, transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -1199,7 +1199,7 @@ Sunday:    Closed`;
               return (
                 <div>
                   <div style={{ fontSize: 11, color: "#475569", marginBottom: 18, lineHeight: 1.5 }}>
-                    Verification complete. Listing synced with Google and now publishing to Bing Maps. <strong style={{ color: "#A78BFA" }}>Publishing ETA: 7–12 days.</strong> Analytics will be available once the listing is live. No action required — monitor Bing Places for the live confirmation.
+                    Verification complete. Listing synced with Google and now publishing to Bing Maps. <strong style={{ color: "#3B82F6" }}>Publishing ETA: 7–12 days.</strong> Analytics will be available once the listing is live. No action required — monitor Bing Places for the live confirmation.
                   </div>
 
                   {/* ── Required fields ── */}
@@ -1224,9 +1224,9 @@ Sunday:    Closed`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : `rgba(0,173,239,0.08)`,
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : `1px solid rgba(0,173,239,0.2)`,
-                              color: copiedKey === f.copyKey ? "#10B981" : BING_BLUE, whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : `rgba(0,173,239,0.08)`,
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : `1px solid rgba(0,173,239,0.2)`,
+                              color: copiedKey === f.copyKey ? "#22C55E" : BING_BLUE, whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -1301,9 +1301,9 @@ Sunday:    Closed`;
                   {/* ── Next action ── */}
                   <div style={{
                     padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://www.bingplaces.com" target="_blank" rel="noopener noreferrer" style={{ color: BING_BLUE }}>bingplaces.com</a> — sign in with a Microsoft account</li>
                       <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or create new</li>
@@ -1365,7 +1365,7 @@ Sunday:    Closed`;
                   <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: BING_BLUE, border: "none", color: "#FFF" }}>
                     Save Setup Notes
                   </button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                  {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                 </div>
               </div>
             )}
@@ -1485,7 +1485,7 @@ const NEXTDOOR_DIAGS: { check: string; status: AppleDiagStatus; note: string }[]
 ];
 
 const ND_NEIGHBORHOOD_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  covered:      { color: "#10B981", bg: "rgba(16,185,129,0.07)",  border: "rgba(16,185,129,0.2)",  label: "Covered"            },
+  covered:      { color: "#22C55E", bg: "rgba(34,197,94,0.07)",  border: "rgba(34,197,94,0.2)",  label: "Covered"            },
   pending:      { color: "#00AEEF", bg: "rgba(0,174,239,0.07)",   border: "rgba(0,174,239,0.15)",  label: "Pending"            },
   missing:      { color: "#EF4444", bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.18)",  label: "Missing"            },
   needs_recs:   { color: "#F59E0B", bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.18)", label: "Needs Recommendations" },
@@ -1594,7 +1594,7 @@ function NextdoorBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: ND_GREEN, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -1647,18 +1647,18 @@ function NextdoorBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(141,198,65,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(141,198,65,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(141,198,65,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(141,198,65,0.2)" : "rgba(255,255,255,0.05)"}`,
                       transition: "all 0.15s",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(141,198,65,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(141,198,65,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(141,198,65,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(141,198,65,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? ND_GREEN : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? ND_GREEN : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -1669,7 +1669,7 @@ function NextdoorBusinessCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -1743,9 +1743,9 @@ Baldwin County, Alabama`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(141,198,65,0.1)",
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(141,198,65,0.25)",
-                          color: copied ? "#10B981" : ND_GREEN, transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(141,198,65,0.1)",
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(141,198,65,0.25)",
+                          color: copied ? "#22C55E" : ND_GREEN, transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -1799,9 +1799,9 @@ Baldwin County, Alabama`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(141,198,65,0.08)",
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(141,198,65,0.2)",
-                              color: copiedKey === f.copyKey ? "#10B981" : ND_GREEN, whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(141,198,65,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(141,198,65,0.2)",
+                              color: copiedKey === f.copyKey ? "#22C55E" : ND_GREEN, whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -1879,9 +1879,9 @@ Baldwin County, Alabama`;
                   {/* ── Next action ── */}
                   <div style={{
                     padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer" style={{ color: ND_GREEN }}>business.nextdoor.com</a> — sign in with your email</li>
                       <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or create new</li>
@@ -1942,7 +1942,7 @@ Baldwin County, Alabama`;
                   <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ND_GREEN, border: "none", color: "#FFF" }}>
                     Save Setup Notes
                   </button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                  {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                 </div>
               </div>
             )}
@@ -2334,7 +2334,7 @@ function PlatformCard({
                 variant="danger"
               />
             )}
-            <ActionBtn label="↗ Diagnostics" color="#8B5CF6" href="/admin/diagnostics" variant="ghost" />
+            <ActionBtn label="↗ Diagnostics" color="#6B7280" href="/admin/diagnostics" variant="ghost" />
           </>
         )}
         {def.id === "apple_business" && (
@@ -2367,8 +2367,8 @@ function PlatformCard({
 function AISearchCard() {
   return (
     <div style={{
-      background: "linear-gradient(135deg, rgba(139,92,246,0.05) 0%, rgba(11,22,41,0.9) 100%)",
-      border: "1px solid rgba(139,92,246,0.2)",
+      background: "linear-gradient(135deg, rgba(107,114,128,0.05) 0%, rgba(11,22,41,0.9) 100%)",
+      border: "1px solid rgba(107,114,128,0.2)",
       borderRadius: 14, padding: 20,
       backdropFilter: "blur(12px)",
       display: "flex", flexDirection: "column", gap: 14, opacity: 0.85,
@@ -2376,9 +2376,9 @@ function AISearchCard() {
       <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          background: "linear-gradient(135deg, #8B5CF6, #6D28D9)",
+          background: "linear-gradient(135deg, #4B5563, #374151)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 20, boxShadow: "0 0 16px rgba(139,92,246,0.3)",
+          fontSize: 20, boxShadow: "0 0 16px rgba(107,114,128,0.3)",
         }}>✦</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
@@ -2391,10 +2391,10 @@ function AISearchCard() {
         </div>
       </div>
       <div style={{
-        background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)",
+        background: "rgba(107,114,128,0.06)", border: "1px solid rgba(107,114,128,0.15)",
         borderRadius: 10, padding: "14px 16px",
       }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#8B5CF6", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
           Channels in V2
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 20px" }}>
@@ -2557,7 +2557,7 @@ function YelpBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: YELP_RED, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -2611,17 +2611,17 @@ function YelpBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(211,35,35,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(211,35,35,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(211,35,35,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(211,35,35,0.2)" : "rgba(255,255,255,0.05)"}`,
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(211,35,35,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(211,35,35,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(211,35,35,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(211,35,35,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? YELP_RED : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? YELP_RED : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -2632,7 +2632,7 @@ function YelpBusinessCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -2718,9 +2718,9 @@ Baldwin County, Alabama`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(211,35,35,0.1)",
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(211,35,35,0.25)",
-                          color: copied ? "#10B981" : YELP_RED, transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(211,35,35,0.1)",
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(211,35,35,0.25)",
+                          color: copied ? "#22C55E" : YELP_RED, transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -2788,9 +2788,9 @@ Baldwin County, Alabama`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(211,35,35,0.08)",
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(211,35,35,0.2)",
-                              color: copiedKey === f.copyKey ? "#10B981" : YELP_RED, whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(211,35,35,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(211,35,35,0.2)",
+                              color: copiedKey === f.copyKey ? "#22C55E" : YELP_RED, whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -2857,9 +2857,9 @@ Baldwin County, Alabama`;
 
                   <div style={{
                     padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://biz.yelp.com" target="_blank" rel="noopener noreferrer" style={{ color: YELP_RED }}>biz.yelp.com</a> — sign in or create account</li>
                       <li>Search "Bed Bugs &amp; Beyond, Baldwin County AL" — claim if found, or click "Add Business"</li>
@@ -2917,7 +2917,7 @@ Baldwin County, Alabama`;
                   <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: YELP_RED, border: "none", color: "#FFF" }}>
                     Save Setup Notes
                   </button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                  {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                 </div>
               </div>
             )}
@@ -3084,7 +3084,7 @@ function WazeBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: WAZE_BLUE, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -3148,17 +3148,17 @@ function WazeBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(0,187,222,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(0,187,222,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(0,187,222,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(0,187,222,0.2)" : "rgba(255,255,255,0.05)"}`,
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(0,187,222,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(0,187,222,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(0,187,222,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(0,187,222,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? WAZE_BLUE : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? WAZE_BLUE : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -3169,7 +3169,7 @@ function WazeBusinessCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -3243,9 +3243,9 @@ Baldwin County, Alabama`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(0,187,222,0.1)",
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(0,187,222,0.25)",
-                          color: copied ? "#10B981" : WAZE_BLUE, transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(0,187,222,0.1)",
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(0,187,222,0.25)",
+                          color: copied ? "#22C55E" : WAZE_BLUE, transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -3313,9 +3313,9 @@ Baldwin County, Alabama`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(0,187,222,0.08)",
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(0,187,222,0.2)",
-                              color: copiedKey === f.copyKey ? "#10B981" : WAZE_BLUE, whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(0,187,222,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(0,187,222,0.2)",
+                              color: copiedKey === f.copyKey ? "#22C55E" : WAZE_BLUE, whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -3381,9 +3381,9 @@ Baldwin County, Alabama`;
 
                   <div style={{
                     padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Sign in at <a href="https://www.waze.com/login" target="_blank" rel="noopener noreferrer" style={{ color: WAZE_BLUE }}>waze.com/login</a> (create a free account if needed)</li>
                       <li>Open <a href="https://www.waze.com/editor" target="_blank" rel="noopener noreferrer" style={{ color: WAZE_BLUE }}>waze.com/editor</a> and search <strong style={{ color: "#CBD5E1" }}>Bed Bugs &amp; Beyond</strong></li>
@@ -3441,7 +3441,7 @@ Baldwin County, Alabama`;
                   <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: WAZE_BLUE, border: "none", color: "#FFF" }}>
                     Save Setup Notes
                   </button>
-                  {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                  {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                 </div>
               </div>
             )}
@@ -3542,9 +3542,9 @@ function AngiBusinessCard() {
   const ANGI_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
     { value: "Not Started",      label: "Not Started",      color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
     { value: "In Progress",      label: "In Progress",      color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
-    { value: "Profile Complete", label: "Profile Complete", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Profile Complete", label: "Profile Complete", color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.35)"   },
     { value: "Leads Active",     label: "Leads Active",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
-    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#22C55E", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.35)"  },
   ];
 
   const TABS: { key: typeof activeTab; label: string }[] = [
@@ -3618,7 +3618,7 @@ function AngiBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: ANGI_ORANGE, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -3672,17 +3672,17 @@ function AngiBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(232,51,10,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(232,51,10,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(232,51,10,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(232,51,10,0.2)" : "rgba(255,255,255,0.05)"}`,
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(232,51,10,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(232,51,10,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(232,51,10,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(232,51,10,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? ANGI_ORANGE : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? ANGI_ORANGE : "#475569", fontWeight: 800,
                           }}>
                             {step.status === "complete" ? "✓" : idx + 1}
                           </span>
@@ -3693,7 +3693,7 @@ function AngiBusinessCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -3778,9 +3778,9 @@ Baldwin County, Alabama`;
                         onClick={() => copyText(copyKey, value)}
                         style={{
                           padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copied ? "rgba(16,185,129,0.12)" : "rgba(232,51,10,0.1)",
-                          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(232,51,10,0.25)",
-                          color: copied ? "#10B981" : ANGI_ORANGE, transition: "all 0.2s",
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(232,51,10,0.1)",
+                          border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(232,51,10,0.25)",
+                          color: copied ? "#22C55E" : ANGI_ORANGE, transition: "all 0.2s",
                         }}
                       >{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
@@ -3847,9 +3847,9 @@ Baldwin County, Alabama`;
                             onClick={() => copyText(f.copyKey!, f.value)}
                             style={{
                               padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(232,51,10,0.08)",
-                              border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(232,51,10,0.2)",
-                              color: copiedKey === f.copyKey ? "#10B981" : ANGI_ORANGE, whiteSpace: "nowrap", flexShrink: 0,
+                              background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(232,51,10,0.08)",
+                              border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(232,51,10,0.2)",
+                              color: copiedKey === f.copyKey ? "#22C55E" : ANGI_ORANGE, whiteSpace: "nowrap", flexShrink: 0,
                             }}
                           >{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
@@ -3914,9 +3914,9 @@ Baldwin County, Alabama`;
 
                   <div style={{
                     padding: "12px 16px", borderRadius: 10,
-                    background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)",
+                    background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://pro.angi.com" target="_blank" rel="noopener noreferrer" style={{ color: ANGI_ORANGE }}>pro.angi.com</a> — sign in or create a new Pros account</li>
                       <li>Select <strong style={{ color: "#CBD5E1" }}>Pest Control</strong> as your service category</li>
@@ -4015,7 +4015,7 @@ Baldwin County, Alabama`;
                         )}
                       </div>
                       {verifyStatus === "Receiving Leads" && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
                           Ready to mark Live
                         </span>
                       )}
@@ -4050,7 +4050,7 @@ Baldwin County, Alabama`;
                     <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: ANGI_ORANGE, border: "none", color: "#FFF" }}>
                       Save Setup Notes
                     </button>
-                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                    {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
               );
@@ -4152,9 +4152,9 @@ function ThumbtackBusinessCard() {
   const TT_STAGES: { value: string; label: string; color: string; bg: string; border: string }[] = [
     { value: "Not Started",      label: "Not Started",      color: "#64748B", bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)"  },
     { value: "In Progress",      label: "In Progress",      color: "#3B82F6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.35)"  },
-    { value: "Profile Complete", label: "Profile Complete", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.35)"  },
+    { value: "Profile Complete", label: "Profile Complete", color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.35)"   },
     { value: "Leads Active",     label: "Leads Active",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.35)"  },
-    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.35)"  },
+    { value: "Receiving Leads",  label: "Receiving Leads",  color: "#22C55E", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.35)"  },
   ];
 
   const TABS: { key: typeof activeTab; label: string }[] = [
@@ -4228,7 +4228,7 @@ function ThumbtackBusinessCard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{completedCount} done</span>
+            <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{completedCount} done</span>
             <span style={{ fontSize: 11, color: "#64748B" }}>·</span>
             <span style={{ fontSize: 11, color: TT_TEAL, fontWeight: 700 }}>{inProgressCount} active</span>
           </div>
@@ -4275,17 +4275,17 @@ function ThumbtackBusinessCard() {
                   {checklist.map((step, idx) => (
                     <div key={idx} style={{
                       padding: "11px 14px", borderRadius: 10,
-                      background: step.status === "complete" ? "rgba(16,185,129,0.05)" : step.status === "in-progress" ? "rgba(0,159,217,0.05)" : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.18)" : step.status === "in-progress" ? "rgba(0,159,217,0.2)" : "rgba(255,255,255,0.05)"}`,
+                      background: step.status === "complete" ? "rgba(34,197,94,0.05)" : step.status === "in-progress" ? "rgba(0,159,217,0.05)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.18)" : step.status === "in-progress" ? "rgba(0,159,217,0.2)" : "rgba(255,255,255,0.05)"}`,
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: step.description ? 4 : 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <span style={{
                             width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: step.status === "complete" ? "rgba(16,185,129,0.2)" : step.status === "in-progress" ? "rgba(0,159,217,0.15)" : "rgba(255,255,255,0.05)",
-                            border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.4)" : step.status === "in-progress" ? "rgba(0,159,217,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            background: step.status === "complete" ? "rgba(34,197,94,0.2)" : step.status === "in-progress" ? "rgba(0,159,217,0.15)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.4)" : step.status === "in-progress" ? "rgba(0,159,217,0.3)" : "rgba(255,255,255,0.1)"}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: step.status === "complete" ? "#10B981" : step.status === "in-progress" ? TT_TEAL : "#475569", fontWeight: 800,
+                            fontSize: 10, color: step.status === "complete" ? "#22C55E" : step.status === "in-progress" ? TT_TEAL : "#475569", fontWeight: 800,
                           }}>{step.status === "complete" ? "✓" : idx + 1}</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: step.status === "complete" ? "#64748B" : "#CBD5E1", textDecoration: step.status === "complete" ? "line-through" : "none" }}>
                             {step.label}
@@ -4294,7 +4294,7 @@ function ThumbtackBusinessCard() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <AppleStepBadge status={step.status} />
                           {step.status !== "complete" && (
-                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            <button onClick={() => markStepComplete(idx)} style={{ padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                               Mark Done
                             </button>
                           )}
@@ -4370,9 +4370,9 @@ Baldwin County, Alabama`;
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.6px" }}>{label}</span>
                       <button onClick={() => copyText(copyKey, value)} style={{
                         padding: "3px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                        background: copied ? "rgba(16,185,129,0.12)" : "rgba(0,159,217,0.1)",
-                        border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(0,159,217,0.25)",
-                        color: copied ? "#10B981" : TT_TEAL, transition: "all 0.2s",
+                        background: copied ? "rgba(34,197,94,0.12)" : "rgba(0,159,217,0.1)",
+                        border: copied ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(0,159,217,0.25)",
+                        color: copied ? "#22C55E" : TT_TEAL, transition: "all 0.2s",
                       }}>{copied ? "✓ Copied" : "Copy"}</button>
                     </div>
                     <textarea readOnly rows={rows} value={value} style={{
@@ -4427,9 +4427,9 @@ Baldwin County, Alabama`;
                         {f.copyKey && (
                           <button onClick={() => copyText(f.copyKey!, f.value)} style={{
                             padding: "3px 9px", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                            background: copiedKey === f.copyKey ? "rgba(16,185,129,0.12)" : "rgba(0,159,217,0.08)",
-                            border: copiedKey === f.copyKey ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(0,159,217,0.2)",
-                            color: copiedKey === f.copyKey ? "#10B981" : TT_TEAL, whiteSpace: "nowrap", flexShrink: 0,
+                            background: copiedKey === f.copyKey ? "rgba(34,197,94,0.12)" : "rgba(0,159,217,0.08)",
+                            border: copiedKey === f.copyKey ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(0,159,217,0.2)",
+                            color: copiedKey === f.copyKey ? "#22C55E" : TT_TEAL, whiteSpace: "nowrap", flexShrink: 0,
                           }}>{copiedKey === f.copyKey ? "✓" : "Copy"}</button>
                         )}
                       </div>
@@ -4473,8 +4473,8 @@ Baldwin County, Alabama`;
                     <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: "rgba(0,159,217,0.12)", border: "1px solid rgba(0,159,217,0.3)", color: TT_TEAL }}>Not Started</span>
                   </div>
 
-                  <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.18)" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
+                  <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 6 }}>Next Action</div>
                     <ol style={{ margin: 0, paddingLeft: 18, color: "#94A3B8", fontSize: 12.5, lineHeight: 2 }}>
                       <li>Go to <a href="https://www.thumbtack.com/pro" target="_blank" rel="noopener noreferrer" style={{ color: TT_TEAL }}>thumbtack.com/pro</a> — sign in or create a Pros account</li>
                       <li>Select <strong style={{ color: "#CBD5E1" }}>Pest Control / Exterminator</strong> as your service category</li>
@@ -4573,7 +4573,7 @@ Baldwin County, Alabama`;
                         )}
                       </div>
                       {verifyStatus === "Receiving Leads" && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "2px 10px", whiteSpace: "nowrap" }}>
                           Ready to mark Live
                         </span>
                       )}
@@ -4605,7 +4605,7 @@ Baldwin County, Alabama`;
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
                     <button onClick={handleSave} style={{ padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: TT_TEAL, border: "none", color: "#FFF" }}>Save Setup Notes</button>
-                    {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>✓ Saved</span>}
+                    {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>✓ Saved</span>}
                   </div>
                 </div>
               );
@@ -4649,12 +4649,12 @@ type DiagEntry = { icon: string; color: string; text: string; severity: "warning
 type SumStatus = "connected" | "verified_publishing" | "setup_pending" | "not_started" | "needs_action" | "coming_soon";
 
 const SUMMARY_STATUS_META: Record<SumStatus, { label: string; color: string; bg: string; border: string }> = {
-  connected:           { label: "Connected",             color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.25)"  },
-  verified_publishing: { label: "Verified · Publishing", color: "#A78BFA", bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.3)"   },
+  connected:           { label: "Connected",             color: "#22C55E", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.25)"  },
+  verified_publishing: { label: "Verified · Publishing", color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.3)"    },
   setup_pending:       { label: "Setup Pending",         color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)"  },
   not_started:         { label: "Not Started",           color: "#64748B", bg: "rgba(100,116,139,0.08)", border: "rgba(100,116,139,0.2)"  },
   needs_action:        { label: "Needs Action",          color: "#EF4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)"   },
-  coming_soon:         { label: "Coming Soon",           color: "#8B5CF6", bg: "rgba(139,92,246,0.08)",  border: "rgba(139,92,246,0.2)"   },
+  coming_soon:         { label: "Coming Soon",           color: "#6B7280", bg: "rgba(107,114,128,0.08)", border: "rgba(107,114,128,0.2)"  },
 };
 
 const SUMMARY_PLATFORMS: {
@@ -4669,7 +4669,7 @@ const SUMMARY_PLATFORMS: {
   { name: "Waze (WME)",              dot: "#00BBDE", summaryStatus: "not_started",         note: "Free path via Waze Map Editor — community moderated"                 },
   { name: "Angi for Pros",           dot: "#E8330A", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
   { name: "Thumbtack for Pros",      dot: "#009FD9", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
-  { name: "AI Search (LLMs)",        dot: "#8B5CF6", summaryStatus: "coming_soon",         note: "AI Visibility module — not yet set up"                               },
+  { name: "AI Search (LLMs)",        dot: "#6B7280", summaryStatus: "coming_soon",         note: "AI Visibility module — not yet set up"                               },
 ];
 
 // ── Facebook Local Presence V2 Card ──────────────────────────────────────────
@@ -4701,7 +4701,7 @@ const FB_DIAGS: { check: string; status: "healthy" | "warning" | "missing" | "pe
 ];
 
 const FB_DIAG_STYLE: Record<string, { color: string; bg: string; border: string; dot: string }> = {
-  healthy: { color: "#10B981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.2)",  dot: "#10B981" },
+  healthy: { color: "#22C55E", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.2)",  dot: "#22C55E" },
   warning: { color: "#F59E0B", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)",  dot: "#F59E0B" },
   missing: { color: "#EF4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)",   dot: "#EF4444" },
   pending: { color: "#64748B", bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.15)", dot: "#475569" },
@@ -4709,7 +4709,7 @@ const FB_DIAG_STYLE: Record<string, { color: string; bg: string; border: string;
 
 function FBStepBadge({ status }: { status: FBStepStatus }) {
   const map: Record<FBStepStatus, { label: string; color: string; bg: string }> = {
-    "complete":    { label: "Done",        color: "#10B981", bg: "rgba(16,185,129,0.15)"  },
+    "complete":    { label: "Done",        color: "#22C55E", bg: "rgba(34,197,94,0.15)"  },
     "in-progress": { label: "In Progress", color: "#1877F2", bg: "rgba(24,119,242,0.15)"  },
     "pending":     { label: "Pending",     color: "#64748B", bg: "rgba(100,116,139,0.1)"  },
     "blocked":     { label: "Blocked",     color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
@@ -4849,12 +4849,12 @@ function FacebookLocalPresenceCard() {
               {checklist.map((step, i) => (
                 <button key={i} onClick={() => cycleStep(i)} style={{
                   display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10,
-                  background: step.status === "complete" ? "rgba(16,185,129,0.05)" : "rgba(255,255,255,0.02)",
-                  border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)"}`,
+                  background: step.status === "complete" ? "rgba(34,197,94,0.05)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${step.status === "complete" ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.05)"}`,
                   borderRadius: 9, padding: "9px 12px", cursor: "pointer", textAlign: "left", width: "100%",
                 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: step.status === "complete" ? "#10B981" : "#CBD5E1", marginBottom: 2 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: step.status === "complete" ? "#22C55E" : "#CBD5E1", marginBottom: 2 }}>
                       {step.status === "complete" ? "✓ " : ""}{step.label}
                     </div>
                     <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.5 }}>{step.description}</div>
@@ -4872,7 +4872,7 @@ function FacebookLocalPresenceCard() {
               }}>
                 {saving ? "Saving…" : "💾 Save Progress to DB"}
               </button>
-              {saveMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>{saveMsg}</span>}
+              {saveMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 600 }}>{saveMsg}</span>}
             </div>
           </>
         )}
@@ -5098,17 +5098,17 @@ function LocalPresenceSummaryCard() {
           {/* Next best action */}
           <div style={{
             padding: "12px 14px", borderRadius: 10,
-            background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.16)",
+            background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.16)",
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
               Next Best Action
             </div>
             <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
-              <span style={{ color: "#10B981", fontWeight: 700 }}>Claim Nextdoor Business listing</span>
+              <span style={{ color: "#22C55E", fontWeight: 700 }}>Claim Nextdoor Business listing</span>
               {" — free, high-value neighborhood channel. Pest control pros get strong local visibility on Nextdoor in service areas."}
             </div>
             <a href="https://business.nextdoor.com" target="_blank" rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11, fontWeight: 700, color: "#10B981", textDecoration: "none" }}>
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 7, fontSize: 11, fontWeight: 700, color: "#22C55E", textDecoration: "none" }}>
               ↗ business.nextdoor.com
             </a>
           </div>
@@ -5145,14 +5145,14 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags, dbScore
       }}>
         <SectionLabel>Local Visibility Score</SectionLabel>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 42, fontWeight: 900, color: scorePct >= 75 ? "#10B981" : scorePct >= 40 ? "#F59E0B" : "#00AEEF", lineHeight: 1 }}>{scorePct}</span>
+          <span style={{ fontSize: 42, fontWeight: 900, color: scorePct >= 75 ? "#22C55E" : scorePct >= 40 ? "#F59E0B" : "#00AEEF", lineHeight: 1 }}>{scorePct}</span>
           <span style={{ fontSize: 16, color: "#475569", fontWeight: 600, marginBottom: 6 }}>/100</span>
         </div>
         <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden", marginBottom: 14 }}>
           <div style={{ height: "100%", width: `${scorePct}%`, background: "linear-gradient(90deg, #F59E0B, #00AEEF)", borderRadius: 3, transition: "width 0.6s" }} />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <StatPill value={connectedCount} label="Connected"  color="#10B981" />
+          <StatPill value={connectedCount} label="Connected"  color="#22C55E" />
           <StatPill value={pendingCount}   label="Pending"    color="#F59E0B" />
           <StatPill value={errors}         label="Errors"     color="#EF4444" />
           <StatPill value={warnCount}      label="Warnings"   color="#F59E0B" />
@@ -5168,11 +5168,11 @@ function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags, dbScore
         {diags.length === 0 ? (
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
-            background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.15)",
+            background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
             borderRadius: 10, padding: "14px 16px",
           }}>
             <span style={{ fontSize: 16 }}>✓</span>
-            <span style={{ fontSize: 13, color: "#10B981", fontWeight: 600 }}>No active issues</span>
+            <span style={{ fontSize: 13, color: "#22C55E", fontWeight: 600 }}>No active issues</span>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -5241,7 +5241,7 @@ function NAPChecker({ connectedCount }: { connectedCount: number }) {
               <div style={{ fontSize: 12, color: "#CBD5E1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
               <div style={{ fontSize: 11, color: "#475569", display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {platforms.map(p => (
-                  <span key={p} style={{ color: p.includes("✓") ? "#10B981" : "#334155" }}>{p}</span>
+                  <span key={p} style={{ color: p.includes("✓") ? "#22C55E" : "#334155" }}>{p}</span>
                 ))}
               </div>
               <HealthBadge health={status} />
@@ -5262,10 +5262,10 @@ interface TrackerEntry {
 }
 const SUB_STATUS_META: Record<SubStatus, { label: string; color: string; bg: string; border: string }> = {
   not_started:          { label: "Not Started",          color: "#64748B", bg: "rgba(100,116,139,0.1)", border: "rgba(100,116,139,0.25)" },
-  in_progress:          { label: "In Progress",          color: "#00AEEF", bg: "rgba(0,174,239,0.1)",   border: "rgba(0,174,239,0.3)" },
-  submitted:            { label: "Submitted",            color: "#8B5CF6", bg: "rgba(139,92,246,0.1)",  border: "rgba(139,92,246,0.3)" },
+  in_progress:          { label: "In Progress",          color: "#3B82F6", bg: "rgba(59,130,246,0.1)",  border: "rgba(59,130,246,0.3)" },
+  submitted:            { label: "Submitted",            color: "#3B82F6", bg: "rgba(59,130,246,0.1)",  border: "rgba(59,130,246,0.3)" },
   verification_pending: { label: "Verification Pending", color: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.3)" },
-  live:                 { label: "Live / Connected",     color: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.3)" },
+  live:                 { label: "Live / Connected",     color: "#22C55E", bg: "rgba(34,197,94,0.1)",  border: "rgba(34,197,94,0.3)" },
   needs_fix:            { label: "Needs Fix",            color: "#EF4444", bg: "rgba(239,68,68,0.1)",   border: "rgba(239,68,68,0.3)" },
 };
 const TRACKER_INIT: TrackerEntry[] = [
@@ -5320,7 +5320,7 @@ function SubmissionTracker() {
             <span style={{ fontSize: 11, color: "#64748B" }}>— manual status only</span>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 20, padding: "2px 10px" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 20, padding: "2px 10px" }}>
               {liveCount} Live
             </span>
             <span style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 20, padding: "2px 10px" }}>
@@ -5369,7 +5369,7 @@ function SubmissionTracker() {
 
           {/* Disclaimer */}
           <div style={{ padding: "10px 18px 0", fontSize: 11, color: "#475569", lineHeight: 1.5 }}>
-            This is a manual tracking tool. Status updates are saved locally in your browser. Nothing is marked <strong style={{ color: "#10B981" }}>Live / Connected</strong> unless you set it after confirming setup is complete.
+            This is a manual tracking tool. Status updates are saved locally in your browser. Nothing is marked <strong style={{ color: "#22C55E" }}>Live / Connected</strong> unless you set it after confirming setup is complete.
           </div>
 
           {/* Channel rows */}
@@ -5463,7 +5463,7 @@ function SubmissionTracker() {
             <button onClick={save} style={{ padding: "8px 20px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#00AEEF", border: "none", color: "#000", letterSpacing: "0.2px" }}>
               Save Tracker
             </button>
-            {savedMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 700 }}>✓ Saved</span>}
+            {savedMsg && <span style={{ fontSize: 12, color: "#22C55E", fontWeight: 700 }}>✓ Saved</span>}
             <button onClick={reset} style={{ marginLeft: "auto", padding: "7px 14px", borderRadius: 9, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "transparent", border: "1px solid rgba(239,68,68,0.25)", color: "#64748B" }}>
               Reset All
             </button>
@@ -5532,7 +5532,7 @@ export default function LocalPresenceEnginePage() {
   const diags: DiagEntry[] = [
     ...gbpWarnings.map(w => ({ icon: "⚠", color: "#F59E0B", text: `Google: ${w}`, severity: "warning" as const })),
     { icon: "⚠", color: "#F59E0B", text: "Apple Business Connect submitted — verification pending (do not mark Connected until Apple confirms)", severity: "warning" },
-    { icon: "✓", color: "#A78BFA", text: "Bing Places verified — synced with Google · publishing to Bing Maps · live in 7–12 days · analytics pending", severity: "warning" },
+    { icon: "✓", color: "#3B82F6", text: "Bing Places verified — synced with Google · publishing to Bing Maps · live in 7–12 days · analytics pending", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Nextdoor Business submitted — verification pending (do not mark Connected until Nextdoor confirms profile is live)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Yelp submitted — verification pending (do not mark Connected until Yelp profile is live and publicly searchable)", severity: "warning" },
     { icon: "⚠", color: "#F59E0B", text: "Angi submitted — verification pending (do not mark Connected until Angi profile is live and publicly searchable)", severity: "warning" },
@@ -5568,7 +5568,7 @@ export default function LocalPresenceEnginePage() {
 
           {/* Summary pills */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <StatPill value={connectedCount} label="Connected"  color="#10B981" />
+            <StatPill value={connectedCount} label="Connected"  color="#22C55E" />
             <StatPill value={pendingCount}   label="Pending"    color="#F59E0B" />
             <StatPill value={0}              label="Errors"     color="#EF4444" />
             <StatPill value={diags.filter(d => d.severity === "warning").length} label="Warnings" color="#F59E0B" />

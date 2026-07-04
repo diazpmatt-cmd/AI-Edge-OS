@@ -18,7 +18,7 @@ const SEVERITY_DARK: Record<InsightSeverity, {
 }> = {
   critical:    { label: "Critical",    icon: "✕", color: "#F87171", bg: "rgba(239,68,68,0.06)",   border: "rgba(239,68,68,0.18)",   left: "#EF4444", badgeBg: "rgba(239,68,68,0.12)",   badgeBorder: "rgba(239,68,68,0.25)",   badgeText: "#F87171" },
   warning:     { label: "Warning",     icon: "⚠", color: "#FCD34D", bg: "rgba(245,158,11,0.06)",  border: "rgba(245,158,11,0.18)",  left: "#F59E0B", badgeBg: "rgba(245,158,11,0.12)",  badgeBorder: "rgba(245,158,11,0.25)",  badgeText: "#FCD34D" },
-  opportunity: { label: "Opportunity", icon: "▲", color: "#34D399", bg: "rgba(16,185,129,0.06)",  border: "rgba(16,185,129,0.18)",  left: "#10B981", badgeBg: "rgba(16,185,129,0.12)",  badgeBorder: "rgba(16,185,129,0.25)",  badgeText: "#34D399" },
+  opportunity: { label: "Opportunity", icon: "▲", color: "#22C55E", bg: "rgba(34,197,94,0.06)",   border: "rgba(34,197,94,0.18)",   left: "#22C55E", badgeBg: "rgba(34,197,94,0.12)",   badgeBorder: "rgba(34,197,94,0.25)",   badgeText: "#22C55E" },
   info:        { label: "Info",        icon: "●", color: "#38BDF8", bg: "rgba(0,174,239,0.06)",   border: "rgba(0,174,239,0.16)",   left: "#00AEEF", badgeBg: "rgba(0,174,239,0.12)",   badgeBorder: "rgba(0,174,239,0.25)",   badgeText: "#38BDF8" },
 };
 
@@ -39,7 +39,7 @@ const SEVERITY_LIGHT: Record<InsightSeverity, {
 }> = {
   critical:    { label: "Critical",    icon: "✕", color: "#B91C1C", bg: "#FEF2F2",   border: "#FECACA", left: "#EF4444", badgeBg: "#FEE2E2",   badgeBorder: "#FECACA", badgeText: "#991B1B" },
   warning:     { label: "Warning",     icon: "⚠", color: "#92400E", bg: "#FFFBEB",   border: "#F59E0B", left: "#F59E0B", badgeBg: "#FEF3C7",   badgeBorder: "#FDE68A", badgeText: "#92400E" },
-  opportunity: { label: "Opportunity", icon: "▲", color: "#065F46", bg: "#F0FDF4",   border: "#10B981", left: "#10B981", badgeBg: "#D1FAE5",   badgeBorder: "#A7F3D0", badgeText: "#065F46" },
+  opportunity: { label: "Opportunity", icon: "▲", color: "#065F46", bg: "#F0FDF4",   border: "#22C55E", left: "#22C55E", badgeBg: "#D1FAE5",   badgeBorder: "#A7F3D0", badgeText: "#065F46" },
   info:        { label: "Info",        icon: "●", color: "#1D4ED8", bg: "#EFF6FF",   border: "#3B82F6", left: "#3B82F6", badgeBg: "#DBEAFE",   badgeBorder: "#BFDBFE", badgeText: "#1D4ED8" },
 };
 

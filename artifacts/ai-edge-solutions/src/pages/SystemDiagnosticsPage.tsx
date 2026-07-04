@@ -68,7 +68,7 @@ type BkHistoryItem = { filename: string; type: string; sizeBytes: number; create
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const HEALTH_COLOR: Record<HealthStatus, { dot: string; bg: string; border: string; label: string }> = {
-  healthy: { dot: "#10B981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)", label: "Healthy" },
+  healthy: { dot: "#22C55E", bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.2)", label: "Healthy" },
   warning: { dot: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)", label: "Warning" },
   failed:  { dot: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)",  label: "Failed" },
 };
@@ -83,7 +83,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   draft:     { bg: "rgba(148,163,184,0.1)", color: "#94A3B8" },
   scheduled: { bg: "rgba(0,174,239,0.1)",   color: "#00AEEF" },
   pending:   { bg: "rgba(245,158,11,0.1)",  color: "#F59E0B" },
-  published: { bg: "rgba(16,185,129,0.1)",  color: "#10B981" },
+  published: { bg: "rgba(34,197,94,0.1)",  color: "#22C55E" },
   partial:   { bg: "rgba(245,158,11,0.1)",  color: "#F59E0B" },
   failed:    { bg: "rgba(239,68,68,0.1)",   color: "#EF4444" },
 };
@@ -520,7 +520,7 @@ export default function SystemDiagnosticsPage() {
                           </div>
                         )}
                         {gbp?.locationTitle && !inCooldown && (
-                          <div style={{ marginTop: 3, fontSize: 10, color: "#10B981" }}>✓ Publishing uses cache — no API calls</div>
+                          <div style={{ marginTop: 3, fontSize: 10, color: "#22C55E" }}>✓ Publishing uses cache — no API calls</div>
                         )}
                       </>
                     );
@@ -601,9 +601,9 @@ export default function SystemDiagnosticsPage() {
                     )}
                     <div style={{ fontSize: 11, color: "#94A3B8" }}>
                       <span style={{ color: "#64748B", marginRight: 4 }}>Cached</span>
-                      <span style={{ color: "#10B981" }}>{gbp.cachedAt ? fmtDate(gbp.cachedAt) : "unknown"}</span>
+                      <span style={{ color: "#22C55E" }}>{gbp.cachedAt ? fmtDate(gbp.cachedAt) : "unknown"}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#10B981" }}>✓ Publishing uses this cache — no API calls needed</div>
+                    <div style={{ fontSize: 11, color: "#22C55E" }}>✓ Publishing uses this cache — no API calls needed</div>
                   </>
                 ) : (
                   <div style={{ fontSize: 11, color: "#F59E0B" }}>
@@ -619,9 +619,9 @@ export default function SystemDiagnosticsPage() {
                   disabled={!hasCache || anyMutPending || useCachedLocation.isPending}
                   style={{
                     padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                    background: hasCache ? "rgba(16,185,129,0.12)" : "rgba(100,116,139,0.1)",
-                    border: `1px solid ${hasCache ? "rgba(16,185,129,0.3)" : "rgba(100,116,139,0.2)"}`,
-                    color: hasCache ? "#10B981" : "#475569",
+                    background: hasCache ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.1)",
+                    border: `1px solid ${hasCache ? "rgba(34,197,94,0.3)" : "rgba(100,116,139,0.2)"}`,
+                    color: hasCache ? "#22C55E" : "#475569",
                     cursor: hasCache && !anyMutPending ? "pointer" : "not-allowed",
                     opacity: (!hasCache || anyMutPending) ? 0.55 : 1,
                   }}
@@ -663,7 +663,7 @@ export default function SystemDiagnosticsPage() {
               label: "Retry Failed Posts",
               desc: `Reset ${health?.postCounts.failed ?? 0} failed → scheduled`,
               icon: "🔄",
-              color: "#10B981",
+              color: "#22C55E",
               action: () => retryFailed.mutate(),
               pending: retryFailed.isPending,
             },
@@ -719,9 +719,9 @@ export default function SystemDiagnosticsPage() {
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
           {[
-            { label: "Simulate Call → Press 1", desc: "Live transfer to business number", icon: "📞", sel: "1", color: "#10B981" },
+            { label: "Simulate Call → Press 1", desc: "Live transfer to business number", icon: "📞", sel: "1", color: "#22C55E" },
             { label: "Simulate Call → Press 2", desc: "Callback request lead logged", icon: "📋", sel: "2", color: "#00AEEF" },
-            { label: "Simulate Call → Press 3", desc: "Voicemail recorded + lead logged", icon: "🎙", sel: "3", color: "#8B5CF6" },
+            { label: "Simulate Call → Press 3", desc: "Voicemail recorded + lead logged", icon: "🎙", sel: "3", color: "#3B82F6" },
           ].map(btn => (
             <button
               key={btn.sel}
@@ -745,7 +745,7 @@ export default function SystemDiagnosticsPage() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           {[
             { label: "Fire Test: Callback Request", icon: "📋", color: "#00AEEF", action: () => testCallbackReq.mutate(), pending: testCallbackReq.isPending },
-            { label: "Fire Test: Voicemail Lead", icon: "🎙", color: "#8B5CF6", action: () => testVoicemail.mutate(), pending: testVoicemail.isPending },
+            { label: "Fire Test: Voicemail Lead", icon: "🎙", color: "#3B82F6", action: () => testVoicemail.mutate(), pending: testVoicemail.isPending },
           ].map(btn => (
             <button
               key={btn.label}
@@ -789,10 +789,10 @@ export default function SystemDiagnosticsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
           {[
             { label: "Missed Calls",    value: textbackStats?.missedCalls    ?? "—", color: "#F59E0B", icon: "📵" },
-            { label: "Text-Backs Sent", value: textbackStats?.sent           ?? "—", color: "#10B981", icon: "📤" },
+            { label: "Text-Backs Sent", value: textbackStats?.sent           ?? "—", color: "#22C55E", icon: "📤" },
             { label: "Failed Sends",    value: textbackStats?.failed         ?? "—", color: "#EF4444", icon: "❌" },
             { label: "Response Rate",   value: textbackStats ? `${textbackStats.responseRate}%` : "—", color: "#00AEEF", icon: "📊" },
-            { label: "Quote Requests",  value: textbackStats?.quoteRequests  ?? "—", color: "#8B5CF6", icon: "💲" },
+            { label: "Quote Requests",  value: textbackStats?.quoteRequests  ?? "—", color: "#3B82F6", icon: "💲" },
             { label: "Appointments",    value: textbackStats?.appointmentRequests ?? "—", color: "#06B6D4", icon: "📅" },
             { label: "Emergencies",     value: textbackStats?.emergencyRequests   ?? "—", color: "#EF4444", icon: "🚨" },
             { label: "Total Replies",   value: textbackStats?.totalReplies   ?? "—", color: "#C0C0C0", icon: "💬" },
@@ -812,10 +812,10 @@ export default function SystemDiagnosticsPage() {
             <button
               onClick={() => testTextback.mutate(false)}
               disabled={testTextback.isPending}
-              style={{ padding: "9px 14px", borderRadius: 9, cursor: testTextback.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", opacity: testTextback.isPending ? 0.55 : 1, transition: "all 0.18s" }}
+              style={{ padding: "9px 14px", borderRadius: 9, cursor: testTextback.isPending ? "not-allowed" : "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", opacity: testTextback.isPending ? 0.55 : 1, transition: "all 0.18s" }}
             >
               <span style={{ fontSize: 13 }}>📤</span>
-              <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "#10B981" }}>{testTextback.isPending ? "Sending…" : "Send Text-Back (with dedup)"}</span>
+              <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "#22C55E" }}>{testTextback.isPending ? "Sending…" : "Send Text-Back (with dedup)"}</span>
             </button>
             <button
               onClick={() => testTextback.mutate(true)}
@@ -832,7 +832,7 @@ export default function SystemDiagnosticsPage() {
           <div style={{ fontSize: 10.5, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>Simulate Customer Reply</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {[
-              { reply: "1", label: "Reply: 1 (Quote)",       color: "#8B5CF6", icon: "💲" },
+              { reply: "1", label: "Reply: 1 (Quote)",       color: "#3B82F6", icon: "💲" },
               { reply: "2", label: "Reply: 2 (Appointment)", color: "#06B6D4", icon: "📅" },
               { reply: "3", label: "Reply: 3 (Emergency)",   color: "#EF4444", icon: "🚨" },
             ].map(btn => (
@@ -876,7 +876,7 @@ export default function SystemDiagnosticsPage() {
           ) : null}
         </div>
         {!health?.recentErrors.length ? (
-          <div style={{ color: "#10B981", fontSize: 13, fontWeight: 600, padding: "8px 0" }}>
+          <div style={{ color: "#22C55E", fontSize: 13, fontWeight: 600, padding: "8px 0" }}>
             ✓ No recent errors — all posts published cleanly.
           </div>
         ) : (
@@ -930,9 +930,9 @@ export default function SystemDiagnosticsPage() {
               onClick={() => setLogPaused(p => !p)}
               style={{
                 fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 8, cursor: "pointer",
-                background: logPaused ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
-                border: logPaused ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(16,185,129,0.3)",
-                color: logPaused ? "#EF4444" : "#10B981",
+                background: logPaused ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
+                border: logPaused ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(34,197,94,0.3)",
+                color: logPaused ? "#EF4444" : "#22C55E",
               }}
             >
               {logPaused ? "▶ Resume" : "⏸ Pause"}
@@ -1078,7 +1078,7 @@ export default function SystemDiagnosticsPage() {
               {(() => {
                 const ae = health.aiEngine;
                 const status = !ae.active ? "Not Configured" : ae.enginePaused ? "Paused" : ae.autoGenerateEnabled ? "Active" : "Disabled";
-                const statusColor = !ae.active ? "#475569" : ae.enginePaused ? "#F59E0B" : ae.autoGenerateEnabled ? "#10B981" : "#EF4444";
+                const statusColor = !ae.active ? "#475569" : ae.enginePaused ? "#F59E0B" : ae.autoGenerateEnabled ? "#22C55E" : "#EF4444";
                 return [
                   {
                     label: "Engine",
@@ -1139,10 +1139,10 @@ export default function SystemDiagnosticsPage() {
                 {(() => {
                   const qa = aiAnalytics;
                   const qualityColor: Record<string, string> = {
-                    excellent: "#10B981", good: "#6B9EFF", fair: "#F59E0B", poor: "#EF4444", empty: "#475569",
+                    excellent: "#22C55E", good: "#6B9EFF", fair: "#F59E0B", poor: "#EF4444", empty: "#475569",
                   };
                   const scoreCol = qa.averageContentScore != null
-                    ? qa.averageContentScore >= 85 ? "#10B981" : qa.averageContentScore >= 70 ? "#6B9EFF" : qa.averageContentScore >= 50 ? "#F59E0B" : "#EF4444"
+                    ? qa.averageContentScore >= 85 ? "#22C55E" : qa.averageContentScore >= 70 ? "#6B9EFF" : qa.averageContentScore >= 50 ? "#F59E0B" : "#EF4444"
                     : "#475569";
                   return [
                     {
@@ -1163,7 +1163,7 @@ export default function SystemDiagnosticsPage() {
                       label: "Duplicate Risk",
                       value: `${qa.duplicateRiskCount.high} High`,
                       sub: `${qa.duplicateRiskCount.medium} medium · ${qa.duplicateRiskCount.low} low`,
-                      color: qa.duplicateRiskCount.high > 0 ? "#EF4444" : qa.duplicateRiskCount.medium > 0 ? "#F59E0B" : "#10B981",
+                      color: qa.duplicateRiskCount.high > 0 ? "#EF4444" : qa.duplicateRiskCount.medium > 0 ? "#F59E0B" : "#22C55E",
                       icon: "⚠",
                     },
                     {
@@ -1194,7 +1194,7 @@ export default function SystemDiagnosticsPage() {
               {[
                 { label: "Regenerate Queue", icon: "🔄", color: "#00AEEF", action: () => regenQueueMut.mutate(), pending: regenQueueMut.isPending, desc: "Rebuild 14-day queue using current settings" },
                 { label: "Clear Queue",       icon: "🗑",  color: "#EF4444", action: () => clearQueueDiag.mutate(), pending: clearQueueDiag.isPending, desc: "Delete all scheduled & draft posts" },
-                { label: "Force Generate Now", icon: "⚡",  color: "#10B981", action: () => forceGenerateMut.mutate(), pending: forceGenerateMut.isPending, desc: "Generate 5 posts immediately" },
+                { label: "Force Generate Now", icon: "⚡",  color: "#22C55E", action: () => forceGenerateMut.mutate(), pending: forceGenerateMut.isPending, desc: "Generate 5 posts immediately" },
               ].map(btn => (
                 <button key={btn.label} onClick={btn.action} disabled={btn.pending || anyMutPending}
                   style={{
@@ -1224,13 +1224,13 @@ export default function SystemDiagnosticsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
               {[
                 { label: "Total Assets",    value: imageStats.total,         sub: "uploaded images",   color: "#00AEEF" },
-                { label: "Tagged Assets",   value: imageStats.tagged,        sub: "with topic / city", color: "#10B981" },
-                { label: "Untagged Assets", value: imageStats.untagged,      sub: "need tagging",      color: imageStats.untagged > 0 ? "#F59E0B" : "#10B981" },
+                { label: "Tagged Assets",   value: imageStats.tagged,        sub: "with topic / city", color: "#22C55E" },
+                { label: "Untagged Assets", value: imageStats.untagged,      sub: "need tagging",      color: imageStats.untagged > 0 ? "#F59E0B" : "#22C55E" },
                 {
                   label: "Coverage Score",
                   value: `${imageStats.coverageScore}%`,
                   sub: imageStats.coverageScore >= 80 ? "Excellent coverage" : imageStats.coverageScore >= 50 ? "Good — add more images" : "Low — upload more",
-                  color: imageStats.coverageScore >= 80 ? "#10B981" : imageStats.coverageScore >= 50 ? "#F59E0B" : "#EF4444",
+                  color: imageStats.coverageScore >= 80 ? "#22C55E" : imageStats.coverageScore >= 50 ? "#F59E0B" : "#EF4444",
                 },
               ].map(card => (
                 <div key={card.label} style={{
@@ -1284,8 +1284,8 @@ export default function SystemDiagnosticsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
               {[
                 { label: "Total Posts",       value: contentInsights.totalPosts,                                   color: "#00AEEF", sub: "all statuses" },
-                { label: "With Performance",  value: contentInsights.postsWithPerf,                                 color: "#10B981", sub: "logged metrics" },
-                { label: "Avg Engagement",    value: contentInsights.avgEngagementScore != null ? `${contentInsights.avgEngagementScore}%` : "—", color: contentInsights.avgEngagementScore != null && contentInsights.avgEngagementScore >= 5 ? "#10B981" : "#F59E0B", sub: "real data only" },
+                { label: "With Performance",  value: contentInsights.postsWithPerf,                                 color: "#22C55E", sub: "logged metrics" },
+                { label: "Avg Engagement",    value: contentInsights.avgEngagementScore != null ? `${contentInsights.avgEngagementScore}%` : "—", color: contentInsights.avgEngagementScore != null && contentInsights.avgEngagementScore >= 5 ? "#22C55E" : "#F59E0B", sub: "real data only" },
               ].map(card => (
                 <div key={card.label} style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px" }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 6 }}>{card.label}</div>
@@ -1351,7 +1351,7 @@ export default function SystemDiagnosticsPage() {
             { name: "Bing Places for Business",icon: "B",  color: "#00ADEF", status: "warning"  as const, detail: "Setup pending — not yet claimed" },
             { name: "Nextdoor Business",        icon: "N",  color: "#8DC641", status: "warning"  as const, detail: "Setup pending — not yet claimed" },
           ].map(({ name, icon, color, status, detail }) => {
-            const st = { healthy: { dot: "#10B981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)", label: "Connected" }, warning: { dot: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)", label: "Pending" } }[status];
+            const st = { healthy: { dot: "#22C55E", bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.2)", label: "Connected" }, warning: { dot: "#F59E0B", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)", label: "Pending" } }[status];
             return (
               <div key={name} style={{ background: st.bg, border: `1px solid ${st.border}`, borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -1401,10 +1401,10 @@ export default function SystemDiagnosticsPage() {
             disabled={!!bkRunning["full"]}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              background: bkRunning["full"] ? "rgba(139,92,246,0.2)" : "linear-gradient(135deg,#8B5CF6,#6D28D9)",
+              background: bkRunning["full"] ? "rgba(59,130,246,0.2)" : "linear-gradient(135deg,#3B82F6,#6D28D9)",
               color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px",
               fontSize: 13, fontWeight: 700, cursor: bkRunning["full"] ? "not-allowed" : "pointer",
-              boxShadow: bkRunning["full"] ? "none" : "0 4px 18px rgba(139,92,246,0.4)",
+              boxShadow: bkRunning["full"] ? "none" : "0 4px 18px rgba(59,130,246,0.4)",
               whiteSpace: "nowrap", transition: "all 0.2s",
             }}
           >
@@ -1417,12 +1417,12 @@ export default function SystemDiagnosticsPage() {
         {(() => {
           const cards: Array<{ key: "code" | "database" | "assets" | "full"; label: string; icon: string; desc: string; btnLabel: string; accent: string; accentBg: string }> = [
             { key: "code",     label: "Code Backup",     icon: "💻", desc: "Full project source (excludes node_modules, .git, dist)", btnLabel: "Backup Code",     accent: "#00AEEF", accentBg: "rgba(0,174,239,0.08)"   },
-            { key: "database", label: "Database Backup", icon: "🗄️", desc: "Exports social_posts, image_assets, settings & connections", btnLabel: "Backup Database", accent: "#10B981", accentBg: "rgba(16,185,129,0.08)"  },
+            { key: "database", label: "Database Backup", icon: "🗄️", desc: "Exports social_posts, image_assets, settings & connections", btnLabel: "Backup Database", accent: "#22C55E", accentBg: "rgba(34,197,94,0.08)"  },
             { key: "assets",   label: "Asset Backup",    icon: "🖼️", desc: "Image metadata + files from object storage as ZIP",   btnLabel: "Backup Images",   accent: "#F59E0B", accentBg: "rgba(245,158,11,0.08)"  },
-            { key: "full",     label: "Full System",     icon: "🔐", desc: "Runs all 3 backups + writes manifest.json",           btnLabel: "Full Backup",     accent: "#8B5CF6", accentBg: "rgba(139,92,246,0.08)"   },
+            { key: "full",     label: "Full System",     icon: "🔐", desc: "Runs all 3 backups + writes manifest.json",           btnLabel: "Full Backup",     accent: "#3B82F6", accentBg: "rgba(59,130,246,0.08)"   },
           ];
           const statusStyle: Record<BkStatus, { dot: string; label: string; border: string }> = {
-            healthy: { dot: "#10B981", label: "Healthy",  border: "rgba(16,185,129,0.25)" },
+            healthy: { dot: "#22C55E", label: "Healthy",  border: "rgba(34,197,94,0.25)" },
             warning: { dot: "#F59E0B", label: "Warning",  border: "rgba(245,158,11,0.25)" },
             never:   { dot: "#475569", label: "No backup", border: "rgba(71,85,105,0.25)" },
           };
@@ -1513,7 +1513,7 @@ export default function SystemDiagnosticsPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {bkData.history.map(b => {
                 const typeIcons: Record<string, string> = { code: "💻", database: "🗄️", assets: "🖼️", full: "🔐", other: "📄" };
-                const typeColors: Record<string, string> = { code: "#00AEEF", database: "#10B981", assets: "#F59E0B", full: "#8B5CF6", other: "#94A3B8" };
+                const typeColors: Record<string, string> = { code: "#00AEEF", database: "#22C55E", assets: "#F59E0B", full: "#3B82F6", other: "#94A3B8" };
                 const icon = typeIcons[b.type] ?? "📄";
                 const color = typeColors[b.type] ?? "#94A3B8";
                 const sizeLabel = b.sizeBytes > 1_000_000 ? `${(b.sizeBytes/1_000_000).toFixed(1)} MB` : b.sizeBytes > 1000 ? `${(b.sizeBytes/1024).toFixed(0)} KB` : `${b.sizeBytes} B`;

@@ -46,9 +46,9 @@ const CATEGORY_OPTIONS = [
 ];
 
 const CAT_COLOR: Record<string, string> = {
-  infestation: "#EF4444", prevention: "#10B981", treatment: "#6B9EFF",
+  infestation: "#EF4444", prevention: "#22C55E", treatment: "#6B9EFF",
   warning: "#F59E0B", educational: "#00AEEF", branding: "#C0C0C0",
-  seasonal: "#A78BFA",
+  seasonal: "#3B82F6",
 };
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -282,9 +282,9 @@ export default function ImageAssetManagerPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
           {[
             { label: "Total Assets",    value: stats.total,         color: "#00AEEF",  icon: "🖼" },
-            { label: "Tagged Assets",   value: stats.tagged,        color: "#10B981",  icon: "🏷" },
-            { label: "Untagged Assets", value: stats.untagged,      color: stats.untagged > 0 ? "#F59E0B" : "#10B981", icon: "⚠" },
-            { label: "Coverage Score",  value: `${stats.coverageScore}%`, color: stats.coverageScore >= 80 ? "#10B981" : stats.coverageScore >= 50 ? "#F59E0B" : "#EF4444", icon: "📊" },
+            { label: "Tagged Assets",   value: stats.tagged,        color: "#22C55E",  icon: "🏷" },
+            { label: "Untagged Assets", value: stats.untagged,      color: stats.untagged > 0 ? "#F59E0B" : "#22C55E", icon: "⚠" },
+            { label: "Coverage Score",  value: `${stats.coverageScore}%`, color: stats.coverageScore >= 80 ? "#22C55E" : stats.coverageScore >= 50 ? "#F59E0B" : "#EF4444", icon: "📊" },
           ].map(c => (
             <div key={c.label} style={{
               background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
@@ -366,8 +366,8 @@ export default function ImageAssetManagerPage() {
               title="Export all images + metadata as a ZIP file"
               style={{
                 padding: "8px 16px", borderRadius: 8, display: "flex", alignItems: "center", gap: 6,
-                background: backingUp ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.12)",
-                border: "1px solid rgba(139,92,246,0.35)", color: backingUp ? "#A78BFA" : "#8B5CF6",
+                background: backingUp ? "rgba(59,130,246,0.15)" : "rgba(59,130,246,0.12)",
+                border: "1px solid rgba(59,130,246,0.35)", color: backingUp ? "#3B82F6" : "#3B82F6",
                 fontSize: 13, fontWeight: 700, cursor: backingUp ? "not-allowed" : "pointer",
                 transition: "all 0.2s",
               }}>
@@ -517,7 +517,7 @@ export default function ImageAssetManagerPage() {
                             <button
                               onClick={() => patchMut.mutate({ id: asset.id, data: editState })}
                               disabled={patchMut.isPending}
-                              style={{ flex: 1, padding: "6px 0", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}>
+                              style={{ flex: 1, padding: "6px 0", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E" }}>
                               {patchMut.isPending ? "Saving…" : "✓ Save"}
                             </button>
                             <button onClick={() => setEditingId(null)}

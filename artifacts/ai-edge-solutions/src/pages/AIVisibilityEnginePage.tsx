@@ -96,10 +96,10 @@ const AI_READINESS = [
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, { color: string; label: string }> = {
-  "Connected":   { color: "#10B981", label: "Connected"   },
+  "Connected":   { color: "#22C55E", label: "Connected"   },
   "Needs Setup": { color: "#EF4444", label: "Needs Setup" },
   "Opportunity": { color: "#F59E0B", label: "Opportunity" },
-  "Monitoring":  { color: "#8B5CF6", label: "Monitoring"  },
+  "Monitoring":  { color: "#3B82F6", label: "Monitoring"  },
 };
 
 const PRIORITY_STYLE: Record<string, { color: string }> = {
@@ -113,7 +113,7 @@ const AUTHORITY_STATUS: Record<string, { color: string; label: string }> = {
   missing: { color: "#EF4444", label: "Missing" },
   weak:    { color: "#F59E0B", label: "Weak"    },
   medium:  { color: "#00AEEF", label: "Fair"    },
-  good:    { color: "#10B981", label: "Good"    },
+  good:    { color: "#22C55E", label: "Good"    },
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -305,10 +305,10 @@ export default function AIVisibilityEnginePage() {
   } as const;
 
   const kpiCards = [
-    { icon: "⚡", label: "Overall Visibility",  value: audit.overallScore,       color: audit.overallScore  >= 70 ? "#10B981" : audit.overallScore  >= 40 ? "#F59E0B" : "#EF4444", suffix: "/100" },
+    { icon: "⚡", label: "Overall Visibility",  value: audit.overallScore,       color: audit.overallScore  >= 70 ? "#22C55E" : audit.overallScore  >= 40 ? "#F59E0B" : "#EF4444", suffix: "/100" },
     { icon: "🔍", label: "Search Visibility",   value: audit.searchScore,        color: "#00AEEF",  suffix: "/100" },
-    { icon: "🗺️", label: "Maps Visibility",     value: audit.mapsScore,          color: "#10B981",  suffix: "/100" },
-    { icon: "🤖", label: "AI Search",           value: audit.aiSearchScore,      color: "#8B5CF6",  suffix: "/100" },
+    { icon: "🗺️", label: "Maps Visibility",     value: audit.mapsScore,          color: "#22C55E",  suffix: "/100" },
+    { icon: "🤖", label: "AI Search",           value: audit.aiSearchScore,      color: "#3B82F6",  suffix: "/100" },
     { icon: "🏛️", label: "Authority Score",     value: audit.authorityScore,     color: "#F59E0B",  suffix: "/100" },
     { icon: "⭐", label: "Review Strength",     value: audit.reviewScore,        color: "#FBBF24",  suffix: "/100" },
     { icon: "⚔️", label: "Competitor Gap",      value: audit.competitorGapScore, color: "#EF4444",  suffix: "/100" },
@@ -354,11 +354,11 @@ export default function AIVisibilityEnginePage() {
               {isClientView && audit.businessName && !loading && (
                 <div style={{
                   display: "flex", alignItems: "center", gap: 7,
-                  background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
+                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
                   borderRadius: 10, padding: "7px 13px",
                 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981" }} />
-                  <span style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>{audit.businessName}</span>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E" }} />
+                  <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{audit.businessName}</span>
                 </div>
               )}
               {loading && (
@@ -372,11 +372,11 @@ export default function AIVisibilityEnginePage() {
                 disabled={generateLoading || loading}
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
-                  background: reportReady ? "#10B981" : "rgba(139,92,246,0.12)",
-                  border: `1px solid ${reportReady ? "#10B981" : "rgba(139,92,246,0.4)"}`,
+                  background: reportReady ? "#22C55E" : "rgba(59,130,246,0.12)",
+                  border: `1px solid ${reportReady ? "#22C55E" : "rgba(59,130,246,0.4)"}`,
                   borderRadius: 10, padding: "8px 16px",
                   cursor: generateLoading ? "wait" : "pointer",
-                  color: reportReady ? "#fff" : "#8B5CF6",
+                  color: reportReady ? "#fff" : "#3B82F6",
                   fontSize: 12, fontWeight: 700,
                   transition: "all 0.25s",
                   opacity: generateLoading ? 0.7 : 1,
@@ -464,9 +464,9 @@ export default function AIVisibilityEnginePage() {
                 {emailStatus && (
                   <div style={{
                     marginBottom: 16, padding: "10px 14px", borderRadius: 8,
-                    background: emailStatus.ok ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
-                    border: `1px solid ${emailStatus.ok ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
-                    fontSize: 12, color: emailStatus.ok ? "#10B981" : "#EF4444", fontWeight: 600,
+                    background: emailStatus.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                    border: `1px solid ${emailStatus.ok ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+                    fontSize: 12, color: emailStatus.ok ? "#22C55E" : "#EF4444", fontWeight: 600,
                   }}>
                     {emailStatus.ok ? "✓ " : "✕ "}{emailStatus.msg}
                   </div>
@@ -579,7 +579,7 @@ export default function AIVisibilityEnginePage() {
                   <tr key={i} style={{ borderBottom: i < competitors.length - 1 ? (isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6") : "none" }}>
                     <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: t.text }}>{c.name}</td>
                     <td style={{ padding: "13px 16px" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: c.reviewGap < -15 ? "#EF4444" : c.reviewGap < -5 ? "#F59E0B" : "#10B981" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: c.reviewGap < -15 ? "#EF4444" : c.reviewGap < -5 ? "#F59E0B" : "#22C55E" }}>
                         {c.reviewGap}
                       </span>
                     </td>
@@ -650,7 +650,7 @@ export default function AIVisibilityEnginePage() {
           <SectionDivider title="AI Search Readiness" sub="How ready each AI platform is to recommend this business" isDark={isDark} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {AI_READINESS.map(p => {
-              const col = p.score >= 50 ? "#10B981" : p.score >= 25 ? "#F59E0B" : "#EF4444";
+              const col = p.score >= 50 ? "#22C55E" : p.score >= 25 ? "#F59E0B" : "#EF4444";
               return (
                 <div key={p.platform} style={{ ...card, padding: "18px 18px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
@@ -715,7 +715,7 @@ export default function AIVisibilityEnginePage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {displayRecs.map((rec, i) => {
               const ps = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.low;
-              const impactColor = rec.impact === "High" ? "#10B981" : rec.impact === "Medium" ? "#00AEEF" : "#64748B";
+              const impactColor = rec.impact === "High" ? "#22C55E" : rec.impact === "Medium" ? "#00AEEF" : "#64748B";
               return (
                 <div key={i} style={{
                   ...card,
@@ -802,7 +802,7 @@ function ChannelGrid({ channels, card, isDark }: { channels: Channel[]; card: Re
 // ─── Gap badge ────────────────────────────────────────────────────────────────
 
 function GapBadge({ level }: { level: string }) {
-  const col = level === "High" ? "#EF4444" : level === "Medium" ? "#F59E0B" : "#10B981";
+  const col = level === "High" ? "#EF4444" : level === "Medium" ? "#F59E0B" : "#22C55E";
   return (
     <span style={{ fontSize: 11, fontWeight: 700, color: col, background: `${col}12`, border: `1px solid ${col}25`, padding: "2px 9px", borderRadius: 6 }}>
       {level}

@@ -433,7 +433,7 @@ function Step6Deploy({
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0 8px" }}>
           <div style={{
             width: 64, height: 64, borderRadius: "50%",
-            background: "rgba(16,185,129,0.15)", border: "2px solid #10B981",
+            background: "rgba(34,197,94,0.15)", border: "2px solid #22C55E",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
           }}>✅</div>
           <div style={{ textAlign: "center" }}>
@@ -457,7 +457,7 @@ function Step6Deploy({
             ].map(([k, v]) => (
               <div key={k}>
                 <div style={{ fontSize: 9, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{k}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: v === "Active" ? "#10B981" : valueColor }}>{v}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: v === "Active" ? "#22C55E" : valueColor }}>{v}</div>
               </div>
             ))}
           </div>
@@ -474,15 +474,15 @@ function Step6Deploy({
               <div key={m.id} style={{
                 display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
                 borderBottom: `1px solid ${cardBorder}`,
-                background: active ? (isDark ? "rgba(16,185,129,0.04)" : "#F0FDF4") : "transparent",
+                background: active ? (isDark ? "rgba(34,197,94,0.04)" : "#F0FDF4") : "transparent",
               }}>
                 <span style={{ fontSize: 16 }}>{m.icon}</span>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: active ? (isDark ? "#E2E8F0" : "#111827") : (isDark ? "#334155" : "#9CA3AF") }}>{m.label}</span>
                 <span style={{
                   fontSize: 9, fontWeight: 800, padding: "2px 9px", borderRadius: 20,
-                  background: active ? "rgba(16,185,129,0.12)" : (isDark ? "rgba(255,255,255,0.04)" : "#F3F4F6"),
-                  color: active ? "#10B981" : (isDark ? "#334155" : "#9CA3AF"),
-                  border: active ? "1px solid rgba(16,185,129,0.25)" : `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB"}`,
+                  background: active ? "rgba(34,197,94,0.12)" : (isDark ? "rgba(255,255,255,0.04)" : "#F3F4F6"),
+                  color: active ? "#22C55E" : (isDark ? "#334155" : "#9CA3AF"),
+                  border: active ? "1px solid rgba(34,197,94,0.25)" : `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB"}`,
                 }}>
                   {active ? "✓ Active" : "Not Selected"}
                 </span>
@@ -715,14 +715,14 @@ export default function ClientOnboardingPage() {
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: done ? 14 : 16,
                     background: done
-                      ? "#10B981"
+                      ? "#22C55E"
                       : active
                         ? "#00AEEF"
                         : (isDark ? "rgba(255,255,255,0.06)" : "#EEF2F7"),
                     border: active
                       ? "2px solid #00AEEF"
                       : done
-                        ? "2px solid #10B981"
+                        ? "2px solid #22C55E"
                         : `2px solid ${isDark ? "rgba(255,255,255,0.1)" : "#DDE3EA"}`,
                     color: (done || active) ? "#FFFFFF" : (isDark ? "#475569" : "#94A3B8"),
                     fontWeight: 800,
@@ -734,7 +734,7 @@ export default function ClientOnboardingPage() {
                   </div>
                   <div style={{
                     fontSize: 9, fontWeight: 700, textAlign: "center", lineHeight: 1.2,
-                    color: active ? "#00AEEF" : done ? "#10B981" : (isDark ? "#475569" : "#94A3B8"),
+                    color: active ? "#00AEEF" : done ? "#22C55E" : (isDark ? "#475569" : "#94A3B8"),
                     textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap",
                   }}>
                     {s.label}
@@ -745,7 +745,7 @@ export default function ClientOnboardingPage() {
                     height: 2, flex: 0, width: 16, flexShrink: 0, margin: "0 -2px",
                     marginBottom: 16,
                     background: done
-                      ? "#10B981"
+                      ? "#22C55E"
                       : (isDark ? "rgba(255,255,255,0.06)" : "#E2E8F0"),
                     transition: "background 0.3s",
                   }} />

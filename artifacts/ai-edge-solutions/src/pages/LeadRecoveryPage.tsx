@@ -53,21 +53,21 @@ const PIPELINE_STAGES = [
   { id: "missed_call",         label: "Missed Call",        icon: "📵", color: "#EF4444" },
   { id: "sms_sent",            label: "SMS Sent",           icon: "💬", color: "#F59E0B" },
   { id: "customer_responded",  label: "Responded",          icon: "↩️", color: "#00AEEF" },
-  { id: "qualified",           label: "Qualified",          icon: "✓",  color: "#8B5CF6" },
-  { id: "appointment_booked",  label: "Booked",             icon: "📅", color: "#10B981" },
+  { id: "qualified",           label: "Qualified",          icon: "✓",  color: "#3B82F6" },
+  { id: "appointment_booked",  label: "Booked",             icon: "📅", color: "#22C55E" },
 ];
 
 const LEAD_STATUS_STYLE: Record<string, { bg: string; color: string; dot: string }> = {
   missed:      { bg: "rgba(239,68,68,0.1)",    color: "#F87171", dot: "#EF4444" },
   sms_sent:    { bg: "rgba(245,158,11,0.1)",   color: "#FCD34D", dot: "#F59E0B" },
   responded:   { bg: "rgba(0,174,239,0.1)",    color: "#00AEEF", dot: "#00AEEF" },
-  qualified:   { bg: "rgba(139,92,246,0.1)",   color: "#A78BFA", dot: "#8B5CF6" },
-  booked:      { bg: "rgba(16,185,129,0.12)",  color: "#10B981", dot: "#10B981" },
+  qualified:   { bg: "rgba(59,130,246,0.1)",   color: "#3B82F6", dot: "#3B82F6" },
+  booked:      { bg: "rgba(34,197,94,0.12)",  color: "#22C55E", dot: "#22C55E" },
   new:         { bg: "rgba(0,174,239,0.12)",   color: "#00AEEF", dot: "#00AEEF" },
   contacted:   { bg: "rgba(245,158,11,0.12)",  color: "#F59E0B", dot: "#F59E0B" },
-  closed:      { bg: "rgba(16,185,129,0.08)",  color: "#6EE7B7", dot: "#6EE7B7" },
+  closed:      { bg: "rgba(34,197,94,0.08)",  color: "#6EE7B7", dot: "#6EE7B7" },
   lost:        { bg: "rgba(148,163,184,0.1)",  color: "#64748B", dot: "#475569" },
-  appointment_booked: { bg: "rgba(16,185,129,0.12)", color: "#10B981", dot: "#10B981" },
+  appointment_booked: { bg: "rgba(34,197,94,0.12)", color: "#22C55E", dot: "#22C55E" },
 };
 
 const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
@@ -311,7 +311,7 @@ export default function LeadRecoveryPage() {
             icon="💬" label="Text-backs Sent"
             value={telnyxLoading ? "…" : (telnyxData?.textbacks_sent ?? 0)}
             sub={telnyxLoading ? "Loading…" : `${telnyxData?.sms_replies ?? 0} replies received`}
-            color="#10B981"
+            color="#22C55E"
           />
           <KPICard
             icon="💰" label="Est. Missed Revenue"
@@ -600,14 +600,14 @@ export default function LeadRecoveryPage() {
                 </div>
 
                 <div style={{
-                  background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)",
+                  background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)",
                   borderRadius: 14, padding: "16px 18px",
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#10B981", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 12 }}>Flow Performance</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 12 }}>Flow Performance</div>
                   {[
-                    { label: "Open Rate (SMS)",    color: "#10B981" },
+                    { label: "Open Rate (SMS)",    color: "#22C55E" },
                     { label: "Response Rate",       color: "#00AEEF" },
-                    { label: "Qualification Rate",  color: "#8B5CF6" },
+                    { label: "Qualification Rate",  color: "#3B82F6" },
                     { label: "Booking Rate",        color: "#F59E0B" },
                   ].map(m => (
                     <div key={m.label} style={{ marginBottom: 10 }}>
@@ -649,7 +649,7 @@ export default function LeadRecoveryPage() {
                     { label: "Total Calls",       value: telnyxData.total_calls,       color: "#94A3B8", note: "Missed + IVR reached" },
                     { label: "Missed Calls",       value: telnyxData.missed_calls,      color: "#EF4444", note: "Went to text-back flow" },
                     { label: "IVR Reached",        value: telnyxData.answered_calls,    color: "#60A5FA", note: "Entered voice menu" },
-                    { label: "Voicemails",         value: telnyxData.voicemail_calls,   color: "#8B5CF6", note: "Pressed 3 in menu" },
+                    { label: "Voicemails",         value: telnyxData.voicemail_calls,   color: "#3B82F6", note: "Pressed 3 in menu" },
                   ].map(m => (
                     <div key={m.label} style={{
                       background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
@@ -665,7 +665,7 @@ export default function LeadRecoveryPage() {
                 {/* SMS / text-back metrics */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                   {[
-                    { label: "Text-backs Sent",    value: telnyxData.textbacks_sent,    color: "#10B981", note: "Auto-sent on missed call" },
+                    { label: "Text-backs Sent",    value: telnyxData.textbacks_sent,    color: "#22C55E", note: "Auto-sent on missed call" },
                     { label: "Text-back Failed",   value: telnyxData.textbacks_failed,  color: "#F87171", note: "Delivery failures" },
                     { label: "SMS Received",       value: telnyxData.sms_received,      color: "#F59E0B", note: "Inbound SMS total" },
                     { label: "SMS Replies",        value: telnyxData.sms_replies,       color: "#00AEEF", note: "Replies to text-back menu" },
@@ -695,7 +695,7 @@ export default function LeadRecoveryPage() {
                   </div>
                   <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 18px" }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 10 }}>Recovery Rate</div>
-                    <div style={{ fontSize: 32, fontWeight: 800, color: "#10B981" }}>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: "#22C55E" }}>
                       {telnyxData.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—"}
                     </div>
                     <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
@@ -710,7 +710,7 @@ export default function LeadRecoveryPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                     {[
                       { label: "Quote Requests",       value: telnyxData.reply_breakdown.quote_request,       color: "#00AEEF" },
-                      { label: "Appointment Requests", value: telnyxData.reply_breakdown.appointment_request, color: "#10B981" },
+                      { label: "Appointment Requests", value: telnyxData.reply_breakdown.appointment_request, color: "#22C55E" },
                       { label: "Emergency Issues",     value: telnyxData.reply_breakdown.emergency_request,   color: "#EF4444" },
                     ].map(m => (
                       <div key={m.label} style={{ textAlign: "center" }}>
@@ -825,11 +825,11 @@ export default function LeadRecoveryPage() {
                       background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)",
                       borderRadius: 9, padding: "10px 14px",
                     }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: rule.active ? "#10B981" : "#334155", flexShrink: 0 }} />
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: rule.active ? "#22C55E" : "#334155", flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <span style={{ fontSize: 12, color: "#94A3B8" }}>If <strong style={{ color: "#CBD5E1" }}>{rule.trigger}</strong> → {rule.action}</span>
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: rule.active ? "#10B981" : "#334155", background: rule.active ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${rule.active ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)"}`, padding: "2px 8px", borderRadius: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: rule.active ? "#22C55E" : "#334155", background: rule.active ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${rule.active ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.05)"}`, padding: "2px 8px", borderRadius: 6 }}>
                         {rule.active ? "Active" : "Off"}
                       </span>
                     </div>

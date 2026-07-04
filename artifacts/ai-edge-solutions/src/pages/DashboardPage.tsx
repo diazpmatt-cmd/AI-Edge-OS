@@ -39,18 +39,18 @@ type TelnyxAnalytics = {
 
 const PLATFORM_KPI_CARDS = [
   { icon: "📍", label: "Local Visibility",    value: "Pending", sub: "Score not yet active",             color: "#EF4444", glow: false },
-  { icon: "✨", label: "AI Visibility",       value: "Pending", sub: "Scan not yet run",                 color: "#8B5CF6", glow: false },
+  { icon: "✨", label: "AI Visibility",       value: "Pending", sub: "Scan not yet run",                 color: "#3B82F6", glow: false },
   { icon: "⚡", label: "Connected Platforms", value: "4 / 8",  sub: "Facebook, Instagram, GBP, YouTube", color: "#00AEEF", glow: false },
-  { icon: "🛡", label: "Automation Health",   value: "Pending", sub: "Health score pending",             color: "#10B981", glow: false },
+  { icon: "🛡", label: "Automation Health",   value: "Pending", sub: "Health score pending",             color: "#22C55E", glow: false },
 ];
 
 // Scoring breakdown — pending live data integration.
 // These values will be computed from real platform signals once each module
 // completes its initial setup and begins reporting live data.
 const HEALTH_BREAKDOWN = [
-  { label: "Lead Recovery",     pct: 0, color: "#10B981", pending: true },
+  { label: "Lead Recovery",     pct: 0, color: "#22C55E", pending: true },
   { label: "Local Presence",    pct: 0, color: "#EF4444", pending: true },
-  { label: "AI Visibility",     pct: 0, color: "#8B5CF6", pending: true },
+  { label: "AI Visibility",     pct: 0, color: "#3B82F6", pending: true },
   { label: "Social Publishing", pct: 0, color: "#00AEEF", pending: true },
   { label: "Automation Health", pct: 0, color: "#F59E0B", pending: true },
 ];
@@ -71,37 +71,37 @@ const ALERTS = [
 const ALERT_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
   critical: { color: "#F87171", bg: "rgba(239,68,68,0.07)",  border: "rgba(239,68,68,0.2)",  label: "Critical" },
   warning:  { color: "#FCD34D", bg: "rgba(245,158,11,0.07)", border: "rgba(245,158,11,0.2)", label: "Warning"  },
-  healthy:  { color: "#10B981", bg: "rgba(16,185,129,0.07)", border: "rgba(16,185,129,0.2)", label: "Healthy"  },
+  healthy:  { color: "#22C55E", bg: "rgba(34,197,94,0.07)", border: "rgba(34,197,94,0.2)", label: "Healthy"  },
 };
 
 // Opportunity estimates require baseline performance data before they can be
 // quantified. Specific projections will appear once each module has run for
 // a full reporting period and established its benchmark.
 const OPPORTUNITIES = [
-  { icon: "📞", title: "Missed Call Recovery",  potential: "Estimate pending",  color: "#10B981", action: "Improve response automation and appointment booking",  link: "/admin/lead-recovery"   },
-  { icon: "✨", title: "AI Search Visibility",  potential: "Estimate pending",  color: "#8B5CF6", action: "Create AI-readable business summary and city pages",   link: "/admin/ai-visibility"   },
+  { icon: "📞", title: "Missed Call Recovery",  potential: "Estimate pending",  color: "#22C55E", action: "Improve response automation and appointment booking",  link: "/admin/lead-recovery"   },
+  { icon: "✨", title: "AI Search Visibility",  potential: "Estimate pending",  color: "#3B82F6", action: "Create AI-readable business summary and city pages",   link: "/admin/ai-visibility"   },
   { icon: "📍", title: "Local Listings",        potential: "Estimate pending",  color: "#00AEEF", action: "Claim Apple and Nextdoor listings · Bing publishing",  link: "/admin/local-presence"  },
   { icon: "⭐", title: "Review Growth",         potential: "Estimate pending",  color: "#F59E0B", action: "Launch automated review request campaign",             link: "/admin/lead-recovery"   },
 ];
 
 const MODULES = [
-  { icon: "📞", name: "Lead Recovery AI",    status: "Active",       statusColor: "#10B981", pct: null, summary: "Telnyx connected · Monitoring calls",  link: "/admin/lead-recovery"     },
-  { icon: "📍", name: "Local Presence",      status: "In Progress",  statusColor: "#A78BFA", pct: null, summary: "Bing verified · 2 platforms pending",  link: "/admin/local-presence"    },
+  { icon: "📞", name: "Lead Recovery AI",    status: "Active",       statusColor: "#22C55E", pct: null, summary: "Telnyx connected · Monitoring calls",  link: "/admin/lead-recovery"     },
+  { icon: "📍", name: "Local Presence",      status: "In Progress",  statusColor: "#3B82F6", pct: null, summary: "Bing verified · 2 platforms pending",  link: "/admin/local-presence"    },
   { icon: "✨", name: "AI Visibility",       status: "Pending scan", statusColor: "#EF4444", pct: null, summary: "No scan data yet",                     link: "/admin/ai-visibility"     },
   { icon: "⚡", name: "Connected Accounts",  status: "Partial",      statusColor: "#00AEEF", pct: null, summary: "4 of 8 platforms connected",           link: "/admin/connections"       },
   { icon: "📸", name: "Publishing Center",   status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Queue open · No score yet",            link: "/admin/social-publishing" },
   { icon: "🤖", name: "Auto Content Engine", status: "Ready",        statusColor: "#00AEEF", pct: null, summary: "Content pipeline active",              link: "/admin/auto-content"      },
-  { icon: "🛰", name: "System Diagnostics",  status: "Monitoring",   statusColor: "#8B5CF6", pct: null, summary: "All core systems nominal",             link: "/admin/diagnostics"       },
+  { icon: "🛰", name: "System Diagnostics",  status: "Monitoring",   statusColor: "#3B82F6", pct: null, summary: "All core systems nominal",             link: "/admin/diagnostics"       },
 ];
 
 const SNAPSHOTS = [
   {
     title: "Lead Recovery",
     icon: "📞",
-    color: "#10B981",
+    color: "#22C55E",
     link: "/admin/lead-recovery",
     rows: [
-      { label: "Status",  value: "Active",  valueColor: "#10B981" },
+      { label: "Status",  value: "Active",  valueColor: "#22C55E" },
       { label: "Source",  value: "Telnyx",  valueColor: "#94A3B8" },
     ],
   },
@@ -111,16 +111,16 @@ const SNAPSHOTS = [
     color: "#00AEEF",
     link: "/admin/local-presence",
     rows: [
-      { label: "Google Business",    value: "Connected",  valueColor: "#10B981" },
+      { label: "Google Business",    value: "Connected",  valueColor: "#22C55E" },
       { label: "Apple Business",     value: "Pending",    valueColor: "#F87171" },
-      { label: "Bing Places",        value: "Publishing",  valueColor: "#A78BFA" },
+      { label: "Bing Places",        value: "Publishing",  valueColor: "#3B82F6" },
       { label: "Nextdoor Business",  value: "Pending",    valueColor: "#F87171" },
     ],
   },
   {
     title: "AI Visibility",
     icon: "✨",
-    color: "#8B5CF6",
+    color: "#3B82F6",
     link: "/admin/ai-visibility",
     rows: [
       { label: "Visibility score",   value: "Pending",    valueColor: "#475569" },
@@ -132,8 +132,8 @@ const SNAPSHOTS = [
 ];
 
 const QUICK_ACTIONS = [
-  { label: "Open Lead Recovery",        icon: "📞", link: "/admin/lead-recovery",      color: "#10B981" },
-  { label: "AI Visibility Scan",        icon: "✨", link: "/admin/ai-visibility",      color: "#8B5CF6" },
+  { label: "Open Lead Recovery",        icon: "📞", link: "/admin/lead-recovery",      color: "#22C55E" },
+  { label: "AI Visibility Scan",        icon: "✨", link: "/admin/ai-visibility",      color: "#3B82F6" },
   { label: "Open Local Presence",       icon: "📍", link: "/admin/local-presence",     color: "#00AEEF" },
   { label: "Publishing Center",         icon: "📸", link: "/admin/social-publishing",  color: "#00AEEF" },
   { label: "View Diagnostics",          icon: "🛰", link: "/admin/diagnostics",        color: "#64748B" },
@@ -293,7 +293,7 @@ export default function DashboardPage() {
               background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.22)",
               borderRadius: 20, padding: "4px 13px",
             }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981", animation: "pulse 2s infinite" }} />
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulse 2s infinite" }} />
               <span style={{ fontSize: 11, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>AI Edge Ecosystem Active</span>
             </div>
             <span style={{ fontSize: 11, color: "#334155" }}>Last updated: Today</span>
@@ -312,13 +312,13 @@ export default function DashboardPage() {
               <Link to="/admin/lead-recovery">
                 <button style={{
                   padding: "9px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981",
+                  background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E",
                 }}>📞 Lead Recovery</button>
               </Link>
               <Link to="/admin/ai-visibility">
                 <button style={{
                   padding: "9px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                  background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", color: "#A78BFA",
+                  background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.3)", color: "#3B82F6",
                 }}>✨ AI Visibility</button>
               </Link>
             </div>
@@ -340,7 +340,7 @@ export default function DashboardPage() {
             label="Jobs Completed"
             value={gdLoading ? "…" : (gd.jobs ? String(gd.jobs.completed) : "—")}
             sub={gdLoading ? "Loading…" : (gd.jobs ? `${gd.jobs.completion_rate}% completion rate` : "No data yet")}
-            color="#10B981"
+            color="#22C55E"
             glow={!!(gd.jobs?.completed)}
           />
           {PLATFORM_KPI_CARDS.map(c => <KPICard key={c.label} {...c} />)}
@@ -444,7 +444,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>
               )}
               {!gdLoading && !gdError && !gdSyncing && !lastSyncedAt && (
-                <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live</span>
+                <span style={{ fontSize: 10, color: "#22C55E", fontWeight: 600 }}>● Live</span>
               )}
               <button
                 onClick={handleSync}
@@ -511,7 +511,7 @@ export default function DashboardPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
                         { label: "Monthly Revenue",    value: gd.revenue.monthly_revenue_fmt,     color: "#F59E0B" },
-                        { label: "Collected",          value: gd.revenue.collected_revenue_fmt,   color: "#10B981" },
+                        { label: "Collected",          value: gd.revenue.collected_revenue_fmt,   color: "#22C55E" },
                         { label: "Outstanding",        value: gd.revenue.outstanding_revenue_fmt, color: "#F87171" },
                         { label: "Avg Ticket",         value: gd.revenue.avg_ticket_fmt,          color: "#94A3B8" },
                       ].map(m => (
@@ -530,7 +530,7 @@ export default function DashboardPage() {
                 {/* Jobs */}
                 <div style={{
                   background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-                  border: "1px solid rgba(16,185,129,0.15)", borderRadius: 14, padding: "20px 22px",
+                  border: "1px solid rgba(34,197,94,0.15)", borderRadius: 14, padding: "20px 22px",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                     <span style={{ fontSize: 16 }}>🔧</span>
@@ -542,7 +542,7 @@ export default function DashboardPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
                         { label: "Total Jobs",       value: String(gd.jobs.total),              color: "#94A3B8" },
-                        { label: "Completed",        value: String(gd.jobs.completed),          color: "#10B981" },
+                        { label: "Completed",        value: String(gd.jobs.completed),          color: "#22C55E" },
                         { label: "Incomplete",       value: String(gd.jobs.incomplete),         color: "#F87171" },
                         { label: "Completion Rate",  value: `${gd.jobs.completion_rate}%`,      color: "#00AEEF" },
                       ].map(m => (
@@ -578,9 +578,9 @@ export default function DashboardPage() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {[
                         { label: "New Customers",      value: gd.customers.new_customers      != null ? String(gd.customers.new_customers)      : "—", color: "#00AEEF" },
-                        { label: "Returning",          value: gd.customers.returning_customers != null ? String(gd.customers.returning_customers) : "—", color: "#8B5CF6" },
+                        { label: "Returning",          value: gd.customers.returning_customers != null ? String(gd.customers.returning_customers) : "—", color: "#3B82F6" },
                         { label: "Active Services",    value: gd.customers.active_services    != null ? String(gd.customers.active_services)    : "—", color: "#F59E0B" },
-                        { label: "Recurring Services", value: gd.customers.recurring_services != null ? String(gd.customers.recurring_services) : "—", color: "#10B981" },
+                        { label: "Recurring Services", value: gd.customers.recurring_services != null ? String(gd.customers.recurring_services) : "—", color: "#22C55E" },
                       ].map(m => (
                         <div key={m.label} style={{
                           background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
@@ -597,7 +597,7 @@ export default function DashboardPage() {
                 {/* Payments */}
                 <div style={{
                   background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-                  border: "1px solid rgba(139,92,246,0.15)", borderRadius: 14, padding: "20px 22px",
+                  border: "1px solid rgba(59,130,246,0.15)", borderRadius: 14, padding: "20px 22px",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                     <span style={{ fontSize: 16 }}>💳</span>
@@ -611,7 +611,7 @@ export default function DashboardPage() {
                         const totalAmt = gd.payments!.total || 1;
                         const pct = Math.round((p.amount / totalAmt) * 100);
                         const methodColors: Record<string, string> = {
-                          card: "#00AEEF", cash: "#10B981", check: "#F59E0B", ach: "#8B5CF6", other: "#64748B",
+                          card: "#00AEEF", cash: "#22C55E", check: "#F59E0B", ach: "#3B82F6", other: "#64748B",
                         };
                         const color = methodColors[p.method] ?? "#64748B";
                         return (
@@ -654,7 +654,7 @@ export default function DashboardPage() {
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
                     {gd.marketing.lead_sources.map((src, i) => {
-                      const palette = ["#00AEEF", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#E1306C"];
+                      const palette = ["#00AEEF", "#22C55E", "#F59E0B", "#3B82F6", "#EF4444", "#E1306C"];
                       const color = palette[i % palette.length];
                       return (
                         <div key={src.name} style={{
@@ -750,7 +750,7 @@ export default function DashboardPage() {
         {/* ── Lead Recovery / Telnyx Analytics ── */}
         <div style={{ marginBottom: 28 }}>
           <SectionDivider title="Lead Recovery Analytics" right={
-            <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>● Live · Telnyx</span>
+            <span style={{ fontSize: 10, color: "#22C55E", fontWeight: 600 }}>● Live · Telnyx</span>
           } />
           {telnyxLoading ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
@@ -763,9 +763,9 @@ export default function DashboardPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                 {[
                   { label: "Missed Calls",     value: String(telnyxData.missed_calls),      color: "#EF4444", sub: `${telnyxData.after_hours_missed} after-hours` },
-                  { label: "Recovery Rate",    value: telnyxData.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—", color: "#10B981", sub: `${telnyxData.recovered_leads} leads recovered` },
+                  { label: "Recovery Rate",    value: telnyxData.recovery_rate != null ? `${telnyxData.recovery_rate}%` : "—", color: "#22C55E", sub: `${telnyxData.recovered_leads} leads recovered` },
                   { label: "Text-backs Sent",  value: String(telnyxData.textbacks_sent),    color: "#00AEEF", sub: `${telnyxData.sms_replies} replies` },
-                  { label: "Callback Requests",value: String(telnyxData.callback_requests), color: "#8B5CF6", sub: "Via voice menu" },
+                  { label: "Callback Requests",value: String(telnyxData.callback_requests), color: "#3B82F6", sub: "Via voice menu" },
                 ].map(m => (
                   <div key={m.label} style={{
                     background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
@@ -911,7 +911,7 @@ export default function DashboardPage() {
                 <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{a.action}</div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                   <span style={{ fontSize: 11, color: "#64748B", background: "rgba(255,255,255,0.04)", padding: "3px 10px", borderRadius: 6 }}>⏱ {a.time}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", padding: "3px 10px", borderRadius: 6 }}>{a.impact} Impact</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", padding: "3px 10px", borderRadius: 6 }}>{a.impact} Impact</span>
                 </div>
               </div>
             ))}
@@ -939,7 +939,7 @@ export default function DashboardPage() {
                   disabled={busy === "plan"}
                   style={{
                     padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                    background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981",
+                    background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E",
                     opacity: busy === "plan" ? 0.6 : 1,
                   }}
                 >
@@ -953,9 +953,9 @@ export default function DashboardPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
             {[
               { label: "Keywords Targeted", value: keywords.length, color: "#00AEEF" },
-              { label: "Articles Planned",  value: totalArticles,   color: "#8B5CF6" },
+              { label: "Articles Planned",  value: totalArticles,   color: "#3B82F6" },
               { label: "Drafts",            value: counts.draft ?? 0, color: "#F59E0B" },
-              { label: "Published",         value: counts.published ?? 0, color: "#10B981" },
+              { label: "Published",         value: counts.published ?? 0, color: "#22C55E" },
             ].map(s => (
               <div key={s.label} style={{
                 background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)",
@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {keywords.slice(0, 8).map((k, i) => {
-                    const diffColor = k.difficulty === "Low" ? "#10B981" : k.difficulty === "Medium" ? "#F59E0B" : "#EF4444";
+                    const diffColor = k.difficulty === "Low" ? "#22C55E" : k.difficulty === "Medium" ? "#F59E0B" : "#EF4444";
                     return (
                       <tr key={k.id} style={{ borderBottom: i < Math.min(keywords.length, 8) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                         <td style={{ padding: "9px 14px", fontSize: 12, fontWeight: 600, color: "#E2E8F0" }}>{k.keyword}</td>
@@ -1029,13 +1029,13 @@ export default function DashboardPage() {
               borderRadius: 13, overflow: "hidden",
             }}>
               <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#10B981" }}>30-Day Article Calendar</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#22C55E" }}>30-Day Article Calendar</span>
                 <span style={{ fontSize: 11, color: "#475569" }}>{publishedPct}% published</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "rgba(255,255,255,0.03)" }}>
                 {articles.map(a => {
                   const stMap: Record<string, { color: string; bg: string }> = {
-                    published:         { color: "#10B981", bg: "rgba(16,185,129,0.1)"  },
+                    published:         { color: "#22C55E", bg: "rgba(34,197,94,0.1)"  },
                     published_error:   { color: "#EF4444", bg: "rgba(239,68,68,0.1)"   },
                     ready_for_website: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)"  },
                     scheduled:         { color: "#00AEEF", bg: "rgba(0,174,239,0.08)"  },

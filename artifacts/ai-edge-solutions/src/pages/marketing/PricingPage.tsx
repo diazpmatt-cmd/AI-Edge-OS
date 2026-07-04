@@ -64,7 +64,7 @@ const PLANS = [
     popular: false,
     bestFor: "Established businesses that want advanced visibility, automation, and competitive growth.",
     cta: "Apply for Edge Elite",
-    color: "#8B5CF6",
+    color: "#3B82F6",
     prevTier: "Everything in Pro, plus:",
     items: [
       "Advanced AI Automation",
@@ -239,7 +239,7 @@ export default function PricingPage() {
         }}>
           {/* Glows */}
           <div style={{ position: "absolute", top: -80, right: -80, width: 400, height: 400, borderRadius: "50%", pointerEvents: "none", background: "radial-gradient(ellipse, rgba(0,174,239,0.14) 0%, transparent 70%)" }} />
-          <div style={{ position: "absolute", bottom: -60, left: -60, width: 300, height: 300, borderRadius: "50%", pointerEvents: "none", background: "radial-gradient(ellipse, rgba(139,92,246,0.08) 0%, transparent 70%)" }} />
+          <div style={{ position: "absolute", bottom: -60, left: -60, width: 300, height: 300, borderRadius: "50%", pointerEvents: "none", background: "radial-gradient(ellipse, rgba(59,130,246,0.08) 0%, transparent 70%)" }} />
           <div style={{
             position: "absolute", inset: 0, borderRadius: 28, pointerEvents: "none", overflow: "hidden",
             backgroundImage: "linear-gradient(rgba(0,174,239,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,174,239,0.035) 1px, transparent 1px)",
@@ -302,8 +302,8 @@ export default function PricingPage() {
             {[
               { label: "Starter", color: "#C0C0C0" },
               { label: "Pro", color: "#00AEEF" },
-              { label: "Elite", color: "#8B5CF6" },
-              { label: "Ecosystem", color: "#10B981" },
+              { label: "Elite", color: "#3B82F6" },
+              { label: "Ecosystem", color: "#22C55E" },
             ].map(col => (
               <div key={col.label} style={{ padding: "16px 12px", textAlign: "center", fontSize: 13, fontWeight: 800, color: col.color }}>{col.label}</div>
             ))}
@@ -370,7 +370,7 @@ export default function PricingPage() {
               "Kickoff strategy session",
             ].map(item => (
               <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                <CheckCircle color="#10B981" size={16} />
+                <CheckCircle color="#22C55E" size={16} />
                 <span style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.4 }}>{item}</span>
               </div>
             ))}
@@ -381,18 +381,18 @@ export default function PricingPage() {
       {/* ══════════════════════════════════════════ PERFORMANCE MODEL ══ */}
       <section style={{ padding: "0 24px 80px", maxWidth: 1100, margin: "0 auto" }}>
         <div style={{
-          background: "linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(0,174,239,0.04) 100%)",
-          border: "1px solid rgba(139,92,246,0.2)", borderRadius: 20, padding: "40px 44px",
+          background: "linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(0,174,239,0.04) 100%)",
+          border: "1px solid rgba(59,130,246,0.2)", borderRadius: 20, padding: "40px 44px",
           display: "grid", gridTemplateColumns: "1fr auto", gap: 40, alignItems: "center",
         }} className="performance-grid">
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#8B5CF6", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 14 }}>Performance Pricing</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#3B82F6", letterSpacing: "2px", textTransform: "uppercase", marginBottom: 14 }}>Performance Pricing</div>
             <h2 style={{ fontSize: "clamp(22px, 3vw, 32px)", fontWeight: 900, letterSpacing: "-0.5px", color: "#FFF", marginBottom: 12 }}>Prefer Performance-Based Pricing?</h2>
             <p style={{ fontSize: 15, color: "#475569", lineHeight: 1.7, marginBottom: 16 }}>
               We offer a lower monthly retainer paired with a performance fee per recovered lead or booked appointment.
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 16 }}>
-              <span style={{ fontSize: 28, fontWeight: 900, color: "#8B5CF6" }}>Starting at $497/mo</span>
+              <span style={{ fontSize: 28, fontWeight: 900, color: "#3B82F6" }}>Starting at $497/mo</span>
               <span style={{ fontSize: 14, color: "#374151" }}>+ performance fee</span>
             </div>
             <p style={{ fontSize: 12, color: "#334155", lineHeight: 1.6 }}>
@@ -404,12 +404,12 @@ export default function PricingPage() {
               onClick={() => navigate("/contact")}
               style={{
                 padding: "13px 28px", borderRadius: 12,
-                background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.35)",
-                color: "#8B5CF6", fontSize: 14, fontWeight: 800, cursor: "pointer", transition: "all 0.2s",
+                background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)",
+                color: "#3B82F6", fontSize: 14, fontWeight: 800, cursor: "pointer", transition: "all 0.2s",
                 whiteSpace: "nowrap",
               }}
-              onMouseEnter={e => { const el = e.currentTarget; el.style.background = "rgba(139,92,246,0.2)"; el.style.boxShadow = "0 0 20px rgba(139,92,246,0.3)"; }}
-              onMouseLeave={e => { const el = e.currentTarget; el.style.background = "rgba(139,92,246,0.12)"; el.style.boxShadow = "none"; }}
+              onMouseEnter={e => { const el = e.currentTarget; el.style.background = "rgba(59,130,246,0.2)"; el.style.boxShadow = "0 0 20px rgba(59,130,246,0.3)"; }}
+              onMouseLeave={e => { const el = e.currentTarget; el.style.background = "rgba(59,130,246,0.12)"; el.style.boxShadow = "none"; }}
             >Ask About Performance Pricing →</button>
           </div>
         </div>
@@ -518,9 +518,9 @@ function CompareCell({ value, highlight }: { value: boolean | string; highlight?
   if (value === true) {
     return (
       <div style={{ padding: "13px 12px", display: "flex", justifyContent: "center", alignItems: "center" }}>
-        <div style={{ width: 22, height: 22, borderRadius: "50%", background: highlight ? "rgba(0,174,239,0.15)" : "rgba(16,185,129,0.12)", border: `1px solid ${highlight ? "rgba(0,174,239,0.4)" : "rgba(16,185,129,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 22, height: 22, borderRadius: "50%", background: highlight ? "rgba(0,174,239,0.15)" : "rgba(34,197,94,0.12)", border: `1px solid ${highlight ? "rgba(0,174,239,0.4)" : "rgba(34,197,94,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke={highlight ? "#00AEEF" : "#10B981"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 6l3 3 5-5" stroke={highlight ? "#00AEEF" : "#22C55E"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </div>
@@ -535,7 +535,7 @@ function CompareCell({ value, highlight }: { value: boolean | string; highlight?
   }
   return (
     <div style={{ padding: "13px 12px", display: "flex", justifyContent: "center", alignItems: "center" }}>
-      <span style={{ fontSize: 10, fontWeight: 800, color: "#8B5CF6", background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", padding: "2px 8px", borderRadius: 10 }}>{value as string}</span>
+      <span style={{ fontSize: 10, fontWeight: 800, color: "#3B82F6", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", padding: "2px 8px", borderRadius: 10 }}>{value as string}</span>
     </div>
   );
 }

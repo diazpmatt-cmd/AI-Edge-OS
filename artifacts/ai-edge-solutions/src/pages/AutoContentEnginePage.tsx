@@ -259,7 +259,7 @@ function MatchedImageBlock({ city, topic, angle }: { city: string | null; topic:
     </div>
   );
 
-  const scoreColor = m.score >= 80 ? "#10B981" : m.score >= 50 ? "#F59E0B" : "#EF4444";
+  const scoreColor = m.score >= 80 ? "#22C55E" : m.score >= 50 ? "#F59E0B" : "#EF4444";
 
   return (
     <div style={{ background: "rgba(107,158,255,0.05)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(107,158,255,0.15)" }}>
@@ -297,22 +297,22 @@ function MatchedImageBlock({ city, topic, angle }: { city: string | null; topic:
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled: "#00AEEF", draft: "#94A3B8", published: "#10B981", failed: "#EF4444", pending: "#F59E0B",
+  scheduled: "#00AEEF", draft: "#94A3B8", published: "#22C55E", failed: "#EF4444", pending: "#F59E0B",
 };
 
 const ANGLE_COLOR: Record<string, string> = {
-  educational: "#6B9EFF", warning: "#F59E0B", promotional: "#10B981", seasonal: "#A78BFA",
+  educational: "#6B9EFF", warning: "#F59E0B", promotional: "#22C55E", seasonal: "#3B82F6",
   faq: "#00AEEF", testimonial: "#FF6B9D", prevention: "#34D399", emergency: "#EF4444",
 };
 
 const RISK_STYLE: Record<string, { color: string; bg: string; border: string }> = {
-  low:    { color: "#10B981", bg: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.3)"  },
+  low:    { color: "#22C55E", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.3)"  },
   medium: { color: "#F59E0B", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)"  },
   high:   { color: "#EF4444", bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.3)"   },
 };
 
 function scoreColor(score: number): string {
-  if (score >= 85) return "#10B981";
+  if (score >= 85) return "#22C55E";
   if (score >= 70) return "#6B9EFF";
   if (score >= 50) return "#F59E0B";
   return "#EF4444";
@@ -483,7 +483,7 @@ export default function AutoContentEnginePage() {
 
   const statusColors = {
     running:    { dot: "#00AEEF", bg: "rgba(0,174,239,0.1)",   border: "rgba(0,174,239,0.3)",    label: "Running",    pulse: true  },
-    active:     { dot: "#10B981", bg: "rgba(16,185,129,0.1)",  border: "rgba(16,185,129,0.25)",  label: "Active",     pulse: false },
+    active:     { dot: "#22C55E", bg: "rgba(34,197,94,0.1)",  border: "rgba(34,197,94,0.25)",  label: "Active",     pulse: false },
     configured: { dot: "#6B9EFF", bg: "rgba(107,158,255,0.08)",border: "rgba(107,158,255,0.22)", label: "Configured", pulse: false },
     paused:     { dot: "#F59E0B", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)",  label: "Paused",     pulse: false },
     disabled:   { dot: "#EF4444", bg: "rgba(239,68,68,0.08)",  border: "rgba(239,68,68,0.2)",    label: "Disabled",   pulse: false },
@@ -593,7 +593,7 @@ export default function AutoContentEnginePage() {
               </button>
             ) : (
               <button onClick={() => resumeMut.mutate()} disabled={anyPending}
-                style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: anyPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10B981" }}>
+                style={{ padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: anyPending ? "not-allowed" : "pointer", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E" }}>
                 ▶ Resume
               </button>
             )}
@@ -903,7 +903,7 @@ export default function AutoContentEnginePage() {
                   </button>
                   {settings.enginePaused ? (
                     <button onClick={() => resumeMut.mutate()} disabled={anyPending}
-                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                       ▶ Resume
                     </button>
                   ) : (
@@ -1108,7 +1108,7 @@ export default function AutoContentEnginePage() {
                           <button
                             onClick={() => publishNowMut.mutate(p.id)}
                             disabled={publishNowMut.isPending}
-                            style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: publishNowMut.isPending ? "not-allowed" : "pointer", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10B981" }}>
+                            style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: publishNowMut.isPending ? "not-allowed" : "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", color: "#22C55E" }}>
                             Publish
                           </button>
                           <button
@@ -1183,7 +1183,7 @@ export default function AutoContentEnginePage() {
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                                   <div style={{ fontSize: 10, fontWeight: 700, color: "#6B9EFF", textTransform: "uppercase", letterSpacing: "0.5px" }}>🖼 Auto-Attached Image</div>
                                   {p.matchedImageScore != null && (
-                                    <span style={{ fontSize: 11, fontWeight: 800, color: p.matchedImageScore >= 80 ? "#10B981" : "#F59E0B", background: p.matchedImageScore >= 80 ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)", border: `1px solid ${p.matchedImageScore >= 80 ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`, padding: "1px 8px", borderRadius: 20 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: p.matchedImageScore >= 80 ? "#22C55E" : "#F59E0B", background: p.matchedImageScore >= 80 ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)", border: `1px solid ${p.matchedImageScore >= 80 ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)"}`, padding: "1px 8px", borderRadius: 20 }}>
                                       {p.matchedImageScore}/100 match
                                     </span>
                                   )}

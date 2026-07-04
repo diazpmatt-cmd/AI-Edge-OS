@@ -76,10 +76,10 @@ const STATUS_META: Record<StatusKind, { label: string; bg: string; color: string
 };
 
 const SOURCE_META: Record<string, { label: string; color: string }> = {
-  replit_database:    { label: "Replit Database",       color: "#10B981" },
+  replit_database:    { label: "Replit Database",       color: "#22C55E" },
   env_secrets_only:   { label: "Environment Secrets",   color: "#00AEEF" },
   not_configured:     { label: "Not Configured",        color: "#64748B" },
-  migrated_placeholder: { label: "Migrated Placeholder", color: "#FB923C" },
+  migrated_placeholder: { label: "Migrated Placeholder", color: "#F59E0B" },
 };
 
 export default function ConnectionsPage() {
@@ -621,8 +621,8 @@ export default function ConnectionsPage() {
             Manage your platform connections and publishing integrations.
           </p>
           <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-            <StatPill value={connected} label="Connected" color="#10B981" />
-            <StatPill value={needsAction} label="Need Action" color="#FB923C" />
+            <StatPill value={connected} label="Connected" color="#22C55E" />
+            <StatPill value={needsAction} label="Need Action" color="#F59E0B" />
             <StatPill value={PLATFORMS.length - connected - needsAction} label="Available" color="#64748B" />
           </div>
         </div>
@@ -630,18 +630,18 @@ export default function ConnectionsPage() {
         {/* Migration Notice */}
         {needsAction > 0 && (
           <div style={{
-            background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.25)",
+            background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
             borderRadius: 12, padding: "14px 18px", marginBottom: 24,
             display: "flex", gap: 12, alignItems: "flex-start",
           }}>
             <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#FB923C", marginBottom: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#F59E0B", marginBottom: 4 }}>
                 Migration from previous system detected
               </div>
               <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0, lineHeight: 1.6 }}>
                 OAuth tokens from the previous Lovable-hosted app were not automatically transferred.
-                Platforms shown as <strong style={{ color: "#FB923C" }}>Needs Reconnection</strong> were previously connected
+                Platforms shown as <strong style={{ color: "#F59E0B" }}>Needs Reconnection</strong> were previously connected
                 and must be reconnected here in Replit. Your data and settings are intact — only the OAuth tokens need to be refreshed.
               </p>
             </div>
@@ -782,21 +782,21 @@ export default function ConnectionsPage() {
             const fbNeedsUpgrade = isFacebook && isConnected && fbStat?.statusLabel === "missing_permissions";
             const fbReadyToPublish = isFacebook && isConnected && fbStat?.statusLabel === "ready_to_publish";
             const fbSmOverride = fbNeedsUpgrade
-              ? { label: "Missing Publish Permissions", bg: "rgba(251,146,60,0.15)", color: "#FB923C", dot: "#FB923C" }
+              ? { label: "Missing Publish Permissions", bg: "rgba(245,158,11,0.15)", color: "#F59E0B", dot: "#F59E0B" }
               : fbReadyToPublish
-                ? { label: "Ready to Publish", bg: "rgba(16,185,129,0.15)", color: "#10B981", dot: "#10B981" }
+                ? { label: "Ready to Publish", bg: "rgba(34,197,94,0.15)", color: "#22C55E", dot: "#22C55E" }
                 : null;
             const displaySm = (isFacebook && isConnected && fbSmOverride) ? fbSmOverride : sm;
 
             return (
               <div key={platform.id} style={{
                 background: isConnected
-                  ? "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(11,22,41,0.9) 100%)"
+                  ? "linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(11,22,41,0.9) 100%)"
                   : "rgba(11,22,41,0.6)",
                 border: isConnected
-                  ? "1px solid rgba(16,185,129,0.25)"
+                  ? "1px solid rgba(34,197,94,0.25)"
                   : status === "needs_reconnect" || status === "needs_review"
-                    ? "1px solid rgba(251,146,60,0.2)"
+                    ? "1px solid rgba(245,158,11,0.2)"
                     : "1px solid rgba(255,255,255,0.07)",
                 borderRadius: 14,
                 padding: 20,
@@ -842,13 +842,13 @@ export default function ConnectionsPage() {
                         padding: "3px 8px", display: "inline-block", marginBottom: 8,
                       }}>
                         📺 {accountName}
-                        {!dbConn && <span style={{ color: "#FB923C", marginLeft: 6 }}>(not yet reconnected)</span>}
+                        {!dbConn && <span style={{ color: "#F59E0B", marginLeft: 6 }}>(not yet reconnected)</span>}
                       </div>
                     )}
 
                     {/* Migration / status note */}
                     {!isConnected && migration && (
-                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#FB923C" : status === "blocked" ? "#F59E0B" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 11.5, color: status === "needs_review" ? "#F59E0B" : status === "blocked" ? "#F59E0B" : "#94A3B8", margin: "0 0 10px", lineHeight: 1.5 }}>
                         {status === "needs_reconnect" && "🔁 "}
                         {status === "needs_review" && "⚠️ "}
                         {status === "coming_soon" && "🕐 "}
@@ -872,14 +872,14 @@ export default function ConnectionsPage() {
                       }}>
                         <span>📄 {fbStat.pageName}</span>
                         {fbStat.instagramBusinessAccountId && (
-                          <span style={{ color: "#E1306C" }}>· IG linked</span>
+                          <span style={{ color: "#9CA3AF" }}>· IG linked</span>
                         )}
                       </div>
                     )}
 
                     {/* Facebook: missing scopes list */}
                     {fbNeedsUpgrade && fbStat && fbStat.missingScopes.length > 0 && (
-                      <p style={{ fontSize: 11.5, color: "#FB923C", margin: "0 0 8px", lineHeight: 1.6 }}>
+                      <p style={{ fontSize: 11.5, color: "#F59E0B", margin: "0 0 8px", lineHeight: 1.6 }}>
                         ⚠️ Missing permissions for publishing:{" "}
                         <code style={{ fontSize: 11, color: "#FCD34D" }}>
                           {fbStat.missingScopes.join(", ")}
@@ -889,7 +889,7 @@ export default function ConnectionsPage() {
 
                     {/* GBP: scope / API-not-enabled warning */}
                     {gbpNeedsUpgrade && (
-                      <p style={{ fontSize: 11.5, color: "#FB923C", margin: "0 0 8px", lineHeight: 1.6 }}>
+                      <p style={{ fontSize: 11.5, color: "#F59E0B", margin: "0 0 8px", lineHeight: 1.6 }}>
                         {gbpApiNotEnabled
                           ? "⚠️ The My Business Account Management API is not enabled in Google Cloud Console. Enable it at console.cloud.google.com → APIs & Services, then reconnect."
                           : "⚠️ The business.manage permission was not approved. Reconnect and accept all requested permissions on the Google consent screen."}
@@ -921,8 +921,8 @@ export default function ConnectionsPage() {
                               disabled={isConnecting}
                               style={{
                                 padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                                background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)",
-                                color: "#FB923C", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
+                                background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.5)",
+                                color: "#F59E0B", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
                               }}
                             >
                               {isConnecting ? "Opening…" : "⬆ Upgrade Google Permissions"}
@@ -947,8 +947,8 @@ export default function ConnectionsPage() {
                               disabled={isConnecting}
                               style={{
                                 padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                                background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)",
-                                color: "#FB923C", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
+                                background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.5)",
+                                color: "#F59E0B", opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
                               }}
                             >
                               {isConnecting ? "Opening…" : "⬆ Upgrade Permissions"}
@@ -988,9 +988,9 @@ export default function ConnectionsPage() {
                           disabled={isConnecting}
                           style={{
                             padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
-                            background: status === "needs_reconnect" ? "rgba(251,146,60,0.15)" : "rgba(0,174,239,0.15)",
-                            border: status === "needs_reconnect" ? "1px solid rgba(251,146,60,0.4)" : "1px solid rgba(0,174,239,0.4)",
-                            color: status === "needs_reconnect" ? "#FB923C" : "#00AEEF",
+                            background: status === "needs_reconnect" ? "rgba(245,158,11,0.15)" : "rgba(0,174,239,0.15)",
+                            border: status === "needs_reconnect" ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,174,239,0.4)",
+                            color: status === "needs_reconnect" ? "#F59E0B" : "#00AEEF",
                             opacity: isConnecting ? 0.6 : 1, transition: "all 0.2s",
                           }}
                         >
@@ -1099,7 +1099,7 @@ export default function ConnectionsPage() {
               ) : callbackLog.length === 0 ? (
                 <p style={{ fontSize: 12, color: "#475569", marginTop: 12, lineHeight: 1.7 }}>
                   No callbacks recorded yet. Click <strong style={{ color: "#00AEEF" }}>Connect</strong> or{" "}
-                  <strong style={{ color: "#FB923C" }}>Reconnect</strong> on a platform card above.
+                  <strong style={{ color: "#F59E0B" }}>Reconnect</strong> on a platform card above.
                   This log auto-refreshes every 5 seconds.
                 </p>
               ) : (
@@ -1107,13 +1107,13 @@ export default function ConnectionsPage() {
                   {callbackLog.map((entry, i) => (
                     <div key={i} style={{
                       background: entry.connectionSaved
-                        ? "rgba(16,185,129,0.05)"
+                        ? "rgba(34,197,94,0.05)"
                         : "rgba(239,68,68,0.05)",
-                      border: `1px solid ${entry.connectionSaved ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
+                      border: `1px solid ${entry.connectionSaved ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
                       borderRadius: 8, padding: "10px 14px",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: entry.connectionSaved ? "#10B981" : "#EF4444" }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: entry.connectionSaved ? "#22C55E" : "#EF4444" }}>
                           {entry.connectionSaved ? "✓ SUCCESS" : "✗ FAILED"}
                         </span>
                         <span style={{ fontSize: 11, color: "#C0C0C0", fontWeight: 600 }}>
@@ -1124,11 +1124,11 @@ export default function ConnectionsPage() {
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: entry.error ? 8 : 0 }}>
-                        <Tag label={`Callback reached: yes`} color="#10B981" />
-                        <Tag label={`Code received: ${entry.codeReceived ? "yes" : "no"}`} color={entry.codeReceived ? "#10B981" : "#EF4444"} />
-                        <Tag label={`State valid: ${entry.stateValid === null ? "n/a" : entry.stateValid ? "yes" : "no"}`} color={entry.stateValid === false ? "#EF4444" : "#10B981"} />
-                        <Tag label={`Token: ${entry.tokenExchangeStatus}`} color={entry.tokenExchangeStatus === "success" ? "#10B981" : "#EF4444"} />
-                        <Tag label={`Saved to DB: ${entry.connectionSaved ? "yes" : "no"}`} color={entry.connectionSaved ? "#10B981" : "#EF4444"} />
+                        <Tag label={`Callback reached: yes`} color="#22C55E" />
+                        <Tag label={`Code received: ${entry.codeReceived ? "yes" : "no"}`} color={entry.codeReceived ? "#22C55E" : "#EF4444"} />
+                        <Tag label={`State valid: ${entry.stateValid === null ? "n/a" : entry.stateValid ? "yes" : "no"}`} color={entry.stateValid === false ? "#EF4444" : "#22C55E"} />
+                        <Tag label={`Token: ${entry.tokenExchangeStatus}`} color={entry.tokenExchangeStatus === "success" ? "#22C55E" : "#EF4444"} />
+                        <Tag label={`Saved to DB: ${entry.connectionSaved ? "yes" : "no"}`} color={entry.connectionSaved ? "#22C55E" : "#EF4444"} />
                       </div>
                       {entry.error && (
                         <div style={{ marginTop: 6 }}>
@@ -1190,11 +1190,11 @@ export default function ConnectionsPage() {
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <Tag
                         label={googleDebug.clientIdSet ? "✓ GOOGLE_OAUTH_CLIENT_ID set" : "✗ GOOGLE_OAUTH_CLIENT_ID missing"}
-                        color={googleDebug.clientIdSet ? "#10B981" : "#EF4444"}
+                        color={googleDebug.clientIdSet ? "#22C55E" : "#EF4444"}
                       />
                       <Tag
                         label={googleDebug.clientSecretSet ? "✓ GOOGLE_OAUTH_CLIENT_SECRET set" : "✗ GOOGLE_OAUTH_CLIENT_SECRET missing"}
-                        color={googleDebug.clientSecretSet ? "#10B981" : "#EF4444"}
+                        color={googleDebug.clientSecretSet ? "#22C55E" : "#EF4444"}
                       />
                     </div>
                     <DebugRow label="GOOGLE_OAUTH_CLIENT_ID">
@@ -1221,9 +1221,9 @@ export default function ConnectionsPage() {
                           }}
                           style={{
                             padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                            background: copied ? "rgba(16,185,129,0.15)" : "rgba(0,174,239,0.12)",
-                            border: copied ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(0,174,239,0.35)",
-                            color: copied ? "#10B981" : "#00AEEF",
+                            background: copied ? "rgba(34,197,94,0.15)" : "rgba(0,174,239,0.12)",
+                            border: copied ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(0,174,239,0.35)",
+                            color: copied ? "#22C55E" : "#00AEEF",
                             flexShrink: 0, transition: "all 0.2s",
                           }}
                         >
@@ -1257,11 +1257,11 @@ export default function ConnectionsPage() {
                             const isSensitive = s.includes("business.manage") || s.includes("youtube.upload");
                             return (
                               <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <code style={{ fontSize: 11, color: isSensitive ? "#FB923C" : "#9CA3AF", wordBreak: "break-all" }}>{s}</code>
+                                <code style={{ fontSize: 11, color: isSensitive ? "#F59E0B" : "#9CA3AF", wordBreak: "break-all" }}>{s}</code>
                                 {isSensitive && (
                                   <span style={{
                                     fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
-                                    background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.3)", color: "#FB923C",
+                                    background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)", color: "#F59E0B",
                                   }}>SENSITIVE</span>
                                 )}
                               </div>
@@ -1273,7 +1273,7 @@ export default function ConnectionsPage() {
                       {/* Required API + Enable button */}
                       <div style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                        background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)",
+                        background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)",
                         borderRadius: 6, padding: "7px 10px", gap: 10, flexWrap: "wrap",
                       }}>
                         <div>
@@ -1290,8 +1290,8 @@ export default function ConnectionsPage() {
                           style={{
                             display: "inline-flex", alignItems: "center", gap: 5,
                             padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700,
-                            background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.4)",
-                            color: "#10B981", textDecoration: "none", flexShrink: 0,
+                            background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.4)",
+                            color: "#22C55E", textDecoration: "none", flexShrink: 0,
                             cursor: "pointer",
                           }}
                         >
@@ -1302,8 +1302,8 @@ export default function ConnectionsPage() {
                       {/* Sensitive scope warning */}
                       {prov.sensitiveScope && prov.sensitiveScopeNote && (
                         <div style={{
-                          fontSize: 11, color: "#FB923C", background: "rgba(251,146,60,0.08)",
-                          border: "1px solid rgba(251,146,60,0.25)", borderRadius: 6, padding: "6px 10px", lineHeight: 1.6,
+                          fontSize: 11, color: "#F59E0B", background: "rgba(245,158,11,0.08)",
+                          border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "6px 10px", lineHeight: 1.6,
                         }}>
                           ⚠️ {prov.sensitiveScopeNote}
                         </div>
@@ -1321,7 +1321,7 @@ export default function ConnectionsPage() {
 
                       {/* Success redirect */}
                       <DebugRow label="Success Redirect Target">
-                        <code style={{ fontSize: 11, color: "#10B981", wordBreak: "break-all" }}>{prov.successRedirect}</code>
+                        <code style={{ fontSize: 11, color: "#22C55E", wordBreak: "break-all" }}>{prov.successRedirect}</code>
                       </DebugRow>
 
                       {/* Full OAuth URL */}
@@ -1433,9 +1433,9 @@ export default function ConnectionsPage() {
                             <strong style={{ color: "#C0C0C0" }}>Scopes → Add or Remove Scopes</strong>
                             {" → search for and add:"}
                             <br />
-                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/business.manage</code>
+                            <code style={{ fontSize: 11, color: "#F59E0B" }}>https://www.googleapis.com/auth/business.manage</code>
                             <br />
-                            <code style={{ fontSize: 11, color: "#FB923C" }}>https://www.googleapis.com/auth/youtube.readonly</code>
+                            <code style={{ fontSize: 11, color: "#F59E0B" }}>https://www.googleapis.com/auth/youtube.readonly</code>
                             <br />
                             Click <strong style={{ color: "#C0C0C0" }}>Update → Save and Continue</strong>.
                             <br />
@@ -1472,16 +1472,16 @@ export default function ConnectionsPage() {
                       <div key={step.n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                         <div style={{
                           width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                          background: (step as any).highlight ? "rgba(251,146,60,0.2)" : "rgba(66,133,244,0.2)",
-                          border: `1px solid ${(step as any).highlight ? "rgba(251,146,60,0.5)" : "rgba(66,133,244,0.4)"}`,
+                          background: (step as any).highlight ? "rgba(245,158,11,0.2)" : "rgba(66,133,244,0.2)",
+                          border: `1px solid ${(step as any).highlight ? "rgba(245,158,11,0.5)" : "rgba(66,133,244,0.4)"}`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 10, fontWeight: 800,
-                          color: (step as any).highlight ? "#FB923C" : "#4285F4",
+                          color: (step as any).highlight ? "#F59E0B" : "#4285F4",
                         }}>{step.n}</div>
                         <div>
                           <div style={{
                             fontSize: 12, fontWeight: 700, marginBottom: 3,
-                            color: (step as any).highlight ? "#FB923C" : "#C0C0C0",
+                            color: (step as any).highlight ? "#F59E0B" : "#C0C0C0",
                           }}>{step.title}</div>
                           <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.7 }}>{step.body}</div>
                         </div>
@@ -1553,17 +1553,17 @@ export default function ConnectionsPage() {
 
                     {/* TIKTOK_CLIENT_KEY box */}
                     <div style={{
-                      background: tiktokDebug.clientKeySet ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
-                      border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                      background: tiktokDebug.clientKeySet ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                      border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
                       borderRadius: 8, padding: "10px 12px",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                         <code style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>TIKTOK_CLIENT_KEY</code>
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                          background: tiktokDebug.clientKeySet ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
-                          color: tiktokDebug.clientKeySet ? "#10B981" : "#EF4444",
-                          border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                          background: tiktokDebug.clientKeySet ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                          color: tiktokDebug.clientKeySet ? "#22C55E" : "#EF4444",
+                          border: `1px solid ${tiktokDebug.clientKeySet ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
                         }}>
                           {tiktokDebug.clientKeySet ? "✓ Set" : "✗ Missing"}
                         </span>
@@ -1581,17 +1581,17 @@ export default function ConnectionsPage() {
 
                     {/* TIKTOK_CLIENT_SECRET box */}
                     <div style={{
-                      background: tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
-                      border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                      background: tiktokDebug.clientSecretSet ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                      border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
                       borderRadius: 8, padding: "10px 12px",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                         <code style={{ fontSize: 12, fontWeight: 700, color: "#C0C0C0" }}>TIKTOK_CLIENT_SECRET</code>
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                          background: tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
-                          color: tiktokDebug.clientSecretSet ? "#10B981" : "#EF4444",
-                          border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                          background: tiktokDebug.clientSecretSet ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+                          color: tiktokDebug.clientSecretSet ? "#22C55E" : "#EF4444",
+                          border: `1px solid ${tiktokDebug.clientSecretSet ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
                         }}>
                           {tiktokDebug.clientSecretSet ? "✓ Set" : "✗ Missing"}
                         </span>
@@ -1626,9 +1626,9 @@ export default function ConnectionsPage() {
                           }}
                           style={{
                             padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                            background: copiedTt ? "rgba(16,185,129,0.15)" : "rgba(37,244,238,0.1)",
-                            border: copiedTt ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(37,244,238,0.35)",
-                            color: copiedTt ? "#10B981" : "#25F4EE",
+                            background: copiedTt ? "rgba(34,197,94,0.15)" : "rgba(37,244,238,0.1)",
+                            border: copiedTt ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(37,244,238,0.35)",
+                            color: copiedTt ? "#22C55E" : "#25F4EE",
                             flexShrink: 0, transition: "all 0.2s",
                           }}
                         >{copiedTt ? "✓ Copied" : "Copy"}</button>
@@ -1729,15 +1729,15 @@ export default function ConnectionsPage() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Tag
                       label={metaDebug.appIdSet ? "✓ META_APP_ID set" : "✗ META_APP_ID missing"}
-                      color={metaDebug.appIdSet ? "#10B981" : "#EF4444"}
+                      color={metaDebug.appIdSet ? "#22C55E" : "#EF4444"}
                     />
                     <Tag
                       label={metaDebug.appSecretSet ? "✓ META_APP_SECRET set" : "✗ META_APP_SECRET missing"}
-                      color={metaDebug.appSecretSet ? "#10B981" : "#EF4444"}
+                      color={metaDebug.appSecretSet ? "#22C55E" : "#EF4444"}
                     />
                     <Tag
                       label={metaDebug.connected ? `✓ Connected as ${metaDebug.accountName ?? "unknown"}` : "✗ Not yet connected"}
-                      color={metaDebug.connected ? "#10B981" : "#FB923C"}
+                      color={metaDebug.connected ? "#22C55E" : "#F59E0B"}
                     />
                   </div>
 
@@ -1753,9 +1753,9 @@ export default function ConnectionsPage() {
                         }}
                         style={{
                           padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                          background: copiedFb ? "rgba(16,185,129,0.15)" : "rgba(24,119,242,0.12)",
-                          border: copiedFb ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(24,119,242,0.35)",
-                          color: copiedFb ? "#10B981" : "#1877F2",
+                          background: copiedFb ? "rgba(34,197,94,0.15)" : "rgba(24,119,242,0.12)",
+                          border: copiedFb ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(24,119,242,0.35)",
+                          color: copiedFb ? "#22C55E" : "#1877F2",
                           flexShrink: 0,
                         }}
                       >
@@ -1782,7 +1782,7 @@ export default function ConnectionsPage() {
                           {metaDebug.meIdentity?.error ? (
                             <span style={{ color: "#EF4444" }}> — /me failed: {String(metaDebug.meIdentity.error)}</span>
                           ) : metaDebug.meIdentity?.id ? (
-                            <span style={{ color: "#10B981" }}> — /me OK: {metaDebug.meIdentity.name} (id {metaDebug.meIdentity.id})</span>
+                            <span style={{ color: "#22C55E" }}> — /me OK: {metaDebug.meIdentity.name} (id {metaDebug.meIdentity.id})</span>
                           ) : null}
                         </span>
                       </DebugRow>
@@ -1796,7 +1796,7 @@ export default function ConnectionsPage() {
                           </span>
                         ) : (
                           <>
-                            <span style={{ fontSize: 12, color: (metaDebug.meAccountsResult.data?.length ?? 0) > 0 ? "#10B981" : "#EF4444" }}>
+                            <span style={{ fontSize: 12, color: (metaDebug.meAccountsResult.data?.length ?? 0) > 0 ? "#22C55E" : "#EF4444" }}>
                               {(metaDebug.meAccountsResult.data?.length ?? 0) === 0
                                 ? "⚠ 0 pages returned — token holder has no managed Pages"
                                 : `✓ ${metaDebug.meAccountsResult.data.length} page(s) found`}
@@ -1820,7 +1820,7 @@ export default function ConnectionsPage() {
                         ) : (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                             {metaDebug.grantedScopes.map(s => (
-                              <Tag key={s} label={`✓ ${s}`} color="#10B981" />
+                              <Tag key={s} label={`✓ ${s}`} color="#22C55E" />
                             ))}
                           </div>
                         )}
@@ -1828,7 +1828,7 @@ export default function ConnectionsPage() {
 
                       <DebugRow label="Declined Scopes">
                         {metaDebug.declinedScopes.length === 0 ? (
-                          <span style={{ fontSize: 12, color: "#10B981" }}>None declined ✓</span>
+                          <span style={{ fontSize: 12, color: "#22C55E" }}>None declined ✓</span>
                         ) : (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                             {metaDebug.declinedScopes.map(s => (
@@ -1907,13 +1907,13 @@ export default function ConnectionsPage() {
                         <Tag label={`Source: ${sm2.label}`} color={sm2.color} />
                         {debug ? (
                           <>
-                            <Tag label={debug.inDatabase ? "✓ In DB" : "✗ Not in DB"} color={debug.inDatabase ? "#10B981" : "#64748B"} />
+                            <Tag label={debug.inDatabase ? "✓ In DB" : "✗ Not in DB"} color={debug.inDatabase ? "#22C55E" : "#64748B"} />
                             {debug.envKeysConfigured.length > 0
                               ? <Tag label={`✓ Env: ${debug.envKeysConfigured.join(", ")}`} color="#00AEEF" />
                               : <Tag label={`✗ Env keys missing: ${debug.envKeysMissing.join(", ")}`} color="#64748B" />
                             }
                             {!debug.inDatabase && hasMigration && (
-                              <Tag label="⚠ Needs reconnection in Replit" color="#FB923C" />
+                              <Tag label="⚠ Needs reconnection in Replit" color="#F59E0B" />
                             )}
                           </>
                         ) : (
@@ -1931,9 +1931,9 @@ export default function ConnectionsPage() {
                 borderRadius: 8, fontSize: 12, color: "#6B7280", lineHeight: 1.7,
               }}>
                 <strong style={{ color: "#00AEEF" }}>Legend:</strong>{" "}
-                <span style={{ color: "#10B981" }}>Replit Database</span> — real OAuth token stored here. {" "}
+                <span style={{ color: "#22C55E" }}>Replit Database</span> — real OAuth token stored here. {" "}
                 <span style={{ color: "#00AEEF" }}>Environment Secrets</span> — API credentials configured but no token yet. {" "}
-                <span style={{ color: "#FB923C" }}>Migrated Placeholder</span> — known from Lovable, not yet in Replit. {" "}
+                <span style={{ color: "#F59E0B" }}>Migrated Placeholder</span> — known from Lovable, not yet in Replit. {" "}
                 <span style={{ color: "#64748B" }}>Not Configured</span> — no credentials or connection.
               </div>
             </div>

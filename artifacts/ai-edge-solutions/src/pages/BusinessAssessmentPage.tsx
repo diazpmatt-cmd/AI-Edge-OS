@@ -59,7 +59,7 @@ function computeScores(form: FormData): Scores {
 }
 
 function scoreLabel(n: number): { label: string; color: string } {
-  if (n >= 75) return { label: "Strong", color: "#10B981" };
+  if (n >= 75) return { label: "Strong", color: "#22C55E" };
   if (n >= 55) return { label: "Moderate", color: "#F59E0B" };
   if (n >= 35) return { label: "Needs Improvement", color: "#F97316" };
   return { label: "Low / Critical", color: "#EF4444" };
@@ -225,17 +225,17 @@ export default function BusinessAssessmentPage() {
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: "50%",
-                    background: step >= s.n ? (step > s.n ? "#10B981" : "rgba(0,174,239,0.15)") : "rgba(255,255,255,0.05)",
-                    border: step >= s.n ? (step > s.n ? "2px solid #10B981" : "2px solid #00AEEF") : "1px solid rgba(255,255,255,0.1)",
+                    background: step >= s.n ? (step > s.n ? "#22C55E" : "rgba(0,174,239,0.15)") : "rgba(255,255,255,0.05)",
+                    border: step >= s.n ? (step > s.n ? "2px solid #22C55E" : "2px solid #00AEEF") : "1px solid rgba(255,255,255,0.1)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 13, fontWeight: 900,
-                    color: step >= s.n ? (step > s.n ? "#10B981" : "#00AEEF") : "#475569",
+                    color: step >= s.n ? (step > s.n ? "#22C55E" : "#00AEEF") : "#475569",
                   }}>
                     {step > s.n ? "✓" : s.n}
                   </div>
                   <span style={{ fontSize: 10, fontWeight: 600, color: step >= s.n ? "#CBD5E1" : "#475569", whiteSpace: "nowrap" }}>{s.label}</span>
                 </div>
-                {i < 2 && <div style={{ width: 80, height: 1, background: step > s.n ? "#10B981" : "rgba(255,255,255,0.08)", margin: "0 8px", marginBottom: 18, transition: "background 0.3s" }} />}
+                {i < 2 && <div style={{ width: 80, height: 1, background: step > s.n ? "#22C55E" : "rgba(255,255,255,0.08)", margin: "0 8px", marginBottom: 18, transition: "background 0.3s" }} />}
               </div>
             ))}
           </div>
@@ -344,7 +344,7 @@ export default function BusinessAssessmentPage() {
                   </div>
                 </Field>
                 <div style={{
-                  background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.15)",
+                  background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.15)",
                   borderRadius: 10, padding: "12px 14px",
                   fontSize: 12, color: "#64748B", lineHeight: 1.5,
                 }}>
@@ -466,7 +466,7 @@ export default function BusinessAssessmentPage() {
   // ── Results Phase ──
   if (!scores) return null;
   const overallLabel = scores.overall >= 70 ? "Good Foundation" : scores.overall >= 50 ? "Growth Opportunity Detected" : "Significant Growth Potential";
-  const overallColor = scores.overall >= 70 ? "#10B981" : scores.overall >= 50 ? "#F59E0B" : "#EF4444";
+  const overallColor = scores.overall >= 70 ? "#22C55E" : scores.overall >= 50 ? "#F59E0B" : "#EF4444";
 
   const PAIN_POINTS = [
     { issue: "Apple Business Connect not claimed",        severity: "critical", impact: "Siri and Apple Maps discoveries blocked"         },
@@ -563,9 +563,9 @@ export default function BusinessAssessmentPage() {
           <Divider>Revenue & Growth Opportunities Identified</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {[
-              { icon: "💰", label: "Revenue Recovery Opportunity",  value: "Estimate pending", color: "#10B981", note: "Missed call recovery + lead conversion optimization" },
+              { icon: "💰", label: "Revenue Recovery Opportunity",  value: "Estimate pending", color: "#22C55E", note: "Missed call recovery + lead conversion optimization" },
               { icon: "📍", label: "Local Visibility Opportunity",  value: "Estimate pending", color: "#00AEEF", note: "Apple, Bing, Nextdoor listings not yet claimed"        },
-              { icon: "✨", label: "AI Visibility Opportunity",     value: "Estimate pending", color: "#8B5CF6", note: "AI search engines not recommending your business"      },
+              { icon: "✨", label: "AI Visibility Opportunity",     value: "Estimate pending", color: "#3B82F6", note: "AI search engines not recommending your business"      },
               { icon: "⭐", label: "Lead Conversion Opportunity",   value: "Estimate pending", color: "#F59E0B", note: "Review velocity and trust signals below competitors"   },
             ].map(op => (
               <div key={op.label} style={{
@@ -634,7 +634,7 @@ export default function BusinessAssessmentPage() {
                 <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{a.action}</div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <span style={{ fontSize: 11, color: "#64748B", background: "rgba(255,255,255,0.04)", padding: "3px 9px", borderRadius: 6 }}>⏱ {a.time}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#10B981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", padding: "3px 9px", borderRadius: 6 }}>{a.impact}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#22C55E", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", padding: "3px 9px", borderRadius: 6 }}>{a.impact}</span>
                 </div>
               </div>
             ))}
@@ -646,10 +646,10 @@ export default function BusinessAssessmentPage() {
           <Divider>Projected Impact — Within 90 Days (with AI Edge)</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {[
-              { label: "Pending",  sub: "AI Visibility Est.",    color: "#8B5CF6" },
+              { label: "Pending",  sub: "AI Visibility Est.",    color: "#3B82F6" },
               { label: "Pending",  sub: "Local Discovery Est.",  color: "#00AEEF" },
               { label: "Pending",  sub: "Lead Conversion Est.",  color: "#F59E0B" },
-              { label: "Pending",  sub: "Revenue Est.",          color: "#10B981" },
+              { label: "Pending",  sub: "Revenue Est.",          color: "#22C55E" },
             ].map(p => (
               <div key={p.sub} style={{
                 background: `${p.color}08`, border: `1px solid ${p.color}20`,

@@ -59,9 +59,9 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; label: string }> = {
-  facebook:  { bg: "rgba(59,130,246,0.12)",  color: "#93C5FD", icon: "f", label: "Facebook" },
-  instagram: { bg: "rgba(107,114,128,0.12)", color: "#9CA3AF", icon: "✦", label: "Instagram" },
-  google:    { bg: "rgba(107,114,128,0.12)", color: "#9CA3AF", icon: "G", label: "Google Business" },
+  facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "f", label: "Facebook" },
+  instagram: { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "✦", label: "Instagram" },
+  google:    { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "G", label: "Google Business" },
 };
 
 const COMING_SOON_PLATFORMS = [
@@ -344,7 +344,7 @@ export default function SocialPublishingPage() {
 
         {/* ── Publish toast ── */}
         {publishResult && (
-          <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 10, background: publishResult.ok ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", border: `1px solid ${publishResult.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`, color: publishResult.ok ? "#10B981" : "#EF4444", fontSize: 13, fontWeight: 600 }}>
+          <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 10, background: publishResult.ok ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)", border: `1px solid ${publishResult.ok ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`, color: publishResult.ok ? "#22C55E" : "#EF4444", fontSize: 13, fontWeight: 600 }}>
             {publishResult.ok ? "✓" : "✗"} {publishResult.msg}
           </div>
         )}
@@ -352,9 +352,9 @@ export default function SocialPublishingPage() {
         {/* ── Facebook Publishing Status Panel ── */}
         {(() => {
           const sl = fbStatus?.statusLabel;
-          const panelColor = sl === "ready_to_publish" ? "#10B981" : sl === "missing_permissions" ? "#FB923C" : "#64748B";
-          const panelBg = sl === "ready_to_publish" ? "rgba(16,185,129,0.06)" : sl === "missing_permissions" ? "rgba(251,146,60,0.06)" : "rgba(100,116,139,0.06)";
-          const panelBorder = sl === "ready_to_publish" ? "rgba(16,185,129,0.2)" : sl === "missing_permissions" ? "rgba(251,146,60,0.2)" : "rgba(100,116,139,0.15)";
+          const panelColor = sl === "ready_to_publish" ? "#22C55E" : sl === "missing_permissions" ? "#F59E0B" : "#64748B";
+          const panelBg = sl === "ready_to_publish" ? "rgba(34,197,94,0.06)" : sl === "missing_permissions" ? "rgba(245,158,11,0.06)" : "rgba(100,116,139,0.06)";
+          const panelBorder = sl === "ready_to_publish" ? "rgba(34,197,94,0.2)" : sl === "missing_permissions" ? "rgba(245,158,11,0.2)" : "rgba(100,116,139,0.15)";
           const checks = [
             {
               label: "Facebook user token",
@@ -389,7 +389,7 @@ export default function SocialPublishingPage() {
                     {sl === "ready_to_publish" ? "✓ Facebook Ready to Publish" : sl === "missing_permissions" ? "⚠️ Facebook Needs Permission Upgrade" : "○ Facebook Not Connected"}
                   </span>
                   {sl === "missing_permissions" && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#030612", background: "#FB923C", borderRadius: 10, padding: "1px 8px" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#030612", background: "#F59E0B", borderRadius: 10, padding: "1px 8px" }}>
                       Action Required
                     </span>
                   )}
@@ -401,10 +401,10 @@ export default function SocialPublishingPage() {
                 <div style={{ padding: "0 18px 16px" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 8, marginBottom: sl === "missing_permissions" ? 14 : 0 }}>
                     {checks.map(c => (
-                      <div key={c.label} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, background: c.ok ? "rgba(16,185,129,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${c.ok ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)"}` }}>
+                      <div key={c.label} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, background: c.ok ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${c.ok ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)"}` }}>
                         <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }}>{c.ok ? "✓" : "✗"}</span>
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: c.ok ? "#10B981" : "#EF4444" }}>{c.label}</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: c.ok ? "#22C55E" : "#EF4444" }}>{c.label}</div>
                           {c.detail && <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, lineHeight: 1.4 }}>{c.detail}</div>}
                         </div>
                       </div>
@@ -414,9 +414,9 @@ export default function SocialPublishingPage() {
                   {sl === "missing_permissions" && (
                     <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <p style={{ fontSize: 12.5, color: "#9CA3AF", margin: 0, lineHeight: 1.5 }}>
-                        Your existing Facebook connection is missing publishing permissions. Click <strong style={{ color: "#FB923C" }}>Upgrade Permissions</strong> to grant them without reconnecting from scratch.
+                        Your existing Facebook connection is missing publishing permissions. Click <strong style={{ color: "#F59E0B" }}>Upgrade Permissions</strong> to grant them without reconnecting from scratch.
                       </p>
-                      <a href="/admin/connections" style={{ flexShrink: 0, padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(251,146,60,0.15)", border: "1px solid rgba(251,146,60,0.5)", color: "#FB923C", textDecoration: "none" }}>
+                      <a href="/admin/connections" style={{ flexShrink: 0, padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.5)", color: "#F59E0B", textDecoration: "none" }}>
                         ⬆ Upgrade Permissions →
                       </a>
                     </div>
@@ -614,8 +614,8 @@ export default function SocialPublishingPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 24 }}>
           {[
             { label: "Drafts",    value: counts.draft,     color: "#94A3B8" },
-            { label: "Scheduled", value: counts.scheduled, color: "#00AEEF" },
-            { label: "Published", value: counts.published, color: "#10B981" },
+            { label: "Scheduled", value: counts.scheduled, color: "#F59E0B" },
+            { label: "Published", value: counts.published, color: "#22C55E" },
             { label: "Failed",    value: counts.failed,    color: "#EF4444" },
           ].map(s => (
             <div key={s.label} style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "14px 16px" }}>
@@ -708,7 +708,7 @@ export default function SocialPublishingPage() {
                       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 11, color: "#475569" }}>{post.clientName}</span>
                         {post.scheduledAt && <span style={{ fontSize: 11, color: "#6B7280" }}>🗓 {fmtDate(post.scheduledAt)}</span>}
-                        {post.publishedAt && <span style={{ fontSize: 11, color: "#10B981" }}>✓ Published {fmtDate(post.publishedAt)}</span>}
+                        {post.publishedAt && <span style={{ fontSize: 11, color: "#22C55E" }}>✓ Published {fmtDate(post.publishedAt)}</span>}
                         {!post.scheduledAt && !post.publishedAt && <span style={{ fontSize: 11, color: "#475569" }}>Created {timeAgo(post.createdAt)}</span>}
                       </div>
 
@@ -723,7 +723,7 @@ export default function SocialPublishingPage() {
                         <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                           {post.engagementScore != null ? (
                             <>
-                              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, border: `1px solid ${post.engagementScore >= 5 ? "rgba(16,185,129,0.3)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)"}`, background: post.engagementScore >= 5 ? "rgba(16,185,129,0.1)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)", color: post.engagementScore >= 5 ? "#10B981" : post.engagementScore >= 2 ? "#F59E0B" : "#EF4444" }}>
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, border: `1px solid ${post.engagementScore >= 5 ? "rgba(34,197,94,0.3)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)"}`, background: post.engagementScore >= 5 ? "rgba(34,197,94,0.1)" : post.engagementScore >= 2 ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)", color: post.engagementScore >= 5 ? "#22C55E" : post.engagementScore >= 2 ? "#F59E0B" : "#EF4444" }}>
                                 📊 {post.engagementScore.toFixed(1)}% eng
                               </span>
                               {post.impressions != null && <span style={{ fontSize: 10, color: "#64748B" }}>👁 {post.impressions.toLocaleString()}</span>}

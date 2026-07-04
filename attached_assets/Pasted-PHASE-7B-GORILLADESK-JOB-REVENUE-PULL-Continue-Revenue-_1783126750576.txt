@@ -1,0 +1,122 @@
+PHASE 7B — GORILLADESK JOB + REVENUE PULL
+
+Continue Revenue Attribution Engine.
+
+OBJECTIVE:
+Finish the money-tracking loop by pulling GorillaDesk jobs/revenue and matching them to AI Edge leads.
+
+CURRENT STATUS:
+Revenue Attribution module exists.
+GorillaDesk customer matching exists.
+matched_at column exists.
+Now we need job/revenue pull.
+
+BUILD:
+
+1. Inspect existing GorillaDesk integration
+Check current:
+- GORILLADESK_API_KEY usage
+- gorilladesk_customers table
+- any existing GorillaDesk routes/services
+- available GorillaDesk API endpoints already implemented
+
+2. Add GorillaDesk jobs sync architecture
+Create table if missing:
+
+gorilladesk_jobs
+- id
+- gorilladesk_job_id
+- gorilladesk_customer_id
+- customer_name
+- phone
+- job_status
+- service_type
+- job_total
+- invoice_total
+- paid_amount
+- job_date
+- completed_at
+- raw_json
+- created_at
+- updated_at
+
+3. Create sync endpoint:
+POST /api/revenue-attribution/sync-gorilladesk-jobs
+
+This should:
+- fetch GorillaDesk jobs if API support exists
+- store jobs in gorilladesk_jobs
+- normalize phone numbers
+- avoid duplicates by gorilladesk_job_id
+
+If GorillaDesk job API is not fully available yet:
+- build the endpoint structure
+- return clear status
+- support manual/demo job import for now
+
+4. Match jobs to AI Edge leads
+Update revenue_attribution records by matching:
+Priority 1: phone number
+Priority 2: GorillaDesk customer id
+Priority 3: customer name + date window
+
+When matched:
+- status = closed_won if job_status is completed/paid
+- status = matched if scheduled/open
+- revenue = invoice_total or job_total
+- service_type = GorillaDesk service/job type
+- gorilladesk_job_id = matched job id
+- updated_at = now
+
+5. Update Revenue Attribution dashboard
+Add section:
+GorillaDesk Revenue Sync
+
+Show:
+- Last sync
+- Jobs pulled
+- Jobs matched
+- Revenue matched
+- Unmatched jobs
+- Sync status
+
+Add button:
+Sync GorillaDesk Revenue
+
+6. Update KPI cards
+Make sure these use matched job revenue:
+- Closed Sales
+- Revenue Generated
+- Conversion Rate
+- Average Ticket
+- ROI
+
+7. Add Revenue by Source
+Use lead_source from AI Edge and matched revenue from GorillaDesk.
+
+Show:
+- AI Receptionist revenue
+- Missed Call Recovery revenue
+- SMS revenue
+- Callback Requests revenue
+- Voicemail revenue
+- AI Visibility Engine revenue
+
+8. Add manual fallback
+If GorillaDesk API cannot return jobs yet, allow manual closeout:
+- Mark Won
+- Revenue Amount
+- Service Type
+- Notes
+
+VALIDATION:
+- API builds clean
+- Web builds clean
+- Revenue Attribution page loads
+- Sync endpoint does not crash
+- Existing manual attribution still works
+- Matched jobs update revenue numbers
+
+GOAL:
+AI Edge should prove:
+“This call became a job and generated $X.”

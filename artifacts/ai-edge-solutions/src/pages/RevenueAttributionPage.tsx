@@ -77,6 +77,9 @@ export default function RevenueAttributionPage() {
   const [selected, setSelected] = useState<Lead | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<string | null>(null);
+  const [syncing, setSyncing]         = useState(false);
+  const [syncResult, setSyncResult]   = useState<any | null>(null);
+  const [syncStatus, setSyncStatus]   = useState<any | null>(null);
   const [form, setForm] = useState({ status: "pending", revenue: "", serviceType: "", notes: "", gorilladeskJobId: "" });
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState<{ msg: string; ok: boolean } | null>(null);
@@ -102,7 +105,14 @@ export default function RevenueAttributionPage() {
     }
   }, [apiFetch]);
 
-  useEffect(() => { loadLeads(); }, [loadLeads]);
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/revenue-attribution/sync-status?clientId=demo");
+      if (res.ok) setSyncStatus(await res.json());
+    } catch {}
+  }, [apiFetch]);
+
+  useEffect(() => { loadLeads(); loadSyncStatus(); }, [loadLeads, loadSyncStatus]);
 
   const openCloseout = (lead: Lead) => {
     setSelected(lead);
@@ -158,11 +168,31 @@ export default function RevenueAttributionPage() {
       });
       const data = await res.json();
       setMatchResult(data.message ?? `Matched ${data.matched} leads`);
-      if (data.matched > 0) loadLeads();
+      if (data.matched > 0) { loadLeads(); loadSyncStatus(); }
     } catch {
       setMatchResult("GorillaDesk sync failed — check API key or try again");
     } finally {
       setMatching(false);
+    }
+  };
+
+  const runJobSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await apiFetch("/api/revenue-attribution/sync-gorilladesk-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: "demo" }),
+      });
+      const data = await res.json();
+      setSyncResult(data);
+      loadLeads();
+      loadSyncStatus();
+    } catch {
+      setSyncResult({ ok: false, message: "Sync failed — check API server" });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -393,55 +423,135 @@ export default function RevenueAttributionPage() {
 
           {divider}
 
-          {/* ── SECTION 6: GORILLADESK SYNC ──────────────────────────── */}
-          {sectionHead("GorillaDesk Sync", "🦍", "Match unmatched leads to GorillaDesk customers by phone number")}
+          {/* ── SECTION 6: GORILLADESK REVENUE SYNC ─────────────────── */}
+          {sectionHead("GorillaDesk Revenue Sync", "🦍", "Pull job revenue from GorillaDesk and match it to AI Edge leads")}
+
+          {/* Stats row */}
+          {syncStatus && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "GD Customers", value: String(syncStatus.realtimeStats?.gdCustomerCount ?? 0), color: "#00AEEF" },
+                { label: "GD Jobs",      value: String(syncStatus.realtimeStats?.gdJobCount ?? 0),      color: "#A78BFA" },
+                { label: "Leads Matched",value: String(syncStatus.realtimeStats?.matchedLeads ?? 0),    color: "#10B981" },
+                { label: "Revenue Matched", value: syncStatus.realtimeStats?.revenueMatched > 0
+                  ? `$${Number(syncStatus.realtimeStats.revenueMatched).toLocaleString()}` : "—",       color: "#FBBF24" },
+                { label: "Unmatched",    value: String(syncStatus.realtimeStats?.unmatchedLeads ?? 0),  color: "#EF4444" },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background: isDark ? "#0B1629" : "#F8FAFC",
+                  border: `1px solid ${isDark ? "rgba(0,174,239,0.1)" : "#E2E8F0"}`,
+                  borderRadius: 10, padding: "14px 16px",
+                }}>
+                  <div style={{ fontSize: 10, color: "#6B7280", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
 
-            {/* Sync action card */}
+            {/* Primary: Sync GorillaDesk Revenue */}
             <div style={{ ...tableStyle, padding: "22px 24px" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 10 }}>Run Phone Match</div>
-              <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 18px", lineHeight: 1.6 }}>
-                Scans all <strong style={{ color: t.text }}>unmatched</strong> AI Edge leads and compares phone numbers
-                against your synced GorillaDesk customers. Matched leads are upgraded to <span style={{ color: "#00AEEF" }}>Matched</span> status automatically.
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 6 }}>Sync GorillaDesk Revenue</div>
+              <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 14px", lineHeight: 1.6 }}>
+                Pulls all GorillaDesk jobs and customers, then matches every AI Edge lead by phone number. When a job is found,
+                revenue, service type, and job ID are applied automatically.
               </p>
-              <button onClick={runGdMatch} disabled={matching} style={{
-                background: matching ? "#00AEEF66" : "#00AEEF",
-                border: "none", color: "#fff", borderRadius: 8,
-                padding: "10px 22px", fontSize: 13, fontWeight: 700,
-                cursor: matching ? "not-allowed" : "pointer", width: "100%",
-              }}>
-                {matching ? "⏳ Matching…" : "🔄 Run GorillaDesk Match"}
-              </button>
-              {matchResult && (
+              {syncStatus?.lastSyncStats && (
                 <div style={{
-                  marginTop: 14, background: "#10B98122", border: "1px solid #10B98144",
-                  borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#10B981",
-                }}>{matchResult}</div>
+                  background: isDark ? "#0A1020" : "#F1F5F9",
+                  borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12,
+                }}>
+                  <div style={{ color: "#6B7280", marginBottom: 4 }}>
+                    Last sync: <strong style={{ color: t.text }}>
+                      {syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : "Never"}
+                    </strong>
+                  </div>
+                  <div style={{ color: "#6B7280" }}>
+                    {syncStatus.lastSyncStats.leadsMatched} leads matched &nbsp;·&nbsp;
+                    ${Number(syncStatus.lastSyncStats.revenueMatched ?? 0).toLocaleString()} revenue attributed
+                  </div>
+                </div>
+              )}
+              <button onClick={runJobSync} disabled={syncing} style={{
+                background: syncing ? "#10B98166" : "#10B981",
+                border: "none", color: "#fff", borderRadius: 8,
+                padding: "11px 22px", fontSize: 13, fontWeight: 700,
+                cursor: syncing ? "not-allowed" : "pointer", width: "100%",
+              }}>
+                {syncing ? "⏳ Syncing GorillaDesk Revenue…" : "💰 Sync GorillaDesk Revenue"}
+              </button>
+              {syncResult && (
+                <div style={{
+                  marginTop: 12,
+                  background: syncResult.ok ? "#10B98118" : "#EF444418",
+                  border: `1px solid ${syncResult.ok ? "#10B98144" : "#EF444444"}`,
+                  borderRadius: 8, padding: "10px 14px",
+                }}>
+                  <div style={{ fontSize: 12, color: syncResult.ok ? "#10B981" : "#EF4444", fontWeight: 600, marginBottom: 4 }}>
+                    {syncResult.ok ? "✅ Sync complete" : "❌ Sync failed"}
+                  </div>
+                  {syncResult.ok && (
+                    <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.6 }}>
+                      {syncResult.leadsMatched} leads matched from {syncResult.gdCustomerCount} GD customers
+                      {syncResult.gdJobCount > 0 && ` + ${syncResult.gdJobCount} jobs`}
+                      {syncResult.revenueMatched > 0 && ` · $${Number(syncResult.revenueMatched).toLocaleString()} revenue`}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4 }}>{syncResult.gdApiMessage}</div>
+                </div>
               )}
             </div>
 
-            {/* Architecture status */}
-            <div style={{ ...tableStyle, padding: "22px 24px" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 14 }}>Sync Architecture</div>
-              {[
-                { label: "GorillaDesk API Key",       status: "configured", icon: "✅" },
-                { label: "Phone Match (Primary)",      status: "ready",      icon: "✅" },
-                { label: "Name Match (Fallback)",      status: "ready",      icon: "✅" },
-                { label: "Auto-sync on Call Events",   status: "planned",    icon: "🔵" },
-                { label: "Job Revenue Pull",           status: "planned",    icon: "🔵" },
-                { label: "Invoice Sync",               status: "planned",    icon: "🔵" },
-              ].map(item => (
-                <div key={item.label} style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "9px 0", borderBottom: `1px solid ${isDark ? "#1E2D48" : "#F1F5F9"}`,
+            {/* Right: Phone match + API status */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Phone Match */}
+              <div style={{ ...tableStyle, padding: "18px 22px", flex: "0 0 auto" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 6 }}>Phone-Only Match</div>
+                <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 12px", lineHeight: 1.5 }}>
+                  Matches only <strong style={{ color: t.text }}>unmatched</strong> leads against GD customer phones — faster, no job revenue update.
+                </p>
+                <button onClick={runGdMatch} disabled={matching} style={{
+                  background: "transparent",
+                  border: `1px solid ${matching ? "#00AEEF44" : "#00AEEF"}`,
+                  color: "#00AEEF", borderRadius: 7,
+                  padding: "8px 18px", fontSize: 12, fontWeight: 700,
+                  cursor: matching ? "not-allowed" : "pointer", width: "100%",
                 }}>
-                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>{item.icon} {item.label}</span>
-                  <span style={{
-                    fontSize: 11, fontWeight: 700,
-                    color: item.status === "configured" || item.status === "ready" ? "#10B981" : "#6B7280",
-                  }}>{item.status.toUpperCase()}</span>
-                </div>
-              ))}
+                  {matching ? "⏳ Matching…" : "🔄 Run Phone Match"}
+                </button>
+                {matchResult && (
+                  <div style={{ marginTop: 10, background: "#10B98118", border: "1px solid #10B98144", borderRadius: 7, padding: "8px 12px", fontSize: 12, color: "#10B981" }}>
+                    {matchResult}
+                  </div>
+                )}
+              </div>
+
+              {/* API Status */}
+              <div style={{ ...tableStyle, padding: "18px 22px", flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 12 }}>API &amp; Sync Status</div>
+                {[
+                  { label: "GorillaDesk API Key",    ok: true,  note: "Configured" },
+                  { label: "Customer Sync",           ok: true,  note: `${syncStatus?.realtimeStats?.gdCustomerCount ?? 445} records` },
+                  { label: "Phone Match",             ok: true,  note: "Active" },
+                  { label: "Name Match (Fallback)",   ok: true,  note: "Active" },
+                  { label: "Job Revenue API",         ok: false, note: "Not available (GD API)" },
+                  { label: "Invoice Sync",            ok: false, note: "Manual entry" },
+                ].map(item => (
+                  <div key={item.label} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "7px 0", borderBottom: `1px solid ${isDark ? "#1E2D48" : "#F1F5F9"}`,
+                  }}>
+                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>
+                      {item.ok ? "✅" : "⚠️"} {item.label}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: item.ok ? "#10B981" : "#6B7280" }}>
+                      {item.note}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
           </div>

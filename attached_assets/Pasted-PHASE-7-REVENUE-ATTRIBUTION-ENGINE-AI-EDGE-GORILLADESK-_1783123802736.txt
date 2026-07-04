@@ -1,0 +1,116 @@
+PHASE 7 — REVENUE ATTRIBUTION ENGINE (AI EDGE + GORILLADESK)
+
+Build a new AI Edge core module:
+Revenue Attribution Engine
+
+OBJECTIVE:
+Track which AI Edge leads turn into actual sales and calculate revenue + ROI.
+
+GOAL:
+Know exactly:
+- which calls became customers
+- which leads converted
+- how much revenue AI Edge generated
+
+NEW SIDEBAR MODULE:
+Revenue Attribution
+
+ROUTE:
+/admin/revenue-attribution
+
+PHASE 1:
+Build manual attribution + GorillaDesk-ready architecture.
+
+SECTION 1 — KPI DASHBOARD
+Top cards:
+- Total Leads
+- Qualified Leads
+- Closed Sales
+- Revenue Generated
+- Conversion Rate
+- Average Ticket
+- ROI
+
+SECTION 2 — LEAD PIPELINE
+Pipeline view:
+Calls → Leads → Appointments → Sales → Revenue
+
+Track:
+- total calls
+- captured leads
+- appointments
+- closed sales
+
+SECTION 3 — REVENUE BY SOURCE
+Track performance by source:
+- AI Receptionist
+- Lead Recovery AI
+- Missed Call Recovery
+- SMS
+- AI Visibility Engine
+
+Show:
+- leads
+- sales
+- revenue
+
+SECTION 4 — LEAD MATCHING
+Match AI Edge leads to GorillaDesk jobs using:
+1. phone number
+2. customer name
+3. time window
+
+Status:
+- unmatched
+- matched
+- closed won
+- closed lost
+
+SECTION 5 — MANUAL CLOSEOUT
+Allow marking leads:
+- Won
+- Lost
+- Pending
+
+Fields:
+- Revenue Amount
+- Service Type
+- Notes
+
+SECTION 6 — ROI ANALYTICS
+Show:
+- Revenue recovered
+- Revenue by module
+- Conversion %
+- Avg revenue per lead
+- Estimated AI Edge value
+
+DATABASE:
+Create revenue_attribution table:
+- id
+- lead_id
+- client_id
+- customer_name
+- phone
+- lead_source
+- status
+- revenue
+- service_type
+- notes
+- gorilladesk_job_id
+- created_at
+- updated_at
+
+API:
+Create routes:
+- GET /api/revenue-attribution
+- POST /api/revenue-attribution
+- PUT /api/revenue-attribution/:id
+- POST /api/revenue-attribution/match-gorilladesk
+
+IMPORTANT:
+Architecture must be ready for future GorillaDesk auto-sync.
+Use demo data if no records exist.
+
+GOAL:
+Turn AI Edge into a true ROI-tracking business growth platform.

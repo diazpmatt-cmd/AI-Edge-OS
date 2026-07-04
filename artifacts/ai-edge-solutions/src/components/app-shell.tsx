@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { to: "/admin/reviews",            icon: "⭐", label: "Reviews\nEngine",           bg: "#261A00", accent: "#FCD34D" },
   { to: "/admin/assessments",        icon: "📋", label: "Business\nAssessments",     bg: "#1A1A0A", accent: "#86EFAC" },
   { to: "/admin/diagnostics",        icon: "🛰",  label: "System\nDiagnostics",      bg: "#0A1A1A", accent: "#94A3B8" },
+  { to: "/admin/revenue-attribution", icon: "💰", label: "Revenue\nAttribution",      bg: "#0A1E0A", accent: "#10B981" },
 ];
 
 const SIDEBAR_W = 252;

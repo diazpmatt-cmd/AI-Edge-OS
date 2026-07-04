@@ -14,3 +14,4 @@ export * from "./sms-conversations";
 export * from "./client-onboarding";
 export * from "./ai-visibility";
 export * from "./audit-exports";
+export * from "./revenue-attribution";

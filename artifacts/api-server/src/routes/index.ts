@@ -23,6 +23,7 @@ import reviewsRouter from "./reviews";
 import callIntelligenceRouter from "./call-intelligence";
 import clientOnboardingRouter from "./client-onboarding";
 import aiVisibilityRouter from "./ai-visibility";
+import revenueAttributionRouter from "./revenue-attribution";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(reviewsRouter);
 router.use(callIntelligenceRouter);
 router.use(clientOnboardingRouter);
 router.use(aiVisibilityRouter);
+router.use(revenueAttributionRouter);
 
 export default router;

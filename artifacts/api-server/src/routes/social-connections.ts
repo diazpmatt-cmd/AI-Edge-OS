@@ -649,6 +649,53 @@ router.get("/social-connections/google-business-status", async (req, res) => {
 
   console.log(`[GBP-STATUS] metadata keys=${Object.keys(metadata).join(",") || "(empty)"}`);
 
+  // ── Cache-first: avoid hammering Google APIs on every page load ───────────
+  const hasCachedLocation = !!(metadata.locationId || metadata.locationName);
+  const cacheAgeMs = metadata.cachedAt
+    ? Date.now() - new Date(metadata.cachedAt).getTime()
+    : Infinity;
+  const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+  const cooldownActive = !!(
+    metadata.cooldownUntil && new Date(metadata.cooldownUntil) > new Date()
+  );
+
+  const buildCachedStatusResponse = (fromCooldown = false) => ({
+    connected:                hasCachedLocation,
+    statusLabel:              hasCachedLocation ? "connected" : (fromCooldown ? "google_api_error" : "no_gbp_locations_found"),
+    failureReason:            hasCachedLocation ? null : (fromCooldown ? "google_api_error" as GBPFailureReason : "no_gbp_locations_found" as GBPFailureReason),
+    tokenExists:              true,
+    refreshTokenExists:       !!(row.refreshToken),
+    accountName:              row.accountName,
+    businessManageScopeGranted: hasCachedLocation,
+    gbpAccountsFound:         metadata.gbpAccountsFound ?? (hasCachedLocation ? 1 : 0),
+    gbpLocationsFound:        metadata.gbpLocationsFound ?? (hasCachedLocation ? 1 : 0),
+    locationNames:            metadata.locationNames ?? (metadata.locationTitle ? [metadata.locationTitle] : []),
+    selectedLocationName:     metadata.primaryLocationTitle ?? metadata.locationTitle ?? null,
+    locationTitle:            metadata.locationTitle ?? null,
+    locationName:             metadata.locationName ?? null,
+    apiError:                 fromCooldown ? "Quota cooldown active — showing cached status" : null,
+    fromCache:                true,
+    cachedAt:                 metadata.cachedAt ?? null,
+    cooldownUntil:            fromCooldown ? (metadata.cooldownUntil ?? null) : undefined,
+  });
+
+  // Return cached data if a quota cooldown is still active
+  if (cooldownActive) {
+    console.log(`[GBP-STATUS] cooldown active until ${metadata.cooldownUntil} — serving cached response, skip Google API calls`);
+    res.json(buildCachedStatusResponse(true));
+    return;
+  }
+
+  // Return cached data if cache is fresh (< 1 hour) and we already have a location
+  if (hasCachedLocation && cacheAgeMs < CACHE_TTL_MS) {
+    console.log(`[GBP-STATUS] cache hit — age=${Math.round(cacheAgeMs / 60000)}min location="${metadata.primaryLocationTitle}" — skip Google API calls`);
+    res.json(buildCachedStatusResponse(false));
+    return;
+  }
+
+  console.log(`[GBP-STATUS] cache miss (hasCachedLocation=${hasCachedLocation} ageMin=${Math.round(cacheAgeMs / 60000)}) — calling Google APIs`);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const refreshTokenExists = !!(row.refreshToken);
   let gbpAccountsFound = 0;
   let gbpLocationsFound = 0;
@@ -834,6 +881,18 @@ router.get("/social-connections/google-business-status", async (req, res) => {
       let errMsg = acctBody.slice(0, 400);
       try { errMsg = (JSON.parse(acctBody) as any)?.error?.message ?? errMsg; } catch {}
       console.warn(`[GOOGLE-VERIFY] accounts API failed HTTP ${acctR.status}: ${errMsg}`);
+      // Save cooldown and return cached response instead of crashing on 429
+      if (acctR.status === 429) {
+        const cooldownUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        try {
+          await db.update(socialConnectionsTable)
+            .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil }), updatedAt: new Date() })
+            .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+        } catch { /* non-fatal */ }
+        console.warn(`[GBP-STATUS] Google 429 on accounts — cooldown saved until ${cooldownUntil}, returning cached response`);
+        res.json(buildCachedStatusResponse(true));
+        return;
+      }
       if (acctR.status === 403 || acctR.status === 401) {
         // Classify the failure carefully:
         //   google_api_not_enabled   → GCP project hasn't enabled the API

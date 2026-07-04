@@ -277,8 +277,9 @@ export default function ConnectionsPage() {
   const { data: gbpPublishStatus, refetch: refetchGBPStatus } = useQuery<GBPStatus>({
     queryKey: ["google_business_status"],
     queryFn: () => authFetch<GBPStatus>("/social-connections/google-business-status"),
-    staleTime: 60 * 1000,
-    retry: 1,
+    staleTime: 10 * 60 * 1000,  // 10 min — status endpoint now serves from DB cache anyway
+    retry: 0,                    // no retry on 429 / quota errors
+    refetchOnWindowFocus: false, // do not re-trigger on tab switch
     enabled: true,
   });
 

@@ -4663,6 +4663,7 @@ const SUMMARY_PLATFORMS: {
   { name: "Google Business Profile", dot: "#4285F4", summaryStatus: "connected",           note: "Connected via API · GBP active"                                     },
   { name: "Bing Places",             dot: "#008272", summaryStatus: "verified_publishing", note: "Verified · Synced with Google · Publishing · Live in 7–12 days"     },
   { name: "Apple Business Connect",  dot: "#888888", summaryStatus: "setup_pending",       note: "Submitted · Phone PIN / Apple review in progress"                    },
+  { name: "Facebook Business",       dot: "#1877F2", summaryStatus: "not_started",         note: "Facebook Business Page not yet created"                              },
   { name: "Nextdoor Business",       dot: "#00B246", summaryStatus: "not_started",         note: "Listing not yet claimed"                                             },
   { name: "Yelp for Business",       dot: "#D32323", summaryStatus: "not_started",         note: "Profile not yet created"                                             },
   { name: "Waze (WME)",              dot: "#00BBDE", summaryStatus: "not_started",         note: "Free path via Waze Map Editor — community moderated"                 },
@@ -4670,6 +4671,322 @@ const SUMMARY_PLATFORMS: {
   { name: "Thumbtack for Pros",      dot: "#009FD9", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
   { name: "AI Search (LLMs)",        dot: "#8B5CF6", summaryStatus: "coming_soon",         note: "AI Visibility module — not yet set up"                               },
 ];
+
+// ── Facebook Local Presence V2 Card ──────────────────────────────────────────
+type FBStepStatus = "complete" | "in-progress" | "pending" | "blocked";
+
+const FB_CHECKLIST: { label: string; status: FBStepStatus; description: string }[] = [
+  { label: "Create Facebook account or sign in",      status: "pending", description: "Go to facebook.com and sign in with your business email, or create a new account." },
+  { label: "Create a Business Page",                  status: "pending", description: "Visit facebook.com/pages/create — choose 'Business or Brand' and enter your business name." },
+  { label: "Set local business category",             status: "pending", description: "Select 'Pest Control Service' as the primary category. Add 'Exterminator' as a secondary category." },
+  { label: "Add NAP — Name, Address & Phone",         status: "pending", description: "Enter: Bed Bugs & Beyond · Baldwin County, AL · (251) 324-9090. Must match Google Business Profile exactly." },
+  { label: "Add website link",                        status: "pending", description: "Add https://bedbugsandbeyond.net to the Page's About section." },
+  { label: "Add service area (Baldwin County, AL)",   status: "pending", description: "In Page settings, add the service area cities: Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort." },
+  { label: "Add business hours",                      status: "pending", description: "Set your operating hours. Must match the hours on Google Business Profile (NAP consistency)." },
+  { label: "Upload cover photo and profile image",    status: "pending", description: "Use the same logo and brand imagery as your GBP and website for brand consistency." },
+  { label: "Enable Messenger for business",           status: "pending", description: "Turn on Facebook Messenger in Page settings so leads can contact you via chat." },
+  { label: "Post introductory content",               status: "pending", description: "Publish at least 3 posts — service overview, service area, and a customer testimonial." },
+  { label: "Link page to AI Edge publishing",         status: "pending", description: "Connect the Facebook page in the Connections tab to enable AI Edge automated publishing." },
+];
+
+const FB_DIAGS: { check: string; status: "healthy" | "warning" | "missing" | "pending"; note: string }[] = [
+  { check: "Business Page created",              status: "missing",  note: "Page not yet created — create at facebook.com/pages/create" },
+  { check: "Local business category set",        status: "pending",  note: "Will be confirmed once page is created" },
+  { check: "NAP matches Google Business Profile",status: "pending",  note: "Will be verified once page is live" },
+  { check: "Phone number confirmed",             status: "pending",  note: "(251) 324-9090 — will be checked after page creation" },
+  { check: "Website URL correct",                status: "pending",  note: "bedbugsandbeyond.net — will be checked after page creation" },
+  { check: "Service area configured",            status: "missing",  note: "Set service area to Baldwin County cities in Page settings" },
+  { check: "Facebook Messenger enabled",         status: "missing",  note: "Enable in Page settings > Messaging" },
+  { check: "Connected to AI Edge publishing",    status: "missing",  note: "Link in Connections tab for automated post publishing" },
+];
+
+const FB_DIAG_STYLE: Record<string, { color: string; bg: string; border: string; dot: string }> = {
+  healthy: { color: "#10B981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.2)",  dot: "#10B981" },
+  warning: { color: "#F59E0B", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)",  dot: "#F59E0B" },
+  missing: { color: "#EF4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)",   dot: "#EF4444" },
+  pending: { color: "#64748B", bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.15)", dot: "#475569" },
+};
+
+function FBStepBadge({ status }: { status: FBStepStatus }) {
+  const map: Record<FBStepStatus, { label: string; color: string; bg: string }> = {
+    "complete":    { label: "Done",        color: "#10B981", bg: "rgba(16,185,129,0.15)"  },
+    "in-progress": { label: "In Progress", color: "#1877F2", bg: "rgba(24,119,242,0.15)"  },
+    "pending":     { label: "Pending",     color: "#64748B", bg: "rgba(100,116,139,0.1)"  },
+    "blocked":     { label: "Blocked",     color: "#EF4444", bg: "rgba(239,68,68,0.12)"   },
+  };
+  const m = map[status];
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color: m.color, background: m.bg, padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>
+      {m.label}
+    </span>
+  );
+}
+
+function FacebookLocalPresenceCard() {
+  const authFetch = useApiFetch();
+  const [activeTab,  setActiveTab]  = useState<"checklist" | "bizinfo" | "diagnostics">("checklist");
+  const [checklist,  setChecklist]  = useState(FB_CHECKLIST);
+  const [pageUrl,    setPageUrl]    = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [saveMsg,    setSaveMsg]    = useState<string | null>(null);
+
+  const completedCount = checklist.filter(s => s.status === "complete").length;
+  const inProgressCount = checklist.filter(s => s.status === "in-progress").length;
+  const overallStatus: PresenceStatus = completedCount === checklist.length ? "connected"
+    : completedCount >= 3 || inProgressCount >= 2 ? "setup_in_progress"
+    : "not_connected";
+
+  const cycleStep = (idx: number) => {
+    const order: FBStepStatus[] = ["pending", "in-progress", "complete"];
+    setChecklist(prev => prev.map((s, i) => {
+      if (i !== idx) return s;
+      const next = order[(order.indexOf(s.status) + 1) % order.length];
+      return { ...s, status: next };
+    }));
+  };
+
+  const saveToDb = async () => {
+    setSaving(true);
+    setSaveMsg(null);
+    const score = Math.round((completedCount / checklist.length) * 15);
+    const status = overallStatus === "connected" ? "connected"
+      : completedCount >= 3 ? "setup_in_progress" : "not_started";
+    try {
+      await authFetch<any>("/api/local-presence/channel", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: "default",
+          channelName: "facebook",
+          status,
+          score,
+          listingUrl: pageUrl || null,
+          verificationStatus: completedCount > 0 ? "in_progress" : "not_started",
+          recommendedAction: completedCount < checklist.length
+            ? "Continue Facebook Business Page setup"
+            : "Maintain page content and respond to messages",
+        }),
+      });
+      setSaveMsg("✓ Progress saved");
+    } catch {
+      setSaveMsg("Save failed — try again");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
+  };
+
+  const FB_BLUE = "#1877F2";
+
+  const TABS: { key: typeof activeTab; label: string }[] = [
+    { key: "checklist",   label: "Setup Checklist" },
+    { key: "bizinfo",     label: "Biz Info" },
+    { key: "diagnostics", label: "Diagnostics" },
+  ];
+
+  return (
+    <div style={{
+      background: cardBg(overallStatus),
+      border: `1px solid ${FB_BLUE}25`,
+      borderRadius: 16, overflow: "hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "18px 22px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+            background: `${FB_BLUE}20`, border: `1px solid ${FB_BLUE}40`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 20,
+          }}>𝒇</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF" }}>Facebook Business</div>
+            <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+              Facebook Pages, Marketplace local reach &amp; Messenger leads
+            </div>
+          </div>
+        </div>
+        <StatusBadge status={overallStatus} />
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ padding: "10px 22px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B" }}>Setup Progress — {completedCount}/{checklist.length} steps</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: FB_BLUE }}>{Math.round(completedCount / checklist.length * 100)}%</span>
+        </div>
+        <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${(completedCount / checklist.length) * 100}%`, background: `linear-gradient(90deg, ${FB_BLUE}, #42A5F5)`, borderRadius: 2, transition: "width 0.4s" }} />
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.05)", padding: "0 22px", marginTop: 12 }}>
+        {TABS.map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+            background: "none", border: "none", padding: "8px 14px 10px",
+            fontSize: 12, fontWeight: activeTab === tab.key ? 700 : 500,
+            color: activeTab === tab.key ? FB_BLUE : "#475569",
+            borderBottom: `2px solid ${activeTab === tab.key ? FB_BLUE : "transparent"}`,
+            cursor: "pointer", marginBottom: -1, transition: "color 0.15s",
+          }}>{tab.label}</button>
+        ))}
+      </div>
+
+      <div style={{ padding: "18px 22px 20px" }}>
+
+        {/* ── Checklist tab ── */}
+        {activeTab === "checklist" && (
+          <>
+            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 12, lineHeight: 1.6 }}>
+              Click a step to cycle its status. Save to DB when done.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 16 }}>
+              {checklist.map((step, i) => (
+                <button key={i} onClick={() => cycleStep(i)} style={{
+                  display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10,
+                  background: step.status === "complete" ? "rgba(16,185,129,0.05)" : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${step.status === "complete" ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.05)"}`,
+                  borderRadius: 9, padding: "9px 12px", cursor: "pointer", textAlign: "left", width: "100%",
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: step.status === "complete" ? "#10B981" : "#CBD5E1", marginBottom: 2 }}>
+                      {step.status === "complete" ? "✓ " : ""}{step.label}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.5 }}>{step.description}</div>
+                  </div>
+                  <FBStepBadge status={step.status} />
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={saveToDb} disabled={saving} style={{
+                flex: 1, background: saving ? `${FB_BLUE}55` : FB_BLUE,
+                border: "none", color: "#fff", borderRadius: 8, padding: "9px 0",
+                fontSize: 12, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer",
+              }}>
+                {saving ? "Saving…" : "💾 Save Progress to DB"}
+              </button>
+              {saveMsg && <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>{saveMsg}</span>}
+            </div>
+          </>
+        )}
+
+        {/* ── Biz Info tab ── */}
+        {activeTab === "bizinfo" && (
+          <>
+            <SectionLabel>NAP — Must Match Google Business Profile Exactly</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 18 }}>
+              {[
+                { label: "Business Name",  value: "Bed Bugs & Beyond",          note: "Use this exact name on Facebook — no abbreviations" },
+                { label: "Phone Number",   value: "(251) 324-9090",              note: "Must match GBP exactly for NAP consistency" },
+                { label: "Website",        value: "https://bedbugsandbeyond.net",note: "Add this to the About section" },
+                { label: "City / Region",  value: "Baldwin County, Alabama",     note: "Service area — not a storefront address" },
+                { label: "Category",       value: "Pest Control Service",         note: "Primary category — add Exterminator as secondary" },
+                { label: "Service Cities", value: "Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort", note: "Add all cities in the service area settings" },
+              ].map(row => (
+                <div key={row.label} style={{
+                  display: "grid", gridTemplateColumns: "130px 1fr", gap: 10, alignItems: "start",
+                  padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.4px" }}>{row.label}</span>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "#CBD5E1" }}>{row.value}</div>
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{row.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <SectionLabel>Facebook Page URL</SectionLabel>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <input
+                type="text"
+                placeholder="https://facebook.com/YourPageName"
+                value={pageUrl}
+                onChange={e => setPageUrl(e.target.value)}
+                style={{
+                  flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#E2E8F0", borderRadius: 8, padding: "8px 12px", fontSize: 12,
+                }}
+              />
+              <button onClick={saveToDb} disabled={saving || !pageUrl} style={{
+                background: FB_BLUE, border: "none", color: "#fff", borderRadius: 8,
+                padding: "8px 16px", fontSize: 12, fontWeight: 700,
+                cursor: (!pageUrl || saving) ? "not-allowed" : "pointer", opacity: !pageUrl ? 0.5 : 1,
+              }}>Save</button>
+            </div>
+
+            <div style={{
+              background: `${FB_BLUE}0D`, border: `1px solid ${FB_BLUE}25`,
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: FB_BLUE, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                Why Facebook for Local Presence?
+              </div>
+              <ul style={{ margin: 0, padding: "0 0 0 16px", fontSize: 12, color: "#94A3B8", lineHeight: 1.8 }}>
+                <li>3 billion users — high probability target customers use Facebook</li>
+                <li>Facebook Marketplace local reach for pest control lead gen</li>
+                <li>Messenger allows instant lead capture and qualification</li>
+                <li>Reviews on Facebook influence local buying decisions</li>
+                <li>Facebook posts can be AI-published via the AI Edge publishing pipeline</li>
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* ── Diagnostics tab ── */}
+        {activeTab === "diagnostics" && (
+          <>
+            <SectionLabel>Platform Diagnostics</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 16 }}>
+              {FB_DIAGS.map(d => {
+                const s = FB_DIAG_STYLE[d.status] ?? FB_DIAG_STYLE.pending;
+                return (
+                  <div key={d.check} style={{
+                    display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10,
+                    background: s.bg, border: `1px solid ${s.border}`,
+                    borderRadius: 9, padding: "9px 12px",
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: s.color }}>{d.check}</div>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{d.note}</div>
+                    </div>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: s.dot, flexShrink: 0, marginTop: 5 }} />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{
+              background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.18)",
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                Next Action
+              </div>
+              <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>
+                Create your Facebook Business Page at{" "}
+                <a href="https://facebook.com/pages/create" target="_blank" rel="noopener noreferrer"
+                  style={{ color: FB_BLUE, textDecoration: "none", fontWeight: 600 }}>
+                  facebook.com/pages/create
+                </a>
+                {" "}using the exact NAP from your Google Business Profile. Then connect it in the Connections tab for AI Edge automated publishing.
+              </div>
+            </div>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
+}
 
 function LocalPresenceSummaryCard() {
   const countsByStatus = (SUMMARY_PLATFORMS
@@ -4802,19 +5119,21 @@ function LocalPresenceSummaryCard() {
   );
 }
 
-function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags }: {
+function DiagnosticsPanel({ connectedCount, pendingCount, errors, diags, dbScore }: {
   connectedCount: number;
   pendingCount: number;
   errors: number;
   diags: DiagEntry[];
+  dbScore?: number | null;
 }) {
-  // Score breakdown: GBP=35, Apple progress=up to 15, Bing=up to 10, Nextdoor=up to 10, NAP=up to 15, Photos/content=up to 15
+  // Use DB-computed score when available, fall back to hardcoded estimate
   const gbpPoints      = connectedCount >= 1 ? 35 : 0;
-  const applePoints    = 2;   // 1 step complete + 1 in-progress = partial credit
-  const bingPoints     = 2;   // 1 step complete + 1 in-progress = partial credit
-  const nextdoorPoints = 2;   // 1 step complete + 1 in-progress = partial credit
-  const napPoints      = connectedCount >= 1 ? 5 : 0; // partial NAP from GBP only
-  const scorePct       = gbpPoints + applePoints + bingPoints + nextdoorPoints + napPoints;
+  const applePoints    = 2;
+  const bingPoints     = 2;
+  const nextdoorPoints = 2;
+  const napPoints      = connectedCount >= 1 ? 5 : 0;
+  const fallbackScore  = gbpPoints + applePoints + bingPoints + nextdoorPoints + napPoints;
+  const scorePct       = dbScore != null ? dbScore : fallbackScore;
   const warnCount = diags.filter(d => d.severity === "warning").length;
 
   return (
@@ -5162,6 +5481,16 @@ export default function LocalPresenceEnginePage() {
   const qc = useQueryClient();
   const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+  // DB-backed local presence score + channels
+  const { data: lpData } = useQuery<{
+    score: number;
+    channels: Array<{ channelName: string; status: string; score: number }>;
+  }>({
+    queryKey: ["local_presence_data"],
+    queryFn:  () => authFetch("/api/local-presence?clientId=default"),
+    staleTime: 30_000, retry: 1,
+  });
+
   // Live GBP status
   const { data: gbpStatus, isLoading: gbpLoading } = useQuery<GBPStatus>({
     queryKey: ["google_business_status"],
@@ -5189,9 +5518,15 @@ export default function LocalPresenceEnginePage() {
   const otherStatus: PresenceStatus = "not_connected";
   const otherHealth: HealthStatus   = "unknown";
 
-  // Counts
-  const connectedCount = gbpPresence === "connected" ? 1 : 0;
-  const pendingCount   = 2; // Apple, Nextdoor pending — Bing verified/publishing
+  // DB-backed counts (fallback to derived values if DB unavailable)
+  const dbChannels     = lpData?.channels ?? [];
+  const connectedCount = dbChannels.length > 0
+    ? dbChannels.filter(c => c.status === "connected").length
+    : (gbpPresence === "connected" ? 1 : 0);
+  const pendingCount   = dbChannels.length > 0
+    ? dbChannels.filter(c => ["setup_in_progress", "verified_publishing"].includes(c.status)).length
+    : 2;
+  const dbScore        = lpData?.score ?? null;
 
   // Diagnostics issues list
   const diags: DiagEntry[] = [
@@ -5310,6 +5645,8 @@ export default function LocalPresenceEnginePage() {
           <AngiBusinessCard />
           {/* Thumbtack — V2 dedicated card */}
           <ThumbtackBusinessCard />
+          {/* Facebook — V2 dedicated card with DB persistence */}
+          <FacebookLocalPresenceCard />
           {/* AI Search Coming Soon */}
           <AISearchCard />
         </div>
@@ -5330,6 +5667,7 @@ export default function LocalPresenceEnginePage() {
             pendingCount={pendingCount}
             errors={0}
             diags={diags}
+            dbScore={dbScore}
           />
         </div>
 

@@ -25,6 +25,7 @@ import clientOnboardingRouter from "./client-onboarding";
 import aiVisibilityRouter from "./ai-visibility";
 import revenueAttributionRouter from "./revenue-attribution";
 import aiReceptionistRouter from "./ai-receptionist";
+import localPresenceRouter from "./local-presence";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(clientOnboardingRouter);
 router.use(aiVisibilityRouter);
 router.use(revenueAttributionRouter);
 router.use(aiReceptionistRouter);
+router.use(localPresenceRouter);
 
 export default router;

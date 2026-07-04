@@ -403,10 +403,15 @@ router.post("/telnyx/voice", async (req, res) => {
       "To request a callback, press 2. " +
       "To leave a voicemail, press 3.";
 
+    const customGreetingUrl = process.env.CUSTOM_BBB_GREETING_URL?.trim();
+    const greetingTexml = customGreetingUrl
+      ? `<Play>${customGreetingUrl}</Play>`
+      : `<Say voice="Polly.Joanna">${greeting}</Say>`;
+
     res.set("Content-Type", "text/xml");
     res.send(texml(`
       <Gather numDigits="1" action="${gatherUrl}" method="POST" timeout="10">
-        <Say voice="Polly.Joanna">${greeting}</Say>
+        ${greetingTexml}
       </Gather>
       <Say voice="Polly.Joanna">We did not receive your selection. Please call back and try again. Goodbye.</Say>
       <Hangup/>

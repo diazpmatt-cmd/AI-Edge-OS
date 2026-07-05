@@ -186,16 +186,183 @@ function DisabledBtn({ label }: { label: string }) {
   );
 }
 
+// ── Edit Modal ────────────────────────────────────────────────────────────────
+function EditModal({ asset, isFav, isSaving, onClose, onSave }: {
+  asset: Asset; isFav: boolean; isSaving: boolean;
+  onClose: () => void;
+  onSave: (updates: { name: string; brand: string; tags: string[]; isFavorite: boolean }) => void;
+}) {
+  const [editName,  setEditName]  = useState(asset.name);
+  const [editBrand, setEditBrand] = useState(asset.brand);
+  const [editTags,  setEditTags]  = useState(asset.tags.join(", "));
+  const [editFav,   setEditFav]   = useState(isFav);
+
+  function handleSubmit() {
+    const tags = editTags.split(",").map(t => t.trim()).filter(Boolean);
+    onSave({ name: editName.trim() || asset.name, brand: editBrand, tags, isFavorite: editFav });
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px", borderRadius: 8, boxSizing: "border-box",
+    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+    color: "#E2E8F0", fontSize: 13, outline: "none",
+  };
+  const fieldLabel: React.CSSProperties = {
+    fontSize: 11, fontWeight: 700, color: "#64748B",
+    textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6,
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "rgba(3,6,18,0.9)", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 480, borderRadius: 18, padding: "28px 28px 24px",
+        background: "linear-gradient(135deg, #0B1629 0%, #060E1E 100%)",
+        border: `1.5px solid ${asset.color}44`, boxShadow: `0 0 40px ${asset.color}22`,
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0, fontSize: 22,
+            background: `${asset.color}14`, border: `1.5px solid ${asset.color}33`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>{asset.icon}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#E2E8F0" }}>Edit Asset</div>
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>Metadata only — file unchanged</div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 30, height: 30, borderRadius: "50%", cursor: "pointer", fontSize: 16,
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            color: "#64748B", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Name */}
+          <div>
+            <label style={fieldLabel}>Asset Name</label>
+            <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} />
+          </div>
+
+          {/* Brand */}
+          <div>
+            <label style={fieldLabel}>Brand</label>
+            <select value={editBrand} onChange={e => setEditBrand(e.target.value)} style={inputStyle}>
+              <option value="BB&B">🐛 Bed Bugs &amp; Beyond</option>
+              <option value="AIE">⚡ AI Edge Solutions</option>
+            </select>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label style={fieldLabel}>
+              Tags <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(comma-separated)</span>
+            </label>
+            <input
+              value={editTags} onChange={e => setEditTags(e.target.value)}
+              placeholder="summer, ad, pest, local…" style={inputStyle}
+            />
+          </div>
+
+          {/* Favorite */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setEditFav(v => !v)} style={{
+              width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 16,
+              background: editFav ? "rgba(252,211,77,0.14)" : "rgba(255,255,255,0.04)",
+              border: editFav ? "1px solid rgba(252,211,77,0.4)" : "1px solid rgba(255,255,255,0.1)",
+              color: editFav ? "#FCD34D" : "#475569",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>⭐</button>
+            <span style={{ fontSize: 12, color: "#64748B" }}>{editFav ? "Marked as favorite" : "Not favorited"}</span>
+          </div>
+
+          {/* Read-only */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[{ label: "Asset Type", value: asset.type }, { label: "Source Module", value: "Asset Library" }].map(row => (
+              <div key={row.label} style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ fontSize: 10, color: "#334155", marginBottom: 3, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>{row.label} · read-only</div>
+                <div style={{ color: "#475569", fontWeight: 600, fontSize: 12 }}>{row.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button onClick={handleSubmit} disabled={isSaving} style={{
+            flex: 1, padding: "10px 0", borderRadius: 9, fontSize: 13, fontWeight: 700,
+            cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? 0.6 : 1,
+            background: "rgba(0,174,239,0.14)", border: "1.5px solid rgba(0,174,239,0.4)", color: "#00AEEF",
+          }}>{isSaving ? "Saving…" : "Save Changes"}</button>
+          <button onClick={onClose} style={{
+            padding: "10px 20px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600,
+            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748B",
+          }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Delete Confirm Modal ───────────────────────────────────────────────────────
+function DeleteConfirmModal({ asset, isDeleting, onClose, onConfirm }: {
+  asset: Asset; isDeleting: boolean;
+  onClose: () => void; onConfirm: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "rgba(3,6,18,0.9)", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 400, borderRadius: 16, padding: "28px",
+        background: "linear-gradient(135deg, #0B1629 0%, #060E1E 100%)",
+        border: "1.5px solid rgba(239,68,68,0.3)", boxShadow: "0 0 40px rgba(239,68,68,0.1)",
+      }}>
+        <div style={{ fontSize: 32, textAlign: "center", marginBottom: 14 }}>🗑</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#E2E8F0", textAlign: "center", marginBottom: 8 }}>
+          Delete this asset record?
+        </div>
+        <div style={{ fontSize: 12, color: "#64748B", textAlign: "center", marginBottom: 6 }}>
+          {asset.icon} <strong style={{ color: "#94A3B8" }}>{asset.name}</strong>
+        </div>
+        <div style={{ fontSize: 11, color: "#475569", textAlign: "center", marginBottom: 22 }}>
+          This removes the DB record only. No file is deleted (no storage connected yet).
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600,
+            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748B",
+          }}>Cancel</button>
+          <button onClick={onConfirm} disabled={isDeleting} style={{
+            flex: 1, padding: "10px 0", borderRadius: 9, fontSize: 13, fontWeight: 700,
+            cursor: isDeleting ? "wait" : "pointer", opacity: isDeleting ? 0.6 : 1,
+            background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.35)", color: "#F87171",
+          }}>{isDeleting ? "Deleting…" : "Delete"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Section: Asset Browser ────────────────────────────────────────────────────
 function AssetBrowser({
   assets, search, setSearch, sort, setSort,
   filter, setFilter, viewMode, setViewMode, favorites, toggleFav,
+  onEdit, onDelete, dbAssetIds,
 }: {
   assets: Asset[]; search: string; setSearch: (v: string) => void;
   sort: SortKey; setSort: (v: SortKey) => void;
   filter: FilterKey; setFilter: (v: FilterKey) => void;
   viewMode: "grid" | "list"; setViewMode: (v: "grid" | "list") => void;
   favorites: Set<string>; toggleFav: (id: string) => void;
+  onEdit: (a: Asset) => void; onDelete: (a: Asset) => void;
+  dbAssetIds: Set<string>;
 }) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [copied, setCopied]       = useState<string | null>(null);
@@ -325,14 +492,20 @@ function AssetBrowser({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
           {filtered.map(a => (
             <AssetCard key={a.id} asset={a} isFav={favorites.has(a.id)} onToggleFav={() => toggleFav(a.id)}
-              onPreview={() => setPreviewId(a.id)} mode="grid" />
+              onPreview={() => setPreviewId(a.id)} mode="grid"
+              onEdit={dbAssetIds.has(a.id) ? () => onEdit(a) : undefined}
+              onDelete={dbAssetIds.has(a.id) ? () => onDelete(a) : undefined}
+            />
           ))}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.map(a => (
             <AssetCard key={a.id} asset={a} isFav={favorites.has(a.id)} onToggleFav={() => toggleFav(a.id)}
-              onPreview={() => setPreviewId(a.id)} mode="list" />
+              onPreview={() => setPreviewId(a.id)} mode="list"
+              onEdit={dbAssetIds.has(a.id) ? () => onEdit(a) : undefined}
+              onDelete={dbAssetIds.has(a.id) ? () => onDelete(a) : undefined}
+            />
           ))}
         </div>
       )}
@@ -408,8 +581,9 @@ function AssetBrowser({
   );
 }
 
-function AssetCard({ asset: a, isFav, onToggleFav, onPreview, mode }: {
-  asset: Asset; isFav: boolean; onToggleFav: () => void; onPreview: () => void; mode: "grid" | "list";
+function AssetCard({ asset: a, isFav, onToggleFav, onPreview, onEdit, onDelete, mode }: {
+  asset: Asset; isFav: boolean; onToggleFav: () => void; onPreview: () => void;
+  onEdit?: () => void; onDelete?: () => void; mode: "grid" | "list";
 }) {
   if (mode === "list") {
     return (
@@ -436,10 +610,17 @@ function AssetCard({ asset: a, isFav, onToggleFav, onPreview, mode }: {
             padding: "5px 11px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700,
             background: `${a.color}10`, border: `1px solid ${a.color}30`, color: a.color,
           }}>Preview</button>
-          <button disabled style={{
-            padding: "5px 11px", borderRadius: 7, cursor: "not-allowed", fontSize: 11, fontWeight: 700,
-            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
-          }}>Edit</button>
+          {onEdit ? (
+            <button onClick={onEdit} style={{
+              padding: "5px 11px", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700,
+              background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)", color: "#00AEEF",
+            }}>Edit</button>
+          ) : (
+            <button disabled style={{
+              padding: "5px 11px", borderRadius: 7, cursor: "not-allowed", fontSize: 11, fontWeight: 700,
+              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
+            }}>Edit</button>
+          )}
           <button onClick={onToggleFav} style={{
             width: 30, height: 30, borderRadius: 7, cursor: "pointer",
             background: isFav ? "rgba(252,211,77,0.12)" : "rgba(255,255,255,0.02)",
@@ -495,14 +676,28 @@ function AssetCard({ asset: a, isFav, onToggleFav, onPreview, mode }: {
             flex: 1, padding: "6px 0", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700,
             background: `${a.color}10`, border: `1px solid ${a.color}30`, color: a.color,
           }}>Preview</button>
-          <button disabled style={{
-            flex: 1, padding: "6px 0", borderRadius: 7, cursor: "not-allowed", fontSize: 11, fontWeight: 600,
-            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
-          }}>Edit</button>
-          <button disabled style={{
-            width: 28, borderRadius: 7, cursor: "not-allowed", fontSize: 13,
-            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
-          }}>🗑</button>
+          {onEdit ? (
+            <button onClick={onEdit} style={{
+              flex: 1, padding: "6px 0", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700,
+              background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)", color: "#00AEEF",
+            }}>Edit</button>
+          ) : (
+            <button disabled style={{
+              flex: 1, padding: "6px 0", borderRadius: 7, cursor: "not-allowed", fontSize: 11, fontWeight: 600,
+              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
+            }}>Edit</button>
+          )}
+          {onDelete ? (
+            <button onClick={onDelete} style={{
+              width: 28, borderRadius: 7, cursor: "pointer", fontSize: 13,
+              background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#F87171",
+            }}>🗑</button>
+          ) : (
+            <button disabled style={{
+              width: 28, borderRadius: 7, cursor: "not-allowed", fontSize: 13,
+              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "#334155",
+            }}>🗑</button>
+          )}
         </div>
       </div>
     </div>
@@ -843,6 +1038,10 @@ export default function AssetLibraryPage() {
   const [mockCounter, setMockCounter] = useState(1);
   const [isCreating,  setIsCreating]  = useState(false);
   const [toast,       setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
+  const [editAsset,   setEditAsset]   = useState<Asset | null>(null);
+  const [deleteAsset, setDeleteAsset] = useState<Asset | null>(null);
+  const [isSaving,    setIsSaving]    = useState(false);
+  const [isDeleting,  setIsDeleting]  = useState(false);
 
   const authFetch = useApiFetch();
 
@@ -893,8 +1092,61 @@ export default function AssetLibraryPage() {
     }
   }
 
-  function toggleFav(id: string) {
+  async function toggleFav(id: string) {
+    const isDb = dbAssets.some(a => a.id === id);
+    const nowFav = !favorites.has(id);
     setFavorites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    if (isDb) {
+      try {
+        await authFetch(`/admin/assets/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ isFavorite: nowFav }),
+        });
+      } catch {
+        setFavorites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+      }
+    }
+  }
+
+  async function handleSave(updates: { name: string; brand: string; tags: string[]; isFavorite: boolean }) {
+    if (!editAsset) return;
+    setIsSaving(true);
+    try {
+      await authFetch(`/admin/assets/${editAsset.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+      if (updates.isFavorite !== favorites.has(editAsset.id)) {
+        setFavorites(prev => {
+          const n = new Set(prev);
+          updates.isFavorite ? n.add(editAsset.id) : n.delete(editAsset.id);
+          return n;
+        });
+      }
+      await loadAssets();
+      setEditAsset(null);
+      showToast("✓ Asset updated", true);
+    } catch {
+      showToast("✗ Failed to update asset", false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteAsset) return;
+    setIsDeleting(true);
+    try {
+      await authFetch(`/admin/assets/${deleteAsset.id}`, { method: "DELETE" });
+      setFavorites(prev => { const n = new Set(prev); n.delete(deleteAsset.id); return n; });
+      await loadAssets();
+      setDeleteAsset(null);
+      showToast("✓ Asset deleted", true);
+    } catch {
+      showToast("✗ Failed to delete asset", false);
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   const allAssets      = [...dbAssets, ...MOCK_ASSETS];
@@ -1046,6 +1298,9 @@ export default function AssetLibraryPage() {
           sort={sort} setSort={setSort} filter={filter} setFilter={setFilter}
           viewMode={viewMode} setViewMode={setViewMode}
           favorites={favorites} toggleFav={toggleFav}
+          onEdit={setEditAsset}
+          onDelete={setDeleteAsset}
+          dbAssetIds={new Set(dbAssets.map(a => a.id))}
         />
       )}
       {activeSection === "collections" && <CollectionsSection />}
@@ -1053,6 +1308,27 @@ export default function AssetLibraryPage() {
       {activeSection === "prompts"     && <PromptLibrarySection />}
       {activeSection === "usage"       && <UsagePanel />}
       {activeSection === "activity"    && <RecentActivitySection />}
+
+      {/* Edit Modal */}
+      {editAsset && (
+        <EditModal
+          asset={editAsset}
+          isFav={favorites.has(editAsset.id)}
+          isSaving={isSaving}
+          onClose={() => setEditAsset(null)}
+          onSave={handleSave}
+        />
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteAsset && (
+        <DeleteConfirmModal
+          asset={deleteAsset}
+          isDeleting={isDeleting}
+          onClose={() => setDeleteAsset(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
     </AppShell>
   );
 }

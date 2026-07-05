@@ -4,11 +4,23 @@ import { useTheme } from "@/contexts/theme-context";
 
 type Studio = "image" | "video" | "audio" | "ad";
 
-const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accent: string; bg: string }[] = [
-  { id: "image", icon: "🖼️", label: "Image Studio",  tagline: "Branded graphics & ad creatives", accent: "#00AEEF", bg: "#071828" },
-  { id: "video", icon: "🎬", label: "Video Studio",  tagline: "Short-form video & social ads",    accent: "#A78BFA", bg: "#120A28" },
-  { id: "audio", icon: "🎙️", label: "Audio Studio",  tagline: "Voiceovers, greetings & ad audio", accent: "#34D399", bg: "#071A12" },
-  { id: "ad",    icon: "🚀", label: "Ad Creator",    tagline: "Full campaign from media assets",  accent: "#FB923C", bg: "#1E0C04" },
+const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accent: string; bg: string; features: string[] }[] = [
+  {
+    id: "image", icon: "🖼️", label: "Image Studio",  tagline: "Branded graphics & ad creatives", accent: "#00AEEF", bg: "#071828",
+    features: ["Social graphics (1080×1080)", "Ad creatives (1200×628)", "Brand kit integration", "PNG / JPG / SVG export"],
+  },
+  {
+    id: "video", icon: "🎬", label: "Video Studio",  tagline: "Short-form video & social ads",    accent: "#A78BFA", bg: "#120A28",
+    features: ["Reels, stories & social ads", "Scene-by-scene builder", "Music & transitions", "MP4 HD / 4K export"],
+  },
+  {
+    id: "audio", icon: "🎙️", label: "Audio Studio",  tagline: "Voiceovers, greetings & ad audio", accent: "#34D399", bg: "#071A12",
+    features: ["AI receptionist greetings", "6 Polly voice options", "Script editor w/ timing", "MP3 / WAV export"],
+  },
+  {
+    id: "ad",    icon: "🚀", label: "Ad Creator",    tagline: "Full campaign from media assets",  accent: "#FB923C", bg: "#1E0C04",
+    features: ["5-step campaign wizard", "Multi-platform targeting", "Live ad preview", "Campaign package export"],
+  },
 ];
 
 // ── Image Studio ──────────────────────────────────────────────────────────────
@@ -46,7 +58,7 @@ function ImageStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
             color: "#E2E8F0", fontSize: 14, outline: "none",
           }}
         />
-        <button style={genBtn("#00AEEF")}>✨ Generate</button>
+        <GenButton accent="#00AEEF" label="✨ Generate Image" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -94,10 +106,10 @@ function ImageStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
 
           {/* Export */}
           <Panel label="Export" accent="#00AEEF">
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={exportBtn}>⬇ PNG</button>
-              <button style={exportBtn}>⬇ JPG</button>
-              <button style={exportBtn}>⬇ SVG</button>
+            <div style={{ display: "flex", gap: 12 }}>
+              <ExportButton label="PNG" accent="#00AEEF" />
+              <ExportButton label="JPG" accent="#00AEEF" />
+              <ExportButton label="SVG" accent="#00AEEF" />
             </div>
           </Panel>
         </div>
@@ -164,7 +176,7 @@ function VideoStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
             color: "#E2E8F0", fontSize: 14, outline: "none",
           }}
         />
-        <button style={genBtn("#A78BFA")}>✨ Generate</button>
+        <GenButton accent="#A78BFA" label="✨ Generate Video" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -244,10 +256,10 @@ function VideoStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
           </Panel>
 
           <Panel label="Export" accent="#A78BFA">
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={{ ...exportBtn, borderColor: "rgba(167,139,250,0.25)", color: "#A78BFA" }}>⬇ MP4 HD</button>
-              <button style={{ ...exportBtn, borderColor: "rgba(167,139,250,0.25)", color: "#A78BFA" }}>⬇ MP4 4K</button>
-              <button style={{ ...exportBtn, borderColor: "rgba(167,139,250,0.25)", color: "#A78BFA" }}>⬇ GIF</button>
+            <div style={{ display: "flex", gap: 12 }}>
+              <ExportButton label="MP4 HD" accent="#A78BFA" />
+              <ExportButton label="MP4 4K" accent="#A78BFA" />
+              <ExportButton label="GIF" accent="#A78BFA" />
             </div>
           </Panel>
 
@@ -377,7 +389,7 @@ function AudioStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
               <span style={{ fontSize: 11, color: "#475569" }}>
                 {(script || defaultScripts[audioType]).split(" ").length} words · ~{Math.ceil((script || defaultScripts[audioType]).split(" ").length / 2.5)}s
               </span>
-              <button style={genBtn("#34D399")}>🎙️ Generate Audio</button>
+              <GenButton accent="#34D399" label="🎙️ Generate Audio" />
             </div>
           </Panel>
 
@@ -398,10 +410,10 @@ function AudioStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
                 ))}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button style={{
-                  width: 36, height: 36, borderRadius: "50%", cursor: "pointer",
-                  background: "rgba(52,211,153,0.15)", border: "1.5px solid #34D399",
-                  color: "#34D399", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
+                <button disabled title="Playback coming soon" style={{
+                  width: 36, height: 36, borderRadius: "50%", cursor: "not-allowed",
+                  background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)",
+                  color: "#374151", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
                 }}>▶</button>
                 <div style={{ flex: 1, height: 3, background: "rgba(52,211,153,0.12)", borderRadius: 2 }}>
                   <div style={{ width: "0%", height: "100%", background: "#34D399", borderRadius: 2 }} />
@@ -412,10 +424,10 @@ function AudioStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
           </Panel>
 
           <Panel label="Export" accent="#34D399">
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={{ ...exportBtn, borderColor: "rgba(52,211,153,0.25)", color: "#34D399" }}>⬇ MP3</button>
-              <button style={{ ...exportBtn, borderColor: "rgba(52,211,153,0.25)", color: "#34D399" }}>⬇ WAV</button>
-              <button style={{ ...exportBtn, borderColor: "rgba(52,211,153,0.25)", color: "#34D399" }}>⬇ OGG</button>
+            <div style={{ display: "flex", gap: 12 }}>
+              <ExportButton label="MP3" accent="#34D399" />
+              <ExportButton label="WAV" accent="#34D399" />
+              <ExportButton label="OGG" accent="#34D399" />
             </div>
           </Panel>
         </div>
@@ -577,7 +589,7 @@ function AdCreator({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
                   }} />
                 </div>
               ))}
-              <button style={{ ...genBtn("#FB923C"), fontSize: 12 }}>✨ AI Generate Copy</button>
+              <GenButton accent="#FB923C" label="✨ AI Generate Copy" />
             </Panel>
 
             <Panel label="Ad Preview" accent="#FB923C">
@@ -687,10 +699,16 @@ function AdCreator({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button style={{ ...genBtn("#FB923C"), flex: 1 }}>🚀 Export Campaign Package</button>
-              <button style={{ ...exportBtn, flex: 1 }}>📋 Export Media Kit</button>
-              <button style={{ ...exportBtn, flex: 1 }}>💾 Save Draft</button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 140, position: "relative" }}>
+                <button disabled title="Export coming soon" style={{ ...exportBtn, width: "100%", opacity: 0.5 }}>🚀 Export Campaign</button>
+                <span style={{ position: "absolute", top: -7, right: -4, padding: "1px 5px", borderRadius: 4, fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase" as const, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24" }}>Soon</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 140, position: "relative" }}>
+                <button disabled title="Export coming soon" style={{ ...exportBtn, width: "100%", opacity: 0.5 }}>📋 Export Media Kit</button>
+                <span style={{ position: "absolute", top: -7, right: -4, padding: "1px 5px", borderRadius: 4, fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase" as const, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24" }}>Soon</span>
+              </div>
+              <button style={{ flex: 1, minWidth: 140, padding: "9px 14px", borderRadius: 8, cursor: "pointer", background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.25)", color: "#FB923C", fontSize: 12, fontWeight: 600 }}>💾 Save Draft</button>
             </div>
           </Panel>
           <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -717,12 +735,64 @@ function Panel({ label, accent, children }: { label: string; accent: string; chi
   );
 }
 
+function ComingSoonBadge() {
+  return (
+    <span style={{
+      display: "inline-block", padding: "2px 7px", borderRadius: 5,
+      fontSize: 9, fontWeight: 800, letterSpacing: "0.6px", textTransform: "uppercase",
+      background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)",
+      color: "#FBBF24", marginLeft: 7, verticalAlign: "middle",
+    }}>
+      Coming Soon
+    </span>
+  );
+}
+
+function GenButton({ accent, label }: { accent: string; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+      <button disabled title="Generation coming soon" style={{
+        padding: "11px 20px", borderRadius: 9, whiteSpace: "nowrap",
+        background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)",
+        color: "#475569", fontSize: 13, fontWeight: 700, cursor: "not-allowed", opacity: 0.7,
+      }}>
+        {label}
+      </button>
+      <ComingSoonBadge />
+    </div>
+  );
+}
+
+function ExportButton({ label, accent }: { label: string; accent: string }) {
+  return (
+    <div style={{ position: "relative", flex: 1 }}>
+      <button disabled title="Export coming soon" style={{
+        width: "100%", padding: "9px 14px", borderRadius: 8,
+        background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+        color: "#374151", fontSize: 12, fontWeight: 600, cursor: "not-allowed",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+      }}>
+        <span style={{ opacity: 0.4 }}>⬇</span>
+        <span style={{ opacity: 0.5 }}>{label}</span>
+      </button>
+      <span style={{
+        position: "absolute", top: -7, right: -4,
+        padding: "1px 5px", borderRadius: 4,
+        fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase",
+        background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)",
+        color: "#FBBF24", whiteSpace: "nowrap",
+      }}>
+        Soon
+      </span>
+    </div>
+  );
+}
+
 function genBtn(accent: string): React.CSSProperties {
   return {
-    padding: "11px 20px", borderRadius: 9, cursor: "pointer", whiteSpace: "nowrap",
-    background: `linear-gradient(135deg, ${accent}22 0%, ${accent}11 100%)`,
-    border: `1.5px solid ${accent}66`, color: accent,
-    fontSize: 13, fontWeight: 700,
+    padding: "11px 20px", borderRadius: 9, whiteSpace: "nowrap",
+    background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)",
+    color: "#475569", fontSize: 13, fontWeight: 700, cursor: "not-allowed", opacity: 0.7,
   };
 }
 
@@ -745,9 +815,9 @@ function tagBtn(active: boolean, accent: string): React.CSSProperties {
 }
 
 const exportBtn: React.CSSProperties = {
-  flex: 1, padding: "9px 14px", borderRadius: 8, cursor: "pointer",
-  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-  color: "#64748B", fontSize: 12, fontWeight: 600,
+  flex: 1, padding: "9px 14px", borderRadius: 8, cursor: "not-allowed",
+  background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+  color: "#374151", fontSize: 12, fontWeight: 600, opacity: 0.6,
 };
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -759,6 +829,27 @@ export default function MediaEnginePage() {
 
   return (
     <AppShell>
+      {/* Frontend Preview Only notice */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 20,
+        padding: "11px 16px", borderRadius: 10,
+        background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.25)",
+      }}>
+        <span style={{ fontSize: 16, flexShrink: 0 }}>🔧</span>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#FBBF24" }}>Frontend Preview Only</span>
+          <span style={{ fontSize: 12, color: "#92400E", marginLeft: 8 }}>
+            UI configuration is fully functional. AI generation and file export require backend integration — coming in the next release.
+          </span>
+        </div>
+        <span style={{
+          padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 800, letterSpacing: "0.5px", whiteSpace: "nowrap",
+          background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+        }}>
+          v0.1 BETA
+        </span>
+      </div>
+
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
@@ -803,22 +894,29 @@ export default function MediaEnginePage() {
               boxShadow: active ? `0 0 20px ${s.accent}22` : "none",
               transition: "all 0.15s",
             }}>
-              <div style={{ fontSize: 28, marginBottom: 10 }}>{s.icon}</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: active ? "#FFFFFF" : "#CBD5E1", marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 28 }}>{s.icon}</span>
+                {active && (
+                  <span style={{
+                    padding: "3px 8px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+                    background: `${s.accent}22`, border: `1px solid ${s.accent}55`, color: s.accent,
+                  }}>ACTIVE</span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: active ? "#FFFFFF" : "#CBD5E1", marginBottom: 4 }}>
                 {s.label}
               </div>
-              <div style={{ fontSize: 11.5, color: active ? s.accent : "#475569", lineHeight: 1.4 }}>
+              <div style={{ fontSize: 11, color: active ? s.accent : "#475569", lineHeight: 1.4, marginBottom: 10 }}>
                 {s.tagline}
               </div>
-              {active && (
-                <div style={{
-                  marginTop: 10, display: "inline-block",
-                  padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 700,
-                  background: `${s.accent}22`, border: `1px solid ${s.accent}44`, color: s.accent,
-                }}>
-                  ACTIVE
-                </div>
-              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {s.features.map(f => (
+                  <div key={f} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 9, color: active ? s.accent : "#374151" }}>▸</span>
+                    <span style={{ fontSize: 10.5, color: active ? "rgba(255,255,255,0.7)" : "#475569" }}>{f}</span>
+                  </div>
+                ))}
+              </div>
             </button>
           );
         })}

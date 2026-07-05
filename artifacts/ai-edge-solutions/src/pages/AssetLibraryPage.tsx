@@ -862,11 +862,15 @@ export default function AssetLibraryPage() {
               Centralized media repository — images, video, audio, campaigns & brand assets
             </div>
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{
               padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
               background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.25)", color: "#00AEEF",
             }}>FRONTEND PREVIEW</span>
+            <span style={{
+              padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+              background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.28)", color: "#22C55E",
+            }}>✓ BACKEND READY: STUB MODE</span>
           </div>
         </div>
       </div>
@@ -892,6 +896,7 @@ export default function AssetLibraryPage() {
       <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
         <DisabledBtn label="⬆ Upload Asset" />
         <DisabledBtn label="📥 Import Media" />
+        <DisabledBtn label="🔄 Sync with Backend" />
         <button onClick={() => setShowNewCollection(v => !v)} style={{
           display: "flex", alignItems: "center", gap: 6,
           padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700,

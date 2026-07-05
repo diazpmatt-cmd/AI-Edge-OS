@@ -1,0 +1,86 @@
+Build Asset Library Backend Prep.
+
+Goal:
+Prepare the backend foundation for real asset storage later, without enabling uploads yet.
+
+Do not connect S3, Cloudinary, Replit Object Storage, or any external storage yet.
+Do not add API keys.
+Do not enable Upload or Import buttons yet.
+Do not refactor unrelated files.
+Do not change public marketing pages.
+
+Add backend-ready architecture for Asset Library:
+
+1. Database Schema Prep
+Create asset-related models/tables for:
+- assets
+- asset_collections
+- asset_collection_items
+- asset_tags
+- asset_usage_events
+
+Fields should support:
+- id
+- user/client ownership
+- brand
+- asset type
+- asset name
+- file URL placeholder
+- thumbnail URL placeholder
+- mime type
+- file size
+- tags
+- favorite status
+- created date
+- updated date
+- source module
+- metadata JSON
+
+2. API Route Stubs
+Add protected admin API stubs only:
+- GET /api/admin/assets
+- POST /api/admin/assets
+- PATCH /api/admin/assets/:id
+- DELETE /api/admin/assets/:id
+- GET /api/admin/asset-collections
+- POST /api/admin/asset-collections
+- POST /api/admin/asset-usage
+
+Important:
+- These routes should return safe mock/stub responses for now.
+- No file upload handling yet.
+- No external API calls.
+- No storage provider calls.
+- No real generated media yet.
+
+3. Frontend Integration Prep
+Inside /admin/asset-library:
+- Keep current mock data visible.
+- Add small "Backend Ready: Stub Mode" badge.
+- Add disabled "Sync with Backend" button with Coming Soon badge.
+- Do not replace local mock data yet.
+- Do not call the backend yet.
+
+4. Safety
+- Upload Asset remains disabled
+- Import Media remains disabled
+- No frontend fetch/useApiFetch/axios calls yet
+- No public pages changed
+
+Verify:
+- Database/schema changes compile or migrate safely
+- API route stubs exist
+- API route stubs are protected/admin scoped if current auth middleware exists
+- /admin/asset-library still loads
+- Existing Asset Library UI still works
+- Upload/Import remain disabled
+- Frontend still has zero backend calls
+- No public marketing pages changed
+- Production build passes
+
+Return:
+verification results
+files changed
+database/schema changes
+API routes added
+production build status

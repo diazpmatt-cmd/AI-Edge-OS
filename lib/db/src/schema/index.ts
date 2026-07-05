@@ -17,3 +17,4 @@ export * from "./audit-exports";
 export * from "./revenue-attribution";
 export * from "./ai-receptionist-settings";
 export * from "./local-presence";
+export * from "./asset-library";

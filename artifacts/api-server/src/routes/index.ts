@@ -26,6 +26,7 @@ import aiVisibilityRouter from "./ai-visibility";
 import revenueAttributionRouter from "./revenue-attribution";
 import aiReceptionistRouter from "./ai-receptionist";
 import localPresenceRouter from "./local-presence";
+import adminAssetsRouter from "./admin-assets";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(aiVisibilityRouter);
 router.use(revenueAttributionRouter);
 router.use(aiReceptionistRouter);
 router.use(localPresenceRouter);
+router.use(adminAssetsRouter);
 
 export default router;

@@ -395,36 +395,202 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
 }
 
 // ── Video Studio ──────────────────────────────────────────────────────────────
+interface VideoScene {
+  id: string;
+  title: string;
+  visual: string;
+  onscreen: string;
+  voiceover: string;
+}
+
+const DEFAULT_VIDEO_SCENES: VideoScene[] = [
+  {
+    id: "hook",
+    title: "Hook",
+    visual: "Pest infestation close-up — quick cuts, high energy",
+    onscreen: "Are pests taking over your home?",
+    voiceover: "Bed bugs, roaches, termites — they don't sleep, and neither should your protection.",
+  },
+  {
+    id: "problem",
+    title: "Problem",
+    visual: "Worried homeowner inspecting walls and furniture",
+    onscreen: "Don't let pests ruin your peace of mind.",
+    voiceover: "Every day you wait, the problem gets worse. Baldwin County homeowners trust one name.",
+  },
+  {
+    id: "solution",
+    title: "Solution",
+    visual: "BB&B technician treating home, logo visible, professional uniform",
+    onscreen: "Bed Bugs & Beyond — Guaranteed Results.",
+    voiceover: "Bed Bugs and Beyond delivers fast, effective, guaranteed pest control. Licensed, local, and here for you.",
+  },
+  {
+    id: "cta",
+    title: "Call to Action",
+    visual: "Happy family in clean, pest-free home — bright, warm lighting",
+    onscreen: "Call Today — Free Inspection!",
+    voiceover: "Call Bed Bugs and Beyond today for your free inspection. Your pest-free life starts now.",
+  },
+];
+
 function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
-  const [videoType, setVideoType] = useState(seed?.videoType ?? "reel");
-  const [duration, setDuration] = useState(seed?.duration ?? 15);
+  const [videoType, setVideoType]   = useState(seed?.videoType ?? "reel");
+  const [duration, setDuration]     = useState(seed?.duration ?? 15);
+  const [transition, setTransition] = useState("Fade");
+  const [musicTrack, setMusicTrack] = useState("No Music");
+
+  // Video Brief fields
+  const [vGoal,     setVGoal]     = useState("");
+  const [vAudience, setVAudience] = useState("");
+  const [vOffer,    setVOffer]    = useState("");
+  const [vService,  setVService]  = useState("");
+  const [vLocation, setVLocation] = useState("");
+  const [vCta,      setVCta]      = useState("");
+
+  // Scene state
+  const [scenes, setScenes]             = useState<VideoScene[]>(DEFAULT_VIDEO_SCENES);
+  const [expandedScene, setExpandedScene] = useState<string>("hook");
+  const [copied, setCopied]             = useState(false);
 
   const videoTypes = [
-    { id: "reel",       label: "Reel / Short",    icon: "📱", size: "9:16" },
-    { id: "social-ad",  label: "Social Ad",        icon: "📢", size: "1:1" },
-    { id: "commercial", label: "Commercial Clip",  icon: "🎥", size: "16:9" },
-    { id: "story",      label: "Story",            icon: "⚡", size: "9:16" },
+    { id: "reel",       label: "Reel / Short",   icon: "📱", size: "9:16",  aspect: "9/16"  },
+    { id: "social-ad",  label: "Social Ad",       icon: "📢", size: "1:1",   aspect: "1/1"   },
+    { id: "commercial", label: "Commercial Clip", icon: "🎥", size: "16:9",  aspect: "16/9"  },
+    { id: "story",      label: "Story",           icon: "⚡", size: "9:16",  aspect: "9/16"  },
   ];
-
   const transitions = ["Fade", "Slide", "Zoom", "Glitch", "Wipe", "Flash"];
-  const music = ["No Music", "Upbeat Corporate", "Cinematic", "Energetic", "Calm & Professional", "Hip Hop Beat"];
+  const musicTracks = ["No Music", "Upbeat Corporate", "Cinematic", "Energetic", "Calm & Professional", "Hip Hop Beat"];
+
+  const currentType = videoTypes.find(v => v.id === videoType)!;
+
+  function updateScene(id: string, field: keyof VideoScene, value: string) {
+    setScenes(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  }
+
+  // Build generated prompt
+  const hasBrief = vGoal || vAudience || vOffer || vService || vLocation || vCta;
+  const briefParts: string[] = [];
+  if (vService)  briefParts.push(vService);
+  if (vGoal)     briefParts.push(`goal: ${vGoal}`);
+  if (vAudience) briefParts.push(`audience: ${vAudience}`);
+  if (vOffer)    briefParts.push(vOffer);
+  if (vLocation) briefParts.push(`in ${vLocation}`);
+  if (vCta)      briefParts.push(`CTA: "${vCta}"`);
+
+  const sceneSummary = scenes
+    .map((s, i) => `Scene ${i + 1} (${s.title}): "${s.onscreen}" — ${s.visual}`)
+    .join(" | ");
+
+  const generatedPrompt = hasBrief
+    ? [
+        briefParts.join(", "),
+        `${currentType.label} format (${currentType.size})`,
+        `${duration}s duration`,
+        `${transition} transitions`,
+        musicTrack !== "No Music" ? `music: ${musicTrack}` : null,
+        `Scenes: ${sceneSummary}`,
+        "cinematic, professional, brand-consistent",
+      ].filter(Boolean).join(" | ")
+    : `Fill in the Video Brief fields to generate your prompt. Scenes: ${sceneSummary}`;
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(generatedPrompt).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const sceneColors = ["#A78BFA", "#818CF8", "#6366F1", "#4F46E5"];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <div style={{ display: "flex", gap: 10 }}>
-        <input
-          placeholder="Describe your video… e.g. 'BB&B pest control team treating home, fast cuts, bold text overlays'"
-          style={{
-            flex: 1, padding: "13px 16px", borderRadius: 10,
-            background: "rgba(167,139,250,0.06)", border: "1.5px solid rgba(167,139,250,0.2)",
-            color: "#E2E8F0", fontSize: 14, outline: "none",
-          }}
-        />
-        <GenButton accent="#A78BFA" label="✨ Generate Video" />
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* ── Generated Video Prompt Preview (full width) ── */}
+      <div style={{
+        padding: "18px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(167,139,250,0.08) 0%, rgba(167,139,250,0.03) 100%)",
+        border: "1.5px solid rgba(167,139,250,0.3)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14 }}>🎬</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#A78BFA", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+            Generated Video Prompt
+          </span>
+          <div style={{ flex: 1 }} />
+          <button onClick={copyPrompt} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "5px 13px", borderRadius: 7, cursor: "pointer",
+            background: copied ? "rgba(34,197,94,0.12)" : "rgba(167,139,250,0.1)",
+            border: copied ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(167,139,250,0.3)",
+            color: copied ? "#22C55E" : "#A78BFA",
+            fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+          }}>
+            {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+          </button>
+          <span style={{
+            padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+          }}>PROMPT READY</span>
+        </div>
+        <div style={{
+          fontSize: 12.5, color: "#CBD5E1", lineHeight: 1.7,
+          maxHeight: 72, overflow: "hidden",
+        }}>
+          {generatedPrompt}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          {[
+            { label: `📐 ${currentType.size} · ${currentType.label}`, c: "#A78BFA" },
+            { label: `⏱ ${duration}s`,                                  c: "#818CF8" },
+            { label: `✂️ ${transition}`,                                  c: "#6366F1" },
+            { label: `🎵 ${musicTrack}`,                                  c: "#475569" },
+          ].map(chip => (
+            <span key={chip.label} style={{
+              padding: "3px 9px", borderRadius: 5, fontSize: 10, fontWeight: 700,
+              background: `${chip.c}12`, border: `1px solid ${chip.c}33`, color: chip.c,
+            }}>{chip.label}</span>
+          ))}
+        </div>
       </div>
 
+      {/* ── Two-column grid ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+        {/* LEFT: Brief + Type + Duration + Transitions + Music */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Video Brief Builder */}
+          <Panel label="Video Brief Builder" accent="#A78BFA">
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {([
+                { key: "goal",     label: "Campaign Goal",          value: vGoal,     set: setVGoal,     ph: "e.g. Drive service calls, grow brand awareness" },
+                { key: "audience", label: "Target Audience",         value: vAudience, set: setVAudience, ph: "e.g. Homeowners in Baldwin County, AL aged 30–60" },
+                { key: "offer",    label: "Offer / Promotion",       value: vOffer,    set: setVOffer,    ph: "e.g. Free inspection + 20% off first treatment" },
+                { key: "service",  label: "Service or Product",      value: vService,  set: setVService,  ph: "e.g. Bed bug extermination, pest control service" },
+                { key: "location", label: "Location / Service Area", value: vLocation, set: setVLocation, ph: "e.g. Baldwin County, Gulf Shores, Foley AL" },
+                { key: "cta",      label: "Call to Action",           value: vCta,      set: setVCta,      ph: "e.g. Call Today, Book Now, Get a Free Quote" },
+              ] as { key: string; label: string; value: string; set: (v: string) => void; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#A78BFA", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>
+                    {f.label}
+                  </div>
+                  <input
+                    value={f.value}
+                    onChange={e => f.set(e.target.value)}
+                    placeholder={f.ph}
+                    style={{
+                      width: "100%", padding: "8px 12px", borderRadius: 8, boxSizing: "border-box",
+                      background: "rgba(167,139,250,0.05)", border: "1.5px solid rgba(167,139,250,0.18)",
+                      color: "#E2E8F0", fontSize: 12.5, outline: "none",
+                    }}
+                  />
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>💡 Prompt updates automatically as you type</div>
+            </div>
+          </Panel>
+
+          {/* Video Type */}
           <Panel label="Video Type" accent="#A78BFA">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {videoTypes.map(v => (
@@ -441,9 +607,11 @@ function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
             </div>
           </Panel>
 
+          {/* Duration */}
           <Panel label="Duration" accent="#A78BFA">
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <input type="range" min={5} max={60} value={duration} onChange={e => setDuration(+e.target.value)}
+              <input type="range" min={5} max={60} value={duration}
+                onChange={e => setDuration(+e.target.value)}
                 style={{ flex: 1, accentColor: "#A78BFA" }} />
               <span style={{ minWidth: 40, fontSize: 14, fontWeight: 700, color: "#A78BFA" }}>{duration}s</span>
             </div>
@@ -454,82 +622,231 @@ function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
             </div>
           </Panel>
 
+          {/* Transitions */}
           <Panel label="Transitions" accent="#A78BFA">
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {transitions.map((tr, i) => (
-                <button key={tr} style={tagBtn(i === 0, "#A78BFA")}>{tr}</button>
+              {transitions.map(tr => (
+                <button key={tr} onClick={() => setTransition(tr)} style={tagBtn(transition === tr, "#A78BFA")}>{tr}</button>
               ))}
             </div>
           </Panel>
 
+          {/* Background Music */}
           <Panel label="Background Music" accent="#A78BFA">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {music.map((m, i) => (
-                <button key={m} style={{
+              {musicTracks.map(m => (
+                <button key={m} onClick={() => setMusicTrack(m)} style={{
                   display: "flex", alignItems: "center", gap: 10,
                   padding: "9px 12px", borderRadius: 8, cursor: "pointer", textAlign: "left",
-                  background: i === 0 ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.02)",
-                  border: i === 0 ? "1px solid rgba(167,139,250,0.4)" : "1px solid rgba(255,255,255,0.05)",
+                  background: musicTrack === m ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.02)",
+                  border: musicTrack === m ? "1px solid rgba(167,139,250,0.4)" : "1px solid rgba(255,255,255,0.05)",
                 }}>
-                  <span style={{ fontSize: 13 }}>{i === 0 ? "🔇" : "🎵"}</span>
-                  <span style={{ fontSize: 12, color: i === 0 ? "#A78BFA" : "#94A3B8" }}>{m}</span>
+                  <span style={{ fontSize: 13 }}>{m === "No Music" ? "🔇" : "🎵"}</span>
+                  <span style={{ fontSize: 12, color: musicTrack === m ? "#A78BFA" : "#94A3B8" }}>{m}</span>
+                  {musicTrack === m && <span style={{ marginLeft: "auto", fontSize: 10, color: "#A78BFA", fontWeight: 700 }}>✓</span>}
                 </button>
               ))}
             </div>
           </Panel>
         </div>
 
+        {/* RIGHT: Scene Builder + Video Preview + Actions + Export */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Panel label="Preview" accent="#A78BFA">
-            <div style={{
-              aspectRatio: "9 / 16", maxHeight: 320, background: "linear-gradient(135deg, #120A28 0%, #1E1040 100%)",
-              borderRadius: 10, border: "1.5px dashed rgba(167,139,250,0.25)",
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
-            }}>
-              <div style={{ fontSize: 40 }}>🎬</div>
-              <div style={{ fontSize: 13, color: "#475569", textAlign: "center" }}>Video preview appears here</div>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6, marginTop: 8,
-                padding: "6px 14px", borderRadius: 20, background: "rgba(167,139,250,0.1)",
-                border: "1px solid rgba(167,139,250,0.25)",
-              }}>
-                <span style={{ fontSize: 14 }}>▶</span>
-                <span style={{ fontSize: 12, color: "#A78BFA" }}>Play Preview</span>
-              </div>
+
+          {/* Scene Builder */}
+          <Panel label="Scene Builder" accent="#A78BFA">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {scenes.map((scene, i) => {
+                const isOpen = expandedScene === scene.id;
+                const color  = sceneColors[i] ?? "#A78BFA";
+                return (
+                  <div key={scene.id} style={{
+                    borderRadius: 10, overflow: "hidden",
+                    border: isOpen ? `1.5px solid ${color}55` : "1px solid rgba(167,139,250,0.12)",
+                    background: isOpen ? `${color}08` : "rgba(255,255,255,0.01)",
+                  }}>
+                    {/* Scene header (click to expand) */}
+                    <button
+                      onClick={() => setExpandedScene(isOpen ? "" : scene.id)}
+                      style={{
+                        width: "100%", padding: "10px 14px", cursor: "pointer", textAlign: "left",
+                        background: "transparent", border: "none",
+                        display: "flex", alignItems: "center", gap: 10,
+                      }}
+                    >
+                      <div style={{
+                        width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                        background: isOpen ? color : "rgba(167,139,250,0.15)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 11, fontWeight: 800, color: isOpen ? "#fff" : "#A78BFA",
+                      }}>
+                        {i + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: isOpen ? "#E2E8F0" : "#94A3B8" }}>
+                          {scene.title}
+                        </div>
+                        {!isOpen && (
+                          <div style={{ fontSize: 10.5, color: "#475569", marginTop: 1, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: 200 }}>
+                            {scene.onscreen || "No on-screen text set"}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 11, color: "#475569" }}>{isOpen ? "▲" : "▼"}</span>
+                    </button>
+
+                    {/* Expanded fields */}
+                    {isOpen && (
+                      <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                        {([
+                          { field: "visual",    label: "Visual Direction", ph: "Describe what the camera sees…" },
+                          { field: "onscreen",  label: "On-Screen Text",   ph: "Bold headline or caption…"      },
+                          { field: "voiceover", label: "Voiceover Line",   ph: "What the narrator says…"        },
+                        ] as { field: keyof VideoScene; label: string; ph: string }[]).map(f => (
+                          <div key={f.field}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: color, textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>
+                              {f.label}
+                            </div>
+                            <textarea
+                              value={scene[f.field]}
+                              onChange={e => updateScene(scene.id, f.field, e.target.value)}
+                              placeholder={f.ph}
+                              rows={2}
+                              style={{
+                                width: "100%", padding: "8px 11px", borderRadius: 8, resize: "vertical",
+                                background: `${color}06`, border: `1px solid ${color}28`,
+                                color: "#E2E8F0", fontSize: 12, outline: "none",
+                                boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.55,
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Panel>
 
+          {/* Mock Video Preview */}
+          <Panel label="Video Output Preview" accent="#A78BFA">
+            <div style={{ position: "relative" }}>
+              {/* Coming Soon badge */}
+              <div style={{
+                position: "absolute", top: 10, right: 10, zIndex: 2,
+                padding: "4px 10px", borderRadius: 6, fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
+                background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#FBBF24",
+              }}>COMING SOON</div>
+
+              {/* Video canvas */}
+              <div style={{
+                aspectRatio: currentType.aspect,
+                maxHeight: videoType === "commercial" ? 200 : 260,
+                background: "linear-gradient(135deg, #120A28 0%, #180E35 50%, #0E0620 100%)",
+                borderRadius: 10, border: "1.5px solid rgba(167,139,250,0.2)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                gap: 10, padding: 16, position: "relative", overflow: "hidden",
+              }}>
+                {/* Decorative grid */}
+                <div style={{
+                  position: "absolute", inset: 0, opacity: 0.04,
+                  backgroundImage: "repeating-linear-gradient(0deg,#A78BFA,#A78BFA 1px,transparent 1px,transparent 36px),repeating-linear-gradient(90deg,#A78BFA,#A78BFA 1px,transparent 1px,transparent 36px)",
+                }} />
+                {/* Glow orb */}
+                <div style={{
+                  position: "absolute", width: 140, height: 140, borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(167,139,250,0.14) 0%, transparent 70%)",
+                }} />
+                <div style={{ position: "relative", fontSize: 38, filter: "drop-shadow(0 0 14px rgba(167,139,250,0.5))" }}>🎬</div>
+                <div style={{ position: "relative", textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8", marginBottom: 4 }}>
+                    AI video output will appear here
+                  </div>
+                  <div style={{ fontSize: 11, color: "#475569" }}>{currentType.size} · {duration}s · {currentType.label}</div>
+                </div>
+
+                {/* Scene markers strip */}
+                <div style={{ position: "relative", width: "80%", display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                  <div style={{ display: "flex", gap: 3, height: 6 }}>
+                    {scenes.map((s, i) => (
+                      <div key={s.id} style={{
+                        flex: 1, height: "100%", borderRadius: 3,
+                        background: sceneColors[i] ?? "#A78BFA", opacity: 0.7,
+                      }} />
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {scenes.map((s, i) => (
+                      <div key={s.id} style={{ flex: 1, textAlign: "center", fontSize: 8, color: "#334155" }}>{s.title}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Timeline bar */}
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: "#475569" }}>0:00</span>
+                  <span style={{ fontSize: 10, color: "#475569" }}>0:{duration.toString().padStart(2, "0")}</span>
+                </div>
+                <div style={{ height: 4, borderRadius: 2, background: "rgba(167,139,250,0.12)", position: "relative" }}>
+                  {/* Scene segment markers */}
+                  {scenes.map((_, i) => (
+                    <div key={i} style={{
+                      position: "absolute", left: `${(i / scenes.length) * 100}%`,
+                      top: -2, width: 2, height: 8, borderRadius: 1,
+                      background: sceneColors[i] ?? "#A78BFA",
+                    }} />
+                  ))}
+                  <div style={{ width: "0%", height: "100%", background: "#A78BFA", borderRadius: 2 }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-around", marginTop: 5 }}>
+                  {scenes.map((s, i) => (
+                    <div key={s.id} style={{ textAlign: "center" }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: sceneColors[i], margin: "0 auto 2px" }} />
+                      <div style={{ fontSize: 9, color: "#334155" }}>{s.title}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={copyPrompt} style={{
+                flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: "10px", borderRadius: 9, cursor: "pointer",
+                background: copied ? "rgba(34,197,94,0.1)" : "rgba(167,139,250,0.08)",
+                border: copied ? "1.5px solid rgba(34,197,94,0.35)" : "1.5px solid rgba(167,139,250,0.28)",
+                color: copied ? "#22C55E" : "#A78BFA",
+                fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+              }}>
+                {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+              </button>
+              <button disabled title="AI video generation coming in next release" style={{
+                flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                padding: "10px", borderRadius: 9, cursor: "not-allowed",
+                background: "rgba(167,139,250,0.04)", border: "1.5px solid rgba(167,139,250,0.15)",
+                color: "#334155", fontSize: 12, fontWeight: 700,
+              }}>
+                <span style={{ fontSize: 13 }}>✨</span>
+                Generate Video
+                <span style={{
+                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
+                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                }}>SOON</span>
+              </button>
+            </div>
+          </Panel>
+
+          {/* Export */}
           <Panel label="Export" accent="#A78BFA">
             <div style={{ display: "flex", gap: 12 }}>
               <ExportButton label="MP4 HD" accent="#A78BFA" />
               <ExportButton label="MP4 4K" accent="#A78BFA" />
-              <ExportButton label="GIF" accent="#A78BFA" />
+              <ExportButton label="GIF"    accent="#A78BFA" />
             </div>
-          </Panel>
-
-          <Panel label="Scene Builder" accent="#A78BFA">
-            {["Intro — Brand reveal", "Scene 1 — Hook statement", "Scene 2 — Service showcase", "Scene 3 — Testimonial", "Outro — CTA"].map((scene, i) => (
-              <div key={scene} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "9px 12px", marginBottom: 6, borderRadius: 8,
-                background: "rgba(167,139,250,0.04)", border: "1px solid rgba(167,139,250,0.1)",
-              }}>
-                <div style={{
-                  width: 22, height: 22, borderRadius: 6, background: "rgba(167,139,250,0.15)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 11, fontWeight: 700, color: "#A78BFA", flexShrink: 0,
-                }}>
-                  {i + 1}
-                </div>
-                <span style={{ fontSize: 12, color: "#94A3B8", flex: 1 }}>{scene}</span>
-                <span style={{ fontSize: 11, color: "#475569", cursor: "pointer" }}>✏️</span>
-              </div>
-            ))}
-            <button style={{
-              width: "100%", padding: "9px", borderRadius: 8, cursor: "pointer", marginTop: 4,
-              background: "rgba(167,139,250,0.06)", border: "1px dashed rgba(167,139,250,0.25)",
-              color: "#A78BFA", fontSize: 12, fontWeight: 600,
-            }}>+ Add Scene</button>
           </Panel>
         </div>
       </div>

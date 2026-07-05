@@ -61,6 +61,7 @@ const MediaEnginePage               = lazy(() => import("./pages/MediaEnginePage
 const AssetLibraryPage              = lazy(() => import("./pages/AssetLibraryPage"));
 const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"));
 const MorningBriefPage              = lazy(() => import("./pages/MorningBriefPage"));
+const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -100,6 +101,11 @@ function AppRouter() {
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/oauth-close" component={() => <Suspense fallback={<PageLoader />}><OAuthClosePage /></Suspense>} />
+
+        {/* ── Public demo (no auth) ── */}
+        <Route path="/demo">
+          <Suspense fallback={<PageLoader />}><DemoPage /></Suspense>
+        </Route>
 
         {/* ── Admin access gate (passcode) + login ── */}
         <Route path="/admin-access" component={() => <Suspense fallback={<PageLoader />}><AdminAccessPage /></Suspense>} />

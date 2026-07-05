@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db/schema";
-import { eq, desc, gte, and, isNotNull } from "drizzle-orm";
+import { eq, desc, gte, and, isNotNull, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 
 const router = Router();
@@ -13,6 +13,12 @@ router.get("/leads", async (req, res) => {
   const rows = await db
     .select()
     .from(leadsTable)
+    .where(sql`
+      ${leadsTable.phone}      NOT LIKE ${"+1555%"}
+      AND ${leadsTable.phone}  NOT LIKE ${"+10000000%"}
+      AND ${leadsTable.message} NOT LIKE ${"[TEST]%"}
+      AND ${leadsTable.clientName} != ${"AI Edge Solutions"}
+    `)
     .orderBy(desc(leadsTable.createdAt));
 
   const now = new Date();

@@ -855,56 +855,254 @@ function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
 }
 
 // ── Audio Studio ──────────────────────────────────────────────────────────────
+interface AudioScriptSections {
+  greeting: string;
+  valueProposition: string;
+  offerMessage: string;
+  callToAction: string;
+  closing: string;
+}
+
+const AUDIO_DEFAULT_SECTIONS: Record<string, AudioScriptSections> = {
+  voiceover: {
+    greeting:          "Welcome to Bed Bugs and Beyond Pest Control.",
+    valueProposition:  "Baldwin County's most trusted pest control experts. We eliminate pests fast, guaranteed.",
+    offerMessage:      "",
+    callToAction:      "Call today for fast, effective pest control.",
+    closing:           "Bed Bugs and Beyond — protecting your home.",
+  },
+  receptionist: {
+    greeting:          "Hi, thank you for calling Bed Bugs and Beyond Pest Control.",
+    valueProposition:  "We're Baldwin County's most trusted pest control experts.",
+    offerMessage:      "To speak directly with us, press 1. To request a callback, press 2. To leave a voicemail, press 3.",
+    callToAction:      "We look forward to speaking with you!",
+    closing:           "Goodbye and have a pest-free day!",
+  },
+  "ad-audio": {
+    greeting:          "Bed bugs keeping you up at night?",
+    valueProposition:  "Bed Bugs and Beyond has you covered.",
+    offerMessage:      "Serving Baldwin County with fast, effective, guaranteed results.",
+    callToAction:      "Call today.",
+    closing:           "",
+  },
+  jingle: {
+    greeting:          "Bed Bugs and Beyond —",
+    valueProposition:  "we've got your back.",
+    offerMessage:      "Pest-free living, that's a fact!",
+    callToAction:      "",
+    closing:           "",
+  },
+};
+
 function AudioStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
   const [audioType, setAudioType] = useState(seed?.audioType ?? "voiceover");
-  const [voice, setVoice] = useState(seed?.voice ?? "Joanna");
-  const [script, setScript] = useState(seed?.script ?? "");
+  const [voice,     setVoice]     = useState(seed?.voice ?? "Joanna");
+
+  // Audio Brief fields
+  const [aPurpose,  setAPurpose]  = useState("");
+  const [aAudience, setAAudience] = useState("");
+  const [aOffer,    setAOffer]    = useState("");
+  const [aService,  setAService]  = useState("");
+  const [aLocation, setALocation] = useState("");
+  const [aCta,      setACta]      = useState("");
+
+  // Voice Controls
+  const [voiceStyle, setVoiceStyle] = useState("Professional");
+  const [emotion,    setEmotion]    = useState("Neutral");
+  const [speed,      setSpeed]      = useState(1.0);
+  const [energy,     setEnergy]     = useState(0.6);
+  const [accent,     setAccent]     = useState("US English");
+  const [bgMusic,    setBgMusic]    = useState(false);
+
+  // Script sections — auto-filled from BB&B defaults
+  const [sections, setSections] = useState<AudioScriptSections>(
+    AUDIO_DEFAULT_SECTIONS[seed?.audioType ?? "voiceover"]
+  );
+
+  const [copied, setCopied] = useState(false);
 
   const audioTypes = [
-    { id: "voiceover",   label: "Voiceover",          icon: "🎤" },
-    { id: "receptionist", label: "AI Receptionist",    icon: "🤖" },
-    { id: "ad-audio",    label: "Ad Audio",            icon: "📻" },
-    { id: "jingle",      label: "Jingle / Music",      icon: "🎵" },
+    { id: "voiceover",    label: "Voiceover",       icon: "🎤" },
+    { id: "receptionist", label: "AI Receptionist",  icon: "🤖" },
+    { id: "ad-audio",     label: "Ad Audio",         icon: "📻" },
+    { id: "jingle",       label: "Jingle / Music",   icon: "🎵" },
   ];
 
   const voices = [
-    { id: "Joanna",   label: "Joanna",   desc: "Professional female",  accent: "US English" },
-    { id: "Matthew",  label: "Matthew",  desc: "Authoritative male",   accent: "US English" },
-    { id: "Salli",    label: "Salli",    desc: "Warm female",          accent: "US English" },
-    { id: "Joey",     label: "Joey",     desc: "Friendly male",        accent: "US English" },
-    { id: "Kendra",   label: "Kendra",   desc: "Clear female",         accent: "US English" },
-    { id: "Kevin",    label: "Kevin",    desc: "Young male",           accent: "US English" },
+    { id: "Joanna",  label: "Joanna",  desc: "Professional female", accent: "US English" },
+    { id: "Matthew", label: "Matthew", desc: "Authoritative male",  accent: "US English" },
+    { id: "Salli",   label: "Salli",   desc: "Warm female",         accent: "US English" },
+    { id: "Joey",    label: "Joey",    desc: "Friendly male",        accent: "US English" },
+    { id: "Kendra",  label: "Kendra",  desc: "Clear female",         accent: "US English" },
+    { id: "Kevin",   label: "Kevin",   desc: "Young male",           accent: "US English" },
   ];
 
-  const defaultScripts: Record<string, string> = {
-    voiceover: "Welcome to Bed Bugs and Beyond Pest Control — Baldwin County's most trusted pest control experts. We eliminate pests fast, guaranteed.",
-    receptionist: "Hi, thank you for calling Bed Bugs and Beyond Pest Control. To speak directly with us, press 1. To request a callback, press 2. To leave a voicemail, press 3.",
-    "ad-audio": "Bed bugs keeping you up at night? Bed Bugs and Beyond has you covered. Serving Baldwin County with fast, effective, guaranteed results. Call today.",
-    jingle: "Bed Bugs and Beyond — we've got your back. Pest-free living, that's a fact!",
-  };
+  const voiceStyles  = ["Professional", "Conversational", "Energetic", "Calm", "Authoritative", "Friendly"];
+  const emotions     = ["Neutral", "Happy", "Urgent", "Empathetic", "Excited", "Serious"];
+  const accents      = ["US English", "Southern US", "British", "Australian", "Canadian"];
+
+  function selectAudioType(id: string) {
+    setAudioType(id);
+    setSections(AUDIO_DEFAULT_SECTIONS[id] ?? AUDIO_DEFAULT_SECTIONS.voiceover);
+  }
+
+  function updateSection(key: keyof AudioScriptSections, val: string) {
+    setSections(prev => ({ ...prev, [key]: val }));
+  }
+
+  // Build full script text from sections
+  const fullScript = [
+    sections.greeting,
+    sections.valueProposition,
+    sections.offerMessage,
+    sections.callToAction,
+    sections.closing,
+  ].filter(Boolean).join(" ");
+
+  const wordCount = fullScript.trim() ? fullScript.trim().split(/\s+/).length : 0;
+  const estSeconds = wordCount ? Math.ceil(wordCount / (speed * 2.5)) : 0;
+
+  // Generated prompt
+  const hasBrief = aPurpose || aAudience || aOffer || aService || aLocation || aCta;
+  const briefParts: string[] = [];
+  if (aService)  briefParts.push(aService);
+  if (aPurpose)  briefParts.push(`purpose: ${aPurpose}`);
+  if (aAudience) briefParts.push(`audience: ${aAudience}`);
+  if (aOffer)    briefParts.push(aOffer);
+  if (aLocation) briefParts.push(`in ${aLocation}`);
+  if (aCta)      briefParts.push(`CTA: "${aCta}"`);
+
+  const selectedVoice = voices.find(v => v.id === voice)!;
+  const voicePart = `${selectedVoice.label} (${selectedVoice.desc}, ${selectedVoice.accent})`;
+
+  const generatedPrompt = [
+    hasBrief ? briefParts.join(", ") : null,
+    `audio type: ${audioTypes.find(a => a.id === audioType)?.label}`,
+    `voice: ${voicePart}`,
+    `style: ${voiceStyle}`,
+    `emotion: ${emotion}`,
+    `speed: ${speed.toFixed(2)}x`,
+    `energy: ${Math.round(energy * 100)}%`,
+    `accent: ${accent}`,
+    bgMusic ? "background music: on" : null,
+    fullScript ? `Script: "${fullScript}"` : null,
+  ].filter(Boolean).join(" | ");
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(generatedPrompt).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Fixed waveform heights (deterministic, no Math.random in render)
+  const WAVE_HEIGHTS = [30,45,62,78,55,88,70,40,58,82,66,48,72,90,60,35,50,75,85,55,42,68,80,52,38,65,78,44,60,85,70,48,56,74,88,62,40,54,70,84,58,46,72,90,64,38,52,76,86,58,44,68,80,50,36,60,74,88,64,42];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* ── Generated Audio Prompt Preview (full width) ── */}
+      <div style={{
+        padding: "18px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(52,211,153,0.08) 0%, rgba(52,211,153,0.03) 100%)",
+        border: "1.5px solid rgba(52,211,153,0.3)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14 }}>🎙️</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+            Generated Audio Prompt
+          </span>
+          <div style={{ flex: 1 }} />
+          <button onClick={copyPrompt} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "5px 13px", borderRadius: 7, cursor: "pointer",
+            background: copied ? "rgba(34,197,94,0.12)" : "rgba(52,211,153,0.1)",
+            border: copied ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(52,211,153,0.3)",
+            color: copied ? "#22C55E" : "#34D399",
+            fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+          }}>
+            {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+          </button>
+          <span style={{
+            padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+          }}>PROMPT READY</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: "#CBD5E1", lineHeight: 1.7, maxHeight: 72, overflow: "hidden" }}>
+          {generatedPrompt}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          {[
+            { label: `🎤 ${audioTypes.find(a => a.id === audioType)?.label}`, c: "#34D399" },
+            { label: `🗣️ ${voice} · ${voiceStyle}`,                           c: "#10B981" },
+            { label: `⚡ ${emotion}`,                                           c: "#6EE7B7" },
+            { label: `⏱ ${speed.toFixed(2)}x · ~${estSeconds}s`,              c: "#475569" },
+          ].map(chip => (
+            <span key={chip.label} style={{
+              padding: "3px 9px", borderRadius: 5, fontSize: 10, fontWeight: 700,
+              background: `${chip.c}12`, border: `1px solid ${chip.c}33`, color: chip.c,
+            }}>{chip.label}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Two-column grid ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+        {/* LEFT: Brief + Audio Type + Voice Selection + Voice Controls */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Audio Brief Builder */}
+          <Panel label="Audio Brief Builder" accent="#34D399">
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {([
+                { key: "purpose",  label: "Audio Purpose",          value: aPurpose,  set: setAPurpose,  ph: "e.g. Phone greeting, radio ad, social voiceover" },
+                { key: "audience", label: "Target Audience",         value: aAudience, set: setAAudience, ph: "e.g. Baldwin County homeowners aged 30–60"        },
+                { key: "offer",    label: "Offer / Promotion",       value: aOffer,    set: setAOffer,    ph: "e.g. Free inspection + 20% off first treatment"    },
+                { key: "service",  label: "Service or Product",      value: aService,  set: setAService,  ph: "e.g. Bed bug extermination, pest control"          },
+                { key: "location", label: "Location / Service Area", value: aLocation, set: setALocation, ph: "e.g. Baldwin County, Gulf Shores, Foley AL"        },
+                { key: "cta",      label: "Call to Action",           value: aCta,      set: setACta,      ph: "e.g. Call Today, Book Now, Get a Free Quote"       },
+              ] as { key: string; label: string; value: string; set: (v: string) => void; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>
+                    {f.label}
+                  </div>
+                  <input
+                    value={f.value}
+                    onChange={e => f.set(e.target.value)}
+                    placeholder={f.ph}
+                    style={{
+                      width: "100%", padding: "8px 12px", borderRadius: 8, boxSizing: "border-box",
+                      background: "rgba(52,211,153,0.05)", border: "1.5px solid rgba(52,211,153,0.18)",
+                      color: "#E2E8F0", fontSize: 12.5, outline: "none",
+                    }}
+                  />
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>💡 Prompt updates automatically as you type</div>
+            </div>
+          </Panel>
+
+          {/* Audio Type */}
           <Panel label="Audio Type" accent="#34D399">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {audioTypes.map(a => (
-                <button key={a.id} onClick={() => {
-                  setAudioType(a.id);
-                  setScript(defaultScripts[a.id] || "");
-                }} style={{
+                <button key={a.id} onClick={() => selectAudioType(a.id)} style={{
                   padding: "12px 10px", borderRadius: 9, cursor: "pointer", textAlign: "left",
                   background: audioType === a.id ? "rgba(52,211,153,0.12)" : "rgba(52,211,153,0.04)",
                   border: audioType === a.id ? "1.5px solid #34D399" : "1.5px solid rgba(52,211,153,0.15)",
                 }}>
                   <div style={{ fontSize: 22, marginBottom: 5 }}>{a.icon}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: audioType === a.id ? "#34D399" : "#CBD5E1" }}>{a.label}</div>
+                  {audioType === a.id && <div style={{ fontSize: 10, color: "#34D399", marginTop: 2 }}>✓ Auto-filled</div>}
                 </button>
               ))}
             </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: "#334155" }}>
+              💡 Switching type auto-fills the Script Builder with BB&B defaults
+            </div>
           </Panel>
 
+          {/* Voice Selection */}
           <Panel label="Voice Selection" accent="#34D399">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {voices.map(v => (
@@ -918,72 +1116,256 @@ function AudioStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
                     width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
                     background: voice === v.id ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.05)",
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
-                  }}>
-                    🎙️
-                  </div>
+                  }}>🎙️</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: voice === v.id ? "#34D399" : "#CBD5E1" }}>{v.label}</div>
                     <div style={{ fontSize: 11, color: "#64748B" }}>{v.desc} · {v.accent}</div>
                   </div>
-                  {voice === v.id && <span style={{ fontSize: 12, color: "#34D399" }}>▶ Play</span>}
+                  {voice === v.id && <span style={{ fontSize: 12, color: "#34D399", fontWeight: 700 }}>✓</span>}
                 </button>
               ))}
             </div>
           </Panel>
+
+          {/* Voice Controls */}
+          <Panel label="Voice Controls" accent="#34D399">
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Voice Style */}
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 7 }}>Voice Style</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {voiceStyles.map(s => (
+                    <button key={s} onClick={() => setVoiceStyle(s)} style={tagBtn(voiceStyle === s, "#34D399")}>{s}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Emotion */}
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 7 }}>Emotion</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {emotions.map(e => (
+                    <button key={e} onClick={() => setEmotion(e)} style={tagBtn(emotion === e, "#34D399")}>{e}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Speed */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px" }}>Speed</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#34D399" }}>{speed.toFixed(2)}x</span>
+                </div>
+                <input type="range" min={75} max={150} step={5}
+                  value={Math.round(speed * 100)}
+                  onChange={e => setSpeed(+e.target.value / 100)}
+                  style={{ width: "100%", accentColor: "#34D399" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                  <span style={{ fontSize: 9, color: "#334155" }}>0.75x Slow</span>
+                  <span style={{ fontSize: 9, color: "#334155" }}>1.00x Normal</span>
+                  <span style={{ fontSize: 9, color: "#334155" }}>1.50x Fast</span>
+                </div>
+              </div>
+
+              {/* Energy */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px" }}>Energy</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#34D399" }}>{Math.round(energy * 100)}%</span>
+                </div>
+                <input type="range" min={0} max={100} step={5}
+                  value={Math.round(energy * 100)}
+                  onChange={e => setEnergy(+e.target.value / 100)}
+                  style={{ width: "100%", accentColor: "#34D399" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                  <span style={{ fontSize: 9, color: "#334155" }}>Low</span>
+                  <span style={{ fontSize: 9, color: "#334155" }}>Medium</span>
+                  <span style={{ fontSize: 9, color: "#334155" }}>High</span>
+                </div>
+              </div>
+
+              {/* Accent */}
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 7 }}>Accent</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {accents.map(a => (
+                    <button key={a} onClick={() => setAccent(a)} style={tagBtn(accent === a, "#34D399")}>{a}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background Music toggle */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px" }}>Background Music</div>
+                  <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>Soft ambient track under voiceover</div>
+                </div>
+                <button onClick={() => setBgMusic(v => !v)} style={{
+                  width: 44, height: 24, borderRadius: 12, cursor: "pointer", position: "relative",
+                  background: bgMusic ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.06)",
+                  border: bgMusic ? "1px solid #34D399" : "1px solid rgba(255,255,255,0.1)",
+                  transition: "all 0.2s",
+                }}>
+                  <div style={{
+                    position: "absolute", top: 3, width: 18, height: 18, borderRadius: "50%",
+                    background: bgMusic ? "#34D399" : "#334155",
+                    left: bgMusic ? 23 : 3,
+                    transition: "all 0.2s",
+                  }} />
+                </button>
+              </div>
+            </div>
+          </Panel>
         </div>
 
+        {/* RIGHT: Script Builder + Mock Preview + Actions + Export */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Panel label="Script Editor" accent="#34D399">
-            <textarea
-              value={script || defaultScripts[audioType]}
-              onChange={e => setScript(e.target.value)}
-              rows={8}
-              style={{
-                width: "100%", padding: "12px 14px", borderRadius: 9, resize: "vertical",
-                background: "rgba(52,211,153,0.04)", border: "1.5px solid rgba(52,211,153,0.18)",
-                color: "#E2E8F0", fontSize: 13, outline: "none", boxSizing: "border-box",
-                fontFamily: "inherit", lineHeight: 1.6,
-              }}
-              placeholder="Type or paste your script here…"
-            />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-              <span style={{ fontSize: 11, color: "#475569" }}>
-                {(script || defaultScripts[audioType]).split(" ").length} words · ~{Math.ceil((script || defaultScripts[audioType]).split(" ").length / 2.5)}s
-              </span>
-              <GenButton accent="#34D399" label="🎙️ Generate Audio" />
-            </div>
-          </Panel>
 
-          {/* Waveform player */}
-          <Panel label="Audio Player" accent="#34D399">
-            <div style={{
-              padding: "20px 16px", borderRadius: 10, background: "rgba(52,211,153,0.04)",
-              border: "1.5px dashed rgba(52,211,153,0.2)",
-            }}>
-              {/* Fake waveform */}
-              <div style={{ display: "flex", alignItems: "center", height: 48, gap: 2, marginBottom: 14 }}>
-                {Array.from({ length: 60 }, (_, i) => (
-                  <div key={i} style={{
-                    flex: 1, borderRadius: 2,
-                    height: `${20 + Math.sin(i * 0.4) * 16 + Math.random() * 12}%`,
-                    background: `rgba(52,211,153,${0.2 + Math.sin(i * 0.3) * 0.15})`,
-                  }} />
-                ))}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button disabled title="Playback coming soon" style={{
-                  width: 36, height: 36, borderRadius: "50%", cursor: "not-allowed",
-                  background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)",
-                  color: "#374151", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                }}>▶</button>
-                <div style={{ flex: 1, height: 3, background: "rgba(52,211,153,0.12)", borderRadius: 2 }}>
-                  <div style={{ width: "0%", height: "100%", background: "#34D399", borderRadius: 2 }} />
+          {/* Script Builder */}
+          <Panel label="Script Builder" accent="#34D399">
+            <div style={{ fontSize: 11, color: "#334155", marginBottom: 12 }}>
+              ✨ Auto-filled from BB&B defaults — edit any section
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {([
+                { key: "greeting",         label: "Greeting",           icon: "👋", ph: "Opening line…"                },
+                { key: "valueProposition", label: "Value Proposition",  icon: "⭐", ph: "Why choose us…"              },
+                { key: "offerMessage",     label: "Offer / Message",    icon: "🎁", ph: "Special offer or key info…"   },
+                { key: "callToAction",     label: "Call to Action",     icon: "📞", ph: "What to do next…"             },
+                { key: "closing",          label: "Closing",            icon: "🏁", ph: "Sign-off line…"               },
+              ] as { key: keyof AudioScriptSections; label: string; icon: string; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                    <span style={{ fontSize: 12 }}>{f.icon}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: "#34D399", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                      {f.label}
+                    </span>
+                    {sections[f.key] && (
+                      <span style={{ marginLeft: "auto", fontSize: 9, color: "#34D399", fontWeight: 700 }}>✓</span>
+                    )}
+                  </div>
+                  <textarea
+                    value={sections[f.key]}
+                    onChange={e => updateSection(f.key, e.target.value)}
+                    placeholder={f.ph}
+                    rows={2}
+                    style={{
+                      width: "100%", padding: "8px 11px", borderRadius: 8, resize: "vertical",
+                      background: sections[f.key] ? "rgba(52,211,153,0.05)" : "rgba(255,255,255,0.01)",
+                      border: sections[f.key] ? "1px solid rgba(52,211,153,0.28)" : "1px solid rgba(52,211,153,0.1)",
+                      color: "#E2E8F0", fontSize: 12, outline: "none",
+                      boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.55,
+                    }}
+                  />
                 </div>
-                <span style={{ fontSize: 11, color: "#475569" }}>0:00</span>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(52,211,153,0.04)", border: "1px solid rgba(52,211,153,0.1)" }}>
+              <div style={{ fontSize: 11, color: "#34D399", fontWeight: 600 }}>
+                📝 Full Script Preview
+              </div>
+              <div style={{ fontSize: 11.5, color: "#94A3B8", marginTop: 4, lineHeight: 1.6 }}>
+                {fullScript || <span style={{ color: "#334155" }}>Script sections will appear here…</span>}
+              </div>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 6 }}>
+                {wordCount} words · ~{estSeconds}s at {speed.toFixed(2)}x speed
               </div>
             </div>
           </Panel>
 
+          {/* Mock Audio Preview */}
+          <Panel label="Audio Output Preview" accent="#34D399">
+            <div style={{ position: "relative" }}>
+              {/* COMING SOON badge */}
+              <div style={{
+                position: "absolute", top: 0, right: 0, zIndex: 2,
+                padding: "4px 10px", borderRadius: 6, fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
+                background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#FBBF24",
+              }}>COMING SOON</div>
+
+              <div style={{
+                padding: "20px 16px 14px", borderRadius: 10,
+                background: "linear-gradient(135deg, rgba(52,211,153,0.05) 0%, rgba(16,185,129,0.02) 100%)",
+                border: "1.5px solid rgba(52,211,153,0.18)",
+              }}>
+                {/* Waveform bars */}
+                <div style={{ display: "flex", alignItems: "center", height: 60, gap: 1.5, marginBottom: 14 }}>
+                  {WAVE_HEIGHTS.map((h, i) => (
+                    <div key={i} style={{
+                      flex: 1, borderRadius: 2,
+                      height: `${h}%`,
+                      background: i < 20
+                        ? `rgba(52,211,153,${0.15 + (h / 100) * 0.3})`
+                        : `rgba(52,211,153,0.08)`,
+                      transition: "height 0.3s",
+                    }} />
+                  ))}
+                </div>
+
+                {/* Controls row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <button disabled title="Playback coming soon" style={{
+                    width: 36, height: 36, borderRadius: "50%", cursor: "not-allowed", flexShrink: 0,
+                    background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)",
+                    color: "#374151", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>▶</button>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 4, background: "rgba(52,211,153,0.12)", borderRadius: 2, marginBottom: 4 }}>
+                      <div style={{ width: "0%", height: "100%", background: "#34D399", borderRadius: 2 }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 10, color: "#475569" }}>0:00</span>
+                      <span style={{ fontSize: 10, color: "#475569" }}>
+                        0:{estSeconds.toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#334155", flexShrink: 0 }}>
+                    {wordCount} words
+                  </span>
+                </div>
+
+                <div style={{ textAlign: "center", marginTop: 10 }}>
+                  <div style={{ fontSize: 12, color: "#475569" }}>AI audio output will appear here</div>
+                  <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>
+                    {audioTypes.find(a => a.id === audioType)?.label} · {voice} · {voiceStyle}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={copyPrompt} style={{
+                flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: "10px", borderRadius: 9, cursor: "pointer",
+                background: copied ? "rgba(34,197,94,0.1)" : "rgba(52,211,153,0.08)",
+                border: copied ? "1.5px solid rgba(34,197,94,0.35)" : "1.5px solid rgba(52,211,153,0.28)",
+                color: copied ? "#22C55E" : "#34D399",
+                fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+              }}>
+                {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+              </button>
+              <button disabled title="AI audio generation coming in next release" style={{
+                flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                padding: "10px", borderRadius: 9, cursor: "not-allowed",
+                background: "rgba(52,211,153,0.04)", border: "1.5px solid rgba(52,211,153,0.15)",
+                color: "#334155", fontSize: 12, fontWeight: 700,
+              }}>
+                <span style={{ fontSize: 13 }}>🎙️</span>
+                Generate Audio
+                <span style={{
+                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
+                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                }}>SOON</span>
+              </button>
+            </div>
+          </Panel>
+
+          {/* Export */}
           <Panel label="Export" accent="#34D399">
             <div style={{ display: "flex", gap: 12 }}>
               <ExportButton label="MP3" accent="#34D399" />

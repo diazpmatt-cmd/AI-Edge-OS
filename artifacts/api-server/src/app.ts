@@ -1,6 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
@@ -32,10 +37,10 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Serve uploaded social-post images (public — no auth required for image display)
-app.use("/api/uploads", express.static("uploads"));
+app.use("/api/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // Serve custom audio greetings (public — fetched by Telnyx during calls)
-app.use("/api/audio", express.static("public/audio"));
+app.use("/api/audio", express.static(path.join(__dirname, "..", "public", "audio")));
 
 // PUBLIC routes — mounted before Clerk middleware (no auth required)
 // OAuth callbacks: Google/Meta/TikTok redirects verified via state tokens

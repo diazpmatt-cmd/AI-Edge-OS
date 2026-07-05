@@ -15,6 +15,39 @@ interface MediaProject {
   createdAt: Date;
 }
 
+interface BrandKitData {
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  tone: string;
+  industry: string;
+}
+
+interface StudioSeed {
+  prompt?: string;
+  format?: "social" | "ad" | "banner";
+  style?: string;
+  videoType?: string;
+  duration?: number;
+  audioType?: string;
+  voice?: string;
+  script?: string;
+  adGoal?: string;
+}
+
+type TemplateCategory = "Social Post" | "Facebook Ad" | "Instagram Ad" | "Commercial Video" | "AI Receptionist Greeting" | "Voiceover Ad";
+
+interface TemplatePreset {
+  id: string;
+  name: string;
+  category: TemplateCategory;
+  brand: Brand | "both";
+  studio: Studio;
+  desc: string;
+  seed: StudioSeed;
+}
+
 const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accent: string; bg: string; features: string[] }[] = [
   {
     id: "image", icon: "🖼️", label: "Image Studio",  tagline: "Branded graphics & ad creatives", accent: "#00AEEF", bg: "#071828",
@@ -35,10 +68,10 @@ const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accen
 ];
 
 // ── Image Studio ──────────────────────────────────────────────────────────────
-function ImageStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
-  const [format, setFormat] = useState<"social" | "ad" | "banner">("social");
-  const [style, setStyle] = useState("modern");
-  const [prompt, setPrompt] = useState("");
+function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
+  const [format, setFormat] = useState<"social" | "ad" | "banner">(seed?.format ?? "social");
+  const [style, setStyle] = useState(seed?.style ?? "modern");
+  const [prompt, setPrompt] = useState(seed?.prompt ?? "");
 
   const formats = [
     { id: "social", label: "Social Graphic", size: "1080×1080" },
@@ -162,9 +195,9 @@ function ImageStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
 }
 
 // ── Video Studio ──────────────────────────────────────────────────────────────
-function VideoStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
-  const [videoType, setVideoType] = useState("reel");
-  const [duration, setDuration] = useState(15);
+function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
+  const [videoType, setVideoType] = useState(seed?.videoType ?? "reel");
+  const [duration, setDuration] = useState(seed?.duration ?? 15);
 
   const videoTypes = [
     { id: "reel",       label: "Reel / Short",    icon: "📱", size: "9:16" },
@@ -305,10 +338,10 @@ function VideoStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
 }
 
 // ── Audio Studio ──────────────────────────────────────────────────────────────
-function AudioStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
-  const [audioType, setAudioType] = useState("voiceover");
-  const [voice, setVoice] = useState("Joanna");
-  const [script, setScript] = useState("");
+function AudioStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
+  const [audioType, setAudioType] = useState(seed?.audioType ?? "voiceover");
+  const [voice, setVoice] = useState(seed?.voice ?? "Joanna");
+  const [script, setScript] = useState(seed?.script ?? "");
 
   const audioTypes = [
     { id: "voiceover",   label: "Voiceover",          icon: "🎤" },
@@ -448,8 +481,8 @@ function AudioStudio({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
 }
 
 // ── Ad Creator ────────────────────────────────────────────────────────────────
-function AdCreator({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
-  const [goal, setGoal] = useState("awareness");
+function AdCreator({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
+  const [goal, setGoal] = useState(seed?.adGoal ?? "awareness");
   const [step, setStep] = useState(1);
 
   const goals = [
@@ -831,6 +864,518 @@ const exportBtn: React.CSSProperties = {
   color: "#374151", fontSize: 12, fontWeight: 600, opacity: 0.6,
 };
 
+// ── Brand Kit defaults ────────────────────────────────────────────────────────
+const DEFAULT_BRAND_KITS: Record<Brand, BrandKitData> = {
+  bbb: {
+    name: "Bed Bugs & Beyond",
+    primaryColor: "#00355F",
+    secondaryColor: "#00AEEF",
+    accentColor: "#FF6B4A",
+    tone: "Professional, trustworthy, local",
+    industry: "Pest Control",
+  },
+  aie: {
+    name: "AI Edge Solutions",
+    primaryColor: "#00AEEF",
+    secondaryColor: "#C0C0C0",
+    accentColor: "#030612",
+    tone: "Futuristic, intelligent, premium",
+    industry: "AI Automation",
+  },
+};
+
+// ── Template presets ──────────────────────────────────────────────────────────
+const TEMPLATE_PRESETS: TemplatePreset[] = [
+  {
+    id: "bbb-social-post",
+    name: "BB&B Social Post",
+    category: "Social Post",
+    brand: "bbb",
+    studio: "image",
+    desc: "1080×1080 professional pest control graphic with bold CTA",
+    seed: {
+      format: "social",
+      style: "bold",
+      prompt: "Bed Bugs & Beyond pest control team in blue uniforms treating a home exterior, bright sunlight, professional service van visible, bold text overlay 'Pest-Free Living Starts Here'",
+    },
+  },
+  {
+    id: "bbb-facebook-ad",
+    name: "BB&B Facebook Lead Ad",
+    category: "Facebook Ad",
+    brand: "bbb",
+    studio: "ad",
+    desc: "Lead generation campaign targeting Baldwin County homeowners",
+    seed: { adGoal: "leads" },
+  },
+  {
+    id: "bbb-instagram-ad",
+    name: "BB&B Instagram Ad",
+    category: "Instagram Ad",
+    brand: "bbb",
+    studio: "image",
+    desc: "1200×628 ad creative for Instagram feed placement",
+    seed: {
+      format: "ad",
+      style: "modern",
+      prompt: "Clean, professional pest-free home interior, Bed Bugs & Beyond branding, navy and aqua color palette, 'Call Today — Guaranteed Results' headline overlay",
+    },
+  },
+  {
+    id: "bbb-commercial-video",
+    name: "BB&B 30s Commercial",
+    category: "Commercial Video",
+    brand: "bbb",
+    studio: "video",
+    desc: "30-second commercial clip for YouTube and Facebook",
+    seed: { videoType: "commercial", duration: 30 },
+  },
+  {
+    id: "bbb-receptionist",
+    name: "BB&B AI Receptionist",
+    category: "AI Receptionist Greeting",
+    brand: "bbb",
+    studio: "audio",
+    desc: "Professional IVR greeting for Bed Bugs & Beyond",
+    seed: {
+      audioType: "receptionist",
+      voice: "Joanna",
+      script: "Hi, thank you for calling Bed Bugs and Beyond Pest Control. To speak directly with us, press 1. To request a callback, press 2. To leave a voicemail, press 3.",
+    },
+  },
+  {
+    id: "bbb-voiceover-ad",
+    name: "BB&B Radio Voiceover",
+    category: "Voiceover Ad",
+    brand: "bbb",
+    studio: "audio",
+    desc: "30-second voiceover ad script for radio and digital audio",
+    seed: {
+      audioType: "ad-audio",
+      voice: "Matthew",
+      script: "Bed bugs keeping you up at night? Bed Bugs and Beyond has you covered. Serving Baldwin County with fast, effective, guaranteed pest control. Call today for a free inspection.",
+    },
+  },
+  {
+    id: "aie-social-post",
+    name: "AI Edge Social Post",
+    category: "Social Post",
+    brand: "aie",
+    studio: "image",
+    desc: "Premium 1080×1080 tech-forward brand graphic",
+    seed: {
+      format: "social",
+      style: "luxury",
+      prompt: "Futuristic AI dashboard interface with glowing cyan neural network visualization, dark navy background, AI Edge Solutions logo, metallic silver typography, premium SaaS aesthetic",
+    },
+  },
+  {
+    id: "aie-facebook-ad",
+    name: "AI Edge Lead Gen Ad",
+    category: "Facebook Ad",
+    brand: "aie",
+    studio: "ad",
+    desc: "High-converting awareness campaign for AI automation services",
+    seed: { adGoal: "awareness" },
+  },
+];
+
+// ── Brand Kit Section ─────────────────────────────────────────────────────────
+function BrandKitSection({ activeBrand, onBrandChange }: {
+  activeBrand: Brand;
+  onBrandChange: (b: Brand) => void;
+}) {
+  const [kits, setKits] = useState<Record<Brand, BrandKitData>>(DEFAULT_BRAND_KITS);
+
+  const kit = kits[activeBrand];
+
+  function update(field: keyof BrandKitData, value: string) {
+    setKits(prev => ({ ...prev, [activeBrand]: { ...prev[activeBrand], [field]: value } }));
+  }
+
+  const brandTabs: { id: Brand; label: string; icon: string; accent: string }[] = [
+    { id: "bbb", label: "Bed Bugs & Beyond", icon: "🐛", accent: "#00AEEF" },
+    { id: "aie", label: "AI Edge Solutions",  icon: "⚡", accent: "#A78BFA" },
+  ];
+
+  const colorFields: { key: keyof BrandKitData; label: string }[] = [
+    { key: "primaryColor",   label: "Primary" },
+    { key: "secondaryColor", label: "Secondary" },
+    { key: "accentColor",    label: "Accent" },
+  ];
+
+  const accent = brandTabs.find(b => b.id === activeBrand)!.accent;
+
+  return (
+    <div style={{ marginTop: 36 }}>
+      {/* Section header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ height: 1, width: 20, background: "rgba(255,255,255,0.06)" }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.9px", whiteSpace: "nowrap" }}>
+          🎨 Brand Kit
+        </span>
+        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+        <span style={{
+          padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+          background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.18)", color: "#00AEEF",
+        }}>
+          CENTRAL BRAND SETTINGS
+        </span>
+      </div>
+
+      <div style={{
+        padding: "24px", borderRadius: 16,
+        background: "rgba(255,255,255,0.01)",
+        border: `1.5px solid ${accent}22`,
+      }}>
+        {/* Brand selector tabs */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+          {brandTabs.map(b => (
+            <button key={b.id} onClick={() => onBrandChange(b.id)} style={{
+              display: "flex", alignItems: "center", gap: 9, padding: "11px 18px",
+              borderRadius: 10, cursor: "pointer",
+              background: activeBrand === b.id
+                ? `linear-gradient(135deg, ${b.accent}18 0%, ${b.accent}08 100%)`
+                : "rgba(255,255,255,0.02)",
+              border: activeBrand === b.id ? `1.5px solid ${b.accent}` : "1.5px solid rgba(255,255,255,0.07)",
+              boxShadow: activeBrand === b.id ? `0 0 16px ${b.accent}18` : "none",
+            }}>
+              <span style={{ fontSize: 18 }}>{b.icon}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: activeBrand === b.id ? "#E2E8F0" : "#475569" }}>
+                {b.label}
+              </span>
+              {activeBrand === b.id && (
+                <span style={{
+                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
+                  background: `${b.accent}22`, border: `1px solid ${b.accent}55`, color: b.accent,
+                }}>ACTIVE</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          {/* Left column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {/* Brand Name */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+                Brand Name
+              </label>
+              <input
+                value={kit.name}
+                onChange={e => update("name", e.target.value)}
+                style={{
+                  width: "100%", padding: "11px 14px", borderRadius: 9, boxSizing: "border-box",
+                  background: `${accent}06`, border: `1.5px solid ${accent}28`,
+                  color: "#E2E8F0", fontSize: 14, fontWeight: 600, outline: "none",
+                }}
+              />
+            </div>
+
+            {/* Colors */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 10 }}>
+                Brand Colors
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {colorFields.map(cf => (
+                  <div key={cf.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input
+                      type="color"
+                      value={kit[cf.key]}
+                      onChange={e => update(cf.key, e.target.value)}
+                      style={{
+                        width: 38, height: 38, borderRadius: 8, border: `1.5px solid ${accent}33`,
+                        background: "transparent", cursor: "pointer", padding: 2, flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", marginBottom: 3 }}>{cf.label}</div>
+                      <input
+                        value={kit[cf.key]}
+                        onChange={e => update(cf.key, e.target.value)}
+                        maxLength={7}
+                        style={{
+                          width: "100%", padding: "6px 10px", borderRadius: 7, boxSizing: "border-box",
+                          background: `${accent}06`, border: `1px solid ${accent}22`,
+                          color: "#E2E8F0", fontSize: 12, fontFamily: "monospace", outline: "none",
+                        }}
+                      />
+                    </div>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 7, flexShrink: 0,
+                      background: kit[cf.key], border: "1.5px solid rgba(255,255,255,0.12)",
+                    }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {/* Logo upload placeholder */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+                Logo
+              </label>
+              <div style={{
+                padding: "24px 16px", borderRadius: 10, textAlign: "center", cursor: "pointer",
+                background: `${accent}06`, border: `2px dashed ${accent}33`,
+                transition: "border-color 0.15s",
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🖼️</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", marginBottom: 4 }}>Upload Logo</div>
+                <div style={{ fontSize: 11, color: "#334155" }}>PNG, SVG or WebP — max 2 MB</div>
+                <div style={{
+                  display: "inline-block", marginTop: 12, padding: "6px 14px", borderRadius: 7,
+                  background: `${accent}12`, border: `1px solid ${accent}44`, color: accent,
+                  fontSize: 11, fontWeight: 700,
+                }}>
+                  Browse Files
+                </div>
+              </div>
+            </div>
+
+            {/* Tone / Voice */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+                Tone / Voice
+              </label>
+              <input
+                value={kit.tone}
+                onChange={e => update("tone", e.target.value)}
+                style={{
+                  width: "100%", padding: "11px 14px", borderRadius: 9, boxSizing: "border-box",
+                  background: `${accent}06`, border: `1.5px solid ${accent}28`,
+                  color: "#E2E8F0", fontSize: 13, outline: "none",
+                }}
+              />
+            </div>
+
+            {/* Industry */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+                Industry
+              </label>
+              <input
+                value={kit.industry}
+                onChange={e => update("industry", e.target.value)}
+                style={{
+                  width: "100%", padding: "11px 14px", borderRadius: 9, boxSizing: "border-box",
+                  background: `${accent}06`, border: `1.5px solid ${accent}28`,
+                  color: "#E2E8F0", fontSize: 13, outline: "none",
+                }}
+              />
+            </div>
+
+            {/* Color preview strip */}
+            <div>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+                Color Preview
+              </label>
+              <div style={{ display: "flex", gap: 0, borderRadius: 10, overflow: "hidden", height: 44 }}>
+                <div style={{ flex: 1, background: kit.primaryColor }}   title={`Primary ${kit.primaryColor}`}   />
+                <div style={{ flex: 1, background: kit.secondaryColor }} title={`Secondary ${kit.secondaryColor}`} />
+                <div style={{ flex: 1, background: kit.accentColor }}    title={`Accent ${kit.accentColor}`}    />
+              </div>
+              <div style={{ display: "flex", marginTop: 4 }}>
+                {["Primary", "Secondary", "Accent"].map(l => (
+                  <div key={l} style={{ flex: 1, textAlign: "center", fontSize: 9, color: "#334155", fontWeight: 600 }}>{l}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Kit applied notice */}
+        <div style={{
+          marginTop: 20, padding: "10px 14px", borderRadius: 8,
+          background: `${accent}08`, border: `1px solid ${accent}22`,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span style={{ fontSize: 13 }}>💡</span>
+          <span style={{ fontSize: 12, color: "#475569" }}>
+            These brand settings are automatically applied when using <strong style={{ color: accent }}>Use Template</strong> below and inform Image Studio, Ad Creator, and Audio Studio defaults.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Template Engine Section ───────────────────────────────────────────────────
+const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  "Social Post", "Facebook Ad", "Instagram Ad",
+  "Commercial Video", "AI Receptionist Greeting", "Voiceover Ad",
+];
+
+const CATEGORY_META: Record<TemplateCategory, { icon: string; studio: Studio; accent: string }> = {
+  "Social Post":              { icon: "📱", studio: "image", accent: "#00AEEF" },
+  "Facebook Ad":              { icon: "📘", studio: "ad",    accent: "#1877F2" },
+  "Instagram Ad":             { icon: "📸", studio: "image", accent: "#E1306C" },
+  "Commercial Video":         { icon: "🎥", studio: "video", accent: "#A78BFA" },
+  "AI Receptionist Greeting": { icon: "🤖", studio: "audio", accent: "#34D399" },
+  "Voiceover Ad":             { icon: "🎙️", studio: "audio", accent: "#34D399" },
+};
+
+const BRAND_LABELS: Record<Brand | "both", { label: string; icon: string }> = {
+  bbb:  { label: "BB&B",            icon: "🐛" },
+  aie:  { label: "AI Edge",         icon: "⚡" },
+  both: { label: "Both brands",     icon: "🔀" },
+};
+
+function TemplateEngineSection({ onUseTemplate }: {
+  onUseTemplate: (preset: TemplatePreset) => void;
+}) {
+  const [catFilter, setCatFilter] = useState<TemplateCategory | "all">("all");
+  const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
+
+  const visible = catFilter === "all"
+    ? TEMPLATE_PRESETS
+    : TEMPLATE_PRESETS.filter(p => p.category === catFilter);
+
+  function handleUse(preset: TemplatePreset) {
+    setUsedIds(prev => new Set([...prev, preset.id]));
+    onUseTemplate(preset);
+  }
+
+  return (
+    <div style={{ marginTop: 36 }}>
+      {/* Section header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ height: 1, width: 20, background: "rgba(255,255,255,0.06)" }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.9px", whiteSpace: "nowrap" }}>
+          ⚡ Template Engine
+        </span>
+        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+        <span style={{
+          padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+          background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "#A78BFA",
+        }}>
+          {TEMPLATE_PRESETS.length} TEMPLATES
+        </span>
+      </div>
+
+      {/* Category filter pills */}
+      <div style={{ display: "flex", gap: 7, marginBottom: 20, flexWrap: "wrap" }}>
+        <button onClick={() => setCatFilter("all")} style={{
+          padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+          background: catFilter === "all" ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.03)",
+          border: catFilter === "all" ? "1.5px solid rgba(167,139,250,0.45)" : "1px solid rgba(255,255,255,0.07)",
+          color: catFilter === "all" ? "#A78BFA" : "#475569",
+        }}>
+          🗂 All Templates
+        </button>
+        {TEMPLATE_CATEGORIES.map(cat => {
+          const meta = CATEGORY_META[cat];
+          const active = catFilter === cat;
+          return (
+            <button key={cat} onClick={() => setCatFilter(cat)} style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "6px 13px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+              background: active ? `${meta.accent}14` : "rgba(255,255,255,0.03)",
+              border: active ? `1.5px solid ${meta.accent}66` : "1px solid rgba(255,255,255,0.07)",
+              color: active ? meta.accent : "#475569",
+            }}>
+              <span style={{ fontSize: 12 }}>{meta.icon}</span>
+              {cat}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Template cards grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+        {visible.map(preset => {
+          const catMeta   = CATEGORY_META[preset.category];
+          const brandMeta = BRAND_LABELS[preset.brand];
+          const studioMeta = STUDIO_META[preset.studio];
+          const used = usedIds.has(preset.id);
+
+          return (
+            <div key={preset.id} style={{
+              padding: "20px 20px 18px", borderRadius: 14, position: "relative", overflow: "hidden",
+              background: "linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%)",
+              border: `1px solid ${catMeta.accent}28`,
+              transition: "border-color 0.15s, box-shadow 0.15s",
+            }}>
+              {/* Top accent strip */}
+              <div style={{
+                position: "absolute", top: 0, left: 0, right: 0, height: 2,
+                background: `linear-gradient(90deg, transparent, ${catMeta.accent}88, transparent)`,
+              }} />
+
+              {/* Header row */}
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                    background: `${catMeta.accent}14`, border: `1px solid ${catMeta.accent}33`,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+                  }}>
+                    {catMeta.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0", lineHeight: 1.2 }}>{preset.name}</div>
+                    <div style={{ fontSize: 10.5, color: catMeta.accent, fontWeight: 600, marginTop: 2 }}>{preset.category}</div>
+                  </div>
+                </div>
+                {used && (
+                  <span style={{
+                    padding: "3px 8px", borderRadius: 5, fontSize: 9, fontWeight: 800,
+                    background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E",
+                  }}>LOADED</span>
+                )}
+              </div>
+
+              {/* Description */}
+              <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.5, marginBottom: 14 }}>
+                {preset.desc}
+              </div>
+
+              {/* Meta row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <span style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "3px 9px", borderRadius: 5, fontSize: 11, fontWeight: 700,
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94A3B8",
+                }}>
+                  {brandMeta.icon} {brandMeta.label}
+                </span>
+                <span style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "3px 9px", borderRadius: 5, fontSize: 11, fontWeight: 700,
+                  background: `${studioMeta.accent}0E`, border: `1px solid ${studioMeta.accent}28`, color: studioMeta.accent,
+                }}>
+                  {studioMeta.icon} {studioMeta.label}
+                </span>
+              </div>
+
+              {/* Use Template button */}
+              <button onClick={() => handleUse(preset)} style={{
+                width: "100%", padding: "10px", borderRadius: 9, cursor: "pointer",
+                background: used
+                  ? "rgba(34,197,94,0.08)"
+                  : `linear-gradient(135deg, ${catMeta.accent}1A 0%, ${catMeta.accent}0A 100%)`,
+                border: used
+                  ? "1.5px solid rgba(34,197,94,0.3)"
+                  : `1.5px solid ${catMeta.accent}55`,
+                color: used ? "#22C55E" : catMeta.accent,
+                fontSize: 12, fontWeight: 700,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              }}>
+                {used ? "✓ Template Loaded — Open Studio ↑" : `⚡ Use Template → ${studioMeta.label}`}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Save Project Modal ────────────────────────────────────────────────────────
 interface SaveModalState { open: boolean; type: Studio; }
 
@@ -1137,6 +1682,9 @@ export default function MediaEnginePage() {
   const [activeStudio, setActiveStudio] = useState<Studio>("image");
   const [projects, setProjects]         = useState<MediaProject[]>([]);
   const [modal, setModal]               = useState<SaveModalState>({ open: false, type: "image" });
+  const [activeBrand, setActiveBrand]   = useState<Brand>("bbb");
+  const [seed, setSeed]                 = useState<StudioSeed | undefined>(undefined);
+  const [seedKey, setSeedKey]           = useState(0);
 
   const studio = STUDIOS.find(s => s.id === activeStudio)!;
 
@@ -1154,6 +1702,13 @@ export default function MediaEnginePage() {
 
   function deleteProject(id: string) {
     setProjects(prev => prev.filter(p => p.id !== id));
+  }
+
+  function applyTemplate(preset: TemplatePreset) {
+    setSeed(preset.seed);
+    setSeedKey(k => k + 1);
+    setActiveStudio(preset.studio);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -1278,11 +1833,20 @@ export default function MediaEnginePage() {
           </span>
         </div>
 
-        {activeStudio === "image" && <ImageStudio t={t} />}
-        {activeStudio === "video" && <VideoStudio t={t} />}
-        {activeStudio === "audio" && <AudioStudio t={t} />}
-        {activeStudio === "ad"    && <AdCreator t={t} />}
+        {activeStudio === "image" && <ImageStudio key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "video" && <VideoStudio key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "audio" && <AudioStudio key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "ad"    && <AdCreator   key={seedKey} t={t} seed={seed} />}
       </div>
+
+      <BrandKitSection
+        activeBrand={activeBrand}
+        onBrandChange={setActiveBrand}
+      />
+
+      <TemplateEngineSection
+        onUseTemplate={applyTemplate}
+      />
 
       <SavedProjectsSection
         projects={projects}

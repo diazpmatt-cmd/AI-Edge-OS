@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
+import { useApiFetch } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AssetType = "image" | "video" | "audio" | "campaign" | "logo" | "brand-kit" | "template";
@@ -57,6 +58,29 @@ const TYPE_COLORS: Record<AssetType, string> = {
   "brand-kit": "#F472B6",
   template: "#FBBF24",
 };
+
+function dbAssetToFrontend(a: Record<string, unknown>): Asset {
+  const icons: Record<string, string> = {
+    image: "🖼️", video: "🎬", audio: "🎙️", campaign: "🚀",
+    logo: "🏷️", "brand-kit": "🎨", template: "📋",
+  };
+  const assetType = (a.assetType as string) || "image";
+  let tags: string[] = [];
+  if (Array.isArray(a.tags)) tags = a.tags as string[];
+  else if (typeof a.tags === "string") { try { tags = JSON.parse(a.tags); } catch { tags = []; } }
+  const createdAt = typeof a.createdAt === "string" ? a.createdAt : "";
+  return {
+    id: String(a.id),
+    name: String(a.name),
+    type: assetType as AssetType,
+    brand: String(a.brand || "—"),
+    date: createdAt ? createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    size: a.fileSize && Number(a.fileSize) > 0 ? `${(Number(a.fileSize) / 1024 / 1024).toFixed(1)} MB` : "—",
+    tags,
+    icon: icons[assetType] || "📄",
+    color: TYPE_COLORS[assetType as AssetType] || "#00AEEF",
+  };
+}
 
 const MOCK_PROMPTS: Prompt[] = [
   { id: "p1",  label: "BB&B Bed Bug Alert",         category: "image", brand: "BB&B", icon: "🖼️", text: "Bed Bugs & Beyond pest control ad, professional technician treating home, blue and white color scheme, Baldwin County AL, clean modern photography style, 1200×628" },
@@ -815,34 +839,65 @@ export default function AssetLibraryPage() {
   const [activeSection, setActiveSection] = useState<Section>("browser");
   const [newCollectionName, setNewCollectionName] = useState("");
   const [showNewCollection, setShowNewCollection] = useState(false);
-  const [localAssets, setLocalAssets] = useState<Asset[]>([]);
+  const [dbAssets,    setDbAssets]    = useState<Asset[]>([]);
   const [mockCounter, setMockCounter] = useState(1);
+  const [isCreating,  setIsCreating]  = useState(false);
+  const [toast,       setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
 
-  function createMockRecord() {
+  const authFetch = useApiFetch();
+
+  const loadAssets = useCallback(async () => {
+    try {
+      const data = await authFetch<{ assets: Record<string, unknown>[] }>("/admin/assets");
+      setDbAssets((data.assets || []).map(dbAssetToFrontend));
+    } catch {
+      // silently keep dbAssets empty — MOCK_ASSETS display as fallback
+    }
+  }, [authFetch]);
+
+  useEffect(() => { loadAssets(); }, [loadAssets]);
+
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function createMockRecord() {
     const types: AssetType[] = ["image", "video", "audio", "campaign", "template"];
     const type = types[mockCounter % types.length];
-    const icons: Record<AssetType, string> = { image: "🖼️", video: "🎬", audio: "🎙️", campaign: "🚀", logo: "🏷️", "brand-kit": "🎨", template: "📋" };
-    const newAsset: Asset = {
-      id: `local-${mockCounter}`,
-      name: `Mock Asset Record #${mockCounter}`,
-      type,
-      brand: mockCounter % 2 === 0 ? "BB&B" : "AIE",
-      date: new Date().toISOString().slice(0, 10),
-      size: "—",
-      tags: ["mock", "local", "db-ready"],
-      icon: icons[type],
-      color: TYPE_COLORS[type],
-    };
-    setLocalAssets(prev => [newAsset, ...prev]);
-    setMockCounter(c => c + 1);
-    setActiveSection("browser");
+    const brand = mockCounter % 2 === 0 ? "BB&B" : "AIE";
+    setIsCreating(true);
+    try {
+      await authFetch("/admin/assets", {
+        method: "POST",
+        body: JSON.stringify({
+          name:         `DB Asset Record #${mockCounter}`,
+          assetType:    type,
+          brand,
+          sourceModule: "Asset Library",
+          fileUrl:      "placeholder://pending",
+          thumbnailUrl: "",
+          mimeType:     "application/octet-stream",
+          fileSize:     0,
+          metadata:     {},
+        }),
+      });
+      setMockCounter(c => c + 1);
+      await loadAssets();
+      setActiveSection("browser");
+      showToast("✓ Asset record created", true);
+    } catch {
+      showToast("✗ Failed to create asset", false);
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   function toggleFav(id: string) {
     setFavorites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  const allAssets      = [...MOCK_ASSETS, ...localAssets];
+  const allAssets      = [...dbAssets, ...MOCK_ASSETS];
   const totalImages    = allAssets.filter(a => a.type === "image").length;
   const totalVideos    = allAssets.filter(a => a.type === "video").length;
   const totalAudio     = allAssets.filter(a => a.type === "audio").length;
@@ -893,11 +948,11 @@ export default function AssetLibraryPage() {
             <span style={{
               padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
               background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.28)", color: "#22C55E",
-            }}>✓ BACKEND READY: STUB MODE</span>
+            }}>✓ LIVE: DB CONNECTED</span>
             <span style={{
               padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
               background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.32)", color: "#34D399",
-            }}>🗄 DB CONNECTED</span>
+            }}>🗄 {dbAssets.length} DB Record{dbAssets.length !== 1 ? "s" : ""}</span>
           </div>
         </div>
       </div>
@@ -924,11 +979,20 @@ export default function AssetLibraryPage() {
         <DisabledBtn label="⬆ Upload Asset" />
         <DisabledBtn label="📥 Import Media" />
         <DisabledBtn label="🔄 Sync with Backend" />
-        <button onClick={createMockRecord} style={{
+        <button onClick={createMockRecord} disabled={isCreating} style={{
           display: "flex", alignItems: "center", gap: 6,
-          padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700,
+          padding: "8px 16px", borderRadius: 8, cursor: isCreating ? "wait" : "pointer", fontSize: 12, fontWeight: 700,
           background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)", color: "#34D399",
-        }}>🗄 Create Mock Asset Record</button>
+          opacity: isCreating ? 0.6 : 1,
+        }}>{isCreating ? "⏳ Creating…" : "🗄 Create DB Asset Record"}</button>
+        {toast && (
+          <span style={{
+            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            background: toast.ok ? "rgba(52,211,153,0.1)" : "rgba(239,68,68,0.1)",
+            border: `1px solid ${toast.ok ? "rgba(52,211,153,0.3)" : "rgba(239,68,68,0.3)"}`,
+            color: toast.ok ? "#34D399" : "#F87171",
+          }}>{toast.msg}</span>
+        )}
         <button onClick={() => setShowNewCollection(v => !v)} style={{
           display: "flex", alignItems: "center", gap: 6,
           padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700,

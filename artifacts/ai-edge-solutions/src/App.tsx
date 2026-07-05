@@ -57,6 +57,7 @@ const ClientOnboardingPage          = lazy(() => import("./pages/ClientOnboardin
 const LocalBizAIPage                = lazy(() => import("./pages/LocalBizAIPage"));
 const RevenueAttributionPage        = lazy(() => import("./pages/RevenueAttributionPage"));
 const BBBOperationsCenterPage       = lazy(() => import("./pages/BBBOperationsCenterPage"));
+const MediaEnginePage               = lazy(() => import("./pages/MediaEnginePage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -170,6 +171,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/bbb-operations">
           <Authenticated><BBBOperationsCenterPage /></Authenticated>
+        </Route>
+        <Route path="/admin/media-engine">
+          <Authenticated><MediaEnginePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

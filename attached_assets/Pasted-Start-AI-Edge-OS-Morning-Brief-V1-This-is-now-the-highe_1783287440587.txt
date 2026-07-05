@@ -1,0 +1,270 @@
+Start AI Edge OS Morning Brief V1.
+
+This is now the highest-priority experience in AI Edge.
+
+Do NOT build another dashboard.
+
+This becomes the future landing page after login.
+
+Goal:
+
+Create a calm executive briefing that makes the owner feel like an AI executive team has already been working overnight.
+
+New route:
+
+/admin/morning-brief
+
+Add sidebar item:
+
+☀️ Morning Brief
+
+Use existing AI Edge dark theme.
+Blue/cyan/silver styling.
+Modern SaaS UI.
+
+This is frontend-first.
+
+Use LIVE data wherever existing APIs already provide it.
+
+If live data is unavailable, clearly label DEMO.
+
+No new backend.
+No schema changes.
+No API changes.
+No Telnyx changes.
+No public marketing page changes.
+
+------------------------------------------------
+
+HEADER
+
+☀️ Good Morning, Matt
+
+Today's Date
+
+Business Health
+(large circular health indicator)
+
+Status:
+🟢 Your AI Team worked while you slept.
+
+------------------------------------------------
+
+AI EXECUTIVE TEAM
+
+Create beautiful cards for:
+
+👋 Emma
+Receptionist
+
+Show:
+- Calls answered
+- Missed callers recovered
+- Current recommendation
+
+Use LIVE data if available.
+
+-----------------------------------------------
+
+💰 Mason
+Sales Director
+
+Show:
+- Leads
+- Hot opportunities
+- Estimated revenue available today
+
+LIVE when possible.
+
+-----------------------------------------------
+
+📣 Mia
+Marketing Director
+
+Show:
+- Posts published
+- Reach
+- Campaign recommendation
+
+Demo if needed.
+
+-----------------------------------------------
+
+🌎 Alex
+SEO Director
+
+Show:
+- Rankings
+- Visibility
+- SEO recommendation
+
+Demo if needed.
+
+-----------------------------------------------
+
+🎨 Ava
+Creative Director
+
+Show:
+- New graphics
+- Videos
+- Content waiting approval
+
+Demo if needed.
+
+-----------------------------------------------
+
+⭐ Olivia
+Customer Experience
+
+Show:
+- Reviews
+- Review opportunities
+- Suggested responses
+
+Demo if needed.
+
+-----------------------------------------------
+
+📊 Riley
+Business Intelligence
+
+Show:
+- Revenue trend
+- Lead trend
+- AI confidence
+- Business health summary
+
+Use LIVE where available.
+
+------------------------------------------------
+
+TODAY'S TOP PRIORITY
+
+Only ONE recommendation.
+
+Large centered card.
+
+Example:
+
+"Call John Smith before 10:00 AM.
+Requested a bed bug estimate yesterday."
+
+If no live recommendation exists,
+generate a realistic demo recommendation.
+
+------------------------------------------------
+
+TODAY'S REVENUE OPPORTUNITY
+
+Large hero card.
+
+Estimated revenue available today.
+
+If live calculation unavailable,
+clearly mark DEMO.
+
+------------------------------------------------
+
+NEEDS YOUR ATTENTION
+
+Maximum 3 items.
+
+No clutter.
+
+------------------------------------------------
+
+BIG ACTION BUTTON
+
+Centered.
+
+🚀 Start My Day
+
+Button disabled for now.
+
+COMING SOON badge.
+
+------------------------------------------------
+
+At the bottom:
+
+AI Edge Executive Team Status
+
+Emma
+Mason
+Mia
+Alex
+Ava
+Olivia
+Riley
+
+Green/yellow status indicators.
+
+------------------------------------------------
+
+Dashboard Health
+
+Every section must display
+
+🟢 LIVE
+
+or
+
+🟡 DEMO
+
+Never fake LIVE data.
+
+------------------------------------------------
+
+Requirements
+
+Frontend only.
+
+Use existing APIs only if already available.
+
+No fetches to new endpoints.
+
+No backend changes.
+
+No API route changes.
+
+No database changes.
+
+No marketing page changes.
+
+Production build must pass.
+
+------------------------------------------------
+
+Verify
+
+- /admin/morning-brief exists
+- Clerk auth protects route
+- Sidebar shows ☀️ Morning Brief
+- Header renders
+- Business Health indicator renders
+- All 7 AI Executive cards render
+- Today's Top Priority renders
+- Revenue Opportunity renders
+- Needs Your Attention renders
+- Start My Day button renders (disabled)
+- LIVE/DEMO badges accurate
+- No API changes
+- No DB changes
+- No Telnyx changes
+- No marketing page changes
+- Production build passes
+
+Return:
+
+verification results
+
+which widgets are LIVE
+
+which widgets are DEMO
+
+files changed
+
+production deploy status
+
+production URL

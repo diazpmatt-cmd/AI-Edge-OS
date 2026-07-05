@@ -60,6 +60,7 @@ const BBBOperationsCenterPage       = lazy(() => import("./pages/BBBOperationsCe
 const MediaEnginePage               = lazy(() => import("./pages/MediaEnginePage"));
 const AssetLibraryPage              = lazy(() => import("./pages/AssetLibraryPage"));
 const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"));
+const MorningBriefPage              = lazy(() => import("./pages/MorningBriefPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -182,6 +183,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/bbb-success">
           <Authenticated><BBBSuccessPage /></Authenticated>
+        </Route>
+        <Route path="/admin/morning-brief">
+          <Authenticated><MorningBriefPage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

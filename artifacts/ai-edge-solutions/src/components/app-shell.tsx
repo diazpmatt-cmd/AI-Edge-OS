@@ -8,6 +8,7 @@ import { useTheme } from "@/contexts/theme-context";
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
 const NAV_ITEMS = [
+  { to: "/admin/morning-brief",       icon: "☀️", label: "Morning\nBrief",             bg: "#1A1200", accent: "#FBBF24" },
   { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
   { to: "/admin/media-engine",        icon: "🎥", label: "Media\nEngine",             bg: "#0D1428", accent: "#00AEEF" },
   { to: "/admin/asset-library",       icon: "📁", label: "Asset\nLibrary",             bg: "#0A1A2E", accent: "#00AEEF" },

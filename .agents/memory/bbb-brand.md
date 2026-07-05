@@ -7,7 +7,6 @@ description: Brand colors, logo file location, and posting rules for client Bed 
 
 ## Identity
 - **Client name:** Bed Bugs & Beyond
-- **Phone:** (251) 324-9090
 - **Service area:** Baldwin County, AL (Fairhope, Gulf Shores, Orange Beach, Daphne, Spanish Fort, Foley)
 - **Niche:** Pest control — coastal / residential focus
 
@@ -34,5 +33,3 @@ description: Brand colors, logo file location, and posting rules for client Bed 
 1. **Scheduled/manual posts:** `image_data` field on `social_posts` table → read first by publish route → uploaded as photo to Facebook → fbPhotoUrl cascade → Instagram ✅
 2. **Auto-generated posts:** V4 matcher scores assets → if score ≥ 70 specific image wins → else branding fallback fires → `matchedImageUrl` set → publish route reads as fallback ✅
 
-## user_id
-`user_3FKEVWfSuyNsJz3oQ9kPH5nzKDm`

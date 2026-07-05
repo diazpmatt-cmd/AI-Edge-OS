@@ -3,6 +3,17 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 
 type Studio = "image" | "video" | "audio" | "ad";
+type Brand  = "bbb" | "aie";
+type ProjectStatus = "Draft" | "In Progress" | "Complete";
+
+interface MediaProject {
+  id: string;
+  name: string;
+  type: Studio;
+  status: ProjectStatus;
+  brand: Brand;
+  createdAt: Date;
+}
 
 const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accent: string; bg: string; features: string[] }[] = [
   {
@@ -820,12 +831,330 @@ const exportBtn: React.CSSProperties = {
   color: "#374151", fontSize: 12, fontWeight: 600, opacity: 0.6,
 };
 
+// ── Save Project Modal ────────────────────────────────────────────────────────
+interface SaveModalState { open: boolean; type: Studio; }
+
+function SaveProjectModal({
+  state, onClose, onSave,
+}: {
+  state: SaveModalState;
+  onClose: () => void;
+  onSave: (p: Omit<MediaProject, "id" | "createdAt">) => void;
+}) {
+  const studio = STUDIOS.find(s => s.id === state.type)!;
+  const [name, setName]   = useState(`${studio.label} Project`);
+  const [brand, setBrand] = useState<Brand>("bbb");
+
+  if (!state.open) return null;
+
+  const brands: { id: Brand; label: string; icon: string }[] = [
+    { id: "bbb", label: "Bed Bugs & Beyond",   icon: "🐛" },
+    { id: "aie", label: "AI Edge Solutions",    icon: "⚡" },
+  ];
+
+  function handleSave() {
+    if (!name.trim()) return;
+    onSave({ name: name.trim(), type: state.type, status: "Draft", brand });
+    onClose();
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(3,6,18,0.82)", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }} onClick={onClose}>
+      <div style={{
+        width: "100%", maxWidth: 420, borderRadius: 16, padding: "28px 28px 24px",
+        background: "linear-gradient(135deg, #0B1629 0%, #060E1E 100%)",
+        border: `1.5px solid ${studio.accent}44`,
+        boxShadow: `0 0 40px ${studio.accent}18`,
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
+          <span style={{ fontSize: 22 }}>{studio.icon}</span>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#E2E8F0" }}>Save as Project</div>
+            <div style={{ fontSize: 11, color: "#475569" }}>{studio.label}</div>
+          </div>
+          <button onClick={onClose} style={{
+            marginLeft: "auto", width: 28, height: 28, borderRadius: "50%", cursor: "pointer",
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            color: "#64748B", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+          }}>×</button>
+        </div>
+
+        {/* Project name */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: studio.accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+            Project Name
+          </label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSave()}
+            autoFocus
+            style={{
+              width: "100%", padding: "11px 14px", borderRadius: 9, boxSizing: "border-box",
+              background: `${studio.accent}08`, border: `1.5px solid ${studio.accent}33`,
+              color: "#E2E8F0", fontSize: 14, outline: "none",
+            }}
+          />
+        </div>
+
+        {/* Brand */}
+        <div style={{ marginBottom: 22 }}>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: studio.accent, textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 7 }}>
+            Brand
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {brands.map(b => (
+              <button key={b.id} onClick={() => setBrand(b.id)} style={{
+                flex: 1, padding: "11px 10px", borderRadius: 9, cursor: "pointer", textAlign: "center",
+                background: brand === b.id ? `${studio.accent}14` : "rgba(255,255,255,0.02)",
+                border: brand === b.id ? `1.5px solid ${studio.accent}` : "1.5px solid rgba(255,255,255,0.08)",
+              }}>
+                <div style={{ fontSize: 18, marginBottom: 4 }}>{b.icon}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: brand === b.id ? "#E2E8F0" : "#64748B" }}>{b.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "11px", borderRadius: 9, cursor: "pointer",
+            background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+            color: "#64748B", fontSize: 13, fontWeight: 600,
+          }}>Cancel</button>
+          <button onClick={handleSave} style={{
+            flex: 2, padding: "11px", borderRadius: 9, cursor: "pointer",
+            background: `linear-gradient(135deg, ${studio.accent}28 0%, ${studio.accent}14 100%)`,
+            border: `1.5px solid ${studio.accent}88`, color: studio.accent,
+            fontSize: 13, fontWeight: 700,
+          }}>💾 Save as Draft</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Saved Projects Section ────────────────────────────────────────────────────
+const STUDIO_META: Record<Studio, { icon: string; label: string; accent: string }> = {
+  image: { icon: "🖼️", label: "Image Studio",  accent: "#00AEEF" },
+  video: { icon: "🎬", label: "Video Studio",  accent: "#A78BFA" },
+  audio: { icon: "🎙️", label: "Audio Studio",  accent: "#34D399" },
+  ad:    { icon: "🚀", label: "Ad Creator",    accent: "#FB923C" },
+};
+
+const BRAND_META: Record<Brand, { label: string; icon: string; color: string }> = {
+  bbb: { label: "Bed Bugs & Beyond",  icon: "🐛", color: "#00AEEF" },
+  aie: { label: "AI Edge Solutions",  icon: "⚡", color: "#A78BFA" },
+};
+
+function SavedProjectsSection({
+  projects, onDelete, onJump,
+}: {
+  projects: MediaProject[];
+  onDelete: (id: string) => void;
+  onJump: (type: Studio) => void;
+}) {
+  const [filter, setFilter] = useState<Studio | "all">("all");
+
+  const filters: { id: Studio | "all"; label: string; icon: string }[] = [
+    { id: "all",   label: "All",          icon: "📁" },
+    { id: "image", label: "Image Studio", icon: "🖼️" },
+    { id: "video", label: "Video Studio", icon: "🎬" },
+    { id: "audio", label: "Audio Studio", icon: "🎙️" },
+    { id: "ad",    label: "Ad Creator",   icon: "🚀" },
+  ];
+
+  const visible = filter === "all" ? projects : projects.filter(p => p.type === filter);
+
+  function formatDate(d: Date) {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  return (
+    <div style={{ marginTop: 36 }}>
+      {/* Section header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <div style={{ height: 1, width: 20, background: "rgba(255,255,255,0.06)" }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.9px", whiteSpace: "nowrap" }}>
+          📁 Saved Projects
+        </span>
+        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+        {projects.length > 0 && (
+          <span style={{
+            padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+            background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.2)", color: "#00AEEF",
+          }}>
+            {projects.length} project{projects.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {/* Filter pills */}
+      <div style={{ display: "flex", gap: 7, marginBottom: 20, flexWrap: "wrap" }}>
+        {filters.map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "6px 13px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            background: filter === f.id ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.03)",
+            border: filter === f.id ? "1.5px solid rgba(0,174,239,0.45)" : "1px solid rgba(255,255,255,0.07)",
+            color: filter === f.id ? "#00AEEF" : "#475569",
+            transition: "all 0.12s",
+          }}>
+            <span style={{ fontSize: 13 }}>{f.icon}</span>
+            {f.label}
+            {f.id !== "all" && projects.filter(p => p.type === f.id).length > 0 && (
+              <span style={{
+                padding: "1px 6px", borderRadius: 10, fontSize: 10, fontWeight: 800,
+                background: "rgba(0,174,239,0.15)", color: "#00AEEF",
+              }}>
+                {projects.filter(p => p.type === f.id).length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Empty state */}
+      {visible.length === 0 && (
+        <div style={{
+          padding: "48px 24px", borderRadius: 14, textAlign: "center",
+          background: "rgba(255,255,255,0.01)", border: "1.5px dashed rgba(255,255,255,0.07)",
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.4 }}>
+            {filter === "all" ? "📁" : STUDIO_META[filter].icon}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
+            {filter === "all" ? "No saved projects yet" : `No ${STUDIO_META[filter].label} projects yet`}
+          </div>
+          <div style={{ fontSize: 13, color: "#1E293B", marginBottom: 20 }}>
+            Configure a studio above, then click{" "}
+            <span style={{ fontWeight: 700, color: "#64748B" }}>Save as Project</span>{" "}
+            to track it here.
+          </div>
+          {filter !== "all" && (
+            <button onClick={() => onJump(filter as Studio)} style={{
+              padding: "9px 20px", borderRadius: 9, cursor: "pointer",
+              background: `${STUDIO_META[filter as Studio].accent}14`,
+              border: `1.5px solid ${STUDIO_META[filter as Studio].accent}44`,
+              color: STUDIO_META[filter as Studio].accent, fontSize: 13, fontWeight: 700,
+            }}>
+              Open {STUDIO_META[filter as Studio].label}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Project cards grid */}
+      {visible.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+          {visible.map(p => {
+            const meta  = STUDIO_META[p.type];
+            const brand = BRAND_META[p.brand];
+            return (
+              <div key={p.id} style={{
+                padding: "18px 18px 16px", borderRadius: 13,
+                background: "rgba(255,255,255,0.02)", border: `1px solid ${meta.accent}22`,
+                position: "relative", overflow: "hidden",
+              }}>
+                {/* Subtle glow strip */}
+                <div style={{
+                  position: "absolute", top: 0, left: 0, right: 0, height: 2,
+                  background: `linear-gradient(90deg, transparent, ${meta.accent}66, transparent)`,
+                }} />
+
+                {/* Top row: type icon + status badge */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                      background: `${meta.accent}14`, border: `1px solid ${meta.accent}33`,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                    }}>
+                      {meta.icon}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: meta.accent }}>{meta.label}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{
+                      padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                      background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                    }}>
+                      {p.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Project name */}
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#E2E8F0", marginBottom: 10, lineHeight: 1.3 }}>
+                  {p.name}
+                </div>
+
+                {/* Meta row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: 13 }}>{brand.icon}</span>
+                  <span style={{ fontSize: 11.5, color: "#475569", flex: 1 }}>{brand.label}</span>
+                  <span style={{ fontSize: 11, color: "#334155" }}>{formatDate(p.createdAt)}</span>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: 7 }}>
+                  <button onClick={() => onJump(p.type)} style={{
+                    flex: 1, padding: "7px 10px", borderRadius: 7, cursor: "pointer",
+                    background: `${meta.accent}0E`, border: `1px solid ${meta.accent}33`,
+                    color: meta.accent, fontSize: 11, fontWeight: 700,
+                  }}>
+                    ✏️ Open Studio
+                  </button>
+                  <button onClick={() => onDelete(p.id)} style={{
+                    padding: "7px 10px", borderRadius: 7, cursor: "pointer",
+                    background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)",
+                    color: "#EF4444", fontSize: 11, fontWeight: 700,
+                  }}>
+                    🗑
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MediaEnginePage() {
   const { colors: t } = useTheme();
   const [activeStudio, setActiveStudio] = useState<Studio>("image");
+  const [projects, setProjects]         = useState<MediaProject[]>([]);
+  const [modal, setModal]               = useState<SaveModalState>({ open: false, type: "image" });
 
   const studio = STUDIOS.find(s => s.id === activeStudio)!;
+
+  function openSaveModal() {
+    setModal({ open: true, type: activeStudio });
+  }
+
+  function handleSaveProject(data: Omit<MediaProject, "id" | "createdAt">) {
+    setProjects(prev => [{
+      ...data,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: new Date(),
+    }, ...prev]);
+  }
+
+  function deleteProject(id: string) {
+    setProjects(prev => prev.filter(p => p.id !== id));
+  }
 
   return (
     <AppShell>
@@ -933,6 +1262,14 @@ export default function MediaEnginePage() {
           <span style={{ fontSize: 20 }}>{studio.icon}</span>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#E2E8F0" }}>{studio.label}</h2>
           <div style={{ height: 1, flex: 1, background: `${studio.accent}22` }} />
+          <button onClick={openSaveModal} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            background: `${studio.accent}14`, border: `1.5px solid ${studio.accent}55`,
+            color: studio.accent, fontSize: 12, fontWeight: 700,
+          }}>
+            💾 Save as Project
+          </button>
           <span style={{
             padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700,
             background: `${studio.accent}15`, border: `1px solid ${studio.accent}33`, color: studio.accent,
@@ -946,6 +1283,18 @@ export default function MediaEnginePage() {
         {activeStudio === "audio" && <AudioStudio t={t} />}
         {activeStudio === "ad"    && <AdCreator t={t} />}
       </div>
+
+      <SavedProjectsSection
+        projects={projects}
+        onDelete={deleteProject}
+        onJump={type => setActiveStudio(type)}
+      />
+
+      <SaveProjectModal
+        state={modal}
+        onClose={() => setModal(m => ({ ...m, open: false }))}
+        onSave={handleSaveProject}
+      />
     </AppShell>
   );
 }

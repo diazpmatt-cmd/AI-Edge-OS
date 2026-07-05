@@ -62,6 +62,7 @@ const AssetLibraryPage              = lazy(() => import("./pages/AssetLibraryPag
 const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"));
 const MorningBriefPage              = lazy(() => import("./pages/MorningBriefPage"));
 const MissionControlPage            = lazy(() => import("./pages/MissionControlPage"));
+const CustomerTimelinePage          = lazy(() => import("./pages/CustomerTimelinePage"));
 const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 
 const PageLoader = () => (
@@ -196,6 +197,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/mission-control">
           <Authenticated><MissionControlPage /></Authenticated>
+        </Route>
+        <Route path="/admin/customer-timeline">
+          <Authenticated><CustomerTimelinePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

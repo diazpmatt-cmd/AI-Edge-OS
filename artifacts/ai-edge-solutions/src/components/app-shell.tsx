@@ -10,6 +10,7 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const NAV_ITEMS = [
   { to: "/admin/morning-brief",       icon: "☀️", label: "Morning\nBrief",             bg: "#1A1200", accent: "#FBBF24" },
   { to: "/admin/mission-control",    icon: "🚀", label: "Mission\nControl",            bg: "#0A0E26", accent: "#00AEEF" },
+  { to: "/admin/customer-timeline",  icon: "👤", label: "Customer\nTimeline",           bg: "#0A1E2E", accent: "#06B6D4" },
   { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
   { to: "/admin/media-engine",        icon: "🎥", label: "Media\nEngine",             bg: "#0D1428", accent: "#00AEEF" },
   { to: "/admin/asset-library",       icon: "📁", label: "Asset\nLibrary",             bg: "#0A1A2E", accent: "#00AEEF" },

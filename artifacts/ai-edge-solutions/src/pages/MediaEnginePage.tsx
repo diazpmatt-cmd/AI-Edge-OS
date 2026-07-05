@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 
-type Studio = "image" | "video" | "audio" | "ad";
+type Studio = "image" | "video" | "audio" | "ad" | "integrations";
 type Brand  = "bbb" | "aie";
 type ProjectStatus = "Draft" | "In Progress" | "Complete";
 
@@ -63,7 +63,11 @@ const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accen
   },
   {
     id: "ad",    icon: "🚀", label: "Ad Creator",    tagline: "Full campaign from media assets",  accent: "#FB923C", bg: "#1E0C04",
-    features: ["5-step campaign wizard", "Multi-platform targeting", "Live ad preview", "Campaign package export"],
+    features: ["Campaign brief builder", "Multi-platform selector", "Asset builder + copy", "Campaign prompt export"],
+  },
+  {
+    id: "integrations", icon: "🔌", label: "AI Integrations", tagline: "Connect AI providers & ad platforms", accent: "#00AEEF", bg: "#030D1A",
+    features: ["OpenAI · Runway · ElevenLabs", "Meta & Google Ads export", "Generation pipeline preview", "Coming Soon — Next release"],
   },
 ];
 
@@ -1381,22 +1385,41 @@ function AudioStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
 
 // ── Ad Creator ────────────────────────────────────────────────────────────────
 function AdCreator({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
-  const [goal, setGoal] = useState(seed?.adGoal ?? "awareness");
-  const [step, setStep] = useState(1);
+  // Campaign Brief
+  const [cObjective, setCObjective] = useState(seed?.adGoal ?? "awareness");
+  const [cGoal,      setCGoal]      = useState("");
+  const [cAudience,  setCAudience]  = useState("");
+  const [cOffer,     setCOffer]     = useState("");
+  const [cService,   setCService]   = useState("");
+  const [cLocation,  setCLocation]  = useState("");
+  const [cCta,       setCCta]       = useState("");
 
-  const goals = [
-    { id: "awareness",    label: "Brand Awareness",  icon: "👁️" },
-    { id: "leads",        label: "Lead Generation",  icon: "🎯" },
-    { id: "conversions",  label: "Conversions",      icon: "💰" },
-    { id: "retargeting",  label: "Retargeting",      icon: "🔄" },
+  // Platform Selector (stateful)
+  const [platforms, setPlatforms] = useState<Set<string>>(new Set(["fb", "ig"]));
+
+  // Campaign Asset Builder
+  const [imgConcept,  setImgConcept]  = useState("");
+  const [vidConcept,  setVidConcept]  = useState("");
+  const [voScript,    setVoScript]    = useState("");
+  const [primaryCopy, setPrimaryCopy] = useState("");
+  const [headline,    setHeadline]    = useState("");
+  const [description, setDescription] = useState("");
+
+  const [copied, setCopied] = useState(false);
+
+  const objectiveDefs = [
+    { id: "awareness",   label: "Brand Awareness", icon: "👁️" },
+    { id: "leads",       label: "Lead Generation", icon: "🎯" },
+    { id: "conversions", label: "Conversions",     icon: "💰" },
+    { id: "retargeting", label: "Retargeting",     icon: "🔄" },
   ];
 
-  const platforms = [
-    { id: "fb",  label: "Facebook",  icon: "📘", checked: true },
-    { id: "ig",  label: "Instagram", icon: "📸", checked: true },
-    { id: "tt",  label: "TikTok",    icon: "🎵", checked: false },
-    { id: "yt",  label: "YouTube",   icon: "▶️",  checked: false },
-    { id: "ggl", label: "Google",    icon: "🔍", checked: false },
+  const platformDefs = [
+    { id: "fb",      label: "Facebook",       icon: "📘", color: "#1877F2" },
+    { id: "ig",      label: "Instagram",      icon: "📸", color: "#E1306C" },
+    { id: "google",  label: "Google Display", icon: "🔍", color: "#34A853" },
+    { id: "tiktok",  label: "TikTok",         icon: "🎵", color: "#69C9D0" },
+    { id: "youtube", label: "YouTube Shorts", icon: "▶️",  color: "#FF0000" },
   ];
 
   const steps = [
@@ -1407,258 +1430,485 @@ function AdCreator({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed
     { n: 5, label: "Review & Export" },
   ];
 
+  // Derived state
+  function togglePlatform(id: string) {
+    setPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedPlatformLabels = platformDefs.filter(p => platforms.has(p.id)).map(p => p.label);
+  const objLabel = objectiveDefs.find(o => o.id === cObjective)?.label ?? "Brand Awareness";
+
+  const generatedPrompt = [
+    cService  ? cService                                     : "Bed Bugs & Beyond Pest Control",
+    `objective: ${cGoal || objLabel}`,
+    cAudience ? `audience: ${cAudience}`                    : "homeowners in Baldwin County, AL",
+    cOffer    ? `offer: ${cOffer}`                          : null,
+    cLocation ? `in ${cLocation}`                           : null,
+    cCta      ? `CTA: "${cCta}"`                            : null,
+    `platforms: ${selectedPlatformLabels.join(", ") || "Facebook, Instagram"}`,
+    headline    ? `headline: "${headline}"`                 : null,
+    primaryCopy ? `copy: "${primaryCopy}"`                  : null,
+    description ? `description: "${description}"`           : null,
+    imgConcept  ? `image concept: ${imgConcept}`            : null,
+    vidConcept  ? `video concept: ${vidConcept}`            : null,
+    voScript    ? `voiceover: "${voScript}"`                : null,
+    "brand colors: #00355F / #00AEEF / #FF6B4A · tone: professional, local, trustworthy",
+  ].filter(Boolean).join(" | ");
+
+  function copyPrompt() {
+    navigator.clipboard.writeText(generatedPrompt).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Stepper */}
-      <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-        {steps.map((s, i) => (
-          <div key={s.n} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? 1 : "none" }}>
-            <button onClick={() => setStep(s.n)} style={{
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              cursor: "pointer", background: "none", border: "none", padding: 0,
-            }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%",
-                background: step === s.n ? "#FB923C" : step > s.n ? "rgba(251,146,60,0.3)" : "rgba(255,255,255,0.05)",
-                border: step >= s.n ? "2px solid #FB923C" : "2px solid rgba(255,255,255,0.1)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 13, fontWeight: 700, color: step >= s.n ? (step === s.n ? "#FFF" : "#FB923C") : "#475569",
-              }}>
-                {step > s.n ? "✓" : s.n}
-              </div>
-              <span style={{ fontSize: 10, color: step >= s.n ? "#FB923C" : "#475569", whiteSpace: "nowrap" }}>{s.label}</span>
-            </button>
-            {i < steps.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: step > s.n ? "#FB923C" : "rgba(255,255,255,0.06)", margin: "0 6px", marginBottom: 16 }} />
-            )}
-          </div>
-        ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* ── Generated Campaign Prompt Preview (full width) ── */}
+      <div style={{
+        padding: "18px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(251,146,60,0.08) 0%, rgba(251,146,60,0.03) 100%)",
+        border: "1.5px solid rgba(251,146,60,0.3)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14 }}>🚀</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#FB923C", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+            Generated Campaign Prompt
+          </span>
+          <div style={{ flex: 1 }} />
+          <button onClick={copyPrompt} style={{
+            display: "flex", alignItems: "center", gap: 5,
+            padding: "5px 13px", borderRadius: 7, cursor: "pointer",
+            background: copied ? "rgba(34,197,94,0.12)" : "rgba(251,146,60,0.1)",
+            border: copied ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(251,146,60,0.3)",
+            color: copied ? "#22C55E" : "#FB923C",
+            fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+          }}>
+            {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+          </button>
+          <span style={{
+            padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+          }}>PROMPT READY</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: "#CBD5E1", lineHeight: 1.7, maxHeight: 72, overflow: "hidden" }}>
+          {generatedPrompt}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          {[
+            { label: `🎯 ${objLabel}`,                                                           c: "#FB923C" },
+            { label: `📢 ${selectedPlatformLabels.slice(0,3).join(", ") || "Facebook, Instagram"}`, c: "#F97316" },
+            { label: `📝 ${headline ? `"${headline.slice(0,20)}…"` : "Add headline →"}`,        c: "#FDBA74" },
+            { label: `💰 ${cOffer ? cOffer.slice(0,22) : "Add offer →"}`,                       c: "#475569" },
+          ].map(chip => (
+            <span key={chip.label} style={{
+              padding: "3px 9px", borderRadius: 5, fontSize: 10, fontWeight: 700,
+              background: `${chip.c}12`, border: `1px solid ${chip.c}33`, color: chip.c,
+            }}>{chip.label}</span>
+          ))}
+        </div>
       </div>
 
-      {step === 1 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <Panel label="Campaign Goal" accent="#FB923C">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {goals.map(g => (
-                <button key={g.id} onClick={() => setGoal(g.id)} style={{
-                  padding: "18px 14px", borderRadius: 10, cursor: "pointer", textAlign: "left",
-                  background: goal === g.id ? "rgba(251,146,60,0.12)" : "rgba(251,146,60,0.04)",
-                  border: goal === g.id ? "1.5px solid #FB923C" : "1.5px solid rgba(251,146,60,0.15)",
+      {/* ── Two-column grid ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+        {/* LEFT: Campaign Brief + Objective + Platform Selector */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Campaign Brief Builder */}
+          <Panel label="Campaign Brief Builder" accent="#FB923C">
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {([
+                { key: "goal",     label: "Campaign Objective",     value: cGoal,     set: setCGoal,     ph: "e.g. Drive pest control service calls in Baldwin County" },
+                { key: "audience", label: "Target Audience",         value: cAudience, set: setCAudience, ph: "e.g. Homeowners 30–60 in Gulf Shores, Foley, Daphne AL"   },
+                { key: "offer",    label: "Offer / Promotion",       value: cOffer,    set: setCOffer,    ph: "e.g. Free inspection + 20% off first treatment"           },
+                { key: "service",  label: "Service or Product",      value: cService,  set: setCService,  ph: "e.g. Bed bug extermination, general pest control"         },
+                { key: "location", label: "Location / Service Area", value: cLocation, set: setCLocation, ph: "e.g. Baldwin County, Gulf Shores, Foley AL"               },
+                { key: "cta",      label: "Call to Action",           value: cCta,      set: setCCta,      ph: "e.g. Call Today, Book Now, Get a Free Quote"              },
+              ] as { key: string; label: string; value: string; set: (v: string) => void; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#FB923C", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{f.label}</div>
+                  <input
+                    value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.ph}
+                    style={{
+                      width: "100%", padding: "8px 12px", borderRadius: 8, boxSizing: "border-box",
+                      background: "rgba(251,146,60,0.05)", border: "1.5px solid rgba(251,146,60,0.18)",
+                      color: "#E2E8F0", fontSize: 12.5, outline: "none",
+                    }}
+                  />
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>💡 Prompt updates automatically as you type</div>
+            </div>
+          </Panel>
+
+          {/* Campaign Objective */}
+          <Panel label="Campaign Objective" accent="#FB923C">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {objectiveDefs.map(o => (
+                <button key={o.id} onClick={() => setCObjective(o.id)} style={{
+                  padding: "14px 12px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                  background: cObjective === o.id ? "rgba(251,146,60,0.14)" : "rgba(251,146,60,0.04)",
+                  border: cObjective === o.id ? "1.5px solid #FB923C" : "1.5px solid rgba(251,146,60,0.15)",
                 }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>{g.icon}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: goal === g.id ? "#FB923C" : "#CBD5E1" }}>{g.label}</div>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>{o.icon}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: cObjective === o.id ? "#FB923C" : "#CBD5E1" }}>{o.label}</div>
                 </button>
               ))}
             </div>
           </Panel>
 
-          <Panel label="Platforms" accent="#FB923C">
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {platforms.map(p => (
-                <button key={p.id} style={{
-                  display: "flex", alignItems: "center", gap: 7, padding: "9px 14px",
-                  borderRadius: 8, cursor: "pointer",
-                  background: p.checked ? "rgba(251,146,60,0.1)" : "rgba(255,255,255,0.02)",
-                  border: p.checked ? "1.5px solid rgba(251,146,60,0.5)" : "1.5px solid rgba(255,255,255,0.06)",
-                }}>
-                  <span style={{ fontSize: 16 }}>{p.icon}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: p.checked ? "#FB923C" : "#64748B" }}>{p.label}</span>
-                  {p.checked && <span style={{ fontSize: 11, color: "#FB923C" }}>✓</span>}
-                </button>
-              ))}
+          {/* Platform Selector */}
+          <Panel label="Platform Selector" accent="#FB923C">
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {platformDefs.map(p => {
+                const active = platforms.has(p.id);
+                return (
+                  <button key={p.id} onClick={() => togglePlatform(p.id)} style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+                    borderRadius: 9, cursor: "pointer", textAlign: "left",
+                    background: active ? "rgba(251,146,60,0.09)" : "rgba(255,255,255,0.02)",
+                    border: active ? "1.5px solid rgba(251,146,60,0.45)" : "1.5px solid rgba(255,255,255,0.06)",
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                      background: active ? `${p.color}22` : "rgba(255,255,255,0.04)",
+                      border: active ? `1px solid ${p.color}55` : "1px solid rgba(255,255,255,0.06)",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                    }}>{p.icon}</div>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: active ? "#E2E8F0" : "#64748B" }}>{p.label}</span>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                      background: active ? "#FB923C" : "rgba(255,255,255,0.04)",
+                      border: active ? "none" : "1.5px solid rgba(255,255,255,0.1)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 10, color: "#fff", fontWeight: 800,
+                    }}>{active ? "✓" : ""}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: "#334155" }}>
+              {platforms.size} platform{platforms.size !== 1 ? "s" : ""} selected
             </div>
           </Panel>
-
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={() => setStep(2)} style={genBtn("#FB923C")}>Next: Creative Assets →</button>
-          </div>
         </div>
-      )}
 
-      {step === 2 && (
+        {/* RIGHT: Campaign Asset Builder + Mock Preview + Actions + Export */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Panel label="Creative Assets" accent="#FB923C">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              {[
-                { type: "Image",  icon: "🖼️", formats: "PNG, JPG", studio: "Image Studio", accent: "#00AEEF", status: "ready" },
-                { type: "Video",  icon: "🎬", formats: "MP4",       studio: "Video Studio", accent: "#A78BFA", status: "none"  },
-                { type: "Audio",  icon: "🎙️", formats: "MP3, WAV",  studio: "Audio Studio", accent: "#34D399", status: "none"  },
-              ].map(asset => (
-                <div key={asset.type} style={{
-                  padding: "16px 14px", borderRadius: 10, textAlign: "center",
-                  background: asset.status === "ready" ? `rgba(0,174,239,0.08)` : "rgba(255,255,255,0.02)",
-                  border: asset.status === "ready" ? `1.5px solid rgba(0,174,239,0.35)` : "1.5px dashed rgba(255,255,255,0.08)",
-                }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>{asset.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1", marginBottom: 4 }}>{asset.type}</div>
-                  <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>{asset.formats}</div>
-                  {asset.status === "ready"
-                    ? <div style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>✓ Ready</div>
-                    : <button style={{
-                        padding: "5px 12px", borderRadius: 6, cursor: "pointer",
-                        background: `rgba(${asset.accent === "#A78BFA" ? "167,139,250" : "52,211,153"},0.1)`,
-                        border: `1px solid ${asset.accent}44`, color: asset.accent, fontSize: 11, fontWeight: 600,
-                      }}>
-                        Open {asset.studio}
-                      </button>
-                  }
+
+          {/* Campaign Asset Builder */}
+          <Panel label="Campaign Asset Builder" accent="#FB923C">
+            <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+              {([
+                { key: "imgConcept",  label: "Image Concept",     value: imgConcept,  set: setImgConcept,  rows: 2, ph: "e.g. BB&B technician in uniform treating home, clean bright lighting" },
+                { key: "vidConcept",  label: "Video Concept",     value: vidConcept,  set: setVidConcept,  rows: 2, ph: "e.g. Fast cuts — pest problem → BB&B solution → happy family"         },
+                { key: "voScript",    label: "Voiceover Script",  value: voScript,    set: setVoScript,    rows: 2, ph: "e.g. Bed bugs keeping you up? Call Bed Bugs and Beyond today."          },
+                { key: "primaryCopy", label: "Primary Ad Copy",   value: primaryCopy, set: setPrimaryCopy, rows: 2, ph: "e.g. Baldwin County's most trusted pest control — guaranteed results."  },
+                { key: "headline",    label: "Headline",          value: headline,    set: setHeadline,    rows: 1, ph: "e.g. Pest-Free Living Starts Here"                                      },
+                { key: "description", label: "Description",       value: description, set: setDescription, rows: 2, ph: "e.g. Fast, effective, guaranteed. Serving Gulf Shores, Foley & beyond." },
+              ] as { key: string; label: string; value: string; set: (v: string) => void; rows: number; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#FB923C", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{f.label}</div>
+                  <textarea
+                    value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.ph} rows={f.rows}
+                    style={{
+                      width: "100%", padding: "8px 11px", borderRadius: 8, resize: "vertical",
+                      background: f.value ? "rgba(251,146,60,0.05)" : "rgba(255,255,255,0.01)",
+                      border: f.value ? "1px solid rgba(251,146,60,0.28)" : "1px solid rgba(251,146,60,0.12)",
+                      color: "#E2E8F0", fontSize: 12, outline: "none",
+                      boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5,
+                    }}
+                  />
                 </div>
               ))}
             </div>
           </Panel>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <button onClick={() => setStep(1)} style={{ ...exportBtn, color: "#94A3B8" }}>← Back</button>
-            <button onClick={() => setStep(3)} style={genBtn("#FB923C")}>Next: Ad Copy →</button>
-          </div>
-        </div>
-      )}
 
-      {step === 3 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <Panel label="Ad Copy" accent="#FB923C">
-              {[
-                { label: "Headline",       placeholder: "Pest-Free Living Starts Here",             rows: 2 },
-                { label: "Primary Text",   placeholder: "Baldwin County's #1 pest control service…", rows: 4 },
-                { label: "Call to Action", placeholder: "Call Now",                                   rows: 1 },
-                { label: "URL",            placeholder: "https://bedbugsandbeyond.com",               rows: 1 },
-              ].map(field => (
-                <div key={field.label} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: "#FB923C", marginBottom: 6 }}>{field.label}</div>
-                  <textarea rows={field.rows} placeholder={field.placeholder} style={{
-                    width: "100%", padding: "10px 12px", borderRadius: 8, resize: "vertical",
-                    background: "rgba(251,146,60,0.04)", border: "1.5px solid rgba(251,146,60,0.18)",
-                    color: "#E2E8F0", fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-                  }} />
-                </div>
-              ))}
-              <GenButton accent="#FB923C" label="✨ AI Generate Copy" />
-            </Panel>
+          {/* Mock Campaign Preview */}
+          <Panel label="Campaign Preview" accent="#FB923C">
+            <div style={{ position: "relative" }}>
+              <div style={{
+                position: "absolute", top: 0, right: 0, zIndex: 2,
+                padding: "4px 10px", borderRadius: 6, fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
+                background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#FBBF24",
+              }}>COMING SOON</div>
 
-            <Panel label="Ad Preview" accent="#FB923C">
-              {/* Mock Facebook ad */}
+              {/* Facebook-style mockup */}
               <div style={{
                 borderRadius: 12, overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.08)", background: "#1C1C1E",
+                border: "1px solid rgba(255,255,255,0.1)", background: "#1A1A2E",
               }}>
-                <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#00AEEF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🐛</div>
-                  <div>
+                {/* Ad header */}
+                <div style={{ padding: "11px 14px", display: "flex", alignItems: "center", gap: 9, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #00355F, #00AEEF)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🐛</div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>Bed Bugs & Beyond</div>
-                    <div style={{ fontSize: 11, color: "#64748B" }}>Sponsored · 📍 Baldwin County, AL</div>
+                    <div style={{ fontSize: 11, color: "#475569" }}>Sponsored · 📍 Baldwin County, AL</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {selectedPlatformLabels.slice(0, 2).map(pl => (
+                      <span key={pl} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(251,146,60,0.12)", border: "1px solid rgba(251,146,60,0.25)", color: "#FB923C", fontWeight: 700 }}>{pl}</span>
+                    ))}
                   </div>
                 </div>
-                <div style={{ height: 160, background: "linear-gradient(135deg, #071828 0%, #0D2A3E 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 36 }}>🖼️</span>
+
+                {/* Creative area */}
+                <div style={{
+                  height: 140,
+                  background: "linear-gradient(135deg, #071828 0%, #0D2A3E 50%, #071828 100%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                  position: "relative", overflow: "hidden",
+                }}>
+                  <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "repeating-linear-gradient(0deg,#00AEEF,#00AEEF 1px,transparent 1px,transparent 28px),repeating-linear-gradient(90deg,#00AEEF,#00AEEF 1px,transparent 1px,transparent 28px)" }} />
+                  <div style={{ fontSize: 32, filter: "drop-shadow(0 0 12px rgba(0,174,239,0.4))" }}>🖼️</div>
+                  <div style={{ fontSize: 11, color: "#334155" }}>
+                    {imgConcept ? imgConcept.slice(0, 40) + (imgConcept.length > 40 ? "…" : "") : "AI-generated creative appears here"}
+                  </div>
                 </div>
+
+                {/* Ad body */}
                 <div style={{ padding: "12px 14px" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#E2E8F0", marginBottom: 4 }}>Pest-Free Living Starts Here</div>
-                  <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.5, marginBottom: 10 }}>Baldwin County's #1 pest control service. Fast, effective, guaranteed.</div>
-                  <button style={{
-                    width: "100%", padding: "9px", borderRadius: 7, cursor: "pointer",
-                    background: "#1877F2", border: "none", color: "#fff", fontSize: 13, fontWeight: 700,
-                  }}>Call Now</button>
-                </div>
-              </div>
-            </Panel>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <button onClick={() => setStep(2)} style={{ ...exportBtn, color: "#94A3B8" }}>← Back</button>
-            <button onClick={() => setStep(4)} style={genBtn("#FB923C")}>Next: Targeting →</button>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            <Panel label="Audience Targeting" accent="#FB923C">
-              {[
-                { label: "Location",   value: "Baldwin County, AL (25 mi radius)" },
-                { label: "Age Range",  value: "28 – 65+" },
-                { label: "Interests",  value: "Home ownership, pest control, real estate" },
-                { label: "Budget",     value: "$15 / day" },
-                { label: "Duration",   value: "7 days" },
-              ].map(f => (
-                <div key={f.label} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: "#FB923C", marginBottom: 5 }}>{f.label}</div>
-                  <input defaultValue={f.value} style={{
-                    width: "100%", padding: "9px 12px", borderRadius: 8, boxSizing: "border-box",
-                    background: "rgba(251,146,60,0.04)", border: "1.5px solid rgba(251,146,60,0.18)",
-                    color: "#E2E8F0", fontSize: 13, outline: "none",
-                  }} />
-                </div>
-              ))}
-            </Panel>
-            <Panel label="Estimated Reach" accent="#FB923C">
-              {[
-                { label: "Est. Daily Reach",    value: "1,200 – 3,500",    icon: "👁️" },
-                { label: "Est. Impressions",    value: "8,400 – 24,500",   icon: "📊" },
-                { label: "Est. Clicks",         value: "180 – 520",        icon: "🖱️" },
-                { label: "Est. Leads",          value: "12 – 35",          icon: "🎯" },
-                { label: "Total Budget",        value: "$105 / week",      icon: "💰" },
-                { label: "Est. Cost Per Lead",  value: "$3 – $9",          icon: "💡" },
-              ].map(stat => (
-                <div key={stat.label} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "11px 14px", borderRadius: 9, marginBottom: 8,
-                  background: "rgba(251,146,60,0.06)", border: "1px solid rgba(251,146,60,0.12)",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>{stat.icon}</span>
-                    <span style={{ fontSize: 12, color: "#94A3B8" }}>{stat.label}</span>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0", marginBottom: 3 }}>
+                    {headline || "Pest-Free Living Starts Here"}
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#FB923C" }}>{stat.value}</span>
+                  <div style={{ fontSize: 11.5, color: "#94A3B8", lineHeight: 1.5, marginBottom: 10 }}>
+                    {primaryCopy || "Baldwin County's #1 pest control service. Fast, effective, guaranteed."}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
+                    <span style={{ fontSize: 10, color: "#334155" }}>bedbugsandbeyond.com</span>
+                    <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
+                  </div>
+                  <button disabled style={{
+                    width: "100%", padding: "9px", borderRadius: 7, cursor: "not-allowed",
+                    background: "#1877F2", border: "none", color: "#fff", fontSize: 13, fontWeight: 700,
+                    opacity: 0.7,
+                  }}>{cCta || "Call Now"}</button>
                 </div>
-              ))}
-            </Panel>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <button onClick={() => setStep(3)} style={{ ...exportBtn, color: "#94A3B8" }}>← Back</button>
-            <button onClick={() => setStep(5)} style={genBtn("#FB923C")}>Next: Review & Export →</button>
-          </div>
-        </div>
-      )}
 
-      {step === 5 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Panel label="Campaign Summary" accent="#FB923C">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-              {[
-                { label: "Goal",      value: "Lead Generation",                icon: "🎯" },
-                { label: "Platforms", value: "Facebook, Instagram",            icon: "📢" },
-                { label: "Budget",    value: "$105 / week",                    icon: "💰" },
-                { label: "Creative",  value: "1 image, 1 voiceover",           icon: "🎨" },
-                { label: "Duration",  value: "7 days",                         icon: "📅" },
-                { label: "Audience",  value: "Baldwin County, AL · 28–65+",    icon: "👥" },
-              ].map(s => (
-                <div key={s.label} style={{
-                  padding: "14px 12px", borderRadius: 10,
-                  background: "rgba(251,146,60,0.06)", border: "1px solid rgba(251,146,60,0.15)",
-                }}>
-                  <div style={{ fontSize: 22, marginBottom: 6 }}>{s.icon}</div>
-                  <div style={{ fontSize: 11, color: "#64748B", marginBottom: 3 }}>{s.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1" }}>{s.value}</div>
+                {/* Platform pills */}
+                <div style={{ padding: "8px 14px 12px", display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {platformDefs.filter(p => platforms.has(p.id)).map(p => (
+                    <span key={p.id} style={{
+                      fontSize: 10, padding: "2px 8px", borderRadius: 10,
+                      background: `${p.color}15`, border: `1px solid ${p.color}33`, color: p.color, fontWeight: 600,
+                    }}>{p.icon} {p.label}</span>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 140, position: "relative" }}>
-                <button disabled title="Export coming soon" style={{ ...exportBtn, width: "100%", opacity: 0.5 }}>🚀 Export Campaign</button>
-                <span style={{ position: "absolute", top: -7, right: -4, padding: "1px 5px", borderRadius: 4, fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase" as const, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24" }}>Soon</span>
-              </div>
-              <div style={{ flex: 1, minWidth: 140, position: "relative" }}>
-                <button disabled title="Export coming soon" style={{ ...exportBtn, width: "100%", opacity: 0.5 }}>📋 Export Media Kit</button>
-                <span style={{ position: "absolute", top: -7, right: -4, padding: "1px 5px", borderRadius: 4, fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase" as const, background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24" }}>Soon</span>
-              </div>
-              <button style={{ flex: 1, minWidth: 140, padding: "9px 14px", borderRadius: 8, cursor: "pointer", background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.25)", color: "#FB923C", fontSize: 12, fontWeight: 600 }}>💾 Save Draft</button>
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={copyPrompt} style={{
+                flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: "10px", borderRadius: 9, cursor: "pointer",
+                background: copied ? "rgba(34,197,94,0.1)" : "rgba(251,146,60,0.08)",
+                border: copied ? "1.5px solid rgba(34,197,94,0.35)" : "1.5px solid rgba(251,146,60,0.28)",
+                color: copied ? "#22C55E" : "#FB923C",
+                fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+              }}>
+                {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+              </button>
+              <button disabled title="AI campaign generation coming in next release" style={{
+                flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                padding: "10px", borderRadius: 9, cursor: "not-allowed",
+                background: "rgba(251,146,60,0.04)", border: "1.5px solid rgba(251,146,60,0.15)",
+                color: "#334155", fontSize: 12, fontWeight: 700,
+              }}>
+                <span style={{ fontSize: 13 }}>✨</span>
+                Generate Campaign
+                <span style={{
+                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
+                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                }}>SOON</span>
+              </button>
             </div>
           </Panel>
-          <div style={{ display: "flex", justifyContent: "flex-start" }}>
-            <button onClick={() => setStep(4)} style={{ ...exportBtn, color: "#94A3B8" }}>← Back</button>
+
+          {/* Export */}
+          <Panel label="Export Campaign Assets" accent="#FB923C">
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <ExportButton label="Campaign ZIP" accent="#FB923C" />
+              <ExportButton label="Media Kit"    accent="#FB923C" />
+              <ExportButton label="Ad Package"   accent="#FB923C" />
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AI Integration Control Center ─────────────────────────────────────────────
+function AIIntegrationsCenter({ t }: { t: ReturnType<typeof useTheme>["colors"] }) {
+  const providers = [
+    { name: "OpenAI Images",        purpose: "AI image generation (DALL·E 3)",            icon: "🤖", reqType: "API Key",           color: "#00A67E", category: "Generation" },
+    { name: "Runway Video",         purpose: "AI video generation (Gen-3 Alpha)",          icon: "🎬", reqType: "API Key",           color: "#7C3AED", category: "Generation" },
+    { name: "ElevenLabs Voice",     purpose: "Realistic AI voice synthesis & cloning",     icon: "🎙️", reqType: "API Key",           color: "#9B59B6", category: "Generation" },
+    { name: "HeyGen Avatar Video",  purpose: "AI talking avatar video creation",           icon: "👤", reqType: "API Key + OAuth",   color: "#06B6D4", category: "Generation" },
+    { name: "Cloudinary Storage",   purpose: "Cloud media storage, CDN & transformation", icon: "☁️", reqType: "API Key + Webhook", color: "#3448C5", category: "Infrastructure" },
+    { name: "Meta Ads Export",      purpose: "Direct Facebook & Instagram ad publishing",  icon: "📘", reqType: "OAuth",             color: "#1877F2", category: "Distribution" },
+    { name: "Google Ads Export",    purpose: "Google Display & YouTube Shorts ad export",  icon: "🔍", reqType: "OAuth",             color: "#34A853", category: "Distribution" },
+  ];
+
+  const pipeline = [
+    { step: 1, label: "Prompt Builder",       icon: "✍️",  desc: "Brief, brand tone, target" },
+    { step: 2, label: "Brand Kit",            icon: "🎨",  desc: "Colors, logo, voice style" },
+    { step: 3, label: "AI Provider",          icon: "🤖",  desc: "Generate image / video / audio" },
+    { step: 4, label: "Preview Output",       icon: "👁️",  desc: "Review, refine, approve" },
+    { step: 5, label: "Export & Campaign",    icon: "🚀",  desc: "Publish to ad platforms" },
+  ];
+
+  const categoryColors: Record<string, string> = {
+    Generation:     "#A78BFA",
+    Infrastructure: "#00AEEF",
+    Distribution:   "#FB923C",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+
+      {/* Section header */}
+      <div style={{
+        padding: "18px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(0,174,239,0.07) 0%, rgba(0,174,239,0.02) 100%)",
+        border: "1.5px solid rgba(0,174,239,0.25)",
+        display: "flex", alignItems: "center", gap: 14,
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+          background: "linear-gradient(135deg, rgba(0,174,239,0.2), rgba(167,139,250,0.2))",
+          border: "1.5px solid rgba(0,174,239,0.3)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+        }}>🔌</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#E2E8F0", marginBottom: 3 }}>AI Integration Control Center</div>
+          <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+            Connect AI generation providers and ad distribution platforms. All integrations are ready to configure — backend activation ships in the next release.
           </div>
         </div>
-      )}
+        <span style={{
+          padding: "5px 13px", borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: "0.6px", flexShrink: 0,
+          background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+        }}>PHASE 8 COMING SOON</span>
+      </div>
+
+      {/* Provider Cards */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 14 }}>
+          AI Provider Cards
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {providers.map(prov => {
+            const catColor = categoryColors[prov.category] ?? "#00AEEF";
+            return (
+              <div key={prov.name} style={{
+                padding: "18px 16px", borderRadius: 14,
+                background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)",
+                display: "flex", flexDirection: "column", gap: 10,
+                transition: "border-color 0.15s",
+              }}>
+                {/* Provider header */}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                    background: `${prov.color}14`, border: `1.5px solid ${prov.color}33`,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+                  }}>{prov.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0", marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{prov.name}</div>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4,
+                      background: `${catColor}14`, border: `1px solid ${catColor}33`, color: catColor,
+                    }}>{prov.category}</span>
+                  </div>
+                </div>
+
+                {/* Purpose */}
+                <div style={{ fontSize: 11.5, color: "#64748B", lineHeight: 1.5 }}>{prov.purpose}</div>
+
+                {/* Status + Requirement */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#374151", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: "#374151", fontWeight: 700 }}>Not Connected</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "#334155" }}>
+                    Required: <span style={{ color: "#475569", fontWeight: 600 }}>{prov.reqType}</span>
+                  </div>
+                </div>
+
+                {/* Connect button */}
+                <button disabled title="Integration coming in next release" style={{
+                  width: "100%", padding: "8px", borderRadius: 8, cursor: "not-allowed",
+                  background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)",
+                  color: "#334155", fontSize: 11.5, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}>
+                  🔗 Connect
+                  <span style={{
+                    padding: "1px 5px", borderRadius: 3, fontSize: 8, fontWeight: 800,
+                    background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                  }}>SOON</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Generation Pipeline Preview */}
+      <Panel label="Generation Pipeline Preview" accent="#00AEEF">
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 16 }}>
+          End-to-end AI media generation flow — from brief to published campaign
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+          {pipeline.map((step, i) => (
+            <div key={step.step} style={{ display: "flex", alignItems: "center", flex: i < pipeline.length - 1 ? 1 : "none" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                <div style={{
+                  width: 50, height: 50, borderRadius: 14,
+                  background: "linear-gradient(135deg, rgba(0,174,239,0.12) 0%, rgba(167,139,250,0.08) 100%)",
+                  border: "1.5px solid rgba(0,174,239,0.25)",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+                }}>{step.icon}</div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#CBD5E1", whiteSpace: "nowrap" }}>{step.label}</div>
+                  <div style={{ fontSize: 9.5, color: "#475569", marginTop: 2, whiteSpace: "nowrap" }}>{step.desc}</div>
+                </div>
+              </div>
+              {i < pipeline.length - 1 && (
+                <div style={{
+                  flex: 1, height: 2, margin: "0 8px", marginBottom: 30,
+                  background: "linear-gradient(90deg, rgba(0,174,239,0.3), rgba(167,139,250,0.3))",
+                  borderRadius: 1,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: -4 }}>
+                    <span style={{ fontSize: 12, color: "rgba(0,174,239,0.4)" }}>›</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 20, padding: "12px 16px", borderRadius: 10, background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.12)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>⚡</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#00AEEF", marginBottom: 2 }}>Ready to activate</div>
+              <div style={{ fontSize: 11, color: "#334155" }}>
+                All prompt builders and brand kits are complete. Connect providers in Phase 8 to unlock full AI generation.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -2387,10 +2637,11 @@ function SaveProjectModal({
 
 // ── Saved Projects Section ────────────────────────────────────────────────────
 const STUDIO_META: Record<Studio, { icon: string; label: string; accent: string }> = {
-  image: { icon: "🖼️", label: "Image Studio",  accent: "#00AEEF" },
-  video: { icon: "🎬", label: "Video Studio",  accent: "#A78BFA" },
-  audio: { icon: "🎙️", label: "Audio Studio",  accent: "#34D399" },
-  ad:    { icon: "🚀", label: "Ad Creator",    accent: "#FB923C" },
+  image:        { icon: "🖼️", label: "Image Studio",          accent: "#00AEEF" },
+  video:        { icon: "🎬", label: "Video Studio",          accent: "#A78BFA" },
+  audio:        { icon: "🎙️", label: "Audio Studio",          accent: "#34D399" },
+  ad:           { icon: "🚀", label: "Ad Creator",            accent: "#FB923C" },
+  integrations: { icon: "🔌", label: "AI Integrations",       accent: "#00AEEF" },
 };
 
 const BRAND_META: Record<Brand, { label: string; icon: string; color: string }> = {
@@ -2664,7 +2915,7 @@ export default function MediaEnginePage() {
       </div>
 
       {/* Studio selector */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 28 }}>
         {STUDIOS.map(s => {
           const active = activeStudio === s.id;
           return (
@@ -2732,10 +2983,11 @@ export default function MediaEnginePage() {
           </span>
         </div>
 
-        {activeStudio === "image" && <ImageStudio key={seedKey} t={t} seed={seed} />}
-        {activeStudio === "video" && <VideoStudio key={seedKey} t={t} seed={seed} />}
-        {activeStudio === "audio" && <AudioStudio key={seedKey} t={t} seed={seed} />}
-        {activeStudio === "ad"    && <AdCreator   key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "image"        && <ImageStudio          key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "video"        && <VideoStudio          key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "audio"        && <AudioStudio          key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "ad"           && <AdCreator            key={seedKey} t={t} seed={seed} />}
+        {activeStudio === "integrations" && <AIIntegrationsCenter key={seedKey} t={t} />}
       </div>
 
       <BrandKitSection

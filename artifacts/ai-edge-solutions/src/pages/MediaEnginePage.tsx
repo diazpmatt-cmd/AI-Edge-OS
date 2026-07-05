@@ -70,16 +70,55 @@ const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accen
 // ── Image Studio ──────────────────────────────────────────────────────────────
 function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
   const [format, setFormat] = useState<"social" | "ad" | "banner">(seed?.format ?? "social");
-  const [style, setStyle] = useState(seed?.style ?? "modern");
-  const [prompt, setPrompt] = useState(seed?.prompt ?? "");
+  const [style, setStyle]   = useState(seed?.style ?? "modern");
+
+  // Prompt Builder fields
+  const [goal,     setGoal]     = useState(seed?.prompt ? "" : "");
+  const [audience, setAudience] = useState("");
+  const [offer,    setOffer]    = useState("");
+  const [service,  setService]  = useState("");
+  const [location, setLocation] = useState("");
+  const [cta,      setCta]      = useState("");
+  const [copied,   setCopied]   = useState(false);
 
   const formats = [
     { id: "social", label: "Social Graphic", size: "1080×1080" },
-    { id: "ad",     label: "Ad Creative",    size: "1200×628" },
-    { id: "banner", label: "Banner",          size: "1920×600" },
+    { id: "ad",     label: "Ad Creative",    size: "1200×628"  },
+    { id: "banner", label: "Banner",          size: "1920×600"  },
   ] as const;
 
   const styles = ["Modern", "Minimal", "Bold", "Corporate", "Playful", "Luxury"];
+
+  const formatMeta: Record<string, string> = {
+    social: "1080×1080 square (social graphic)",
+    ad:     "1200×628 landscape (ad creative)",
+    banner: "1920×600 wide (banner)",
+  };
+
+  // Build a polished prompt from builder fields
+  const parts: string[] = [];
+  if (service)  parts.push(service);
+  if (goal)     parts.push(`campaign goal: ${goal}`);
+  if (audience) parts.push(`targeting ${audience}`);
+  if (offer)    parts.push(offer);
+  if (location) parts.push(`in ${location}`);
+  if (cta)      parts.push(`CTA: "${cta}"`);
+  parts.push(`${style} visual style`);
+  parts.push(`formatted for ${formatMeta[format]}`);
+  parts.push("professional, brand-consistent, high quality");
+
+  // Fall back to seed prompt if builder is empty
+  const hasBuilderInput = goal || audience || offer || service || location || cta;
+  const generatedPrompt = hasBuilderInput
+    ? parts.join(", ")
+    : (seed?.prompt ?? "Fill in the Prompt Builder fields below to generate your image prompt.");
+
+  function copyPrompt() {
+    if (!hasBuilderInput && !seed?.prompt) return;
+    navigator.clipboard.writeText(generatedPrompt).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   const placeholders = [
     { label: "Logo + Brand Colors", icon: "🎨", desc: "Consistent brand identity" },
@@ -89,25 +128,105 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Prompt row */}
-      <div style={{ display: "flex", gap: 10 }}>
-        <input
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          placeholder="Describe your image… e.g. 'Pest control team in uniform, bright blue, professional'"
-          style={{
-            flex: 1, padding: "13px 16px", borderRadius: 10,
-            background: "rgba(0,174,239,0.06)", border: "1.5px solid rgba(0,174,239,0.2)",
-            color: "#E2E8F0", fontSize: 14, outline: "none",
-          }}
-        />
-        <GenButton accent="#00AEEF" label="✨ Generate Image" />
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* ── Generated Prompt Preview (full width) ── */}
+      <div style={{
+        padding: "18px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(0,174,239,0.07) 0%, rgba(0,174,239,0.03) 100%)",
+        border: "1.5px solid rgba(0,174,239,0.28)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14 }}>✨</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+            Generated Image Prompt
+          </span>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={copyPrompt}
+            disabled={!hasBuilderInput && !seed?.prompt}
+            title="Copy prompt to clipboard"
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "5px 13px", borderRadius: 7, cursor: hasBuilderInput || seed?.prompt ? "pointer" : "not-allowed",
+              background: copied ? "rgba(34,197,94,0.12)" : "rgba(0,174,239,0.1)",
+              border: copied ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(0,174,239,0.3)",
+              color: copied ? "#22C55E" : "#00AEEF",
+              fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+            }}
+          >
+            {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+          </button>
+          <span style={{
+            padding: "3px 9px", borderRadius: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+          }}>
+            PROMPT READY
+          </span>
+        </div>
+        <div style={{
+          fontSize: 13, color: hasBuilderInput || seed?.prompt ? "#CBD5E1" : "#334155",
+          lineHeight: 1.65, fontStyle: hasBuilderInput || seed?.prompt ? "normal" : "italic",
+          minHeight: 44,
+        }}>
+          {generatedPrompt}
+        </div>
+        {(hasBuilderInput || seed?.prompt) && (
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+            {[
+              { label: `📐 ${formatMeta[format]}`, accent: "#00AEEF" },
+              { label: `🎨 ${style.charAt(0).toUpperCase() + style.slice(1)} style`, accent: "#A78BFA" },
+            ].map(chip => (
+              <span key={chip.label} style={{
+                padding: "3px 9px", borderRadius: 5, fontSize: 10, fontWeight: 700,
+                background: `${chip.accent}12`, border: `1px solid ${chip.accent}33`, color: chip.accent,
+              }}>
+                {chip.label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* ── Main two-column grid ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Left: Options */}
+
+        {/* ── LEFT: Prompt Builder + Format + Style ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Prompt Builder */}
+          <Panel label="Prompt Builder" accent="#00AEEF">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {([
+                { key: "goal",     label: "Campaign Goal",         value: goal,     set: setGoal,     ph: "e.g. Drive service bookings, increase brand awareness" },
+                { key: "audience", label: "Target Audience",        value: audience, set: setAudience, ph: "e.g. Homeowners in Baldwin County, AL aged 30–60" },
+                { key: "offer",    label: "Offer / Promotion",      value: offer,    set: setOffer,    ph: "e.g. Free inspection + 20% off first treatment" },
+                { key: "service",  label: "Service or Product",     value: service,  set: setService,  ph: "e.g. Bed bug extermination, pest control service" },
+                { key: "location", label: "Location / Service Area", value: location, set: setLocation, ph: "e.g. Baldwin County, Gulf Shores, Foley AL" },
+                { key: "cta",      label: "Call to Action",          value: cta,      set: setCta,      ph: "e.g. Call Today, Book Now, Get a Free Quote" },
+              ] as { key: string; label: string; value: string; set: (v: string) => void; ph: string }[]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>
+                    {f.label}
+                  </div>
+                  <input
+                    value={f.value}
+                    onChange={e => f.set(e.target.value)}
+                    placeholder={f.ph}
+                    style={{
+                      width: "100%", padding: "9px 12px", borderRadius: 8, boxSizing: "border-box",
+                      background: "rgba(0,174,239,0.05)", border: "1.5px solid rgba(0,174,239,0.18)",
+                      color: "#E2E8F0", fontSize: 12.5, outline: "none",
+                    }}
+                  />
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>
+                💡 Prompt updates automatically as you type
+              </div>
+            </div>
+          </Panel>
+
           {/* Format */}
           <Panel label="Format" accent="#00AEEF">
             <div style={{ display: "flex", gap: 8 }}>
@@ -120,7 +239,7 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
             </div>
           </Panel>
 
-          {/* Style */}
+          {/* Visual Style */}
           <Panel label="Visual Style" accent="#00AEEF">
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
               {styles.map(s => (
@@ -158,22 +277,103 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
           </Panel>
         </div>
 
-        {/* Right: Canvas + recent */}
+        {/* ── RIGHT: Image Preview + Actions + Quick Templates ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Panel label="Canvas Preview" accent="#00AEEF">
-            <div style={{
-              aspectRatio: "1 / 1", background: "linear-gradient(135deg, #071828 0%, #0D2A3E 100%)",
-              borderRadius: 10, border: "1.5px dashed rgba(0,174,239,0.25)",
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
-            }}>
-              <div style={{ fontSize: 36 }}>🖼️</div>
-              <div style={{ fontSize: 13, color: "#475569", textAlign: "center" }}>
-                Generated image will appear here
+
+          {/* Mock Generated Image Preview */}
+          <Panel label="AI Image Output" accent="#00AEEF">
+            <div style={{ position: "relative" }}>
+              {/* Coming Soon badge */}
+              <div style={{
+                position: "absolute", top: 12, right: 12, zIndex: 2,
+                padding: "4px 10px", borderRadius: 6, fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
+                background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#FBBF24",
+              }}>
+                COMING SOON
               </div>
-              <div style={{ fontSize: 11, color: "#00AEEF", opacity: 0.6 }}>1080 × 1080 px</div>
+
+              {/* Preview card */}
+              <div style={{
+                aspectRatio: format === "banner" ? "16 / 5" : format === "ad" ? "1200 / 628" : "1 / 1",
+                background: "linear-gradient(135deg, #071828 0%, #091E32 40%, #071222 100%)",
+                borderRadius: 12, border: "1.5px solid rgba(0,174,239,0.2)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                gap: 12, padding: 20, position: "relative", overflow: "hidden",
+              }}>
+                {/* Decorative background grid */}
+                <div style={{
+                  position: "absolute", inset: 0, opacity: 0.04,
+                  backgroundImage: "repeating-linear-gradient(0deg,#00AEEF,#00AEEF 1px,transparent 1px,transparent 40px), repeating-linear-gradient(90deg,#00AEEF,#00AEEF 1px,transparent 1px,transparent 40px)",
+                }} />
+                {/* Glowing orb */}
+                <div style={{
+                  position: "absolute", width: 160, height: 160, borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(0,174,239,0.12) 0%, transparent 70%)",
+                }} />
+
+                <div style={{ position: "relative", fontSize: 42, filter: "drop-shadow(0 0 12px rgba(0,174,239,0.4))" }}>🖼️</div>
+                <div style={{ position: "relative", textAlign: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>
+                    AI image output will appear here
+                  </div>
+                  <div style={{ fontSize: 11, color: "#475569" }}>
+                    {formatMeta[format]}
+                  </div>
+                </div>
+
+                {/* Fake progress bar */}
+                <div style={{
+                  position: "relative", width: "60%", height: 3, borderRadius: 2,
+                  background: "rgba(0,174,239,0.12)",
+                }}>
+                  <div style={{
+                    width: "38%", height: "100%", borderRadius: 2,
+                    background: "linear-gradient(90deg, #00AEEF, rgba(0,174,239,0.3))",
+                  }} />
+                </div>
+                <div style={{ position: "relative", fontSize: 10, color: "#334155" }}>
+                  Waiting for generation…
+                </div>
+              </div>
+            </div>
+
+            {/* Prompt Actions row */}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={copyPrompt}
+                disabled={!hasBuilderInput && !seed?.prompt}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  padding: "10px", borderRadius: 9, cursor: hasBuilderInput || seed?.prompt ? "pointer" : "not-allowed",
+                  background: copied ? "rgba(34,197,94,0.1)" : "rgba(0,174,239,0.08)",
+                  border: copied ? "1.5px solid rgba(34,197,94,0.35)" : "1.5px solid rgba(0,174,239,0.28)",
+                  color: copied ? "#22C55E" : "#00AEEF",
+                  fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+                }}
+              >
+                {copied ? "✓ Copied!" : "📋 Copy Prompt"}
+              </button>
+              <button
+                disabled
+                title="AI generation coming in next release"
+                style={{
+                  flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  padding: "10px", borderRadius: 9, cursor: "not-allowed",
+                  background: "rgba(0,174,239,0.04)", border: "1.5px solid rgba(0,174,239,0.15)",
+                  color: "#334155", fontSize: 12, fontWeight: 700,
+                }}
+              >
+                <span style={{ fontSize: 13 }}>✨</span>
+                Generate Image
+                <span style={{
+                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
+                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
+                }}>SOON</span>
+              </button>
             </div>
           </Panel>
 
+          {/* Quick Templates */}
           <Panel label="Quick Templates" accent="#00AEEF">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {placeholders.map(p => (

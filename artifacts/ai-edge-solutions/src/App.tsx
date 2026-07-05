@@ -63,6 +63,7 @@ const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"
 const MorningBriefPage              = lazy(() => import("./pages/MorningBriefPage"));
 const MissionControlPage            = lazy(() => import("./pages/MissionControlPage"));
 const CustomerTimelinePage          = lazy(() => import("./pages/CustomerTimelinePage"));
+const ProfitCenterPage              = lazy(() => import("./pages/ProfitCenterPage"));
 const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 
 const PageLoader = () => (
@@ -200,6 +201,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/customer-timeline">
           <Authenticated><CustomerTimelinePage /></Authenticated>
+        </Route>
+        <Route path="/admin/profit-center">
+          <Authenticated><ProfitCenterPage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

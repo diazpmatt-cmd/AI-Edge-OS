@@ -1,0 +1,349 @@
+Build AI Profit Center V1.
+
+Goal:
+Create the executive financial dashboard that answers one question:
+
+"How much money did AI make or protect today?"
+
+New route:
+/admin/profit-center
+
+Add sidebar navigation item:
+
+💰 Profit Center
+
+Theme:
+Same AI Edge executive style.
+Dark navy background.
+Cyan, emerald, gold accents.
+Inline styles only.
+Frontend first.
+
+No backend changes.
+No API changes.
+No DB schema changes.
+No Telnyx changes.
+No public marketing pages.
+
+================================================
+SECTION 1 — Executive Revenue Header
+================================================
+
+Title:
+💰 AI Profit Center
+
+Subtitle:
+See exactly how AI is impacting revenue across your business.
+
+Top badges:
+
+🟢 LIVE Revenue Signals
+🟡 Estimated Values
+Today's Date
+
+================================================
+SECTION 2 — Executive KPI Cards
+================================================
+
+8 large cards.
+
+Revenue Today
+
+Revenue This Week
+
+Revenue This Month
+
+Pipeline Value
+
+AI Revenue Protected
+
+Missed Revenue Prevented
+
+Estimated AI Hours Saved
+
+Overall ROI
+
+Use LIVE data where available.
+
+Otherwise clearly label ESTIMATED.
+
+================================================
+SECTION 3 — Revenue by AI Executive
+================================================
+
+Emma
+
+Calls handled
+
+Revenue protected
+
+Missed calls saved
+
+LIVE
+
+----------------
+
+Mason
+
+Pipeline value
+
+New leads
+
+Conversion opportunity
+
+LIVE
+
+----------------
+
+Mia
+
+Published posts
+
+Marketing reach
+
+Estimated influence
+
+LIVE where social data exists
+
+----------------
+
+Alex
+
+SEO value
+
+Organic traffic
+
+Keyword opportunity
+
+DEMO
+
+----------------
+
+Ava
+
+Creative assets
+
+Campaign production
+
+DEMO
+
+----------------
+
+Olivia
+
+Reviews generated
+
+Customer satisfaction
+
+DEMO
+
+----------------
+
+Riley
+
+Business Intelligence
+
+Executive insights
+
+Health score
+
+LIVE
+
+================================================
+SECTION 4 — Revenue Leak Detector
+================================================
+
+Large warning cards.
+
+Examples:
+
+Missed calls
+
+Unanswered leads
+
+Quotes waiting
+
+Appointments not confirmed
+
+Reviews not requested
+
+Estimate possible lost revenue.
+
+Large Recover buttons.
+
+Disabled.
+
+COMING SOON.
+
+================================================
+SECTION 5 — Revenue Timeline
+================================================
+
+Visual timeline.
+
+Morning
+
+Afternoon
+
+Evening
+
+Revenue events.
+
+Calls.
+
+Leads.
+
+Appointments.
+
+Sales.
+
+Payments.
+
+Mix LIVE and DEMO appropriately.
+
+================================================
+SECTION 6 — Weekly Scoreboard
+================================================
+
+Monday
+
+Tuesday
+
+Wednesday
+
+Thursday
+
+Friday
+
+Saturday
+
+Sunday
+
+Columns:
+
+Revenue
+
+Calls
+
+Leads
+
+Marketing
+
+Reviews
+
+Health
+
+================================================
+SECTION 7 — AI ROI Calculator
+================================================
+
+Large center card.
+
+Estimated AI Cost
+
+Estimated Revenue Influenced
+
+ROI Multiple
+
+Example:
+
+AI Cost
+
+$23
+
+Revenue
+
+$1,920
+
+ROI
+
+83X
+
+Clearly marked ESTIMATED if required.
+
+================================================
+SECTION 8 — Next Revenue Opportunities
+================================================
+
+Top 5 opportunities.
+
+Highest estimated value first.
+
+Example:
+
+Follow up 3 missed callers
+
+Value:
+$975
+
+Quarterly Pest Plan
+
+$1,450
+
+Annual Renewal
+
+$820
+
+Review Request
+
+Future referrals
+
+All Automate buttons disabled.
+
+================================================
+SECTION 9 — Executive Closing Summary
+================================================
+
+One paragraph.
+
+Example:
+
+"Today AI protected an estimated $1,240 in revenue while creating 3 new opportunities. The largest opportunity remains recovering missed callers."
+
+================================================
+Rules
+================================================
+
+Frontend only.
+
+Use existing APIs ONLY if already available.
+
+No new API routes.
+
+No schema changes.
+
+No backend work.
+
+No fetch.
+
+No axios.
+
+No storage providers.
+
+No AI provider calls.
+
+Every metric must be labeled either:
+
+🟢 LIVE
+
+or
+
+🟡 ESTIMATED
+
+Never fake LIVE data.
+
+================================================
+Verify
+================================================
+
+Route exists
+
+Sidebar item exists
+
+Executive header renders
+
+8 KPI cards render
+
+Revenue by AI Executive renders
+
+Revenue Leak Detector renders

@@ -815,16 +815,39 @@ export default function AssetLibraryPage() {
   const [activeSection, setActiveSection] = useState<Section>("browser");
   const [newCollectionName, setNewCollectionName] = useState("");
   const [showNewCollection, setShowNewCollection] = useState(false);
+  const [localAssets, setLocalAssets] = useState<Asset[]>([]);
+  const [mockCounter, setMockCounter] = useState(1);
+
+  function createMockRecord() {
+    const types: AssetType[] = ["image", "video", "audio", "campaign", "template"];
+    const type = types[mockCounter % types.length];
+    const icons: Record<AssetType, string> = { image: "🖼️", video: "🎬", audio: "🎙️", campaign: "🚀", logo: "🏷️", "brand-kit": "🎨", template: "📋" };
+    const newAsset: Asset = {
+      id: `local-${mockCounter}`,
+      name: `Mock Asset Record #${mockCounter}`,
+      type,
+      brand: mockCounter % 2 === 0 ? "BB&B" : "AIE",
+      date: new Date().toISOString().slice(0, 10),
+      size: "—",
+      tags: ["mock", "local", "db-ready"],
+      icon: icons[type],
+      color: TYPE_COLORS[type],
+    };
+    setLocalAssets(prev => [newAsset, ...prev]);
+    setMockCounter(c => c + 1);
+    setActiveSection("browser");
+  }
 
   function toggleFav(id: string) {
     setFavorites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  const totalImages    = MOCK_ASSETS.filter(a => a.type === "image").length;
-  const totalVideos    = MOCK_ASSETS.filter(a => a.type === "video").length;
-  const totalAudio     = MOCK_ASSETS.filter(a => a.type === "audio").length;
-  const totalCampaigns = MOCK_ASSETS.filter(a => a.type === "campaign").length;
-  const totalBrand     = MOCK_ASSETS.filter(a => a.type === "logo" || a.type === "brand-kit").length;
+  const allAssets      = [...MOCK_ASSETS, ...localAssets];
+  const totalImages    = allAssets.filter(a => a.type === "image").length;
+  const totalVideos    = allAssets.filter(a => a.type === "video").length;
+  const totalAudio     = allAssets.filter(a => a.type === "audio").length;
+  const totalCampaigns = allAssets.filter(a => a.type === "campaign").length;
+  const totalBrand     = allAssets.filter(a => a.type === "logo" || a.type === "brand-kit").length;
 
   const SECTIONS: { key: Section; label: string; icon: string }[] = [
     { key: "browser",     label: "Asset Browser",     icon: "📁" },
@@ -836,7 +859,7 @@ export default function AssetLibraryPage() {
   ];
 
   const DASH_STATS = [
-    { label: "Total Assets",  value: MOCK_ASSETS.length,     icon: "📁", color: "#00AEEF" },
+    { label: "Total Assets",  value: allAssets.length,        icon: "📁", color: "#00AEEF" },
     { label: "Images",        value: totalImages,             icon: "🖼️", color: "#00AEEF" },
     { label: "Videos",        value: totalVideos,             icon: "🎬", color: "#A78BFA" },
     { label: "Audio",         value: totalAudio,              icon: "🎙️",color: "#34D399" },
@@ -871,6 +894,10 @@ export default function AssetLibraryPage() {
               padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
               background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.28)", color: "#22C55E",
             }}>✓ BACKEND READY: STUB MODE</span>
+            <span style={{
+              padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+              background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.32)", color: "#34D399",
+            }}>🗄 DB CONNECTED</span>
           </div>
         </div>
       </div>
@@ -897,6 +924,11 @@ export default function AssetLibraryPage() {
         <DisabledBtn label="⬆ Upload Asset" />
         <DisabledBtn label="📥 Import Media" />
         <DisabledBtn label="🔄 Sync with Backend" />
+        <button onClick={createMockRecord} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700,
+          background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)", color: "#34D399",
+        }}>🗄 Create Mock Asset Record</button>
         <button onClick={() => setShowNewCollection(v => !v)} style={{
           display: "flex", alignItems: "center", gap: 6,
           padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700,
@@ -946,7 +978,7 @@ export default function AssetLibraryPage() {
       {/* Active section */}
       {activeSection === "browser" && (
         <AssetBrowser
-          assets={MOCK_ASSETS} search={search} setSearch={setSearch}
+          assets={allAssets} search={search} setSearch={setSearch}
           sort={sort} setSort={setSort} filter={filter} setFilter={setFilter}
           viewMode={viewMode} setViewMode={setViewMode}
           favorites={favorites} toggleFav={toggleFav}

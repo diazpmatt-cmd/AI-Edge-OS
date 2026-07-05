@@ -1,0 +1,77 @@
+Build Asset Library DB Activation Phase 1: Real Asset Records.
+
+Do not connect object storage yet.
+Do not enable file uploads yet.
+Do not connect AI providers yet.
+Do not refactor unrelated files.
+Do not change public marketing pages.
+
+Goal:
+Make Asset Library save and read real asset metadata from the database while keeping all file/media actions disabled.
+
+1. Database
+- Run/create the migration needed for the 5 Asset Library tables:
+  assets
+  asset_collections
+  asset_collection_items
+  asset_tags
+  asset_usage_events
+
+2. Backend API
+Replace stub behavior with real DB logic for:
+- GET /api/admin/assets
+- POST /api/admin/assets
+- PATCH /api/admin/assets/:id
+- DELETE /api/admin/assets/:id
+- GET /api/admin/asset-collections
+- POST /api/admin/asset-collections
+- POST /api/admin/asset-usage
+
+Requirements:
+- Keep Clerk auth protection
+- Scope records to the authenticated userId
+- Return empty arrays safely if no records exist
+- Validate required fields
+- Use placeholder fileUrl / thumbnailUrl only
+- No storage calls
+- No upload handling
+- No external API calls
+
+3. Frontend
+Inside /admin/asset-library:
+- Keep current mock assets as fallback/demo data if backend has no records
+- Add a disabled-looking “Database Connected” or “DB Ready” status badge only after backend route exists
+- Add a frontend-only “Create Mock Asset Record” button that creates a local mock card only for now
+- Do not add frontend fetch/useApiFetch/axios yet
+- Upload, Import, Sync remain disabled
+
+4. Safety
+- No object storage
+- No AI provider calls
+- No uploads
+- No public marketing page changes
+
+Verify:
+- DB migration/schema succeeds
+- API server build passes
+- Frontend build passes
+- API routes require auth
+- API routes use real DB logic
+- GET assets returns empty array safely when no records exist
+- POST assets validates required fields
+- PATCH assets validates ownership/auth scope
+- DELETE assets validates ownership/auth scope
+- Frontend still loads
+- Upload/Import/Sync remain disabled
+- No storage provider calls
+- No AI provider calls
+- No public marketing pages changed
+
+Return:
+verification results
+files changed
+migration/schema status
+API route status
+frontend status
+production deploy status
+production URL

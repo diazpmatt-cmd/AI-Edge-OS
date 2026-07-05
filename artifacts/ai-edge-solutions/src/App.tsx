@@ -56,6 +56,7 @@ const CallIntelligencePage          = lazy(() => import("./pages/CallIntelligenc
 const ClientOnboardingPage          = lazy(() => import("./pages/ClientOnboardingPage"));
 const LocalBizAIPage                = lazy(() => import("./pages/LocalBizAIPage"));
 const RevenueAttributionPage        = lazy(() => import("./pages/RevenueAttributionPage"));
+const BBBOperationsCenterPage       = lazy(() => import("./pages/BBBOperationsCenterPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -166,6 +167,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/revenue-attribution">
           <Authenticated><RevenueAttributionPage /></Authenticated>
+        </Route>
+        <Route path="/admin/bbb-operations">
+          <Authenticated><BBBOperationsCenterPage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

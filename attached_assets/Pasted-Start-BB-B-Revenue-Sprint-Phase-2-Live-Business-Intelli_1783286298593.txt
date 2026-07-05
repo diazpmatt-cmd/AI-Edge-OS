@@ -1,0 +1,137 @@
+Start BB&B Revenue Sprint Phase 2: Live Business Intelligence.
+
+Do not build new platform modules.
+Do not refactor unrelated code.
+Do not change Telnyx routing.
+Do not change phone numbers.
+Do not change public marketing pages.
+
+Goal:
+Replace mock/demo metrics on the BB&B Success Dashboard with live business data wherever it already exists.
+
+Priority order:
+
+1. Calls
+If Telnyx call records already exist in the database:
+- Today's calls
+- This week's calls
+- Missed calls
+- AI answered calls
+- Average duration
+
+If unavailable:
+Keep demo data.
+
+2. Leads
+If lead records already exist:
+Replace mock lead table with live leads.
+
+Show:
+- New today
+- Contacted
+- Won
+- Lost
+- Pending
+
+3. SMS
+If SMS conversations already exist:
+Show:
+- Texts sent today
+- Replies received
+- Recovery texts
+- Customer responses
+
+4. Revenue Opportunities
+
+Using live calls/leads if possible:
+
+Categorize:
+
+Hot Lead
+
+Needs Follow-up
+
+Missed Call
+
+Requested Estimate
+
+After-hours Caller
+
+Review Opportunity
+
+If insufficient data:
+Fall back gracefully to demo.
+
+5. Receptionist Intelligence
+
+If transcripts already exist:
+
+Show:
+
+Top questions asked
+
+Services requested
+
+Transfer rate
+
+Unknown questions
+
+Otherwise use demo.
+
+6. Dashboard Health
+
+Each widget should display:
+
+🟢 LIVE
+
+or
+
+🟡 DEMO
+
+depending on its data source.
+
+Do not fake LIVE data.
+
+Requirements:
+
+Only use existing database tables.
+
+No schema changes.
+
+No webhook changes.
+
+No Telnyx changes.
+
+No AI provider calls.
+
+No public page changes.
+
+Gracefully fall back to demo when data doesn't exist.
+
+Verify:
+
+- Dashboard loads
+- Clerk auth works
+- Every widget correctly labels LIVE or DEMO
+- Existing live calls display if available
+- Existing live leads display if available
+- Existing SMS display if available
+- Demo fallback works correctly
+- No Telnyx routing changes
+- No phone changes
+- No public page changes
+- Production build passes
+
+Return:
+
+verification results
+
+which widgets are LIVE
+
+which widgets remain DEMO
+
+files changed
+
+production deploy status
+
+production URL

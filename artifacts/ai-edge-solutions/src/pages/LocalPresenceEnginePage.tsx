@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/theme-context";
 import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
 import { PublishingHubTab } from "@/components/LocalPresencePublishingHub";
+import { LeadReviewHubTab } from "@/components/LocalPresenceLeadReviewHub";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -2473,7 +2474,7 @@ const YELP_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
 
 function YelpBusinessCard() {
   const [drawerOpen,   setDrawerOpen]   = useState(false);
-  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics" | "lead_review_hub">("checklist");
   const [checklist,    setChecklist]    = useState(YELP_CHECKLIST);
   const [listingUrl,   setListingUrl]   = useState("");
   const [acctEmail,    setAcctEmail]    = useState("");
@@ -2500,10 +2501,11 @@ function YelpBusinessCard() {
   const YELP_RED = "#D32323";
 
   const TABS: { key: typeof activeTab; label: string }[] = [
-    { key: "checklist",   label: "Setup Checklist" },
-    { key: "bizinfo",     label: "Business Info" },
-    { key: "profile",     label: "Profile Tracker" },
-    { key: "diagnostics", label: "Diagnostics" },
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "diagnostics",   label: "Diagnostics" },
+    { key: "lead_review_hub", label: "📊 Lead & Review Hub" },
   ];
 
   return (
@@ -2957,6 +2959,9 @@ Baldwin County, Alabama`;
                   })}
                 </div>
               </div>
+            )}
+            {activeTab === "lead_review_hub" && (
+              <LeadReviewHubTab platform="yelp" />
             )}
 
           </div>
@@ -3526,7 +3531,7 @@ const ANGI_DIAGS: { check: string; status: AppleDiagStatus; note: string }[] = [
 
 function AngiBusinessCard() {
   const [drawerOpen,   setDrawerOpen]   = useState(false);
-  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics" | "lead_review_hub">("checklist");
   const [checklist,    setChecklist]    = useState(ANGI_CHECKLIST);
   const [listingUrl,   setListingUrl]   = useState("");
   const [acctEmail,    setAcctEmail]    = useState("");
@@ -3561,10 +3566,11 @@ function AngiBusinessCard() {
   ];
 
   const TABS: { key: typeof activeTab; label: string }[] = [
-    { key: "checklist",   label: "Setup Checklist" },
-    { key: "bizinfo",     label: "Business Info" },
-    { key: "profile",     label: "Profile Tracker" },
-    { key: "diagnostics", label: "Diagnostics" },
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "diagnostics",   label: "Diagnostics" },
+    { key: "lead_review_hub", label: "📊 Lead & Review Hub" },
   ];
 
   return (
@@ -4092,6 +4098,9 @@ Baldwin County, Alabama`;
                 </div>
               </div>
             )}
+            {activeTab === "lead_review_hub" && (
+              <LeadReviewHubTab platform="angi" />
+            )}
 
           </div>
         </div>
@@ -4136,7 +4145,7 @@ const THUMBTACK_DIAGS: { check: string; status: AppleDiagStatus; note: string }[
 
 function ThumbtackBusinessCard() {
   const [drawerOpen,   setDrawerOpen]   = useState(false);
-  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics">("checklist");
+  const [activeTab,    setActiveTab]    = useState<"checklist" | "bizinfo" | "profile" | "diagnostics" | "lead_review_hub">("checklist");
   const [checklist,    setChecklist]    = useState(THUMBTACK_CHECKLIST);
   const [listingUrl,   setListingUrl]   = useState("");
   const [acctEmail,    setAcctEmail]    = useState("");
@@ -4171,10 +4180,11 @@ function ThumbtackBusinessCard() {
   ];
 
   const TABS: { key: typeof activeTab; label: string }[] = [
-    { key: "checklist",   label: "Setup Checklist" },
-    { key: "bizinfo",     label: "Business Info" },
-    { key: "profile",     label: "Profile Tracker" },
-    { key: "diagnostics", label: "Diagnostics" },
+    { key: "checklist",     label: "Setup Checklist" },
+    { key: "bizinfo",       label: "Business Info" },
+    { key: "profile",       label: "Profile Tracker" },
+    { key: "diagnostics",   label: "Diagnostics" },
+    { key: "lead_review_hub", label: "📊 Lead & Review Hub" },
   ];
 
   return (
@@ -4646,6 +4656,9 @@ Baldwin County, Alabama`;
                   })}
                 </div>
               </div>
+            )}
+            {activeTab === "lead_review_hub" && (
+              <LeadReviewHubTab platform="thumbtack" />
             )}
 
           </div>

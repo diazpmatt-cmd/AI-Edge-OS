@@ -10,6 +10,7 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const NAV_ITEMS = [
   { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
   { to: "/admin/media-engine",        icon: "🎥", label: "Media\nEngine",             bg: "#0D1428", accent: "#00AEEF" },
+  { to: "/admin/asset-library",       icon: "📁", label: "Asset\nLibrary",             bg: "#0A1A2E", accent: "#00AEEF" },
   { to: "/admin/bbb-operations",     icon: "🐛", label: "BB&B Ops\nCenter",          bg: "#0D1A2E", accent: "#00AEEF" },
   { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },
   { to: "/admin/client-onboarding",   icon: "👤", label: "Client\nOnboarding",        bg: "#0D1A2E", accent: "#38BDF8" },

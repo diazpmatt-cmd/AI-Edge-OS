@@ -31,14 +31,14 @@ const B = {
 
 // ── Checklist items ────────────────────────────────────────────────────────────
 const ACTION_ITEMS = [
-  { id: "fb",     label: "Publish Facebook post",              icon: "📘", color: B.blue    },
-  { id: "gbp",    label: "Publish Google Business Profile post",icon: "📍", color: B.green   },
-  { id: "photo",  label: "Upload one completed job photo",     icon: "📸", color: B.orange  },
-  { id: "review", label: "Request one Google review",          icon: "⭐", color: B.gold    },
-  { id: "leads",  label: "Follow up with recovered leads",     icon: "🔥", color: B.orange  },
-  { id: "video",  label: "Record one 30-second video",         icon: "🎬", color: B.purple  },
-  { id: "apple",  label: "Check Apple Business Connect",       icon: "🍎", color: B.silver  },
-  { id: "tiktok", label: "Check TikTok approval",              icon: "🎵", color: B.cyan    },
+  { id: "fb",     label: "Publish Facebook post",               icon: "📘", color: B.blue,   action: { label: "Open Publishing Center", route: "/admin/publishing",    disabled: false } },
+  { id: "gbp",    label: "Publish Google Business Profile post", icon: "📍", color: B.green,  action: { label: "Open Publishing Center", route: "/admin/publishing",    disabled: false } },
+  { id: "photo",  label: "Upload one completed job photo",      icon: "📸", color: B.orange, action: { label: "Open Media Engine",      route: "/admin/media-engine",  disabled: false } },
+  { id: "review", label: "Request one Google review",           icon: "⭐", color: B.gold,   action: { label: "Open Review Engine",     route: "/admin/reviews",       disabled: false } },
+  { id: "leads",  label: "Follow up with recovered leads",      icon: "🔥", color: B.orange, action: { label: "Open Lead Recovery",     route: "/admin/lead-recovery", disabled: false } },
+  { id: "video",  label: "Record one 30-second video",          icon: "🎬", color: B.purple, action: { label: "Open Media Engine",      route: "/admin/media-engine",  disabled: false } },
+  { id: "apple",  label: "Check Apple Business Connect",        icon: "🍎", color: B.silver, action: { label: "External Pending",       route: "",                     disabled: true  } },
+  { id: "tiktok", label: "Check TikTok approval",               icon: "🎵", color: B.cyan,   action: { label: "External Pending",       route: "",                     disabled: true  } },
 ] as const;
 
 type ActionId = typeof ACTION_ITEMS[number]["id"];
@@ -284,6 +284,29 @@ export default function BBBExecutionPage() {
                       }}>{item.label}</span>
                       {done && <span style={{ marginLeft: "auto", fontSize: 10, color: B.green, fontWeight: 700 }}>Done ✓</span>}
                     </div>
+                    {/* Action button */}
+                    {(() => {
+                      const act = item.action as { label: string; route: string; disabled: boolean };
+                      return (
+                        <button
+                          disabled={act.disabled}
+                          onClick={e => { e.stopPropagation(); if (!act.disabled && act.route) navigate(act.route); }}
+                          style={{
+                            alignSelf: "flex-start",
+                            background: act.disabled ? "rgba(255,255,255,0.03)" : `${item.color}0F`,
+                            border: `1px solid ${act.disabled ? "rgba(255,255,255,0.07)" : `${item.color}35`}`,
+                            borderRadius: 6, padding: "3px 10px",
+                            fontSize: 10.5, fontWeight: 700,
+                            color: act.disabled ? B.dim : item.color,
+                            cursor: act.disabled ? "not-allowed" : "pointer",
+                            transition: "all 0.15s",
+                            opacity: act.disabled ? 0.6 : 1,
+                          }}
+                        >
+                          {act.label}{!act.disabled && " →"}
+                        </button>
+                      );
+                    })()}
                     {/* Notes field */}
                     <input
                       type="text"
@@ -488,6 +511,55 @@ export default function BBBExecutionPage() {
                 ))}
               </div>
             </Section>
+          </div>
+        </div>
+
+        {/* ── THIS WEEK'S BB&B FOCUS ── */}
+        <div style={{ padding: "0 36px", marginBottom: 20 }}>
+          <div style={{
+            background: B.panel, border: `1px solid ${B.border}`,
+            borderRadius: 16, padding: "22px 24px",
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
+              📅 This Week's BB&amp;B Focus
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+              {[
+                { icon: "⭐", text: "Get more reviews",                       color: B.gold    },
+                { icon: "📍", text: "Publish consistent local content",       color: B.green   },
+                { icon: "🔥", text: "Follow up with every recovered lead",    color: B.orange  },
+                { icon: "📸", text: "Build trust with before/after photos",   color: B.cyan    },
+                { icon: "🍎", text: "Finish Apple + TikTok approvals",        color: B.silver  },
+              ].map(f => (
+                <div key={f.text} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  background: `${f.color}08`, border: `1px solid ${f.color}20`,
+                  borderRadius: 10, padding: "9px 14px",
+                }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>{f.icon}</span>
+                  <span style={{ fontSize: 12.5, color: B.white, fontWeight: 500 }}>{f.text}</span>
+                  <span style={{
+                    marginLeft: "auto", width: 6, height: 6, borderRadius: "50%",
+                    background: f.color, flexShrink: 0, opacity: 0.7,
+                  }} />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate("/admin/apollos")}
+              style={{
+                width: "100%",
+                background: "linear-gradient(135deg, rgba(242,108,33,0.12) 0%, rgba(251,191,36,0.08) 100%)",
+                border: "1px solid rgba(242,108,33,0.35)",
+                borderRadius: 10, padding: "10px 0",
+                fontSize: 13, fontWeight: 700,
+                color: B.bbbOrange, cursor: "pointer", transition: "all 0.15s",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.22) 0%, rgba(251,191,36,0.15) 100%)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.12) 0%, rgba(251,191,36,0.08) 100%)"; }}
+            >
+              🧠 Open Apollos Strategy
+            </button>
           </div>
         </div>
 

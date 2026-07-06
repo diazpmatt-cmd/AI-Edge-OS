@@ -153,7 +153,7 @@ const APOLLOS_SCRIPT = [
 ];
 
 const ACCENT_OPTIONS = [
-  { id: "british",    label: "British Executive",   lang: "en-GB", pitch: 0.95, rate: 0.88 },
+  { id: "british",    label: "British Executive",   lang: "en-GB", pitch: 0.92, rate: 0.98 },
   { id: "american",   label: "American Professional",lang: "en-US", pitch: 1.0,  rate: 0.92 },
   { id: "australian", label: "Australian Executive", lang: "en-AU", pitch: 0.98, rate: 0.90 },
 ];
@@ -213,12 +213,23 @@ function ApollosCard() {
       u.rate  = accent.rate;
       if (match) u.voice = match;
       u.onstart = () => { setPlaying(true); setLineIndex(i); };
-      u.onend   = () => { if (i === APOLLOS_SCRIPT.length - 1) { setPlaying(false); setLineIndex(null); } };
+      u.onend   = () => {
+        if (i === APOLLOS_SCRIPT.length - 1) {
+          setPlaying(false);
+          setLineIndex(null);
+        } else {
+          // 350ms pause between sentences before queuing the next
+          setTimeout(() => {
+            const next = utterQueueRef.current[i + 1];
+            if (next) window.speechSynthesis.speak(next);
+          }, 350);
+        }
+      };
       return u;
     });
 
-    // Chain utterances sequentially
-    utterQueueRef.current.forEach(u => window.speechSynthesis.speak(u));
+    // Speak only the first utterance; onend chains the rest
+    window.speechSynthesis.speak(utterQueueRef.current[0]);
     setPlaying(true);
     setLineIndex(0);
   }

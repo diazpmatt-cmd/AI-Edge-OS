@@ -1,872 +1,453 @@
+// ── Client Onboarding Engine V1 ───────────────────────────────────────────────
+// Frontend only. Zero API calls. Preview panel updates live from form state.
+
 import { useState } from "react";
-import { AppShell } from "../components/app-shell";
-import { useTheme } from "@/contexts/theme-context";
-import { useApiFetch } from "@/lib/api";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface OnboardingForm {
-  // Step 1
-  businessName: string;
-  industry: string;
-  website: string;
-  mainPhone: string;
-  forwardingPhone: string;
-  email: string;
-  // Step 2
-  city: string;
-  state: string;
-  zip: string;
-  serviceRadius: string;
-  // Step 3
-  businessHours: string;
-  emergencyService: boolean;
-  appointmentRequired: boolean;
-  services: string;
-  // Step 4
-  logoUrl: string;
-  primaryColor: string;
-  secondaryColor: string;
-  brandTone: string;
-  // Step 5
-  modulesEnabled: string[];
-}
-
-interface DeployResult {
-  success: boolean;
-  client: { id: string; businessName: string; status: string };
-  deployedAt: string;
-  workspace: string;
-  modulesActivated: string[];
-  visibilityAuditId: string;
-  clientId: string;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const STEPS = [
-  { id: 1, label: "Business Info",   icon: "🏢" },
-  { id: 2, label: "Service Area",    icon: "📍" },
-  { id: 3, label: "Settings",        icon: "⚙️" },
-  { id: 4, label: "Branding",        icon: "🎨" },
-  { id: 5, label: "AI Features",     icon: "🤖" },
-  { id: 6, label: "Deploy",          icon: "🚀" },
-];
-
-const INDUSTRIES = [
-  "Pest Control", "HVAC", "Plumbing", "Electrical", "Lawn & Landscaping",
-  "Cleaning Services", "Roofing", "Pool & Spa", "General Contractor",
-  "Painting", "Flooring", "Appliance Repair", "Locksmith", "Other",
-];
-
-const BRAND_TONES = [
-  { value: "professional", label: "Professional & Trustworthy" },
-  { value: "friendly",     label: "Friendly & Approachable" },
-  { value: "bold",         label: "Bold & Confident" },
-  { value: "premium",      label: "Premium & Sophisticated" },
-  { value: "urgent",       label: "Urgent & Action-Oriented" },
-];
-
-const MODULES = [
-  { id: "ai_receptionist",    label: "AI Receptionist",     icon: "📞", desc: "24/7 automated call handling & IVR" },
-  { id: "lead_recovery",      label: "Lead Recovery AI",    icon: "🎯", desc: "Auto follow-up on missed calls & leads" },
-  { id: "call_intelligence",  label: "Call Intelligence",   icon: "📊", desc: "Call analytics, outcomes & trends" },
-  { id: "review_automation",  label: "Review Automation",   icon: "⭐", desc: "Automated review requests & responses" },
-  { id: "ai_visibility",      label: "AI Visibility Engine",icon: "✨", desc: "Track AI search presence across platforms" },
-  { id: "publishing_center",  label: "Publishing Center",   icon: "📸", desc: "Social media scheduling & publishing" },
-];
-
-const EMPTY_FORM: OnboardingForm = {
-  businessName: "", industry: "", website: "", mainPhone: "", forwardingPhone: "", email: "",
-  city: "", state: "", zip: "", serviceRadius: "25",
-  businessHours: "Mon–Fri 8am–6pm", emergencyService: false, appointmentRequired: false, services: "",
-  logoUrl: "", primaryColor: "#00AEEF", secondaryColor: "#C0C0C0", brandTone: "professional",
-  modulesEnabled: ["ai_receptionist", "lead_recovery", "call_intelligence"],
+// ── Brand ─────────────────────────────────────────────────────────────────────
+const B = {
+  navy:    "#030612",
+  panel:   "#080E1F",
+  panel2:  "#0A1228",
+  border:  "rgba(255,255,255,0.08)",
+  blue:    "#00AEEF",
+  cyan:    "#06B6D4",
+  sky:     "#38BDF8",
+  emerald: "#10B981",
+  gold:    "#FBBF24",
+  purple:  "#A78BFA",
+  orange:  "#F97316",
+  silver:  "#94A3B8",
+  white:   "#F1F5F9",
+  dim:     "#64748B",
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ── Templates ─────────────────────────────────────────────────────────────────
+const TEMPLATES = [
+  { id: "pest",       label: "🐛 Pest Control",          industry: "Pest Control",         services: "Termite Treatment, Bed Bug Elimination, General Pest Control, Rodent Control" },
+  { id: "home",       label: "🔧 Home Services",          industry: "Home Services",         services: "Plumbing, HVAC, Electrical, General Repairs" },
+  { id: "restaurant", label: "🍽️ Local Restaurant",       industry: "Restaurant & Food",     services: "Dine-In, Takeout, Catering, Private Events" },
+  { id: "beauty",     label: "💅 Beauty / Wellness",      industry: "Beauty & Wellness",     services: "Hair Styling, Nail Care, Skincare, Massage Therapy" },
+  { id: "etsy",       label: "🧶 Etsy / Handmade",        industry: "E-Commerce / Handmade", services: "Custom Orders, Wholesale, Workshops, Gift Wrapping" },
+  { id: "general",    label: "🏢 General Small Business", industry: "General Business",      services: "Consultation, Products, Services, Customer Support" },
+] as const;
 
-function Field({
-  label, required, children, hint,
-}: { label: string; required?: boolean; children: React.ReactNode; hint?: string }) {
+// ── Modules ───────────────────────────────────────────────────────────────────
+const MODULES = [
+  { id: "workspace",    label: "Client Workspace",     icon: "🏢", color: B.sky     },
+  { id: "receptionist", label: "AI Receptionist",      icon: "📞", color: B.blue    },
+  { id: "leads",        label: "Lead Recovery",        icon: "🔥", color: B.orange  },
+  { id: "media",        label: "Media Engine",         icon: "🎥", color: B.blue    },
+  { id: "reviews",      label: "Review Engine",        icon: "⭐", color: B.gold    },
+  { id: "local",        label: "Local Presence Engine",icon: "📍", color: B.cyan    },
+  { id: "publishing",   label: "Publishing Center",    icon: "📤", color: B.purple  },
+  { id: "revenue",      label: "Revenue Forecast",     icon: "💰", color: B.emerald },
+  { id: "apollos",      label: "Apollos Briefing",     icon: "🧠", color: B.purple  },
+] as const;
+
+type ModuleId = typeof MODULES[number]["id"];
+
+// ── BB&B defaults ─────────────────────────────────────────────────────────────
+const BBB = {
+  businessName:    "Bed Bugs & Beyond",
+  industry:        "Pest Control",
+  phone:           "(251) 555-0123",
+  forwardingPhone: "(251) 555-0124",
+  website:         "bedbugsandbeyond.com",
+  serviceArea:     "Baldwin County, AL",
+  hours:           "Mon–Fri 7AM–6PM, Sat 8AM–3PM",
+  services:        "Bed Bug Elimination, General Pest Control, Termite Treatment, Rodent Control",
+  brandColors:     "#0D2B45, #0077B6, #F26C21",
+};
+
+// ── Reusable micro-components ──────────────────────────────────────────────────
+function FieldLabel({ children }: { children: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-        {label}{required && <span style={{ color: "#EF4444", marginLeft: 3 }}>*</span>}
-      </label>
+    <div style={{ fontSize: 10.5, fontWeight: 700, color: B.silver, letterSpacing: "0.4px", textTransform: "uppercase", marginBottom: 5 }}>
       {children}
-      {hint && <span style={{ fontSize: 10, color: "#475569" }}>{hint}</span>}
     </div>
   );
 }
 
-function Input({
-  value, onChange, placeholder, type = "text", isDark,
-}: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; isDark: boolean }) {
+function TextInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <input
-      type={type}
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       style={{
         width: "100%", boxSizing: "border-box",
-        padding: "9px 12px", borderRadius: 8, fontSize: 13,
-        background: isDark ? "rgba(255,255,255,0.05)" : "#FFFFFF",
-        border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #DDE3EA",
-        color: isDark ? "#E2E8F0" : "#111827",
-        outline: "none", fontFamily: "inherit",
-        transition: "border-color 0.15s",
+        background: B.panel2, border: `1px solid ${B.border}`,
+        borderRadius: 8, padding: "8px 12px",
+        fontSize: 12.5, color: B.white, outline: "none",
+        fontFamily: "inherit", transition: "border-color 0.15s",
       }}
-      onFocus={e => { e.target.style.borderColor = "#00AEEF"; }}
-      onBlur={e => { e.target.style.borderColor = isDark ? "rgba(255,255,255,0.12)" : "#DDE3EA"; }}
+      onFocus={e => { (e.target as HTMLInputElement).style.borderColor = "rgba(56,189,248,0.4)"; }}
+      onBlur={e  => { (e.target as HTMLInputElement).style.borderColor = B.border; }}
     />
   );
 }
 
-function Select({
-  value, onChange, options, isDark,
-}: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; isDark: boolean }) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        width: "100%", boxSizing: "border-box",
-        padding: "9px 12px", borderRadius: 8, fontSize: 13,
-        background: isDark ? "rgba(255,255,255,0.05)" : "#FFFFFF",
-        border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #DDE3EA",
-        color: isDark ? "#E2E8F0" : "#111827",
-        outline: "none", fontFamily: "inherit", cursor: "pointer",
-      }}
-    >
-      <option value="">Select…</option>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
-
-function Toggle({
-  checked, onChange, label, isDark,
-}: { checked: boolean; onChange: (v: boolean) => void; label: string; isDark: boolean }) {
-  return (
-    <div
-      style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-      onClick={() => onChange(!checked)}
-    >
-      <div style={{
-        width: 40, height: 22, borderRadius: 11,
-        background: checked ? "#00AEEF" : (isDark ? "rgba(255,255,255,0.15)" : "#CBD5E1"),
-        position: "relative", transition: "background 0.2s", flexShrink: 0,
-      }}>
-        <div style={{
-          position: "absolute", top: 3, left: checked ? 21 : 3,
-          width: 16, height: 16, borderRadius: "50%",
-          background: "#FFFFFF", transition: "left 0.2s",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-        }} />
-      </div>
-      <span style={{ fontSize: 13, color: isDark ? "#CBD5E1" : "#374151", fontWeight: 500 }}>{label}</span>
-    </div>
-  );
-}
-
-// ─── Step panels ──────────────────────────────────────────────────────────────
-
-function Step1({ form, set, isDark }: { form: OnboardingForm; set: (k: keyof OnboardingForm, v: string | boolean | string[]) => void; isDark: boolean }) {
-  const gridTwo = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } as const;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Field label="Business Name" required>
-        <Input value={form.businessName} onChange={v => set("businessName", v)} placeholder="Bed Bugs & Beyond" isDark={isDark} />
-      </Field>
-      <Field label="Industry" required>
-        <Select
-          value={form.industry}
-          onChange={v => set("industry", v)}
-          options={INDUSTRIES.map(i => ({ value: i, label: i }))}
-          isDark={isDark}
-        />
-      </Field>
-      <Field label="Website">
-        <Input value={form.website} onChange={v => set("website", v)} placeholder="https://yourbusiness.com" isDark={isDark} />
-      </Field>
-      <div style={gridTwo}>
-        <Field label="Main Phone" required hint="Customer-facing number">
-          <Input value={form.mainPhone} onChange={v => set("mainPhone", v)} placeholder="(251) 324-9090" isDark={isDark} />
-        </Field>
-        <Field label="Forwarding Phone" hint="Where calls transfer to">
-          <Input value={form.forwardingPhone} onChange={v => set("forwardingPhone", v)} placeholder="(251) 555-0100" isDark={isDark} />
-        </Field>
-      </div>
-      <Field label="Email">
-        <Input value={form.email} onChange={v => set("email", v)} type="email" placeholder="info@yourbusiness.com" isDark={isDark} />
-      </Field>
-    </div>
-  );
-}
-
-function Step2({ form, set, isDark }: { form: OnboardingForm; set: (k: keyof OnboardingForm, v: string | boolean | string[]) => void; isDark: boolean }) {
-  const gridTwo = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } as const;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Field label="City" required>
-        <Input value={form.city} onChange={v => set("city", v)} placeholder="Gulf Shores" isDark={isDark} />
-      </Field>
-      <div style={gridTwo}>
-        <Field label="State" required>
-          <Input value={form.state} onChange={v => set("state", v)} placeholder="AL" isDark={isDark} />
-        </Field>
-        <Field label="Zip Code">
-          <Input value={form.zip} onChange={v => set("zip", v)} placeholder="36542" isDark={isDark} />
-        </Field>
-      </div>
-      <Field label="Service Radius (miles)" hint="How far from city center does the business operate?">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <input
-            type="range" min={5} max={200} step={5}
-            value={parseInt(form.serviceRadius) || 25}
-            onChange={e => set("serviceRadius", e.target.value)}
-            style={{ flex: 1, accentColor: "#00AEEF" }}
-          />
-          <span style={{
-            minWidth: 52, textAlign: "center", fontSize: 14, fontWeight: 700,
-            color: "#00AEEF", background: "rgba(0,174,239,0.1)",
-            border: "1px solid rgba(0,174,239,0.25)", borderRadius: 8, padding: "4px 8px",
-          }}>
-            {form.serviceRadius} mi
-          </span>
-        </div>
-      </Field>
-    </div>
-  );
-}
-
-function Step3({ form, set, isDark }: { form: OnboardingForm; set: (k: keyof OnboardingForm, v: string | boolean | string[]) => void; isDark: boolean }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <Field label="Business Hours" hint="e.g. Mon–Fri 8am–6pm, Sat 9am–2pm">
-        <Input value={form.businessHours} onChange={v => set("businessHours", v)} placeholder="Mon–Fri 8am–6pm" isDark={isDark} />
-      </Field>
-      <Field label="Services Offered" hint="Comma-separated list of core services">
-        <textarea
-          value={form.services}
-          onChange={e => set("services", e.target.value)}
-          placeholder="Bed bug treatment, pest inspection, fumigation, preventive treatment…"
-          rows={3}
-          style={{
-            width: "100%", boxSizing: "border-box",
-            padding: "9px 12px", borderRadius: 8, fontSize: 13,
-            background: isDark ? "rgba(255,255,255,0.05)" : "#FFFFFF",
-            border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #DDE3EA",
-            color: isDark ? "#E2E8F0" : "#111827",
-            outline: "none", fontFamily: "inherit", resize: "vertical",
-          }}
-          onFocus={e => { e.target.style.borderColor = "#00AEEF"; }}
-          onBlur={e => { e.target.style.borderColor = isDark ? "rgba(255,255,255,0.12)" : "#DDE3EA"; }}
-        />
-      </Field>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <Toggle
-          checked={form.emergencyService}
-          onChange={v => set("emergencyService", v)}
-          label="Offers Emergency / After-Hours Service"
-          isDark={isDark}
-        />
-        <Toggle
-          checked={form.appointmentRequired}
-          onChange={v => set("appointmentRequired", v)}
-          label="Appointment Required (not walk-in)"
-          isDark={isDark}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Step4({ form, set, isDark }: { form: OnboardingForm; set: (k: keyof OnboardingForm, v: string | boolean | string[]) => void; isDark: boolean }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <Field label="Logo URL" hint="Link to hosted logo image (PNG or SVG recommended)">
-        <Input value={form.logoUrl} onChange={v => set("logoUrl", v)} placeholder="https://cdn.example.com/logo.png" isDark={isDark} />
-      </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Field label="Primary Color">
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              type="color"
-              value={form.primaryColor}
-              onChange={e => set("primaryColor", e.target.value)}
-              style={{ width: 40, height: 36, borderRadius: 6, border: "none", cursor: "pointer", background: "none", padding: 0 }}
-            />
-            <Input value={form.primaryColor} onChange={v => set("primaryColor", v)} placeholder="#00AEEF" isDark={isDark} />
-          </div>
-        </Field>
-        <Field label="Secondary Color">
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              type="color"
-              value={form.secondaryColor}
-              onChange={e => set("secondaryColor", e.target.value)}
-              style={{ width: 40, height: 36, borderRadius: 6, border: "none", cursor: "pointer", background: "none", padding: 0 }}
-            />
-            <Input value={form.secondaryColor} onChange={v => set("secondaryColor", v)} placeholder="#C0C0C0" isDark={isDark} />
-          </div>
-        </Field>
-      </div>
-
-      {/* Color preview */}
-      <div style={{
-        borderRadius: 10, overflow: "hidden",
-        border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #DDE3EA",
-      }}>
-        <div style={{ height: 10, background: `linear-gradient(90deg, ${form.primaryColor}, ${form.secondaryColor})` }} />
-        <div style={{ padding: "12px 14px", background: isDark ? "rgba(255,255,255,0.03)" : "#F8FAFC" }}>
-          <span style={{ fontSize: 11, color: isDark ? "#64748B" : "#4B5563", fontWeight: 600 }}>Brand color preview</span>
-        </div>
-      </div>
-
-      <Field label="Brand Tone">
-        <Select
-          value={form.brandTone}
-          onChange={v => set("brandTone", v)}
-          options={BRAND_TONES}
-          isDark={isDark}
-        />
-      </Field>
-    </div>
-  );
-}
-
-function Step5({ form, set, isDark }: { form: OnboardingForm; set: (k: keyof OnboardingForm, v: string | boolean | string[]) => void; isDark: boolean }) {
-  const toggle = (id: string) => {
-    const current = form.modulesEnabled;
-    const next = current.includes(id) ? current.filter(m => m !== id) : [...current, id];
-    set("modulesEnabled", next);
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <p style={{ fontSize: 13, color: isDark ? "#94A3B8" : "#374151", margin: "0 0 8px", lineHeight: 1.5 }}>
-        Select which AI Edge modules to activate for this client. You can change these after deployment.
-      </p>
-      {MODULES.map(m => {
-        const active = form.modulesEnabled.includes(m.id);
-        return (
-          <div
-            key={m.id}
-            onClick={() => toggle(m.id)}
-            style={{
-              display: "flex", alignItems: "center", gap: 14,
-              padding: "14px 16px", borderRadius: 10, cursor: "pointer",
-              background: active
-                ? (isDark ? "rgba(0,174,239,0.08)" : "#EFF6FF")
-                : (isDark ? "rgba(255,255,255,0.02)" : "#F8FAFC"),
-              border: active
-                ? `1px solid ${isDark ? "rgba(0,174,239,0.3)" : "#BFDBFE"}`
-                : `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#DDE3EA"}`,
-              transition: "all 0.15s",
-            }}
-          >
-            <div style={{
-              width: 38, height: 38, borderRadius: 9, flexShrink: 0,
-              background: active ? "rgba(0,174,239,0.15)" : (isDark ? "rgba(255,255,255,0.05)" : "#EEF2F7"),
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 18, transition: "background 0.15s",
-            }}>
-              {m.icon}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: active ? "#00AEEF" : (isDark ? "#E2E8F0" : "#111827"), marginBottom: 2 }}>
-                {m.label}
-              </div>
-              <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#4B5563" }}>
-                {m.desc}
-              </div>
-            </div>
-            <div style={{
-              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-              background: active ? "#00AEEF" : "transparent",
-              border: active ? "2px solid #00AEEF" : `2px solid ${isDark ? "rgba(255,255,255,0.2)" : "#CBD5E1"}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.15s",
-            }}>
-              {active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#FFFFFF" }} />}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Step6Deploy({
-  form, isDark, deploying, deployed, deployResult, onDeploy,
-}: {
-  form: OnboardingForm;
-  isDark: boolean;
-  deploying: boolean;
-  deployed: boolean;
-  deployResult: DeployResult | null;
-  onDeploy: () => void;
-}) {
-  const cardBg = isDark ? "rgba(255,255,255,0.03)" : "#F8FAFC";
-  const cardBorder = isDark ? "rgba(255,255,255,0.07)" : "#DDE3EA";
-  const labelColor = isDark ? "#64748B" : "#4B5563";
-  const valueColor = isDark ? "#E2E8F0" : "#111827";
-
-  if (deployed && deployResult) {
-    const allModules = [
-      { id: "ai_receptionist",   label: "AI Receptionist",      icon: "📞" },
-      { id: "lead_recovery",     label: "Lead Recovery AI",     icon: "🎯" },
-      { id: "call_intelligence", label: "Call Intelligence",    icon: "📊" },
-      { id: "review_automation", label: "Review Automation",    icon: "⭐" },
-      { id: "ai_visibility",     label: "AI Visibility Engine", icon: "✨" },
-      { id: "publishing_center", label: "Publishing Center",    icon: "📸" },
-    ];
-    const activeSet = new Set(deployResult.modulesActivated);
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-
-        {/* Success banner */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0 8px" }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: "50%",
-            background: "rgba(34,197,94,0.15)", border: "2px solid #22C55E",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
-          }}>✅</div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: isDark ? "#FFFFFF" : "#111827", marginBottom: 4 }}>
-              {deployResult.client.businessName} is Live!
-            </div>
-            <div style={{ fontSize: 12, color: isDark ? "#94A3B8" : "#374151" }}>
-              Client workspace deployed and all modules provisioned
-            </div>
-          </div>
-        </div>
-
-        {/* Deployment metadata */}
-        <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, padding: "12px 14px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              ["Client ID",    deployResult.clientId.slice(0, 14) + "…"],
-              ["Workspace",    deployResult.workspace],
-              ["Deployed At",  new Date(deployResult.deployedAt).toLocaleTimeString()],
-              ["Status",       "Active"],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{k}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: v === "Active" ? "#22C55E" : valueColor }}>{v}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Module deployment summary */}
-        <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "9px 14px", borderBottom: `1px solid ${cardBorder}`, fontSize: 10, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            Module Deployment Summary
-          </div>
-          {allModules.map(m => {
-            const active = activeSet.has(m.id);
-            return (
-              <div key={m.id} style={{
-                display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-                borderBottom: `1px solid ${cardBorder}`,
-                background: active ? (isDark ? "rgba(34,197,94,0.04)" : "#F0FDF4") : "transparent",
-              }}>
-                <span style={{ fontSize: 16 }}>{m.icon}</span>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: active ? (isDark ? "#E2E8F0" : "#111827") : (isDark ? "#334155" : "#9CA3AF") }}>{m.label}</span>
-                <span style={{
-                  fontSize: 9, fontWeight: 800, padding: "2px 9px", borderRadius: 20,
-                  background: active ? "rgba(34,197,94,0.12)" : (isDark ? "rgba(255,255,255,0.04)" : "#F3F4F6"),
-                  color: active ? "#22C55E" : (isDark ? "#334155" : "#9CA3AF"),
-                  border: active ? "1px solid rgba(34,197,94,0.25)" : `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB"}`,
-                }}>
-                  {active ? "✓ Active" : "Not Selected"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* AI Visibility audit created notice */}
-        <div style={{
-          background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)",
-          borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <span style={{ fontSize: 18 }}>✨</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#FBBF24", marginBottom: 2 }}>AI Visibility Audit Created</div>
-            <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280" }}>Initial visibility audit generated — 30/100 overall score with 12 action items.</div>
-          </div>
-          <a
-            href={`/admin/ai-visibility?clientId=${deployResult.clientId}`}
-            style={{
-              display: "inline-block", padding: "7px 14px", borderRadius: 8,
-              fontSize: 11, fontWeight: 700, textDecoration: "none",
-              background: "rgba(251,191,36,0.15)", color: "#FBBF24",
-              border: "1px solid rgba(251,191,36,0.3)", whiteSpace: "nowrap",
-              cursor: "pointer",
-            }}
-          >
-            Open Audit →
-          </a>
-        </div>
-
-      </div>
-    );
-  }
-
-  const rows: [string, string][] = [
-    ["Business",        form.businessName || "—"],
-    ["Industry",        form.industry || "—"],
-    ["Phone",           form.mainPhone || "—"],
-    ["Forwarding",      form.forwardingPhone || "—"],
-    ["Email",           form.email || "—"],
-    ["Location",        [form.city, form.state, form.zip].filter(Boolean).join(", ") || "—"],
-    ["Service Radius",  form.serviceRadius ? `${form.serviceRadius} miles` : "—"],
-    ["Business Hours",  form.businessHours || "—"],
-    ["Emergency Svc",   form.emergencyService ? "Yes" : "No"],
-    ["Appt Required",   form.appointmentRequired ? "Yes" : "No"],
-    ["Brand Tone",      BRAND_TONES.find(t => t.value === form.brandTone)?.label || "—"],
-  ];
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Summary table */}
-      <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, overflow: "hidden" }}>
-        <div style={{ padding: "10px 14px", borderBottom: `1px solid ${cardBorder}`, fontSize: 10, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-          Deployment Summary
-        </div>
-        {rows.map(([k, v], i) => (
-          <div key={k} style={{
-            display: "flex", justifyContent: "space-between", gap: 12,
-            padding: "9px 14px",
-            background: i % 2 === 0 ? "transparent" : (isDark ? "rgba(255,255,255,0.015)" : "#F8FAFC"),
-            borderBottom: i < rows.length - 1 ? `1px solid ${cardBorder}` : "none",
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: labelColor }}>{k}</span>
-            <span style={{ fontSize: 11, color: valueColor, textAlign: "right", maxWidth: "60%" }}>{v}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Modules */}
-      <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 12, padding: "12px 14px" }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: labelColor, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
-          Modules to Activate ({form.modulesEnabled.length})
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {form.modulesEnabled.length === 0
-            ? <span style={{ fontSize: 12, color: isDark ? "#64748B" : "#9CA3AF" }}>No modules selected</span>
-            : form.modulesEnabled.map(id => {
-                const m = MODULES.find(x => x.id === id);
-                return m ? (
-                  <span key={id} style={{
-                    fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20,
-                    background: "rgba(0,174,239,0.1)", color: "#00AEEF",
-                    border: "1px solid rgba(0,174,239,0.25)",
-                  }}>
-                    {m.icon} {m.label}
-                  </span>
-                ) : null;
-              })
-          }
-        </div>
-      </div>
-
-      {/* Deploy button */}
-      <button
-        onClick={onDeploy}
-        disabled={deploying || !form.businessName || !form.mainPhone}
-        style={{
-          width: "100%", padding: "15px", borderRadius: 12, fontSize: 15, fontWeight: 800,
-          cursor: (deploying || !form.businessName || !form.mainPhone) ? "not-allowed" : "pointer",
-          border: "none",
-          background: (deploying || !form.businessName || !form.mainPhone)
-            ? (isDark ? "rgba(255,255,255,0.08)" : "#E2E8F0")
-            : "linear-gradient(135deg, #00AEEF, #0080CC)",
-          color: (deploying || !form.businessName || !form.mainPhone)
-            ? (isDark ? "#475569" : "#9CA3AF")
-            : "#FFFFFF",
-          letterSpacing: "0.3px",
-          boxShadow: (deploying || !form.businessName || !form.mainPhone) ? "none" : "0 4px 20px rgba(0,174,239,0.35)",
-          transition: "all 0.2s",
-        }}
-      >
-        {deploying ? "⚙️  Deploying Client…" : "🚀  Deploy Client"}
-      </button>
-
-      {(!form.businessName || !form.mainPhone) && (
-        <p style={{ fontSize: 11, color: "#EF4444", textAlign: "center", margin: 0 }}>
-          Business Name and Main Phone are required before deploying.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
-
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ClientOnboardingPage() {
-  const { colors: t, isDark } = useTheme();
-  const apiFetch = useApiFetch();
+  const [form, setForm]       = useState({ ...BBB });
+  const [modules, setModules] = useState<Record<ModuleId, boolean>>({
+    workspace: true, receptionist: true, leads: true, media: true,
+    reviews: true, local: true, publishing: true, revenue: true, apollos: true,
+  });
+  const [template, setTemplate]             = useState<string>("pest");
+  const [logoName, setLogoName]             = useState<string>("");
+  const [saved, setSaved]                   = useState(false);
+  const [previewGenerated, setPreviewGenerated] = useState(false);
 
-  const [step, setStep]           = useState(1);
-  const [form, setForm]           = useState<OnboardingForm>(EMPTY_FORM);
-  const [deploying, setDeploying] = useState(false);
-  const [deployed, setDeployed]   = useState(false);
-  const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
-  const [error, setError]         = useState<string | null>(null);
-
-  function set(key: keyof OnboardingForm, value: string | boolean | string[]) {
-    setForm(prev => ({ ...prev, [key]: value }));
+  function setField(field: keyof typeof BBB, value: string) {
+    setForm(f => ({ ...f, [field]: value }));
+    setSaved(false);
+    setPreviewGenerated(false);
   }
 
-  async function handleDeploy() {
-    if (!form.businessName || !form.mainPhone) return;
-    setDeploying(true);
-    setError(null);
-    try {
-      // Create the onboarding record
-      const created = await apiFetch<{ id: string }>("/client-onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          emergencyService:    form.emergencyService,
-          appointmentRequired: form.appointmentRequired,
-          modulesEnabled:      form.modulesEnabled,
-        }),
-      });
-      // Deploy it
-      const result = await apiFetch<DeployResult>(`/client-onboarding/${created.id}/deploy`, {
-        method: "POST",
-      });
-      setDeployResult(result);
-      setDeployed(true);
-    } catch (err: any) {
-      setError(err.message || "Deploy failed. Please try again.");
-    } finally {
-      setDeploying(false);
-    }
+  function applyTemplate(id: string) {
+    const t = TEMPLATES.find(t => t.id === id);
+    if (!t) return;
+    setTemplate(id);
+    setForm(f => ({ ...f, industry: t.industry, services: t.services }));
+    setPreviewGenerated(false);
+    setSaved(false);
   }
 
-  function resetWizard() {
-    setForm(EMPTY_FORM);
-    setStep(1);
-    setDeployed(false);
-    setDeployResult(null);
-    setError(null);
+  function toggleModule(id: ModuleId) {
+    setModules(m => ({ ...m, [id]: !m[id] }));
+    setPreviewGenerated(false);
   }
 
-  const canAdvance = () => {
-    if (step === 1) return form.businessName.trim() !== "" && form.mainPhone.trim() !== "";
-    return true;
-  };
+  const activeModules = MODULES.filter(m => modules[m.id]);
+  const serviceList   = (form.services || "").split(",").map(s => s.trim()).filter(Boolean);
+  const colorList     = (form.brandColors || "").split(",").map(c => c.trim()).filter(Boolean);
 
-  const STEP_CONTENT: Record<number, React.ReactNode> = {
-    1: <Step1 form={form} set={set} isDark={isDark} />,
-    2: <Step2 form={form} set={set} isDark={isDark} />,
-    3: <Step3 form={form} set={set} isDark={isDark} />,
-    4: <Step4 form={form} set={set} isDark={isDark} />,
-    5: <Step5 form={form} set={set} isDark={isDark} />,
-    6: <Step6Deploy form={form} isDark={isDark} deploying={deploying} deployed={deployed} deployResult={deployResult} onDeploy={handleDeploy} />,
-  };
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <AppShell>
-      <div style={{ maxWidth: 700, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-        {/* ── Header ── */}
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 20, padding: "4px 14px", marginBottom: 10 }}>
-            <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>👤 Client Onboarding</span>
-          </div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 6px" }}>
-            Client Onboarding Engine
-          </h1>
-          <p style={{ fontSize: 14, color: t.text2, margin: 0 }}>
-            Deploy a new business into AI Edge in minutes — complete profile, features, and automation.
-          </p>
-        </div>
-
-        {/* ── Step indicator ── */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 28, overflowX: "auto" }}>
-          {STEPS.map((s, i) => {
-            const done    = s.id < step;
-            const active  = s.id === step;
-            return (
-              <div
-                key={s.id}
-                style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}
-              >
-                <div
-                  onClick={() => { if (done) setStep(s.id); }}
-                  style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-                    cursor: done ? "pointer" : "default", flex: 1, padding: "0 4px",
-                  }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: "50%",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: done ? 14 : 16,
-                    background: done
-                      ? "#22C55E"
-                      : active
-                        ? "#00AEEF"
-                        : (isDark ? "rgba(255,255,255,0.06)" : "#EEF2F7"),
-                    border: active
-                      ? "2px solid #00AEEF"
-                      : done
-                        ? "2px solid #22C55E"
-                        : `2px solid ${isDark ? "rgba(255,255,255,0.1)" : "#DDE3EA"}`,
-                    color: (done || active) ? "#FFFFFF" : (isDark ? "#475569" : "#94A3B8"),
-                    fontWeight: 800,
-                    boxShadow: active ? "0 0 12px rgba(0,174,239,0.4)" : "none",
-                    transition: "all 0.2s",
-                    flexShrink: 0,
-                  }}>
-                    {done ? "✓" : s.icon}
-                  </div>
-                  <div style={{
-                    fontSize: 9, fontWeight: 700, textAlign: "center", lineHeight: 1.2,
-                    color: active ? "#00AEEF" : done ? "#22C55E" : (isDark ? "#475569" : "#94A3B8"),
-                    textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap",
-                  }}>
-                    {s.label}
-                  </div>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div style={{
-                    height: 2, flex: 0, width: 16, flexShrink: 0, margin: "0 -2px",
-                    marginBottom: 16,
-                    background: done
-                      ? "#22C55E"
-                      : (isDark ? "rgba(255,255,255,0.06)" : "#E2E8F0"),
-                    transition: "background 0.3s",
-                  }} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* ── Card ── */}
+      {/* ── Header ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #080E1F 0%, #0A1228 60%, #030612 100%)",
+        borderBottom: `1px solid ${B.border}`, padding: "26px 36px 22px",
+        display: "flex", alignItems: "center", gap: 16,
+      }}>
         <div style={{
-          background: t.card,
-          border: isDark ? "1px solid rgba(255,255,255,0.07)" : `1px solid ${t.border}`,
-          borderRadius: 16,
-          boxShadow: isDark ? "0 4px 32px rgba(0,0,0,0.3)" : t.shadow,
-          overflow: "hidden",
-        }}>
-          {/* Card header */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "16px 20px",
-            borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${t.border}`,
-            background: isDark ? "rgba(0,174,239,0.04)" : "#F8FAFC",
-          }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 9,
-              background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.25)",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-            }}>
-              {STEPS[step - 1].icon}
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+          background: "linear-gradient(135deg, rgba(56,189,248,0.25) 0%, rgba(0,174,239,0.15) 100%)",
+          border: "1px solid rgba(56,189,248,0.35)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
+        }}>🚀</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 21, fontWeight: 800, color: B.white, letterSpacing: "-0.3px" }}>
+            Client Onboarding Engine
+          </div>
+          <div style={{ fontSize: 12, color: B.dim, marginTop: 3, maxWidth: 620 }}>
+            Set up a new client workspace, AI receptionist, lead recovery, media, reviews, and local visibility from one guided flow.
+          </div>
+        </div>
+        <span style={{
+          fontSize: 9, fontWeight: 800, letterSpacing: "1px",
+          background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)",
+          color: B.sky, borderRadius: 8, padding: "4px 12px",
+        }}>V1 · FRONTEND PREVIEW</span>
+      </div>
+
+      {/* ── Body: 2-column grid ── */}
+      <div style={{ padding: "28px 36px", display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}>
+
+        {/* ════ LEFT COLUMN ════════════════════════════════════════════════ */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* ── 1. Template Selector ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "20px 22px" }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: B.sky, letterSpacing: "1.2px", textTransform: "uppercase", marginBottom: 14 }}>
+              📋 Select a Template
             </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: t.text }}>
-                Step {step} of {STEPS.length} — {STEPS[step - 1].label}
-              </div>
-              <div style={{ fontSize: 11, color: t.text3 }}>
-                {step === 1 && "Core business information for AI Edge setup"}
-                {step === 2 && "Define where this business serves customers"}
-                {step === 3 && "Operating hours, services, and capabilities"}
-                {step === 4 && "Visual identity and communication style"}
-                {step === 5 && "Choose which AI modules to activate"}
-                {step === 6 && "Review and deploy the client workspace"}
-              </div>
-            </div>
-            <div style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: "#00AEEF" }}>
-              {Math.round(((step - 1) / STEPS.length) * 100)}%
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {TEMPLATES.map(t => {
+                const active = template === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTemplate(t.id)}
+                    style={{
+                      background: active ? "rgba(56,189,248,0.15)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${active ? "rgba(56,189,248,0.5)" : B.border}`,
+                      borderRadius: 10, padding: "10px 8px", fontSize: 11.5, fontWeight: 600,
+                      color: active ? B.sky : B.silver, cursor: "pointer", textAlign: "center",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = "rgba(56,189,248,0.25)"; b.style.color = B.white; } }}
+                    onMouseLeave={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = B.border; b.style.color = B.silver; } }}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Card body */}
-          <div style={{ padding: "24px 20px" }}>
-            {STEP_CONTENT[step]}
+          {/* ── 2. Client Setup Form ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "20px 22px" }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: B.sky, letterSpacing: "1.2px", textTransform: "uppercase", marginBottom: 18 }}>
+              🏢 Client Setup
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <FieldLabel>Business Name</FieldLabel>
+                <TextInput value={form.businessName} onChange={v => setField("businessName", v)} placeholder="e.g. Bed Bugs & Beyond" />
+              </div>
+              <div>
+                <FieldLabel>Industry</FieldLabel>
+                <TextInput value={form.industry} onChange={v => setField("industry", v)} placeholder="e.g. Pest Control" />
+              </div>
+              <div>
+                <FieldLabel>Main Phone Number</FieldLabel>
+                <TextInput value={form.phone} onChange={v => setField("phone", v)} placeholder="(XXX) XXX-XXXX" />
+              </div>
+              <div>
+                <FieldLabel>Forwarding Phone Number</FieldLabel>
+                <TextInput value={form.forwardingPhone} onChange={v => setField("forwardingPhone", v)} placeholder="(XXX) XXX-XXXX" />
+              </div>
+              <div>
+                <FieldLabel>Website</FieldLabel>
+                <TextInput value={form.website} onChange={v => setField("website", v)} placeholder="yoursite.com" />
+              </div>
+              <div>
+                <FieldLabel>Service Area</FieldLabel>
+                <TextInput value={form.serviceArea} onChange={v => setField("serviceArea", v)} placeholder="e.g. Baldwin County, AL" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FieldLabel>Business Hours</FieldLabel>
+                <TextInput value={form.hours} onChange={v => setField("hours", v)} placeholder="e.g. Mon–Fri 8AM–6PM" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <FieldLabel>Services Offered</FieldLabel>
+                <TextInput value={form.services} onChange={v => setField("services", v)} placeholder="Comma-separated list of services" />
+              </div>
+              <div>
+                <FieldLabel>Brand Colors (hex)</FieldLabel>
+                <TextInput value={form.brandColors} onChange={v => setField("brandColors", v)} placeholder="#000000, #FFFFFF" />
+              </div>
+              {/* Logo Upload Placeholder */}
+              <div>
+                <FieldLabel>Logo Upload</FieldLabel>
+                <label style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: B.panel2, border: "1px dashed rgba(56,189,248,0.3)",
+                  borderRadius: 8, padding: "8px 12px", cursor: "pointer",
+                }}>
+                  <span style={{ fontSize: 14 }}>🖼️</span>
+                  <span style={{ fontSize: 11.5, color: logoName ? B.sky : B.dim }}>
+                    {logoName || "Click to upload logo…"}
+                  </span>
+                  <input
+                    type="file" accept="image/*" style={{ display: "none" }}
+                    onChange={e => setLogoName(e.target.files?.[0]?.name || "")}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div style={{ margin: "0 20px 16px", padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "#EF4444" }}>
-              {error}
+          {/* ── 3. Setup Modules Checklist ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "20px 22px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: B.sky, letterSpacing: "1.2px", textTransform: "uppercase" }}>
+                ✅ Setup Modules
+              </div>
+              <span style={{ fontSize: 10.5, color: B.dim }}>{activeModules.length} / {MODULES.length} active</span>
             </div>
-          )}
-
-          {/* Card footer — nav buttons */}
-          {!deployed && (
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "14px 20px",
-              borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${t.border}`,
-              background: isDark ? "rgba(0,0,0,0.1)" : "#F8FAFC",
-            }}>
-              <button
-                onClick={() => { if (step > 1) setStep(s => s - 1); }}
-                disabled={step === 1}
-                style={{
-                  padding: "9px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  cursor: step === 1 ? "not-allowed" : "pointer",
-                  border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #DDE3EA",
-                  background: "transparent",
-                  color: step === 1 ? (isDark ? "#334155" : "#CBD5E1") : (isDark ? "#94A3B8" : "#374151"),
-                }}
-              >
-                ← Back
-              </button>
-
-              {step < 6 && (
-                <button
-                  onClick={() => { if (canAdvance()) setStep(s => s + 1); }}
-                  disabled={!canAdvance()}
-                  style={{
-                    padding: "9px 24px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                    cursor: canAdvance() ? "pointer" : "not-allowed",
-                    border: "none",
-                    background: canAdvance() ? "linear-gradient(135deg, #00AEEF, #0080CC)" : (isDark ? "rgba(255,255,255,0.08)" : "#E2E8F0"),
-                    color: canAdvance() ? "#FFFFFF" : (isDark ? "#475569" : "#9CA3AF"),
-                    boxShadow: canAdvance() ? "0 2px 12px rgba(0,174,239,0.3)" : "none",
-                  }}
-                >
-                  Continue →
-                </button>
-              )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {MODULES.map(mod => {
+                const on = modules[mod.id];
+                return (
+                  <button
+                    key={mod.id}
+                    onClick={() => toggleModule(mod.id)}
+                    style={{
+                      background: on ? `${mod.color}14` : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${on ? `${mod.color}45` : B.border}`,
+                      borderRadius: 10, padding: "10px 12px",
+                      cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <span style={{
+                      width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                      background: on ? mod.color : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${on ? mod.color : "rgba(255,255,255,0.15)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#000", fontWeight: 900,
+                    }}>{on ? "✓" : ""}</span>
+                    <span style={{ fontSize: 11, color: on ? B.white : B.dim, fontWeight: on ? 600 : 400, lineHeight: 1.3 }}>
+                      {mod.icon} {mod.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
 
-          {/* New client button after deploy */}
-          {deployed && (
-            <div style={{ padding: "14px 20px", borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${t.border}`, display: "flex", justifyContent: "center" }}>
-              <button
-                onClick={resetWizard}
-                style={{
-                  padding: "9px 24px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                  cursor: "pointer", border: "none",
-                  background: "linear-gradient(135deg, #00AEEF, #0080CC)", color: "#FFFFFF",
-                  boxShadow: "0 2px 12px rgba(0,174,239,0.3)",
-                }}
-              >
-                + Onboard Another Client
-              </button>
-            </div>
-          )}
+          {/* ── Action Buttons ── */}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => setSaved(true)}
+              style={{
+                flex: 1, background: saved ? "rgba(16,185,129,0.12)" : "rgba(56,189,248,0.1)",
+                border: `1px solid ${saved ? "rgba(16,185,129,0.35)" : "rgba(56,189,248,0.3)"}`,
+                borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 700,
+                color: saved ? B.emerald : B.sky, cursor: "pointer", transition: "all 0.2s",
+              }}
+            >
+              {saved ? "✓ Draft Saved" : "💾 Save Draft Setup"}
+            </button>
+            <button
+              onClick={() => setPreviewGenerated(true)}
+              style={{
+                flex: 1,
+                background: "linear-gradient(135deg, rgba(0,174,239,0.18) 0%, rgba(6,182,212,0.12) 100%)",
+                border: "1px solid rgba(0,174,239,0.4)", borderRadius: 10, padding: "11px 0",
+                fontSize: 13, fontWeight: 700, color: B.blue, cursor: "pointer", transition: "all 0.15s",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(0,174,239,0.28) 0%, rgba(6,182,212,0.2) 100%)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(0,174,239,0.18) 0%, rgba(6,182,212,0.12) 100%)"; }}
+            >
+              🔍 Generate Client Preview
+            </button>
+            <button
+              disabled
+              title="Coming soon — provisioning not yet available"
+              style={{
+                flex: 1, background: "rgba(255,255,255,0.02)", border: `1px solid ${B.border}`,
+                borderRadius: 10, padding: "11px 0", fontSize: 12, fontWeight: 700,
+                color: B.dim, cursor: "not-allowed",
+              }}
+            >
+              🚀 Provision Client
+              <span style={{ display: "block", fontSize: 8, fontWeight: 800, color: B.gold, letterSpacing: "0.5px", marginTop: 2 }}>COMING SOON</span>
+            </button>
+          </div>
         </div>
 
+        {/* ════ RIGHT COLUMN — Preview Panel ══════════════════════════════ */}
+        <div style={{
+          background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
+          padding: "20px 22px", position: "sticky", top: 28,
+        }}>
+          {/* Panel header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: B.sky, letterSpacing: "1.2px", textTransform: "uppercase" }}>
+              👁 Setup Preview
+            </div>
+            <span style={{
+              fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", borderRadius: 6, padding: "2px 7px",
+              background: previewGenerated ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${previewGenerated ? "rgba(16,185,129,0.3)" : B.border}`,
+              color: previewGenerated ? B.emerald : B.dim,
+            }}>{previewGenerated ? "GENERATED" : "LIVE"}</span>
+          </div>
+
+          {/* Business identity card */}
+          <div style={{
+            background: "linear-gradient(135deg, rgba(56,189,248,0.07) 0%, rgba(0,174,239,0.04) 100%)",
+            border: "1px solid rgba(56,189,248,0.15)", borderRadius: 12, padding: "14px 16px", marginBottom: 14,
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: B.white, marginBottom: 2 }}>
+              {form.businessName || "—"}
+            </div>
+            <div style={{ fontSize: 11, color: B.sky, marginBottom: 10 }}>{form.industry || "—"}</div>
+            {[
+              { icon: "📞", val: form.phone },
+              { icon: "🔀", val: form.forwardingPhone ? `Fwd → ${form.forwardingPhone}` : "" },
+              { icon: "🌐", val: form.website },
+              { icon: "📍", val: form.serviceArea },
+              { icon: "🕐", val: form.hours },
+            ].map(r => r.val ? (
+              <div key={r.icon} style={{ display: "flex", gap: 7, fontSize: 10.5, color: B.silver, marginBottom: 3 }}>
+                <span style={{ flexShrink: 0 }}>{r.icon}</span>
+                <span>{r.val}</span>
+              </div>
+            ) : null)}
+          </div>
+
+          {/* Services */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 7 }}>Services</div>
+            {serviceList.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {serviceList.map(s => (
+                  <span key={s} style={{
+                    fontSize: 10, background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.2)",
+                    color: B.sky, borderRadius: 6, padding: "2px 7px",
+                  }}>{s}</span>
+                ))}
+              </div>
+            ) : <span style={{ fontSize: 10.5, color: B.dim }}>—</span>}
+          </div>
+
+          {/* Brand colors */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 7 }}>Brand Colors</div>
+            {colorList.length > 0 ? (
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+                {colorList.map(c => (
+                  <div key={c} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 4, background: c, border: "1px solid rgba(255,255,255,0.15)" }} />
+                    <span style={{ fontSize: 9.5, color: B.dim }}>{c}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <span style={{ fontSize: 10.5, color: B.dim }}>—</span>}
+          </div>
+
+          {/* Logo */}
+          {logoName && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 5 }}>Logo</div>
+              <span style={{ fontSize: 10.5, color: B.emerald }}>✓ {logoName}</span>
+            </div>
+          )}
+
+          {/* Active modules */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+              Active Modules ({activeModules.length}/{MODULES.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {MODULES.map(mod => {
+                const on = modules[mod.id];
+                return (
+                  <div key={mod.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, color: on ? B.silver : B.dim }}>
+                      {mod.icon} {mod.label}
+                    </span>
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, borderRadius: 5, padding: "1px 6px",
+                      color: on ? mod.color : B.dim,
+                      background: on ? `${mod.color}14` : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${on ? `${mod.color}30` : "rgba(255,255,255,0.06)"}`,
+                    }}>{on ? "ON" : "OFF"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Provision status pill */}
+          <div style={{
+            marginTop: 8, padding: "10px 12px", borderRadius: 10,
+            background: "rgba(255,255,255,0.02)", border: `1px dashed ${B.border}`,
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 10, color: B.dim, marginBottom: 3 }}>One-click provisioning</div>
+            <div style={{ fontSize: 9, fontWeight: 800, color: B.gold, letterSpacing: "0.5px" }}>COMING SOON</div>
+          </div>
+        </div>
       </div>
-    </AppShell>
+    </div>
   );
 }

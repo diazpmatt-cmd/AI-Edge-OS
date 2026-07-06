@@ -247,6 +247,8 @@ export default function ApollosPage() {
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
+  const [recsOpen, setRecsOpen]         = useState(true);
+  const [timelineOpen, setTimelineOpen] = useState(true);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
 
@@ -443,15 +445,20 @@ export default function ApollosPage() {
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column" }}>
 
           {/* ── Today's Apollos Recommendations ── */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => setRecsOpen(o => !o)} style={{
+              width: "100%", background: "none", border: "none", padding: "0 0 10px 0",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+            }}>
               <span style={{ fontSize: 13 }}>🧠</span>
               <span style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.2px", textTransform: "uppercase" }}>
                 Today's Apollos Recommendations
               </span>
               <span style={{ fontSize: 9, color: B.dim }}>— {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <span style={{ marginLeft: "auto", fontSize: 10, color: B.dim, transition: "transform 0.25s", display: "inline-block", transform: recsOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+            </button>
+            <div style={{ overflow: "hidden", maxHeight: recsOpen ? "800px" : "0px", transition: "max-height 0.3s ease", }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, paddingBottom: 4 }}>
               {TODAY_RECS.map(r => (
                 <div key={r.title} style={{
                   background: "linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%)",
@@ -491,16 +498,22 @@ export default function ApollosPage() {
                 </div>
               ))}
             </div>
+            </div>
           </div>
 
           {/* ── Today's Briefing Timeline ── */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={() => setTimelineOpen(o => !o)} style={{
+              width: "100%", background: "none", border: "none", padding: "0 0 10px 0",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+            }}>
               <span style={{ fontSize: 13 }}>📋</span>
               <span style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.2px", textTransform: "uppercase" }}>
                 Today's Briefing Timeline
               </span>
-            </div>
+              <span style={{ marginLeft: "auto", fontSize: 10, color: B.dim, transition: "transform 0.25s", display: "inline-block", transform: timelineOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+            </button>
+            <div style={{ overflow: "hidden", maxHeight: timelineOpen ? "1200px" : "0px", transition: "max-height 0.3s ease" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {BRIEFING_TIMELINE.map((item, idx) => {
                 const s = TIMELINE_STATUS_STYLE[item.status];
@@ -557,6 +570,7 @@ export default function ApollosPage() {
                   </div>
                 );
               })}
+            </div>
             </div>
           </div>
 

@@ -60,10 +60,11 @@ const BBB = {
 };
 
 // ── Reusable micro-components ──────────────────────────────────────────────────
-function FieldLabel({ children }: { children: string }) {
+function FieldLabel({ children, required }: { children: string; required?: boolean }) {
   return (
-    <div style={{ fontSize: 10.5, fontWeight: 700, color: B.silver, letterSpacing: "0.4px", textTransform: "uppercase", marginBottom: 5 }}>
+    <div style={{ fontSize: 10.5, fontWeight: 700, color: B.silver, letterSpacing: "0.4px", textTransform: "uppercase", marginBottom: 5, display: "flex", alignItems: "center", gap: 3 }}>
       {children}
+      {required && <span style={{ color: "#F87171", fontSize: 11, fontWeight: 900, lineHeight: 1 }}>*</span>}
     </div>
   );
 }
@@ -147,11 +148,18 @@ export default function ClientOnboardingPage() {
             Set up a new client workspace, AI receptionist, lead recovery, media, reviews, and local visibility from one guided flow.
           </div>
         </div>
-        <span style={{
-          fontSize: 9, fontWeight: 800, letterSpacing: "1px",
-          background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)",
-          color: B.sky, borderRadius: 8, padding: "4px 12px",
-        }}>V1 · FRONTEND PREVIEW</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: "1px",
+            background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.35)",
+            color: B.sky, borderRadius: 8, padding: "4px 12px",
+          }}>V1 · FRONTEND PREVIEW ONLY</span>
+          <span style={{
+            fontSize: 8.5, fontWeight: 700, letterSpacing: "0.5px",
+            background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
+            color: B.gold, borderRadius: 6, padding: "3px 10px",
+          }}>⚠️ No live data · No AI calls · No provisioning</span>
+        </div>
       </div>
 
       {/* ── Body: 2-column grid ── */}
@@ -187,6 +195,21 @@ export default function ClientOnboardingPage() {
                 );
               })}
             </div>
+            {/* BB&B Golden Template badge */}
+            {template === "pest" && (
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, letterSpacing: "0.5px",
+                  background: "linear-gradient(135deg, rgba(251,191,36,0.18) 0%, rgba(245,158,11,0.12) 100%)",
+                  border: "1px solid rgba(251,191,36,0.45)",
+                  color: B.gold, borderRadius: 8, padding: "5px 12px",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  ⭐ BB&B Golden Template — Pest Control defaults loaded
+                </span>
+                <span style={{ fontSize: 10, color: B.dim }}>Pre-filled with Bed Bugs &amp; Beyond data</span>
+              </div>
+            )}
           </div>
 
           {/* ── 2. Client Setup Form ── */}
@@ -196,19 +219,19 @@ export default function ClientOnboardingPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
-                <FieldLabel>Business Name</FieldLabel>
+                <FieldLabel required>Business Name</FieldLabel>
                 <TextInput value={form.businessName} onChange={v => setField("businessName", v)} placeholder="e.g. Bed Bugs & Beyond" />
               </div>
               <div>
-                <FieldLabel>Industry</FieldLabel>
+                <FieldLabel required>Industry</FieldLabel>
                 <TextInput value={form.industry} onChange={v => setField("industry", v)} placeholder="e.g. Pest Control" />
               </div>
               <div>
-                <FieldLabel>Main Phone Number</FieldLabel>
+                <FieldLabel required>Main Phone Number</FieldLabel>
                 <TextInput value={form.phone} onChange={v => setField("phone", v)} placeholder="(XXX) XXX-XXXX" />
               </div>
               <div>
-                <FieldLabel>Forwarding Phone Number</FieldLabel>
+                <FieldLabel required>Forwarding Phone Number</FieldLabel>
                 <TextInput value={form.forwardingPhone} onChange={v => setField("forwardingPhone", v)} placeholder="(XXX) XXX-XXXX" />
               </div>
               <div>
@@ -216,7 +239,7 @@ export default function ClientOnboardingPage() {
                 <TextInput value={form.website} onChange={v => setField("website", v)} placeholder="yoursite.com" />
               </div>
               <div>
-                <FieldLabel>Service Area</FieldLabel>
+                <FieldLabel required>Service Area</FieldLabel>
                 <TextInput value={form.serviceArea} onChange={v => setField("serviceArea", v)} placeholder="e.g. Baldwin County, AL" />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -254,11 +277,30 @@ export default function ClientOnboardingPage() {
 
           {/* ── 3. Setup Modules Checklist ── */}
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "20px 22px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <div style={{ fontSize: 10.5, fontWeight: 800, color: B.sky, letterSpacing: "1.2px", textTransform: "uppercase" }}>
                 ✅ Setup Modules
               </div>
               <span style={{ fontSize: 10.5, color: B.dim }}>{activeModules.length} / {MODULES.length} active</span>
+            </div>
+            {/* Progress Meter */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ fontSize: 9.5, color: B.dim, fontWeight: 600 }}>Setup Progress</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: activeModules.length === MODULES.length ? B.emerald : B.sky }}>
+                  {Math.round((activeModules.length / MODULES.length) * 100)}%
+                </span>
+              </div>
+              <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 99,
+                  width: `${Math.round((activeModules.length / MODULES.length) * 100)}%`,
+                  background: activeModules.length === MODULES.length
+                    ? `linear-gradient(90deg, ${B.emerald}, #34D399)`
+                    : `linear-gradient(90deg, ${B.blue}, ${B.sky})`,
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
               {MODULES.map(mod => {
@@ -318,18 +360,34 @@ export default function ClientOnboardingPage() {
             >
               🔍 Generate Client Preview
             </button>
-            <button
-              disabled
-              title="Coming soon — provisioning not yet available"
-              style={{
-                flex: 1, background: "rgba(255,255,255,0.02)", border: `1px solid ${B.border}`,
-                borderRadius: 10, padding: "11px 0", fontSize: 12, fontWeight: 700,
-                color: B.dim, cursor: "not-allowed",
-              }}
-            >
-              🚀 Provision Client
-              <span style={{ display: "block", fontSize: 8, fontWeight: 800, color: B.gold, letterSpacing: "0.5px", marginTop: 2 }}>COMING SOON</span>
-            </button>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <button
+                  disabled
+                  title="Coming soon — provisioning not yet available"
+                  style={{
+                    flex: 1, background: "rgba(255,255,255,0.02)", border: `1px solid ${B.border}`,
+                    borderRadius: 10, padding: "11px 0", fontSize: 12, fontWeight: 700,
+                    color: B.dim, cursor: "not-allowed",
+                  }}
+                >
+                  🚀 Provision Client
+                  <span style={{ display: "block", fontSize: 8, fontWeight: 800, color: B.gold, letterSpacing: "0.5px", marginTop: 2 }}>COMING SOON</span>
+                </button>
+                <span style={{
+                  fontSize: 8, fontWeight: 800, letterSpacing: "0.5px", whiteSpace: "nowrap",
+                  background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
+                  color: B.gold, borderRadius: 7, padding: "4px 8px",
+                }}>⏳ Provisioning<br/>Coming Soon</span>
+              </div>
+              <div style={{
+                fontSize: 9.5, color: B.dim, lineHeight: 1.5,
+                background: "rgba(255,255,255,0.02)", border: `1px solid ${B.border}`,
+                borderRadius: 8, padding: "8px 10px",
+              }}>
+                Live provisioning will later create workspace, Telnyx setup, AI receptionist, lead recovery, local presence, media, and review automation.
+              </div>
+            </div>
           </div>
         </div>
 

@@ -2,52 +2,120 @@ import { Link, useLocation } from "wouter";
 import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTheme } from "@/contexts/theme-context";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
-const NAV_ITEMS = [
-  { to: "/admin/morning-brief",       icon: "☀️", label: "Morning\nBrief",             bg: "#1A1200", accent: "#FBBF24" },
-  { to: "/admin/mission-control",    icon: "🚀", label: "Mission\nControl",            bg: "#0A0E26", accent: "#00AEEF" },
-  { to: "/admin/customer-timeline",  icon: "👤", label: "Customer\nTimeline",           bg: "#0A1E2E", accent: "#06B6D4" },
-  { to: "/admin/profit-center",      icon: "💰", label: "Profit\nCenter",               bg: "#0A1E0A", accent: "#10B981" },
-  { to: "/admin/apollos",            icon: "🧠", label: "Apollos",                       bg: "#0D0A2A", accent: "#A78BFA" },
+// ── Primary nav — BB&B growth OS (always visible) ─────────────────────────────
+const PRIMARY_NAV = [
+  { to: "/admin/morning-brief",      icon: "☀️", label: "Morning\nBrief",          bg: "#1A1200", accent: "#FBBF24" },
+  { to: "/admin/mission-control",    icon: "🚀", label: "Mission\nControl",         bg: "#0A0E26", accent: "#00AEEF" },
+  { to: "/admin/apollos",            icon: "🧠", label: "Apollos",                  bg: "#0D0A2A", accent: "#A78BFA" },
   { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
-  { to: "/admin/media-engine",        icon: "🎥", label: "Media\nEngine",             bg: "#0D1428", accent: "#00AEEF" },
-  { to: "/admin/asset-library",       icon: "📁", label: "Asset\nLibrary",             bg: "#0A1A2E", accent: "#00AEEF" },
-  { to: "/admin/bbb-execution",        icon: "🎯", label: "Growth\nExecution",          bg: "#1A0E08", accent: "#F26C21" },
-  { to: "/admin/bbb-autopilot",       icon: "⚡", label: "Content\nAutopilot",          bg: "#150E1A", accent: "#F26C21" },
-  { to: "/admin/bbb-success",         icon: "🐛", label: "BB&B\nSuccess",             bg: "#0D1A10", accent: "#22C55E" },
-  { to: "/admin/bbb-operations",     icon: "🐛", label: "BB&B Ops\nCenter",          bg: "#0D1A2E", accent: "#00AEEF" },
-  { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },
-  { to: "/admin/client-onboarding",   icon: "🚀", label: "Client\nOnboarding",        bg: "#0D1A2E", accent: "#38BDF8" },
-  { to: "/admin/connections",        icon: "🔗", label: "Connected\nAccounts",       bg: "#261200", accent: "#F59E0B" },
-  { to: "/admin/distribution",       icon: "📦", label: "Distribution",              bg: "#0A2020", accent: "#06B6D4" },
-  { to: "/admin/repurpose",          icon: "🎯", label: "Repurpose",                 bg: "#26071A", accent: "#F472B6" },
-  { to: "/admin/lead-recovery",      icon: "📞", label: "Lead\nRecovery AI",         bg: "#0A2010", accent: "#4ADE80" },
-  { to: "/admin/call-intelligence",  icon: "📊", label: "Call\nIntelligence",        bg: "#0D1828", accent: "#60A5FA" },
-  { to: "/admin/ai-receptionist",    icon: "🤖", label: "AI\nReceptionist",          bg: "#180D2E", accent: "#3B82F6" },
-  { to: "/admin/social-publishing",  icon: "✈",  label: "Publishing\nCenter",        bg: "#281400", accent: "#F59E0B" },
-  { to: "/admin/auto-content",       icon: "⚡", label: "Auto Content\nEngine",      bg: "#0A0E26", accent: "#818CF8" },
-  { to: "/admin/image-assets",       icon: "🖼",  label: "Image Asset\nManager",     bg: "#0A1226", accent: "#67E8F9" },
-  { to: "/admin/ai-visibility",      icon: "✨", label: "AI Visibility\nEngine",     bg: "#221800", accent: "#FBBF24" },
-  { to: "/admin/local-presence",     icon: "📍", label: "Local Presence\nEngine",    bg: "#0A1E1E", accent: "#2DD4BF" },
-  { to: "/admin/voice-search",       icon: "🔊", label: "Voice Search\nEngine",      bg: "#1A1026", accent: "#818CF8" },
-  { to: "/admin/reviews",            icon: "⭐", label: "Reviews\nEngine",           bg: "#261A00", accent: "#FCD34D" },
-  { to: "/admin/assessments",        icon: "📋", label: "Business\nAssessments",     bg: "#1A1A0A", accent: "#86EFAC" },
-  { to: "/admin/diagnostics",        icon: "🛰",  label: "System\nDiagnostics",      bg: "#0A1A1A", accent: "#94A3B8" },
-  { to: "/admin/revenue-attribution", icon: "💰", label: "Revenue\nAttribution",      bg: "#0A1E0A", accent: "#22C55E" },
+  { to: "/admin/media-engine",       icon: "🎥", label: "Media\nEngine",            bg: "#0D1428", accent: "#00AEEF" },
+  { to: "/admin/asset-library",      icon: "📁", label: "Asset\nLibrary",           bg: "#0A1A2E", accent: "#00AEEF" },
+  { to: "/admin/bbb-execution",      icon: "🎯", label: "Growth\nExecution",        bg: "#1A0E08", accent: "#F26C21" },
+  { to: "/admin/bbb-autopilot",      icon: "⚡", label: "Content\nAutopilot",       bg: "#150E1A", accent: "#F26C21" },
+  { to: "/admin/bbb-operations",     icon: "🐛", label: "BB&B Ops\nCenter",         bg: "#0D1A2E", accent: "#00AEEF" },
+  { to: "/admin/social-publishing",  icon: "✈",  label: "Publishing\nCenter",       bg: "#281400", accent: "#F59E0B" },
+  { to: "/admin/connections",        icon: "🔗", label: "Connected\nAccounts",      bg: "#261200", accent: "#F59E0B" },
+  { to: "/admin/lead-recovery",      icon: "📞", label: "Lead\nRecovery AI",        bg: "#0A2010", accent: "#4ADE80" },
+  { to: "/admin/ai-receptionist",    icon: "🤖", label: "AI\nReceptionist",         bg: "#180D2E", accent: "#3B82F6" },
+  { to: "/admin/reviews",            icon: "⭐", label: "Reviews\nEngine",          bg: "#261A00", accent: "#FCD34D" },
+  { to: "/admin/local-presence",     icon: "📍", label: "Local Presence\nEngine",   bg: "#0A1E1E", accent: "#2DD4BF" },
+  { to: "/admin/diagnostics",        icon: "🛰",  label: "System\nDiagnostics",     bg: "#0A1A1A", accent: "#94A3B8" },
 ];
+
+// ── Secondary nav — advanced / future tools (collapsed by default) ────────────
+const SECONDARY_NAV = [
+  { to: "/admin/customer-timeline",  icon: "👤", label: "Customer\nTimeline",       bg: "#0A1E2E", accent: "#06B6D4" },
+  { to: "/admin/profit-center",      icon: "💰", label: "Profit\nCenter",           bg: "#0A1E0A", accent: "#10B981" },
+  { to: "/admin/bbb-success",        icon: "🐛", label: "BB&B\nSuccess",            bg: "#0D1A10", accent: "#22C55E" },
+  { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },
+  { to: "/admin/client-onboarding",  icon: "🚀", label: "Client\nOnboarding",       bg: "#0D1A2E", accent: "#38BDF8" },
+  { to: "/admin/distribution",       icon: "📦", label: "Distribution",             bg: "#0A2020", accent: "#06B6D4" },
+  { to: "/admin/repurpose",          icon: "🎯", label: "Repurpose",                bg: "#26071A", accent: "#F472B6" },
+  { to: "/admin/call-intelligence",  icon: "📊", label: "Call\nIntelligence",       bg: "#0D1828", accent: "#60A5FA" },
+  { to: "/admin/auto-content",       icon: "⚡", label: "Auto Content\nEngine",     bg: "#0A0E26", accent: "#818CF8" },
+  { to: "/admin/image-assets",       icon: "🖼",  label: "Image Asset\nManager",    bg: "#0A1226", accent: "#67E8F9" },
+  { to: "/admin/ai-visibility",      icon: "✨", label: "AI Visibility\nEngine",    bg: "#221800", accent: "#FBBF24" },
+  { to: "/admin/voice-search",       icon: "🔊", label: "Voice Search\nEngine",     bg: "#1A1026", accent: "#818CF8" },
+  { to: "/admin/assessments",        icon: "📋", label: "Business\nAssessments",    bg: "#1A1A0A", accent: "#86EFAC" },
+  { to: "/admin/revenue-attribution",icon: "💰", label: "Revenue\nAttribution",     bg: "#0A1E0A", accent: "#22C55E" },
+];
+
+// All nav items combined (used for mobile header active detection)
+const ALL_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV];
 
 const SIDEBAR_W = 252;
 
+function NavGrid({ items, location }: { items: typeof PRIMARY_NAV; location: string }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+      {items.map(({ to, icon, label, bg, accent }) => {
+        const active = location.startsWith(to);
+        const lines  = label.split("\n");
+        return (
+          <Link key={to} to={to} style={{
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            padding: "14px 6px 12px",
+            borderRadius: 12, textDecoration: "none",
+            background: active
+              ? `linear-gradient(135deg, ${bg} 0%, ${bg}CC 100%)`
+              : `linear-gradient(135deg, ${bg} 0%, ${bg}99 100%)`,
+            border: active
+              ? `1.5px solid ${accent}`
+              : `1.5px solid ${accent}33`,
+            boxShadow: active ? `0 0 12px ${accent}33` : "none",
+            cursor: "pointer", transition: "all 0.15s",
+            minHeight: 78,
+          }}
+            onMouseEnter={e => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}88`;
+                (e.currentTarget as HTMLElement).style.boxShadow = `0 0 8px ${accent}22`;
+              }
+            }}
+            onMouseLeave={e => {
+              if (!active) {
+                (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}33`;
+                (e.currentTarget as HTMLElement).style.boxShadow = "none";
+              }
+            }}
+          >
+            <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 7, filter: active ? "none" : "saturate(0.85) brightness(0.9)" }}>
+              {icon}
+            </span>
+            <div style={{ textAlign: "center" }}>
+              {lines.map((line, i) => (
+                <div key={i} style={{
+                  fontSize: 10.5, fontWeight: 600, lineHeight: 1.25,
+                  color: active ? "#FFFFFF" : "rgba(200,215,235,0.75)",
+                  letterSpacing: "0.2px",
+                }}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  const { signOut } = useClerk();
-  const { user } = useUser();
-  const queryClient = useQueryClient();
+  const [location]      = useLocation();
+  const { signOut }     = useClerk();
+  const { user }        = useUser();
+  const queryClient     = useQueryClient();
   const { theme, setTheme, colors: t, isDark } = useTheme();
+  const [advOpen, setAdvOpen] = useState(false);
+
+  // Auto-open advanced section if current route lives there
+  const isInSecondary = SECONDARY_NAV.some(n => location.startsWith(n.to));
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
@@ -63,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       transition: "background 0.25s, color 0.25s",
     }}>
 
-      {/* Sidebar — always dark for visual consistency with colored tiles */}
+      {/* Sidebar */}
       <aside style={{
         position: "fixed", inset: "0 auto 0 0", width: SIDEBAR_W,
         background: isDark
@@ -81,7 +149,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link to="/">
               <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 38, width: "auto", objectFit: "contain" }} />
             </Link>
-            {/* Theme toggle pill */}
             <button
               onClick={() => setTheme(isDark ? "light" : "dark")}
               title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -105,59 +172,39 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* Navigation grid */}
+        {/* Navigation */}
         <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px 10px", scrollbarWidth: "none" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            {NAV_ITEMS.map(({ to, icon, label, bg, accent }) => {
-              const active = location.startsWith(to);
-              const lines = label.split("\n");
-              return (
-                <Link key={to} to={to} style={{
-                  display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center",
-                  padding: "14px 6px 12px",
-                  borderRadius: 12, textDecoration: "none",
-                  background: active
-                    ? `linear-gradient(135deg, ${bg} 0%, ${bg}CC 100%)`
-                    : `linear-gradient(135deg, ${bg} 0%, ${bg}99 100%)`,
-                  border: active
-                    ? `1.5px solid ${accent}`
-                    : `1.5px solid ${accent}33`,
-                  boxShadow: active ? `0 0 12px ${accent}33` : "none",
-                  cursor: "pointer", transition: "all 0.15s",
-                  minHeight: 78,
-                }}
-                  onMouseEnter={e => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}88`;
-                      (e.currentTarget as HTMLElement).style.boxShadow = `0 0 8px ${accent}22`;
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.border = `1.5px solid ${accent}33`;
-                      (e.currentTarget as HTMLElement).style.boxShadow = "none";
-                    }
-                  }}
-                >
-                  <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 7, filter: active ? "none" : "saturate(0.85) brightness(0.9)" }}>
-                    {icon}
-                  </span>
-                  <div style={{ textAlign: "center" }}>
-                    {lines.map((line, i) => (
-                      <div key={i} style={{
-                        fontSize: 10.5, fontWeight: 600, lineHeight: 1.25,
-                        color: active ? "#FFFFFF" : "rgba(200,215,235,0.75)",
-                        letterSpacing: "0.2px",
-                      }}>
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+
+          {/* Primary nav */}
+          <NavGrid items={PRIMARY_NAV} location={location} />
+
+          {/* Advanced / future toggle */}
+          <button
+            onClick={() => setAdvOpen(o => !o)}
+            style={{
+              width: "100%", marginTop: 10, padding: "7px 10px",
+              background: (advOpen || isInSecondary) ? "rgba(148,163,184,0.08)" : "transparent",
+              border: `1px solid ${(advOpen || isInSecondary) ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.1)"}`,
+              borderRadius: 8, cursor: "pointer", transition: "all 0.15s",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(148,163,184,0.1)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = (advOpen || isInSecondary) ? "rgba(148,163,184,0.08)" : "transparent"}
+          >
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#64748B", letterSpacing: "0.8px", textTransform: "uppercase" }}>
+              Advanced &amp; Future Tools
+            </span>
+            <span style={{ fontSize: 12, color: "#64748B", transition: "transform 0.2s", transform: (advOpen || isInSecondary) ? "rotate(180deg)" : "none" }}>
+              ▾
+            </span>
+          </button>
+
+          {/* Secondary nav — shown when expanded or current route is secondary */}
+          {(advOpen || isInSecondary) && (
+            <div style={{ marginTop: 6 }}>
+              <NavGrid items={SECONDARY_NAV} location={location} />
+            </div>
+          )}
 
           {/* Back to website */}
           <a href="/" style={{
@@ -225,7 +272,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 32, width: "auto" }} />
         </Link>
         <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
-          {NAV_ITEMS.slice(0, 8).map(({ to, label, accent }) => (
+          {PRIMARY_NAV.slice(0, 8).map(({ to, label, accent }) => (
             <Link key={to} to={to} style={{
               padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontSize: 11,
               background: location.startsWith(to) ? `${accent}22` : "transparent",

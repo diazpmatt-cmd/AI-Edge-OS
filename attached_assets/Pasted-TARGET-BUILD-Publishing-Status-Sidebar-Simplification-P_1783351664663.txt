@@ -1,0 +1,81 @@
+TARGET BUILD: Publishing Status + Sidebar Simplification
+
+Part 1 — Add Publishing Traffic-Light System
+Add a clear Publishing Status section to Content Autopilot.
+
+Requirements:
+- Show Facebook, Instagram, and Google Business Profile.
+- Status colors:
+  - Gray = Not queued
+  - Yellow = Ready / Pending
+  - Green = Success
+  - Red = Failed
+- After Queue Facebook / Instagram / GBP / Queue All, set that platform to Yellow: “Ready for review.”
+- Do NOT say “Published” unless a real publish API confirms it.
+- Add overall banner:
+  - No posts queued yet
+  - Posts ready for review
+  - All platforms ready
+  - Some platforms need attention
+- Add activity log with timestamp, platform, action, status.
+- Keep frontend-only unless safe existing APIs already exist.
+- No backend changes unless absolutely required.
+
+Part 2 — Remove termites from BB&B
+- Search for “termite” across the project.
+- Remove termite references from all Bed Bugs & Beyond presets, templates, captions, service lists, and content generation.
+- BB&B does not offer termites yet.
+
+Part 3 — Sidebar Simplification
+Audit src/components/app-shell.tsx navigation.
+
+Goal:
+Make the sidebar focused on the new BB&B growth operating system.
+
+Keep these primary tabs visible:
+- Morning Brief
+- Mission Control
+- Apollos
+- Command Center
+- Media Engine
+- Asset Library
+- Growth Execution
+- Content Autopilot
+- BB&B Ops Center
+- Publishing Center
+- Connected Accounts
+- Lead Recovery AI
+- AI Receptionist
+- Reviews Engine
+- Local Presence Engine
+- System Diagnostics
+
+Move or hide lower-priority / future tabs from the main sidebar if they are not essential today:
+- Customer Timeline
+- Profit Center
+- BB&B Success
+- BizAI
+- Client Onboarding
+- Distribution
+- Repurpose
+- Call Intelligence
+- Auto Content Engine if Content Autopilot replaces it for BB&B
+- Image Asset Manager if Asset Library covers it
+- AI Visibility Engine
+- Voice Search Engine
+- Business Assessments
+- Revenue Attribution
+
+Important:
+- Do not delete routes or pages.
+- Just hide, comment, or move non-essential tabs to a “Future / Advanced” section if the app supports it.
+- Preserve the actual files for later.
+- Keep the sidebar clean and growth-focused.
+
+After implementation, run build and report:
+- Files changed
+- Sidebar tabs kept
+- Sidebar tabs hidden/moved
+- Publishing Status behavior verified
+- Termite references removed
+- Build result

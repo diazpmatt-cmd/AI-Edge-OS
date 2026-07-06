@@ -184,7 +184,27 @@ function ApollosCard() {
     stop();
     const accent = ACCENT_OPTIONS.find(a => a.id === accentId) ?? ACCENT_OPTIONS[0];
     const voices = window.speechSynthesis.getVoices();
-    const match  = voices.find(v => v.lang.startsWith(accent.lang)) ?? null;
+
+    const PREFERRED_BRITISH_MALE = ["Daniel", "Google UK English Male", "Microsoft Ryan Online (Natural)", "Microsoft George"];
+    const isMale = (v: SpeechSynthesisVoice) =>
+      v.name.toLowerCase().includes("male") ||
+      PREFERRED_BRITISH_MALE.some(n => v.name.toLowerCase().includes(n.toLowerCase()));
+
+    // Priority 1: preferred British male by exact name order
+    let match: SpeechSynthesisVoice | null =
+      PREFERRED_BRITISH_MALE.reduce<SpeechSynthesisVoice | null>((found, name) => {
+        if (found) return found;
+        return voices.find(v => v.lang.startsWith(accent.lang) && v.name.toLowerCase().includes(name.toLowerCase())) ?? null;
+      }, null);
+
+    // Priority 2: any British male voice (lang match + male heuristic)
+    if (!match) match = voices.find(v => v.lang.startsWith(accent.lang) && isMale(v)) ?? null;
+
+    // Priority 3: any English male voice
+    if (!match) match = voices.find(v => v.lang.startsWith("en") && isMale(v)) ?? null;
+
+    // Priority 4: any voice matching the accent lang (original fallback)
+    if (!match) match = voices.find(v => v.lang.startsWith(accent.lang)) ?? null;
 
     utterQueueRef.current = APOLLOS_SCRIPT.map((line, i) => {
       const u = new SpeechSynthesisUtterance(line);

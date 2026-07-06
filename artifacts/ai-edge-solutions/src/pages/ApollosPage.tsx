@@ -37,6 +37,19 @@ const OPENING_MESSAGE: Message = {
 
 const PLACEHOLDER_RESPONSE = "Conversation mode will be powered by AI in the next release.";
 
+// ── Navigation intents ─────────────────────────────────────────────────────────
+// Matched case-insensitively via includes(). First match wins.
+const NAV_INTENTS: { patterns: string[]; response: string; route: string }[] = [
+  { patterns: ["morning brief"],                           response: "Opening Morning Brief...",              route: "/admin/morning-brief"      },
+  { patterns: ["media engine", "launch media", "create an ad", "ad campaign", "build a commercial"], response: "Launching Media Engine...",             route: "/admin/media-engine"       },
+  { patterns: ["lead recovery", "review leads", "missed calls", "review missed"], response: "Taking you to Lead Recovery...",       route: "/admin/lead-recovery"      },
+  { patterns: ["publishing", "draft social", "social post", "publishing center"], response: "Opening Publishing Center...",          route: "/admin/publishing"         },
+  { patterns: ["client onboarding"],                       response: "Preparing Client Onboarding...",        route: "/admin/client-onboarding"  },
+  { patterns: ["revenue forecast", "show revenue", "profit center"], response: "Loading Revenue Forecast...", route: "/admin/profit-center"      },
+  { patterns: ["google business", "generate a google"],    response: "Taking you to Local Presence Engine...",route: "/admin/local-presence"     },
+  { patterns: ["seo", "analyze seo"],                      response: "Opening SEO Engine...",                 route: "/admin/local-presence"     },
+];
+
 const TODAY_RECS = [
   {
     icon: "🔥", title: "Follow up with recovered leads",
@@ -309,15 +322,31 @@ export default function ApollosPage() {
     setInput("");
     setResponding(true);
 
-    // Placeholder — no fetch, no axios, no backend
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        id: uid(), role: "apollos",
-        text: PLACEHOLDER_RESPONSE,
-        time: nowTime(),
-      }]);
-      setResponding(false);
-    }, 650);
+    const lower = trimmed.toLowerCase();
+    const intent = NAV_INTENTS.find(i => i.patterns.some(p => lower.includes(p)));
+
+    if (intent) {
+      // Show natural response first, then navigate after 800ms
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          id: uid(), role: "apollos",
+          text: intent.response,
+          time: nowTime(),
+        }]);
+        setResponding(false);
+        setTimeout(() => navigate(intent.route), 800);
+      }, 450);
+    } else {
+      // Fallback — no fetch, no axios, no backend
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          id: uid(), role: "apollos",
+          text: PLACEHOLDER_RESPONSE,
+          time: nowTime(),
+        }]);
+        setResponding(false);
+      }, 650);
+    }
   }
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -666,12 +695,7 @@ export default function ApollosPage() {
             {QUICK_ACTIONS.map(qa => (
               <button
                 key={qa.label}
-                onClick={() => {
-                  if (qa.msg) {
-                    setMessages(prev => [...prev, { id: String(Date.now()), role: "user" as const, text: qa.msg!, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-                  }
-                  navigate(qa.route);
-                }}
+                onClick={() => send(qa.label)}
                 style={{
                   flexShrink: 0, whiteSpace: "nowrap",
                   background: `${qa.color}12`,

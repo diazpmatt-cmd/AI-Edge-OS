@@ -63,6 +63,23 @@ const SCRIPT_DEFAULTS: Record<ScriptKey, string> = {
   quote:  "Hi, this is Bed Bugs & Beyond. I just wanted to follow up on your pest control quote and see if you had any questions or wanted to get scheduled.",
 };
 
+// ── SEO targets ──────────────────────────────────────────────────────────────
+type SeoStatus = "Target" | "In Progress" | "Needs Content";
+const SEO_TARGETS: Array<{ area: string; keyword: string; status: SeoStatus }> = [
+  { area: "Foley",          keyword: "bed bug treatment Foley AL",          status: "In Progress"   },
+  { area: "Gulf Shores",    keyword: "bed bug exterminator Gulf Shores AL", status: "Target"        },
+  { area: "Orange Beach",   keyword: "pest control Orange Beach AL",        status: "Target"        },
+  { area: "Fairhope",       keyword: "bed bug removal Fairhope AL",         status: "Needs Content" },
+  { area: "Daphne",         keyword: "pest control Daphne AL",              status: "Target"        },
+  { area: "Spanish Fort",   keyword: "exterminator Spanish Fort AL",        status: "Needs Content" },
+  { area: "Baldwin County", keyword: "bed bug treatment Baldwin County AL", status: "In Progress"   },
+];
+const SEO_STATUS_STYLE: Record<SeoStatus, { color: string; bg: string; border: string }> = {
+  "Target":        { color: B.sky,     bg: "rgba(56,189,248,0.10)",  border: "rgba(56,189,248,0.25)"  },
+  "In Progress":   { color: B.emerald, bg: "rgba(16,185,129,0.10)",  border: "rgba(16,185,129,0.25)"  },
+  "Needs Content": { color: B.gold,    bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.25)"  },
+};
+
 // ── Weekly content ────────────────────────────────────────────────────────────
 const WEEK_DAYS = [
   { day: "Monday",    icon: "📘", theme: "Facebook post — Bed Bug ID tips",           status: "scheduled" },
@@ -145,6 +162,12 @@ export default function BBBExecutionPage() {
         setTimeout(() => setScriptCopied(false), 2500);
       }).catch(() => {});
     }
+  }
+
+  // Review push tracker state
+  const [reviewStats, setReviewStats] = useState({ asked: 0, received: 0, goal: 10 });
+  function setReviewStat(key: "asked" | "received" | "goal", val: number) {
+    setReviewStats(s => ({ ...s, [key]: isNaN(val) ? 0 : Math.max(0, val) }));
   }
 
   function setNote(id: ActionId, val: string) {
@@ -748,6 +771,129 @@ export default function BBBExecutionPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── TWO-COLUMN: SEO TARGETS + REVIEW TRACKER ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+
+          {/* ── LOCAL SEO TARGETS ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.sky, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
+              📍 Local SEO Targets
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {SEO_TARGETS.map(t => {
+                const ss = SEO_STATUS_STYLE[t.status];
+                return (
+                  <div key={t.area} style={{
+                    background: "rgba(255,255,255,0.02)", border: `1px solid ${B.border}`,
+                    borderRadius: 10, padding: "10px 12px",
+                    display: "flex", flexDirection: "column", gap: 5,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: B.white }}>{t.area}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, letterSpacing: "0.4px",
+                        color: ss.color, background: ss.bg, border: `1px solid ${ss.border}`,
+                        borderRadius: 5, padding: "2px 7px", whiteSpace: "nowrap" as const,
+                      }}>{t.status}</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: B.dim, fontStyle: "italic" }}>{t.keyword}</div>
+                    <button
+                      onClick={() => navigate("/admin/publishing")}
+                      style={{
+                        alignSelf: "flex-start",
+                        background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.22)",
+                        borderRadius: 6, padding: "3px 10px",
+                        fontSize: 10, fontWeight: 700, color: B.sky,
+                        cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      Create Content →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── REVIEW PUSH TRACKER ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.gold, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
+              ⭐ Review Push Tracker
+            </div>
+
+            {/* Number inputs */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
+              {([
+                { key: "asked"    as const, label: "Customers asked today",       color: B.blue    },
+                { key: "received" as const, label: "Reviews received this week",  color: B.emerald },
+                { key: "goal"     as const, label: "Review goal this month",      color: B.gold    },
+              ]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, color: B.dim, marginBottom: 5 }}>{f.label}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button
+                      onClick={() => setReviewStat(f.key, reviewStats[f.key] - 1)}
+                      style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(255,255,255,0.04)", border: `1px solid ${B.border}`, color: B.silver, fontSize: 16, cursor: "pointer", flexShrink: 0 }}
+                    >−</button>
+                    <input
+                      type="number" min={0}
+                      value={reviewStats[f.key]}
+                      onChange={e => setReviewStat(f.key, parseInt(e.target.value, 10))}
+                      style={{
+                        flex: 1, background: `${f.color}0D`, border: `1px solid ${f.color}30`,
+                        borderRadius: 8, padding: "7px 10px",
+                        fontSize: 20, fontWeight: 800, color: f.color,
+                        textAlign: "center" as const, outline: "none", fontFamily: "inherit",
+                      }}
+                    />
+                    <button
+                      onClick={() => setReviewStat(f.key, reviewStats[f.key] + 1)}
+                      style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(255,255,255,0.04)", border: `1px solid ${B.border}`, color: B.silver, fontSize: 16, cursor: "pointer", flexShrink: 0 }}
+                    >+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Progress bar */}
+            {(() => {
+              const pctReview = reviewStats.goal > 0
+                ? Math.min(100, Math.round((reviewStats.received / reviewStats.goal) * 100))
+                : 0;
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, color: B.dim }}>Monthly review progress</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: pctReview >= 100 ? B.green : B.gold }}>{pctReview}%</span>
+                  </div>
+                  <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: 99,
+                      width: `${pctReview}%`,
+                      background: pctReview >= 100
+                        ? `linear-gradient(90deg, ${B.green}, #4ADE80)`
+                        : `linear-gradient(90deg, ${B.gold}, ${B.orange})`,
+                      transition: "width 0.3s ease",
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: B.dim, marginTop: 5 }}>
+                    {reviewStats.received} received · {Math.max(0, reviewStats.goal - reviewStats.received)} remaining
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Reminder */}
+            <div style={{
+              background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.18)",
+              borderRadius: 10, padding: "10px 14px",
+              fontSize: 11, color: B.silver, lineHeight: 1.6, fontStyle: "italic",
+            }}>
+              "Reviews help BB&amp;B rank higher, build trust, and convert more local searchers into booked jobs."
             </div>
           </div>
         </div>

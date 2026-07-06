@@ -116,9 +116,9 @@ function getScorecardStatus(score: number): { label: string; color: string } {
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
-function Section({ title, children, accent = B.blue }: { title: string; children: React.ReactNode; accent?: string }) {
+function Section({ title, children, accent = B.blue, noPrint }: { title: string; children: React.ReactNode; accent?: string; noPrint?: boolean }) {
   return (
-    <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px", marginBottom: 20 }}>
+    <div className={noPrint ? "bbb-no-print" : undefined} style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px", marginBottom: 20 }}>
       <div style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
         {title}
       </div>
@@ -203,6 +203,35 @@ export default function BBBExecutionPage() {
     return                               { text: "Keep momentum going: follow up every new lead today.",    icon: "🔥", color: B.orange,  route: "/admin/lead-recovery" };
   })();
 
+  // End-of-day recap state
+  const [recap, setRecap] = useState({ wins: "", jobs: "", leads: "", reviews: "", content: "", tomorrow: "" });
+  const [recapCopied, setRecapCopied]           = useState(false);
+  const [showRecapFallback, setShowRecapFallback] = useState(false);
+
+  const recapText = [
+    "BB&B End-of-Day Recap",
+    new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+    "",
+    recap.wins     ? `Wins Today:\n  ${recap.wins}`           : null,
+    recap.jobs     ? `Jobs Booked:\n  ${recap.jobs}`          : null,
+    recap.leads    ? `Leads Followed Up:\n  ${recap.leads}`   : null,
+    recap.reviews  ? `Reviews Requested:\n  ${recap.reviews}` : null,
+    recap.content  ? `Content Created:\n  ${recap.content}`   : null,
+    recap.tomorrow ? `Tomorrow's Priority:\n  ${recap.tomorrow}` : null,
+  ].filter(Boolean).join("\n\n");
+
+  function copyRecap() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(recapText).then(() => {
+        setRecapCopied(true);
+        setShowRecapFallback(false);
+        setTimeout(() => setRecapCopied(false), 2500);
+      }).catch(() => { setShowRecapFallback(true); });
+    } else {
+      setShowRecapFallback(f => !f);
+    }
+  }
+
   function handleTakeAction() {
     if (nextBestAction.route === "checklist") {
       checklistRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -249,6 +278,13 @@ export default function BBBExecutionPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <style>{`
+        @media print {
+          .bbb-no-print { display: none !important; }
+          body { background: #fff !important; color: #111 !important; margin: 0; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+      `}</style>
 
       {/* ── Header ── */}
       <div style={{
@@ -292,6 +328,21 @@ export default function BBBExecutionPage() {
             }} />
           </div>
         </div>
+        <button
+          className="bbb-no-print"
+          onClick={() => window.print()}
+          style={{
+            background: "rgba(255,255,255,0.06)", border: `1px solid ${B.border}`,
+            borderRadius: 8, padding: "6px 14px",
+            fontSize: 11, fontWeight: 700, color: B.silver,
+            cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" as const,
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
+        >
+          🖨️ Print Daily Plan
+        </button>
       </div>
 
       {/* ── Body ── */}
@@ -670,7 +721,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── THIS WEEK'S CONTENT ── */}
-        <Section title="📅 This Week's Content" accent={B.sky}>
+        <Section title="📅 This Week's Content" accent={B.sky} noPrint>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
             {WEEK_DAYS.map(d => {
               const s = DAY_STATUS_STYLE[d.status];
@@ -692,7 +743,7 @@ export default function BBBExecutionPage() {
         </Section>
 
         {/* ── TWO-COLUMN: OUTREACH SCRIPTS + SHOT LIST ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+        <div className="bbb-no-print" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
 
           {/* ── OUTREACH SCRIPTS ── */}
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
@@ -1076,8 +1127,88 @@ export default function BBBExecutionPage() {
           </div>
         </div>
 
+        {/* ── END-OF-DAY RECAP BUILDER ── */}
+        <div className="bbb-no-print" style={{ padding: "0 36px", marginBottom: 20 }}>
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
+              📝 End-of-Day Recap Builder
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              {([
+                { key: "wins"     as const, label: "Wins today",           icon: "🏆", color: B.gold    },
+                { key: "jobs"     as const, label: "Jobs booked",          icon: "✅", color: B.green   },
+                { key: "leads"    as const, label: "Leads followed up",    icon: "🔥", color: B.orange  },
+                { key: "reviews"  as const, label: "Reviews requested",    icon: "⭐", color: B.gold    },
+                { key: "content"  as const, label: "Content created",      icon: "📍", color: B.sky     },
+                { key: "tomorrow" as const, label: "Tomorrow's priority",  icon: "🎯", color: B.purple  },
+              ]).map(f => (
+                <div key={f.key}>
+                  <div style={{ fontSize: 10.5, color: B.dim, marginBottom: 5 }}>{f.icon} {f.label}</div>
+                  <input
+                    type="text"
+                    value={recap[f.key]}
+                    onChange={e => setRecap(r => ({ ...r, [f.key]: e.target.value }))}
+                    placeholder={`Enter ${f.label.toLowerCase()}…`}
+                    style={{
+                      width: "100%", boxSizing: "border-box" as const,
+                      background: recap[f.key] ? `${f.color}08` : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${recap[f.key] ? `${f.color}40` : "rgba(255,255,255,0.07)"}`,
+                      borderRadius: 8, padding: "7px 10px",
+                      fontSize: 12, color: B.white, fontFamily: "inherit", outline: "none",
+                      transition: "border-color 0.15s",
+                    }}
+                    onFocus={e => { (e.target as HTMLInputElement).style.borderColor = `${f.color}60`; }}
+                    onBlur={e  => { (e.target as HTMLInputElement).style.borderColor = recap[f.key] ? `${f.color}40` : "rgba(255,255,255,0.07)"; }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Copy button */}
+            <button
+              onClick={copyRecap}
+              style={{
+                width: "100%",
+                background: recapCopied ? "rgba(16,185,129,0.12)" : "rgba(242,108,33,0.08)",
+                border: `1px solid ${recapCopied ? "rgba(16,185,129,0.35)" : "rgba(242,108,33,0.3)"}`,
+                borderRadius: 10, padding: "10px 0",
+                fontSize: 12.5, fontWeight: 700,
+                color: recapCopied ? B.emerald : B.bbbOrange,
+                cursor: "pointer", transition: "all 0.2s",
+                marginBottom: showRecapFallback ? 10 : 0,
+              }}
+            >
+              {recapCopied ? "✓ Copied!" : "📋 Copy End-of-Day Recap"}
+            </button>
+
+            {/* Fallback textarea */}
+            {showRecapFallback && (
+              <div>
+                <div style={{ fontSize: 10.5, color: B.gold, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>⚠️</span>
+                  <span>Clipboard unavailable — select all and copy manually (Ctrl+A, Ctrl+C)</span>
+                </div>
+                <textarea
+                  readOnly
+                  value={recapText}
+                  onFocus={e => e.target.select()}
+                  rows={12}
+                  style={{
+                    width: "100%", boxSizing: "border-box" as const,
+                    background: B.panel2, border: `1px solid rgba(251,191,36,0.3)`,
+                    borderRadius: 8, padding: "10px 12px",
+                    fontSize: 11.5, color: B.silver, lineHeight: 1.6,
+                    resize: "none", fontFamily: "monospace", outline: "none",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ── Bottom banner ── */}
-        <div style={{
+        <div className="bbb-no-print" style={{
           background: `linear-gradient(135deg, ${B.bbbDark} 0%, #0A2035 50%, ${B.panel} 100%)`,
           border: `1px solid rgba(242,108,33,0.25)`, borderRadius: 14,
           padding: "18px 28px", display: "flex", alignItems: "center", gap: 18,

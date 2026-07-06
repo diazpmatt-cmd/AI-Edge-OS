@@ -98,6 +98,41 @@ export default function BBBExecutionPage() {
     setChecked(c => ({ ...c, [id]: !c[id] }));
   }
 
+  const [copied, setCopied]           = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
+
+  const ACTION_PLAN_TEXT = `Bed Bugs & Beyond — Today's Growth Action Plan
+
+Mission:
+Get one more booked inspection.
+
+Actions:
+[ ] Publish Facebook post
+[ ] Publish Google Business Profile post
+[ ] Upload one completed job photo
+[ ] Request one Google review
+[ ] Follow up with recovered leads
+[ ] Record one 30-second video
+[ ] Check Apple Business Connect
+[ ] Check TikTok approval
+
+Goal:
+Every completed task moves Bed Bugs & Beyond closer to another booked job.`;
+
+  function copyActionPlan() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ACTION_PLAN_TEXT).then(() => {
+        setCopied(true);
+        setShowFallback(false);
+        setTimeout(() => setCopied(false), 2500);
+      }).catch(() => {
+        setShowFallback(true);
+      });
+    } else {
+      setShowFallback(f => !f);
+    }
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
 
@@ -243,6 +278,52 @@ export default function BBBExecutionPage() {
                   </button>
                 );
               })}
+            </div>
+
+            {/* ── Copy Action Plan button ── */}
+            <div style={{ marginTop: 14 }}>
+              <button
+                onClick={copyActionPlan}
+                style={{
+                  width: "100%",
+                  background: copied
+                    ? "rgba(16,185,129,0.12)"
+                    : "rgba(56,189,248,0.08)",
+                  border: `1px solid ${copied ? "rgba(16,185,129,0.35)" : "rgba(56,189,248,0.25)"}`,
+                  borderRadius: 10, padding: "10px 0",
+                  fontSize: 12.5, fontWeight: 700,
+                  color: copied ? B.emerald : B.sky,
+                  cursor: "pointer", transition: "all 0.2s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+                onMouseEnter={e => { if (!copied) { (e.currentTarget as HTMLButtonElement).style.background = "rgba(56,189,248,0.14)"; } }}
+                onMouseLeave={e => { if (!copied) { (e.currentTarget as HTMLButtonElement).style.background = "rgba(56,189,248,0.08)"; } }}
+              >
+                {copied ? "✓ Copied!" : "📋 Copy Today's Action Plan"}
+              </button>
+
+              {/* Fallback textarea */}
+              {showFallback && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 10.5, color: B.gold, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>⚠️</span>
+                    <span>Clipboard unavailable — select all and copy manually (Ctrl+A, Ctrl+C)</span>
+                  </div>
+                  <textarea
+                    readOnly
+                    value={ACTION_PLAN_TEXT}
+                    onFocus={e => e.target.select()}
+                    rows={18}
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      background: B.panel2, border: `1px solid rgba(251,191,36,0.3)`,
+                      borderRadius: 8, padding: "10px 12px",
+                      fontSize: 11.5, color: B.silver, lineHeight: 1.6,
+                      resize: "none", fontFamily: "monospace", outline: "none",
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </Section>
 

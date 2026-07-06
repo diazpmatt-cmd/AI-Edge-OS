@@ -37,7 +37,7 @@ const OPENING_MESSAGE: Message = {
 
 const PLACEHOLDER_RESPONSE = "Conversation mode will be powered by AI in the next release.";
 
-const QUICK_ACTIONS = [
+const LEFT_NAV_ACTIONS = [
   { icon: "📊", label: "Business Review"    },
   { icon: "🎯", label: "Campaign Builder"   },
   { icon: "🔍", label: "SEO Analysis"       },
@@ -54,6 +54,15 @@ const SUGGESTED_PROMPTS = [
   { icon: "💰", text: "Show revenue forecast",               color: "#22C55E" },
   { icon: "🎥", text: "Launch Media Engine",                 color: "#00AEEF" },
 ];
+
+const QUICK_ACTIONS = [
+  { label: "☀️ Morning Brief",    route: "/admin/morning-brief", msg: null,                        color: "#FBBF24" },
+  { label: "🎥 Media Engine",     route: "/admin/media-engine",  msg: null,                        color: "#00AEEF" },
+  { label: "🔥 Review Leads",     route: "/admin/lead-recovery", msg: null,                        color: "#F97316" },
+  { label: "📣 Create Ad",        route: "/admin/media-engine",  msg: "Create an ad campaign.",    color: "#A78BFA" },
+  { label: "✍️ Draft Social Post", route: "/admin/publishing",    msg: "Draft a social media post.", color: "#06B6D4" },
+  { label: "💰 Revenue Forecast", route: "/admin/profit-center", msg: null,                        color: "#10B981" },
+] as const;
 
 // status: "connected" | "preview" | "soon"
 const LAUNCH_ENGINES = [
@@ -276,7 +285,7 @@ export default function ApollosPage() {
         <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1.5px", textTransform: "uppercase", padding: "0 4px", marginBottom: 4 }}>
           Quick Actions
         </div>
-        {QUICK_ACTIONS.map(a => (
+        {LEFT_NAV_ACTIONS.map(a => (
           <button key={a.label} onClick={() => send(a.label)} style={{
             width: "100%", background: "transparent", border: "1px solid transparent",
             borderRadius: 8, padding: "8px 10px", fontSize: 12, color: B.silver,
@@ -384,6 +393,43 @@ export default function ApollosPage() {
             </div>
           )}
           <div ref={bottomRef} />
+        </div>
+
+        {/* ── Quick Actions ── */}
+        <div style={{
+          padding: "8px 24px 0",
+          background: B.panel,
+          borderTop: `1px solid ${B.border}`,
+          flexShrink: 0,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 7 }}>
+            Quick Actions
+          </div>
+          <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 10, scrollbarWidth: "none" }}>
+            {QUICK_ACTIONS.map(qa => (
+              <button
+                key={qa.label}
+                onClick={() => {
+                  if (qa.msg) {
+                    setMessages(prev => [...prev, { id: String(Date.now()), role: "user" as const, text: qa.msg!, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
+                  }
+                  navigate(qa.route);
+                }}
+                style={{
+                  flexShrink: 0, whiteSpace: "nowrap",
+                  background: `${qa.color}12`,
+                  border: `1px solid ${qa.color}30`,
+                  borderRadius: 20, padding: "5px 13px",
+                  fontSize: 11.5, fontWeight: 600, color: qa.color,
+                  cursor: "pointer", transition: "all 0.15s",
+                }}
+                onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${qa.color}24`; (ev.currentTarget as HTMLButtonElement).style.borderColor = `${qa.color}55`; }}
+                onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${qa.color}12`; (ev.currentTarget as HTMLButtonElement).style.borderColor = `${qa.color}30`; }}
+              >
+                {qa.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Input bar */}

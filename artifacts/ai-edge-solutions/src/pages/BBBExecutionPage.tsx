@@ -2,7 +2,7 @@
 // Frontend only. Zero API calls. Every widget answers:
 // "What should we do TODAY to get Bed Bugs & Beyond another paying customer?"
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
@@ -105,6 +105,16 @@ const WINS = [
   { icon: "🌐", label: "Website updated",          color: B.emerald, sub: "New services page"     },
 ];
 
+// ── Scorecard ────────────────────────────────────────────────────────────────
+const SCORECARD_GOALS = { calls: 25, leads: 10, jobs: 5, reviews: 5, posts: 5, media: 5 } as const;
+type ScorecardKey = keyof typeof SCORECARD_GOALS;
+function getScorecardStatus(score: number): { label: string; color: string } {
+  if (score >= 90) return { label: "Excellent Week",    color: "#22C55E" };
+  if (score >= 70) return { label: "Strong Week",       color: "#10B981" };
+  if (score >= 40) return { label: "Building Momentum", color: "#FBBF24" };
+  return              { label: "Needs Work",           color: "#F87171" };
+}
+
 // ── Section wrapper ───────────────────────────────────────────────────────────
 function Section({ title, children, accent = B.blue }: { title: string; children: React.ReactNode; accent?: string }) {
   return (
@@ -168,6 +178,37 @@ export default function BBBExecutionPage() {
   const [reviewStats, setReviewStats] = useState({ asked: 0, received: 0, goal: 10 });
   function setReviewStat(key: "asked" | "received" | "goal", val: number) {
     setReviewStats(s => ({ ...s, [key]: isNaN(val) ? 0 : Math.max(0, val) }));
+  }
+
+  // Weekly Scorecard state
+  const [scorecard, setScorecard] = useState<Record<ScorecardKey, number>>({
+    calls: 0, leads: 0, jobs: 0, reviews: 0, posts: 0, media: 0,
+  });
+  function setScorecardStat(key: ScorecardKey, val: number) {
+    setScorecard(s => ({ ...s, [key]: isNaN(val) ? 0 : Math.max(0, val) }));
+  }
+  const weeklyScore = Math.round(
+    (Object.keys(SCORECARD_GOALS) as ScorecardKey[]).reduce((sum, k) => {
+      return sum + Math.min(scorecard[k] / SCORECARD_GOALS[k], 1) * (100 / 6);
+    }, 0)
+  );
+
+  const checklistRef = useRef<HTMLDivElement>(null);
+
+  const nextBestAction = (() => {
+    if (reviewStats.received < 2)  return { text: "Ask one completed customer for a Google review.",        icon: "⭐", color: B.gold,    route: "/admin/reviews"       };
+    if (shotCount === 0)            return { text: "Capture one before/after photo or short job video.",     icon: "📸", color: B.orange,  route: "/admin/media-engine"  };
+    if (completedCount < 4)        return { text: "Complete the highest-impact growth checklist item.",      icon: "✅", color: B.green,   route: "checklist"            };
+    if (weeklyScore < 70)          return { text: "Publish one local content post for a target city.",      icon: "📍", color: B.sky,     route: "/admin/publishing"    };
+    return                               { text: "Keep momentum going: follow up every new lead today.",    icon: "🔥", color: B.orange,  route: "/admin/lead-recovery" };
+  })();
+
+  function handleTakeAction() {
+    if (nextBestAction.route === "checklist") {
+      checklistRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      navigate(nextBestAction.route);
+    }
   }
 
   function setNote(id: ActionId, val: string) {
@@ -302,7 +343,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── 2-column grid ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+        <div ref={checklistRef} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
 
           {/* ── TODAY'S ACTIONS ── */}
           <Section title="✅ Today's Actions" accent={B.green}>
@@ -772,6 +813,143 @@ export default function BBBExecutionPage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+
+        {/* ── TWO-COLUMN: WEEKLY SCORECARD + NEXT BEST ACTION ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+
+          {/* ── WEEKLY GROWTH SCORECARD ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            {(() => {
+              const st = getScorecardStatus(weeklyScore);
+              return (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: B.emerald, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                      📊 Weekly Growth Scorecard
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 24, fontWeight: 900, color: st.color }}>{weeklyScore}</span>
+                      <div>
+                        <div style={{ fontSize: 9, color: B.dim }}>/ 100</div>
+                        <div style={{ fontSize: 9, fontWeight: 800, color: st.color }}>{st.label}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Score bar */}
+                  <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", marginBottom: 16 }}>
+                    <div style={{
+                      height: "100%", borderRadius: 99, width: `${weeklyScore}%`,
+                      background: weeklyScore >= 90 ? `linear-gradient(90deg,${B.green},#4ADE80)` :
+                                  weeklyScore >= 70 ? `linear-gradient(90deg,${B.emerald},#34D399)` :
+                                  weeklyScore >= 40 ? `linear-gradient(90deg,${B.gold},${B.orange})` :
+                                                     `linear-gradient(90deg,${B.red},#FB7185)`,
+                      transition: "width 0.3s ease",
+                    }} />
+                  </div>
+
+                  {/* Metric inputs */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {([
+                      { key: "calls"   as ScorecardKey, label: "Calls",       icon: "📞", color: B.blue    },
+                      { key: "leads"   as ScorecardKey, label: "Leads",       icon: "🔥", color: B.orange  },
+                      { key: "jobs"    as ScorecardKey, label: "Jobs Booked", icon: "✅", color: B.green   },
+                      { key: "reviews" as ScorecardKey, label: "Reviews",     icon: "⭐", color: B.gold    },
+                      { key: "posts"   as ScorecardKey, label: "Posts",       icon: "📍", color: B.sky     },
+                      { key: "media"   as ScorecardKey, label: "Media",       icon: "🎬", color: B.purple  },
+                    ]).map(f => {
+                      const goal = SCORECARD_GOALS[f.key];
+                      const val  = scorecard[f.key];
+                      const pctM = Math.min(val / goal, 1);
+                      return (
+                        <div key={f.key} style={{
+                          background: `${f.color}08`, border: `1px solid ${f.color}22`,
+                          borderRadius: 10, padding: "8px 10px",
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 10, color: B.dim }}>{f.icon} {f.label}</span>
+                            <span style={{ fontSize: 9, color: pctM >= 1 ? f.color : B.dim }}>{val}/{goal}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <button onClick={() => setScorecardStat(f.key, val - 1)} style={{ width: 20, height: 20, borderRadius: 5, background: "rgba(255,255,255,0.04)", border: `1px solid ${B.border}`, color: B.silver, fontSize: 13, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>−</button>
+                            <input
+                              type="number" min={0} value={val}
+                              onChange={e => setScorecardStat(f.key, parseInt(e.target.value, 10))}
+                              style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 16, fontWeight: 800, color: f.color, textAlign: "center" as const, fontFamily: "inherit", minWidth: 0 }}
+                            />
+                            <button onClick={() => setScorecardStat(f.key, val + 1)} style={{ width: 20, height: 20, borderRadius: 5, background: "rgba(255,255,255,0.04)", border: `1px solid ${B.border}`, color: B.silver, fontSize: 13, cursor: "pointer", flexShrink: 0, lineHeight: 1 }}>+</button>
+                          </div>
+                          <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", marginTop: 5 }}>
+                            <div style={{ height: "100%", width: `${pctM * 100}%`, background: f.color, borderRadius: 99, transition: "width 0.2s ease" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* ── NEXT BEST ACTION ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: nextBestAction.color, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+              🎯 Next Best Action
+            </div>
+
+            {/* Recommendation card */}
+            <div style={{
+              flex: 1,
+              background: `${nextBestAction.color}0A`,
+              border: `1px solid ${nextBestAction.color}30`,
+              borderRadius: 14, padding: "20px 18px",
+              display: "flex", flexDirection: "column", alignItems: "center",
+              justifyContent: "center", gap: 14, textAlign: "center" as const,
+            }}>
+              <span style={{ fontSize: 40 }}>{nextBestAction.icon}</span>
+              <p style={{
+                margin: 0, fontSize: 14, fontWeight: 600, color: B.white,
+                lineHeight: 1.6, maxWidth: 260,
+              }}>
+                {nextBestAction.text}
+              </p>
+            </div>
+
+            {/* State context */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {[
+                { label: "Checklist",  value: `${completedCount}/8`, color: B.green   },
+                { label: "Reviews",    value: `${reviewStats.received} wk`, color: B.gold    },
+                { label: "Score",      value: `${weeklyScore}%`,     color: B.emerald },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background: `${s.color}0D`, border: `1px solid ${s.color}25`,
+                  borderRadius: 8, padding: "7px 8px", textAlign: "center" as const,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 9, color: B.dim, marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Take Action button */}
+            <button
+              onClick={handleTakeAction}
+              style={{
+                width: "100%",
+                background: `linear-gradient(135deg, ${nextBestAction.color}22 0%, ${nextBestAction.color}10 100%)`,
+                border: `1px solid ${nextBestAction.color}40`,
+                borderRadius: 10, padding: "11px 0",
+                fontSize: 13, fontWeight: 800, color: nextBestAction.color,
+                cursor: "pointer", transition: "all 0.15s",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `linear-gradient(135deg, ${nextBestAction.color}35 0%, ${nextBestAction.color}18 100%)`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = `linear-gradient(135deg, ${nextBestAction.color}22 0%, ${nextBestAction.color}10 100%)`; }}
+            >
+              Take Action →
+            </button>
           </div>
         </div>
 

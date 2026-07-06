@@ -68,6 +68,46 @@ const TODAY_RECS = [
   },
 ] as const;
 
+type TimelineStatus = "done" | "ready" | "pending";
+const TIMELINE_STATUS_STYLE: Record<TimelineStatus, { label: string; color: string; bg: string; dot: string }> = {
+  done:    { label: "Done",    color: "#22C55E", bg: "rgba(34,197,94,0.12)",   dot: "#22C55E" },
+  ready:   { label: "Ready",   color: "#00AEEF", bg: "rgba(0,174,239,0.12)",   dot: "#00AEEF" },
+  pending: { label: "Pending", color: "#64748B", bg: "rgba(100,116,139,0.12)", dot: "#475569" },
+};
+
+const BRIEFING_TIMELINE = [
+  {
+    icon: "☀️", title: "Morning Brief completed",
+    desc: "Overnight signals reviewed — top 3 opportunities identified.",
+    status: "done" as TimelineStatus, engine: "Morning Brief",
+    route: "/admin/morning-brief", btnLabel: "View Brief",
+  },
+  {
+    icon: "🔥", title: "Leads reviewed",
+    desc: "3 recovered leads actioned — follow-up messages sent.",
+    status: "done" as TimelineStatus, engine: "Lead Recovery",
+    route: "/admin/lead-recovery", btnLabel: "View Leads",
+  },
+  {
+    icon: "🎥", title: "Media campaign ready",
+    desc: "Today's Facebook post drafted — awaiting final approval.",
+    status: "ready" as TimelineStatus, engine: "Media Engine",
+    route: "/admin/media-engine", btnLabel: "Review Campaign",
+  },
+  {
+    icon: "💰", title: "Revenue forecast checked",
+    desc: "On track — week-over-week revenue up 6% vs. last month.",
+    status: "done" as TimelineStatus, engine: "Profit Center",
+    route: "/admin/profit-center", btnLabel: "View Forecast",
+  },
+  {
+    icon: "🌙", title: "End-of-day recap pending",
+    desc: "Apollos will compile your daily performance summary at 6 PM.",
+    status: "pending" as TimelineStatus, engine: "Apollos AI",
+    route: null, btnLabel: null,
+  },
+] as const;
+
 const LEFT_NAV_ACTIONS = [
   { icon: "📊", label: "Business Review"    },
   { icon: "🎯", label: "Campaign Builder"   },
@@ -450,6 +490,73 @@ export default function ApollosPage() {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* ── Today's Briefing Timeline ── */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 13 }}>📋</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.2px", textTransform: "uppercase" }}>
+                Today's Briefing Timeline
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {BRIEFING_TIMELINE.map((item, idx) => {
+                const s = TIMELINE_STATUS_STYLE[item.status];
+                const isLast = idx === BRIEFING_TIMELINE.length - 1;
+                return (
+                  <div key={item.title} style={{ display: "flex", gap: 12, position: "relative" }}>
+                    {/* Connector line */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: 20 }}>
+                      <div style={{
+                        width: 12, height: 12, borderRadius: "50%", marginTop: 14,
+                        background: s.dot, flexShrink: 0,
+                        boxShadow: item.status !== "pending" ? `0 0 6px ${s.dot}88` : "none",
+                      }} />
+                      {!isLast && <div style={{ width: 2, flex: 1, minHeight: 20, background: "rgba(255,255,255,0.06)", marginTop: 4, marginBottom: 0 }} />}
+                    </div>
+                    {/* Card */}
+                    <div style={{
+                      flex: 1, background: "rgba(255,255,255,0.02)",
+                      border: `1px solid rgba(255,255,255,0.06)`,
+                      borderRadius: 10, padding: "10px 12px",
+                      marginBottom: isLast ? 0 : 8,
+                      opacity: item.status === "pending" ? 0.65 : 1,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <span style={{ fontSize: 14 }}>{item.icon}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: B.white }}>{item.title}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontSize: 8.5, color: B.dim }}>{item.engine}</span>
+                          <span style={{
+                            fontSize: 8, fontWeight: 800, letterSpacing: "0.5px",
+                            background: s.bg, color: s.color, borderRadius: 6,
+                            padding: "2px 6px", border: `1px solid ${s.color}40`,
+                          }}>{s.label}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: B.dim, lineHeight: 1.5, marginBottom: item.route ? 8 : 0 }}>{item.desc}</div>
+                      {item.route && item.btnLabel && (
+                        <button
+                          onClick={() => navigate(item.route as string)}
+                          style={{
+                            background: `${s.color}12`, border: `1px solid ${s.color}30`,
+                            borderRadius: 7, padding: "4px 10px", fontSize: 10, fontWeight: 700,
+                            color: s.color, cursor: "pointer", transition: "all 0.15s",
+                          }}
+                          onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${s.color}24`; }}
+                          onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${s.color}12`; }}
+                        >
+                          {item.btnLabel} →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

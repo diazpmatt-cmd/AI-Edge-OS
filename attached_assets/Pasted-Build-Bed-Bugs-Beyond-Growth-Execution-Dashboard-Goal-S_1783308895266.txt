@@ -1,0 +1,163 @@
+Build Bed Bugs & Beyond Growth Execution Dashboard.
+
+Goal:
+Stop tracking software progress.
+Start tracking business growth.
+
+New route:
+/admin/bbb-execution
+
+Sidebar:
+🎯 Growth Execution
+
+Frontend only.
+No backend calls.
+No AI APIs.
+No database changes.
+No marketing page changes.
+
+Purpose:
+Every widget answers one question:
+
+"What should we do TODAY to get Bed Bugs & Beyond another paying customer?"
+
+Dashboard sections:
+
+-------------------------------------------------
+
+TODAY'S MISSION
+
+One large card.
+
+Today's Mission:
+
+Get one more booked inspection.
+
+Progress:
+0 / 1
+(or placeholder)
+
+-------------------------------------------------
+
+TODAY'S ACTIONS
+
+Checklist:
+
+☐ Publish Facebook post
+
+☐ Publish Google Business Profile post
+
+☐ Upload one completed job photo
+
+☐ Request one Google review
+
+☐ Follow up with recovered leads
+
+☐ Record one 30-second video
+
+☐ Check Apple Business Connect
+
+☐ Check TikTok approval
+
+-------------------------------------------------
+
+LEAD GOALS
+
+Today's Calls
+
+Today's Leads
+
+Quotes Sent
+
+Jobs Booked
+
+Revenue Estimate
+
+Placeholder values.
+
+-------------------------------------------------
+
+THIS WEEK'S CONTENT
+
+Monday
+
+Tuesday
+
+Wednesday
+
+Thursday
+
+Friday
+
+Placeholder cards.
+
+-------------------------------------------------
+
+APOLLOS FOCUS
+
+Apollos Recommendation:
+
+"Today's highest ROI activity is requesting reviews from completed customers."
+
+Go button
+
+-------------------------------------------------
+
+SUCCESS WALL
+
+Recent Wins
+
+Examples:
+
+★★★★★
+New 5-star review
+
+Lead recovered
+
+Facebook post published
+
+Commercial created
+
+Website updated
+
+-------------------------------------------------
+
+Bottom banner:
+
+🎯
+
+Every completed task moves Bed Bugs & Beyond closer to another booked job.
+
+-------------------------------------------------
+
+No backend.
+
+No AI.
+
+No APIs.
+
+Everything frontend.
+
+Verify:
+
+- Route works
+
+- Auth works
+
+- Sidebar works
+
+- Checklist toggles
+
+- Progress updates
+
+- Build passes
+
+Return:
+
+verification
+
+files changed
+
+production
+
+URL

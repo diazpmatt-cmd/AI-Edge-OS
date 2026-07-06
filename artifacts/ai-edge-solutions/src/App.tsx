@@ -57,6 +57,7 @@ const ClientOnboardingPage          = lazy(() => import("./pages/ClientOnboardin
 const LocalBizAIPage                = lazy(() => import("./pages/LocalBizAIPage"));
 const RevenueAttributionPage        = lazy(() => import("./pages/RevenueAttributionPage"));
 const BBBOperationsCenterPage       = lazy(() => import("./pages/BBBOperationsCenterPage"));
+const BBBExecutionPage              = lazy(() => import("./pages/BBBExecutionPage"));
 const MediaEnginePage               = lazy(() => import("./pages/MediaEnginePage"));
 const AssetLibraryPage              = lazy(() => import("./pages/AssetLibraryPage"));
 const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"));
@@ -184,6 +185,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/bbb-operations">
           <Authenticated><BBBOperationsCenterPage /></Authenticated>
+        </Route>
+        <Route path="/admin/bbb-execution">
+          <Authenticated><BBBExecutionPage /></Authenticated>
         </Route>
         <Route path="/admin/media-engine">
           <Authenticated><MediaEnginePage /></Authenticated>

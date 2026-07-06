@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { to: "/admin/dashboard",          icon: "🏠", label: "Command\nCenter",          bg: "#0D2218", accent: "#22C55E" },
   { to: "/admin/media-engine",        icon: "🎥", label: "Media\nEngine",             bg: "#0D1428", accent: "#00AEEF" },
   { to: "/admin/asset-library",       icon: "📁", label: "Asset\nLibrary",             bg: "#0A1A2E", accent: "#00AEEF" },
+  { to: "/admin/bbb-execution",        icon: "🎯", label: "Growth\nExecution",          bg: "#1A0E08", accent: "#F26C21" },
   { to: "/admin/bbb-success",         icon: "🐛", label: "BB&B\nSuccess",             bg: "#0D1A10", accent: "#22C55E" },
   { to: "/admin/bbb-operations",     icon: "🐛", label: "BB&B Ops\nCenter",          bg: "#0D1A2E", accent: "#00AEEF" },
   { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },

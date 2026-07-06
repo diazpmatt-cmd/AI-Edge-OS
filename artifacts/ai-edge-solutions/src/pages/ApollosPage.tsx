@@ -41,9 +41,12 @@ const PLACEHOLDER_RESPONSE = "Conversation mode will be powered by AI in the nex
 // Matched case-insensitively via includes(). First match wins.
 const NAV_INTENTS: { patterns: string[]; response: string; route: string }[] = [
   { patterns: ["morning brief"],                           response: "Opening Morning Brief...",              route: "/admin/morning-brief"      },
+  { patterns: ["mission control", "start my day"],         response: "Opening Mission Control...",            route: "/admin/mission-control"    },
+  { patterns: ["content autopilot", "autopilot", "queue posts", "generate content", "bbb autopilot"], response: "Opening Content Autopilot...", route: "/admin/bbb-autopilot"     },
   { patterns: ["media engine", "launch media", "create an ad", "ad campaign", "build a commercial"], response: "Launching Media Engine...",             route: "/admin/media-engine"       },
   { patterns: ["lead recovery", "review leads", "missed calls", "review missed"], response: "Taking you to Lead Recovery...",       route: "/admin/lead-recovery"      },
-  { patterns: ["publishing", "draft social", "social post", "publishing center"], response: "Opening Publishing Center...",          route: "/admin/publishing"         },
+  { patterns: ["publishing", "draft social", "social post", "publishing center"], response: "Opening Publishing Center...",          route: "/admin/social-publishing"  },
+  { patterns: ["growth execution", "daily execution", "today's mission"], response: "Loading Growth Execution...",          route: "/admin/bbb-execution"      },
   { patterns: ["client onboarding"],                       response: "Preparing Client Onboarding...",        route: "/admin/client-onboarding"  },
   { patterns: ["revenue forecast", "show revenue", "profit center"], response: "Loading Revenue Forecast...", route: "/admin/profit-center"      },
   { patterns: ["google business", "generate a google"],    response: "Taking you to Local Presence Engine...",route: "/admin/local-presence"     },
@@ -62,7 +65,7 @@ const TODAY_RECS = [
     icon: "📣", title: "Create today's Facebook post",
     reason: "Consistent daily posts keep BB&B top of mind in Baldwin County.",
     priority: "Medium", priorityColor: "#3B82F6",
-    route: "/admin/publishing", btnLabel: "Open Publisher →",
+    route: "/admin/social-publishing", btnLabel: "Open Publisher →",
     color: "#3B82F6",
   },
   {
@@ -144,7 +147,7 @@ const QUICK_ACTIONS = [
   { label: "🎥 Media Engine",     route: "/admin/media-engine",  msg: null,                        color: "#00AEEF" },
   { label: "🔥 Review Leads",     route: "/admin/lead-recovery", msg: null,                        color: "#F97316" },
   { label: "📣 Create Ad",        route: "/admin/media-engine",  msg: "Create an ad campaign.",    color: "#A78BFA" },
-  { label: "✍️ Draft Social Post", route: "/admin/publishing",    msg: "Draft a social media post.", color: "#06B6D4" },
+  { label: "✍️ Draft Social Post", route: "/admin/social-publishing", msg: "Draft a social media post.", color: "#06B6D4" },
   { label: "💰 Revenue Forecast", route: "/admin/profit-center", msg: null,                        color: "#10B981" },
 ] as const;
 
@@ -157,7 +160,7 @@ const LAUNCH_ENGINES = [
   { icon: "🔍", label: "SEO Engine",        desc: "Local search rankings & visibility",   status: "soon",      route: null,                    color: "#06B6D4" },
   { icon: "💰", label: "Revenue Forecast",  desc: "AI Profit Center & ROI dashboard",     status: "preview",   route: "/admin/profit-center",  color: "#10B981" },
   { icon: "⭐", label: "Review Engine",     desc: "Reputation management & requests",     status: "preview",   route: "/admin/reviews",        color: "#FBBF24" },
-  { icon: "📤", label: "Publishing Center", desc: "Schedule & distribute all content",    status: "connected", route: "/admin/publishing",     color: "#A78BFA" },
+  { icon: "📤", label: "Publishing Center", desc: "Schedule & distribute all content",    status: "connected", route: "/admin/social-publishing", color: "#A78BFA" },
 ] as const;
 
 type LaunchStatus = "connected" | "preview" | "soon";

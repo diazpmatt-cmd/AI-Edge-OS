@@ -4,6 +4,7 @@
 
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
+import { WorkflowNav } from "@/components/WorkflowNav";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -31,8 +32,8 @@ const B = {
 
 // ── Checklist items ────────────────────────────────────────────────────────────
 const ACTION_ITEMS = [
-  { id: "fb",     label: "Publish Facebook post",               icon: "📘", color: B.blue,   action: { label: "Open Publishing Center", route: "/admin/publishing",    disabled: false } },
-  { id: "gbp",    label: "Publish Google Business Profile post", icon: "📍", color: B.green,  action: { label: "Open Publishing Center", route: "/admin/publishing",    disabled: false } },
+  { id: "fb",     label: "Publish Facebook post",               icon: "📘", color: B.blue,   action: { label: "Open Publishing Center", route: "/admin/social-publishing", disabled: false } },
+  { id: "gbp",    label: "Publish Google Business Profile post", icon: "📍", color: B.green,  action: { label: "Open Publishing Center", route: "/admin/social-publishing", disabled: false } },
   { id: "photo",  label: "Upload one completed job photo",      icon: "📸", color: B.orange, action: { label: "Open Media Engine",      route: "/admin/media-engine",  disabled: false } },
   { id: "review", label: "Request one Google review",           icon: "⭐", color: B.gold,   action: { label: "Open Review Engine",     route: "/admin/reviews",       disabled: false } },
   { id: "leads",  label: "Follow up with recovered leads",      icon: "🔥", color: B.orange, action: { label: "Open Lead Recovery",     route: "/admin/lead-recovery", disabled: false } },
@@ -199,7 +200,7 @@ export default function BBBExecutionPage() {
     if (reviewStats.received < 2)  return { text: "Ask one completed customer for a Google review.",        icon: "⭐", color: B.gold,    route: "/admin/reviews"       };
     if (shotCount === 0)            return { text: "Capture one before/after photo or short job video.",     icon: "📸", color: B.orange,  route: "/admin/media-engine"  };
     if (completedCount < 4)        return { text: "Complete the highest-impact growth checklist item.",      icon: "✅", color: B.green,   route: "checklist"            };
-    if (weeklyScore < 70)          return { text: "Publish one local content post for a target city.",      icon: "📍", color: B.sky,     route: "/admin/publishing"    };
+    if (weeklyScore < 70)          return { text: "Publish one local content post for a target city.",      icon: "📍", color: B.sky,     route: "/admin/social-publishing" };
     return                               { text: "Keep momentum going: follow up every new lead today.",    icon: "🔥", color: B.orange,  route: "/admin/lead-recovery" };
   })();
 
@@ -349,6 +350,7 @@ export default function BBBExecutionPage() {
 
       {/* ── Body ── */}
       <div style={{ padding: "28px 36px", maxWidth: 1100, margin: "0 auto" }}>
+        <WorkflowNav />
 
         {/* ── TODAY'S MISSION ── */}
         <div style={{
@@ -1032,7 +1034,7 @@ export default function BBBExecutionPage() {
                     </div>
                     <div style={{ fontSize: 10.5, color: B.dim, fontStyle: "italic" }}>{t.keyword}</div>
                     <button
-                      onClick={() => navigate("/admin/publishing")}
+                      onClick={() => navigate("/admin/social-publishing")}
                       style={{
                         alignSelf: "flex-start",
                         background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.22)",

@@ -1,8 +1,11 @@
-// ── BB&B Content Autopilot V1 ────────────────────────────────────────────────
-// Frontend only. Zero API calls. Rotates pre-written BB&B content plans.
-// Posts stored in local state — labelled "Ready to Queue" until manually sent.
+// ── BB&B Content Autopilot V2 ────────────────────────────────────────────────
+// V2: queue posts as real backend drafts via POST /api/social-posts.
+// WorkflowNav connects this page into the full BB&B Growth OS workflow.
 
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useApiFetch } from "@/lib/api";
+import { WorkflowNav } from "@/components/WorkflowNav";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -180,6 +183,14 @@ export default function BBBContentAutopilotPage() {
   const [justQueued,      setJustQueued]      = useState<string[]>([]);
   const [platformStatus,  setPlatformStatus]  = useState<Record<Platform, PlatformStatus>>({ ...INITIAL_STATUS });
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
+  const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
+
+  // V2: real backend draft creation
+  const authFetch   = useApiFetch();
+  const createDraft = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      authFetch<{ id: number }>("/social-posts", { method: "POST", body: JSON.stringify(data) }),
+  });
 
   const generated = templateIdx !== null ? TEMPLATES[templateIdx] : null;
 
@@ -225,6 +236,20 @@ export default function BBBContentAutopilotPage() {
       action:   `"${generated.topic}" added to review queue`,
       status:   "ready",
     }, ...prev]);
+
+    // V2: save to backend as a real draft in the Publishing Center
+    const platformKey = platform === "Facebook" ? "facebook"
+      : platform === "Instagram" ? "instagram"
+      : "google";
+    createDraft.mutate({
+      caption:         captionFor(generated, "Instagram"),
+      captionFacebook: captionFor(generated, "Facebook"),
+      captionGoogle:   captionFor(generated, "Google Business Profile"),
+      platforms:       [platformKey],
+      status:          "draft",
+    }, {
+      onSuccess: () => setDraftsSaved(prev => new Set([...prev, post.id])),
+    });
   }
 
   function queueAll() {
@@ -267,6 +292,11 @@ export default function BBBContentAutopilotPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
+
+      {/* ── Workflow Navigator ── */}
+      <div style={{ padding: "14px 36px 0" }}>
+        <WorkflowNav />
+      </div>
 
       {/* ── Header ── */}
       <div style={{
@@ -663,6 +693,11 @@ export default function BBBContentAutopilotPage() {
                           {sMeta.label}
                         </span>
                         <span style={{ fontSize: 10, color: B.dim }}>· {post.topic} · {post.queuedAt}</span>
+                        {draftsSaved.has(post.id) && (
+                          <span style={{ fontSize: 9, fontWeight: 700, color: B.emerald, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 5, padding: "2px 6px" }}>
+                            📨 Draft in Publishing Center
+                          </span>
+                        )}
                       </div>
                       <div style={{
                         fontSize: 11.5, color: B.silver, lineHeight: 1.55,

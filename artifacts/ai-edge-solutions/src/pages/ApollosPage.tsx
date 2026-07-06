@@ -574,6 +574,59 @@ export default function ApollosPage() {
             </div>
           </div>
 
+          {/* ── End-of-Day Recap ── */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 13 }}>🌙</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.2px", textTransform: "uppercase" }}>
+                End-of-Day Recap
+              </span>
+              <span style={{ fontSize: 9, color: B.dim }}>— Preview</span>
+            </div>
+            <div style={{
+              background: "linear-gradient(135deg, rgba(167,139,250,0.06) 0%, rgba(6,182,212,0.04) 100%)",
+              border: "1px solid rgba(167,139,250,0.18)", borderRadius: 14, padding: "16px 18px",
+            }}>
+              {/* Recap rows */}
+              {[
+                { icon: "🏆", label: "Today's Wins",          value: "Waiting to generate…", color: "#22C55E" },
+                { icon: "⚠️", label: "Missed Opportunities",  value: "Waiting to generate…", color: "#FBBF24" },
+                { icon: "💰", label: "Revenue Notes",         value: "Waiting to generate…", color: "#10B981" },
+                { icon: "📄", label: "Content Completed",     value: "Waiting to generate…", color: "#00AEEF" },
+                { icon: "🎯", label: "Tomorrow's Priority",   value: "Waiting to generate…", color: "#A78BFA" },
+              ].map(row => (
+                <div key={row.label} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                }}>
+                  <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{row.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: row.color, marginBottom: 2 }}>{row.label}</div>
+                    <div style={{ fontSize: 11, color: B.dim, fontStyle: "italic" }}>{row.value}</div>
+                  </div>
+                </div>
+              ))}
+              {/* Generate button */}
+              <button
+                onClick={() => {
+                  const recapMsg = "End-of-day recap preview is ready. Today's wins, missed opportunities, revenue notes, completed content, and tomorrow's top priority will be generated automatically in the next release.";
+                  setMessages(prev => [...prev, { id: uid(), role: "apollos", text: recapMsg, time: nowTime() }]);
+                }}
+                style={{
+                  marginTop: 14, width: "100%",
+                  background: "linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(6,182,212,0.12) 100%)",
+                  border: "1px solid rgba(167,139,250,0.35)", borderRadius: 10,
+                  padding: "9px 0", fontSize: 12, fontWeight: 700,
+                  color: "#A78BFA", cursor: "pointer", transition: "all 0.15s",
+                }}
+                onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(167,139,250,0.28) 0%, rgba(6,182,212,0.2) 100%)"; }}
+                onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(6,182,212,0.12) 100%)"; }}
+              >
+                🔮 Generate Recap Preview
+              </button>
+            </div>
+          </div>
+
           {messages.map(m => <Bubble key={m.id} msg={m} />)}
 
           {/* Typing indicator */}

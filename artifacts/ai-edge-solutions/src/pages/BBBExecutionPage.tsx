@@ -98,30 +98,38 @@ export default function BBBExecutionPage() {
     setChecked(c => ({ ...c, [id]: !c[id] }));
   }
 
-  const [copied, setCopied]           = useState(false);
+  const [copied, setCopied]             = useState(false);
   const [showFallback, setShowFallback] = useState(false);
+  const [notes, setNotes]               = useState<Record<ActionId, string>>({
+    fb: "", gbp: "", photo: "", review: "", leads: "", video: "", apple: "", tiktok: "",
+  });
+  const [showSummary, setShowSummary]   = useState(false);
 
-  const ACTION_PLAN_TEXT = `Bed Bugs & Beyond — Today's Growth Action Plan
+  function setNote(id: ActionId, val: string) {
+    setNotes(n => ({ ...n, [id]: val }));
+  }
 
-Mission:
-Get one more booked inspection.
-
-Actions:
-[ ] Publish Facebook post
-[ ] Publish Google Business Profile post
-[ ] Upload one completed job photo
-[ ] Request one Google review
-[ ] Follow up with recovered leads
-[ ] Record one 30-second video
-[ ] Check Apple Business Connect
-[ ] Check TikTok approval
-
-Goal:
-Every completed task moves Bed Bugs & Beyond closer to another booked job.`;
+  // Dynamic plan — includes per-item notes when filled
+  const actionPlanText = [
+    "Bed Bugs & Beyond — Today's Growth Action Plan",
+    "",
+    "Mission:",
+    "Get one more booked inspection.",
+    "",
+    "Actions:",
+    ...ACTION_ITEMS.map(item => {
+      const box  = checked[item.id] ? "[x]" : "[ ]";
+      const note = notes[item.id].trim();
+      return note ? `${box} ${item.label}\n    Note: ${note}` : `${box} ${item.label}`;
+    }),
+    "",
+    "Goal:",
+    "Every completed task moves Bed Bugs & Beyond closer to another booked job.",
+  ].join("\n");
 
   function copyActionPlan() {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(ACTION_PLAN_TEXT).then(() => {
+      navigator.clipboard.writeText(actionPlanText).then(() => {
         setCopied(true);
         setShowFallback(false);
         setTimeout(() => setCopied(false), 2500);
@@ -244,38 +252,57 @@ Every completed task moves Bed Bugs & Beyond closer to another booked job.`;
                 }} />
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {ACTION_ITEMS.map(item => {
                 const done = checked[item.id];
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => toggle(item.id)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      background: done ? `${item.color}10` : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${done ? `${item.color}35` : B.border}`,
-                      borderRadius: 10, padding: "10px 12px",
-                      cursor: "pointer", textAlign: "left", transition: "all 0.15s",
-                    }}
-                  >
-                    {/* Checkbox */}
-                    <span style={{
-                      width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                      background: done ? item.color : "rgba(255,255,255,0.04)",
-                      border: `1.5px solid ${done ? item.color : "rgba(255,255,255,0.15)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 10, color: "#000", fontWeight: 900, transition: "all 0.15s",
-                    }}>{done ? "✓" : ""}</span>
-                    <span style={{ fontSize: 13 }}>{item.icon}</span>
-                    <span style={{
-                      fontSize: 12, fontWeight: done ? 600 : 400,
-                      color: done ? B.silver : B.white,
-                      textDecoration: done ? "line-through" : "none",
-                      transition: "all 0.15s",
-                    }}>{item.label}</span>
-                    {done && <span style={{ marginLeft: "auto", fontSize: 10, color: B.green, fontWeight: 700 }}>Done ✓</span>}
-                  </button>
+                  <div key={item.id} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {/* Toggle row */}
+                    <div
+                      onClick={() => toggle(item.id)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        background: done ? `${item.color}10` : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${done ? `${item.color}35` : B.border}`,
+                        borderRadius: 10, padding: "10px 12px",
+                        cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                        background: done ? item.color : "rgba(255,255,255,0.04)",
+                        border: `1.5px solid ${done ? item.color : "rgba(255,255,255,0.15)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, color: "#000", fontWeight: 900, transition: "all 0.15s",
+                      }}>{done ? "✓" : ""}</span>
+                      <span style={{ fontSize: 13 }}>{item.icon}</span>
+                      <span style={{
+                        fontSize: 12, fontWeight: done ? 600 : 400,
+                        color: done ? B.silver : B.white,
+                        textDecoration: done ? "line-through" : "none",
+                        transition: "all 0.15s",
+                      }}>{item.label}</span>
+                      {done && <span style={{ marginLeft: "auto", fontSize: 10, color: B.green, fontWeight: 700 }}>Done ✓</span>}
+                    </div>
+                    {/* Notes field */}
+                    <input
+                      type="text"
+                      value={notes[item.id]}
+                      onChange={e => setNote(item.id, e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      placeholder="Add result or reminder…"
+                      style={{
+                        width: "100%", boxSizing: "border-box" as const,
+                        background: notes[item.id] ? `${item.color}08` : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${notes[item.id] ? `${item.color}40` : "rgba(255,255,255,0.05)"}`,
+                        borderRadius: 7, padding: "5px 10px",
+                        fontSize: 11, color: B.silver, fontFamily: "inherit",
+                        outline: "none", transition: "border-color 0.15s",
+                      }}
+                      onFocus={e => { (e.target as HTMLInputElement).style.borderColor = `${item.color}60`; }}
+                      onBlur={e => { (e.target as HTMLInputElement).style.borderColor = notes[item.id] ? `${item.color}40` : "rgba(255,255,255,0.05)"; }}
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -311,7 +338,7 @@ Every completed task moves Bed Bugs & Beyond closer to another booked job.`;
                   </div>
                   <textarea
                     readOnly
-                    value={ACTION_PLAN_TEXT}
+                    value={actionPlanText}
                     onFocus={e => e.target.select()}
                     rows={18}
                     style={{
@@ -322,6 +349,63 @@ Every completed task moves Bed Bugs & Beyond closer to another booked job.`;
                       resize: "none", fontFamily: "monospace", outline: "none",
                     }}
                   />
+                </div>
+              )}
+            </div>
+
+            {/* ── Apollos Daily Summary ── */}
+            <div style={{ marginTop: 6 }}>
+              <button
+                onClick={() => setShowSummary(s => !s)}
+                style={{
+                  width: "100%",
+                  background: showSummary ? "rgba(139,92,246,0.12)" : "rgba(139,92,246,0.07)",
+                  border: `1px solid rgba(139,92,246,${showSummary ? "0.45" : "0.25"})`,
+                  borderRadius: 10, padding: "10px 0",
+                  fontSize: 12.5, fontWeight: 700,
+                  color: "#C4B5FD",
+                  cursor: "pointer", transition: "all 0.2s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                🤖 {showSummary ? "Hide Apollos Summary" : "Generate Apollos Daily Summary"}
+              </button>
+
+              {showSummary && (
+                <div style={{
+                  marginTop: 10,
+                  background: "rgba(139,92,246,0.06)",
+                  border: "1px solid rgba(139,92,246,0.25)",
+                  borderRadius: 10, padding: "14px 16px",
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#C4B5FD", display: "flex", alignItems: "center", gap: 7 }}>
+                    <span>🤖</span>
+                    <span>Apollos Summary</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11.5, color: B.silver, lineHeight: 1.65 }}>
+                    Today's focus is to complete the highest-impact growth actions for Bed Bugs &amp; Beyond.
+                    Prioritize reviews, follow-up, visibility updates, and one piece of content that can
+                    generate another booked inspection.
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                    {[
+                      { label: "Completed",  value: completedCount,             color: B.emerald, icon: "✅" },
+                      { label: "Remaining",  value: totalActions - completedCount, color: B.gold,    icon: "⏳" },
+                      { label: "Progress",   value: `${pct}%`,                  color: B.sky,     icon: "📈" },
+                    ].map(stat => (
+                      <div key={stat.label} style={{
+                        background: `${stat.color}0D`,
+                        border: `1px solid ${stat.color}30`,
+                        borderRadius: 8, padding: "8px 10px",
+                        display: "flex", flexDirection: "column", gap: 3, alignItems: "center",
+                      }}>
+                        <span style={{ fontSize: 14 }}>{stat.icon}</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: stat.color }}>{stat.value}</span>
+                        <span style={{ fontSize: 9.5, color: B.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>{stat.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

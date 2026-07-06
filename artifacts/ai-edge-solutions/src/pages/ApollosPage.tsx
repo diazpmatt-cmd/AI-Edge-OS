@@ -37,6 +37,37 @@ const OPENING_MESSAGE: Message = {
 
 const PLACEHOLDER_RESPONSE = "Conversation mode will be powered by AI in the next release.";
 
+const TODAY_RECS = [
+  {
+    icon: "🔥", title: "Follow up with recovered leads",
+    reason: "3 new leads captured overnight — respond before competitors do.",
+    priority: "High", priorityColor: "#F97316",
+    route: "/admin/lead-recovery", btnLabel: "Review Leads →",
+    color: "#F97316",
+  },
+  {
+    icon: "📣", title: "Create today's Facebook post",
+    reason: "Consistent daily posts keep BB&B top of mind in Baldwin County.",
+    priority: "Medium", priorityColor: "#3B82F6",
+    route: "/admin/publishing", btnLabel: "Open Publisher →",
+    color: "#3B82F6",
+  },
+  {
+    icon: "💰", title: "Review revenue forecast",
+    reason: "Weekly check-in — compare actuals vs. projected growth targets.",
+    priority: "Medium", priorityColor: "#10B981",
+    route: "/admin/profit-center", btnLabel: "View Forecast →",
+    color: "#10B981",
+  },
+  {
+    icon: "📢", title: "Build a BB&B ad campaign",
+    reason: "Summer pest season peaks now — launch a targeted local ad.",
+    priority: "High", priorityColor: "#A78BFA",
+    route: "/admin/media-engine", btnLabel: "Open Media Engine →",
+    color: "#A78BFA",
+  },
+] as const;
+
 const LEFT_NAV_ACTIONS = [
   { icon: "📊", label: "Business Review"    },
   { icon: "🎯", label: "Campaign Builder"   },
@@ -370,6 +401,58 @@ export default function ApollosPage() {
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column" }}>
+
+          {/* ── Today's Apollos Recommendations ── */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 13 }}>🧠</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.2px", textTransform: "uppercase" }}>
+                Today's Apollos Recommendations
+              </span>
+              <span style={{ fontSize: 9, color: B.dim }}>— {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {TODAY_RECS.map(r => (
+                <div key={r.title} style={{
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%)",
+                  border: `1px solid rgba(255,255,255,0.07)`,
+                  borderLeft: `3px solid ${r.color}`,
+                  borderRadius: 12, padding: "13px 14px",
+                  display: "flex", flexDirection: "column", gap: 8,
+                }}>
+                  {/* Card header */}
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <span style={{ fontSize: 16 }}>{r.icon}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: B.white, lineHeight: 1.35 }}>{r.title}</span>
+                    </div>
+                    <span style={{
+                      flexShrink: 0, fontSize: 8, fontWeight: 800, letterSpacing: "0.6px",
+                      background: `${r.priorityColor}18`, border: `1px solid ${r.priorityColor}40`,
+                      color: r.priorityColor, borderRadius: 6, padding: "2px 6px",
+                    }}>{r.priority}</span>
+                  </div>
+                  {/* Reason */}
+                  <div style={{ fontSize: 11, color: B.dim, lineHeight: 1.5 }}>{r.reason}</div>
+                  {/* Action */}
+                  <button
+                    onClick={() => navigate(r.route)}
+                    style={{
+                      alignSelf: "flex-start", background: `${r.color}14`,
+                      border: `1px solid ${r.color}30`, borderRadius: 8,
+                      padding: "5px 11px", fontSize: 10.5, fontWeight: 700,
+                      color: r.color, cursor: "pointer", transition: "all 0.15s",
+                    }}
+                    onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${r.color}26`; }}
+                    onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${r.color}14`; }}
+                  >
+                    {r.btnLabel}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {messages.map(m => <Bubble key={m.id} msg={m} />)}
 
           {/* Typing indicator */}

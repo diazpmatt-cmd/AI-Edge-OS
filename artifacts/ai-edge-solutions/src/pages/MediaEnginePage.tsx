@@ -413,7 +413,7 @@ const DEFAULT_VIDEO_SCENES: VideoScene[] = [
     title: "Hook",
     visual: "Pest infestation close-up — quick cuts, high energy",
     onscreen: "Are pests taking over your home?",
-    voiceover: "Bed bugs, roaches, termites — they don't sleep, and neither should your protection.",
+    voiceover: "Bed bugs, roaches, rodents — they don't sleep, and neither should your protection.",
   },
   {
     id: "problem",

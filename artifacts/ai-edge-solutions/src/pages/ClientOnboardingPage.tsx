@@ -55,7 +55,7 @@ const BBB = {
   website:         "bedbugsandbeyond.com",
   serviceArea:     "Baldwin County, AL",
   hours:           "Mon–Fri 7AM–6PM, Sat 8AM–3PM",
-  services:        "Bed Bug Elimination, General Pest Control, Termite Treatment, Rodent Control",
+  services:        "Bed Bug Elimination, Rodent Control, General Pest Control, Home Inspections",
   brandColors:     "#0D2B45, #0077B6, #F26C21",
 };
 

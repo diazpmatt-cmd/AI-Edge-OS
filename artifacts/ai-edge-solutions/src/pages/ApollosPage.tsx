@@ -69,14 +69,18 @@ function uid() {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-function ApollosAvatar({ size = 34 }: { size?: number }) {
+function ApollosAvatar({ size = 34, glowing = false }: { size?: number; glowing?: boolean }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      background: "linear-gradient(135deg, rgba(0,174,239,0.18) 0%, rgba(6,182,212,0.08) 100%)",
-      border: "1.5px solid rgba(0,174,239,0.45)",
+      background: "linear-gradient(135deg, rgba(0,174,239,0.22) 0%, rgba(6,182,212,0.10) 100%)",
+      border: `1.5px solid ${glowing ? "rgba(0,174,239,0.75)" : "rgba(0,174,239,0.45)"}`,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: Math.round(size * 0.52),
+      boxShadow: glowing
+        ? "0 0 14px rgba(0,174,239,0.55), 0 0 32px rgba(0,174,239,0.20)"
+        : "0 0 8px rgba(0,174,239,0.15)",
+      transition: "box-shadow 0.4s ease, border-color 0.4s ease",
     }}>🎙️</div>
   );
 }
@@ -140,7 +144,53 @@ export default function ApollosPage() {
   const [messages, setMessages]     = useState<Message[]>([OPENING_MESSAGE]);
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
+  const [voicePlaying, setVoicePlaying] = useState(false);
   const bottomRef                   = useRef<HTMLDivElement>(null);
+  const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
+
+  const INTRO_SCRIPT = [
+    "Hi, I'm Apollos.",
+    "I'm your AI Business Advisor.",
+    "How shall we improve your business today?",
+  ];
+
+  function stopVoice() {
+    window.speechSynthesis?.cancel();
+    setVoicePlaying(false);
+    voiceUtterRef.current = [];
+  }
+
+  function playVoiceIntro() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    stopVoice();
+    const voices = window.speechSynthesis.getVoices();
+    const PREF_NAMES = ["Daniel", "Google UK English Male", "Microsoft Ryan Online (Natural)", "Microsoft George"];
+    const isMale = (v: SpeechSynthesisVoice) =>
+      v.name.toLowerCase().includes("male") ||
+      PREF_NAMES.some(n => v.name.toLowerCase().includes(n.toLowerCase()));
+
+    let voice: SpeechSynthesisVoice | null =
+      PREF_NAMES.reduce<SpeechSynthesisVoice | null>((found, name) =>
+        found ?? (voices.find(v => v.lang.startsWith("en-GB") && v.name.toLowerCase().includes(name.toLowerCase())) ?? null)
+      , null);
+    if (!voice) voice = voices.find(v => v.lang.startsWith("en-GB") && isMale(v)) ?? null;
+    if (!voice) voice = voices.find(v => v.lang.startsWith("en") && isMale(v)) ?? null;
+    if (!voice) voice = voices.find(v => v.lang.startsWith("en-GB")) ?? null;
+
+    voiceUtterRef.current = INTRO_SCRIPT.map((line, i) => {
+      const u = new SpeechSynthesisUtterance(line);
+      u.lang = "en-GB"; u.pitch = 0.92; u.rate = 0.98;
+      if (voice) u.voice = voice;
+      u.onstart = () => setVoicePlaying(true);
+      u.onend = () => {
+        if (i === INTRO_SCRIPT.length - 1) { setVoicePlaying(false); voiceUtterRef.current = []; }
+        else setTimeout(() => { const next = voiceUtterRef.current[i + 1]; if (next) window.speechSynthesis.speak(next); }, 350);
+      };
+      return u;
+    });
+    window.speechSynthesis.speak(voiceUtterRef.current[0]);
+    setVoicePlaying(true);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -242,17 +292,48 @@ export default function ApollosPage() {
 
         {/* Chat header */}
         <div style={{
-          padding: "14px 24px", borderBottom: `1px solid ${B.border}`,
+          padding: "12px 24px", borderBottom: `1px solid ${B.border}`,
           display: "flex", alignItems: "center", gap: 12, flexShrink: 0, background: B.panel,
+          flexWrap: "wrap",
         }}>
-          <ApollosAvatar size={38} />
+          <ApollosAvatar size={38} glowing={voicePlaying} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: B.white, letterSpacing: "-0.2px" }}>Apollos</div>
-            <div style={{ fontSize: 11, color: B.blue, fontWeight: 600 }}>AI Business Advisor · British Executive</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: B.white, letterSpacing: "-0.2px" }}>Apollos</span>
+              {/* AI Coming Soon badge */}
+              <span style={{
+                fontSize: 8, fontWeight: 800, letterSpacing: "1px",
+                background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)",
+                color: "#A78BFA", borderRadius: 8, padding: "2px 7px",
+              }}>🤖 AI COMING SOON</span>
+              {/* Frontend Preview Only badge */}
+              <span style={{
+                fontSize: 8, fontWeight: 800, letterSpacing: "1px",
+                background: "rgba(251,191,36,0.10)", border: "1px solid rgba(251,191,36,0.28)",
+                color: "#FBBF24", borderRadius: 8, padding: "2px 7px",
+              }}>👁 FRONTEND PREVIEW</span>
+            </div>
+            <div style={{ fontSize: 11, color: B.blue, fontWeight: 600, marginTop: 2 }}>AI Business Advisor · British Executive</div>
           </div>
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: B.green, display: "inline-block" }} />
-            <span style={{ fontSize: 11, color: B.green, fontWeight: 600 }}>Ready</span>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {/* Voice intro button */}
+            {!voicePlaying ? (
+              <button onClick={playVoiceIntro} style={{
+                background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.3)",
+                borderRadius: 8, padding: "5px 12px", fontSize: 11, fontWeight: 700,
+                color: B.blue, cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+              }}>▶ Hear Intro</button>
+            ) : (
+              <button onClick={stopVoice} style={{
+                background: "rgba(248,113,113,0.10)", border: "1px solid rgba(248,113,113,0.3)",
+                borderRadius: 8, padding: "5px 12px", fontSize: 11, fontWeight: 700,
+                color: "#F87171", cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+              }}>■ Stop</button>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: B.green, display: "inline-block" }} />
+              <span style={{ fontSize: 11, color: B.green, fontWeight: 600 }}>Ready</span>
+            </div>
           </div>
         </div>
 

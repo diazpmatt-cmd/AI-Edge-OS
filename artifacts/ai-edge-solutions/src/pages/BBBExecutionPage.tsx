@@ -43,6 +43,26 @@ const ACTION_ITEMS = [
 
 type ActionId = typeof ACTION_ITEMS[number]["id"];
 
+// ── Shot list items ───────────────────────────────────────────────────────────
+const SHOT_ITEMS = [
+  { id: "before",     label: "Before photo"                 },
+  { id: "setup",      label: "Treatment setup photo"        },
+  { id: "equipment",  label: "Product/equipment photo"      },
+  { id: "working",    label: "Technician working photo"     },
+  { id: "after",      label: "After photo"                  },
+  { id: "video",      label: "10-second vertical video"     },
+  { id: "permission", label: "Customer permission confirmed" },
+] as const;
+type ShotId = typeof SHOT_ITEMS[number]["id"];
+
+// ── Script defaults ───────────────────────────────────────────────────────────
+type ScriptKey = "review" | "missed" | "quote";
+const SCRIPT_DEFAULTS: Record<ScriptKey, string> = {
+  review: "Hi, this is Bed Bugs & Beyond. Thank you for trusting us with your pest control service today. If you were happy with our work, would you mind leaving us a quick Google review? It really helps our local family business.",
+  missed: "Hi, this is Bed Bugs & Beyond. Sorry we missed your call. Do you still need help with bed bugs or pest control service in Baldwin County?",
+  quote:  "Hi, this is Bed Bugs & Beyond. I just wanted to follow up on your pest control quote and see if you had any questions or wanted to get scheduled.",
+};
+
 // ── Weekly content ────────────────────────────────────────────────────────────
 const WEEK_DAYS = [
   { day: "Monday",    icon: "📘", theme: "Facebook post — Bed Bug ID tips",           status: "scheduled" },
@@ -104,6 +124,28 @@ export default function BBBExecutionPage() {
     fb: "", gbp: "", photo: "", review: "", leads: "", video: "", apple: "", tiktok: "",
   });
   const [showSummary, setShowSummary]   = useState(false);
+
+  // Shot list state
+  const [shotChecked, setShotChecked] = useState<Record<ShotId, boolean>>({
+    before: false, setup: false, equipment: false, working: false,
+    after: false, video: false, permission: false,
+  });
+  function toggleShot(id: ShotId) { setShotChecked(s => ({ ...s, [id]: !s[id] })); }
+  const shotCount = Object.values(shotChecked).filter(Boolean).length;
+
+  // Outreach script state
+  const [activeScript, setActiveScript] = useState<ScriptKey>("review");
+  const [scriptTexts, setScriptTexts]   = useState<Record<ScriptKey, string>>({ ...SCRIPT_DEFAULTS });
+  const [scriptCopied, setScriptCopied] = useState(false);
+  function copyScript() {
+    const text = scriptTexts[activeScript];
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setScriptCopied(true);
+        setTimeout(() => setScriptCopied(false), 2500);
+      }).catch(() => {});
+    }
+  }
 
   function setNote(id: ActionId, val: string) {
     setNotes(n => ({ ...n, [id]: val }));
@@ -584,6 +626,131 @@ export default function BBBExecutionPage() {
             })}
           </div>
         </Section>
+
+        {/* ── TWO-COLUMN: OUTREACH SCRIPTS + SHOT LIST ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+
+          {/* ── OUTREACH SCRIPTS ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.bbbMid, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
+              📞 Ready-to-Use Outreach Scripts
+            </div>
+
+            {/* Tab buttons */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              {([
+                { key: "review" as ScriptKey, label: "Review Request",    color: B.gold    },
+                { key: "missed" as ScriptKey, label: "Missed Call",       color: B.orange  },
+                { key: "quote"  as ScriptKey, label: "Quote Follow-Up",   color: B.emerald },
+              ]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => { setActiveScript(tab.key); setScriptCopied(false); }}
+                  style={{
+                    flex: 1,
+                    background: activeScript === tab.key ? `${tab.color}18` : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${activeScript === tab.key ? `${tab.color}45` : "rgba(255,255,255,0.07)"}`,
+                    borderRadius: 8, padding: "6px 4px",
+                    fontSize: 10, fontWeight: 700,
+                    color: activeScript === tab.key ? tab.color : B.dim,
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Editable textarea */}
+            <textarea
+              value={scriptTexts[activeScript]}
+              onChange={e => setScriptTexts(t => ({ ...t, [activeScript]: e.target.value }))}
+              rows={5}
+              style={{
+                width: "100%", boxSizing: "border-box" as const,
+                background: "rgba(255,255,255,0.02)",
+                border: `1px solid rgba(255,255,255,0.08)`,
+                borderRadius: 10, padding: "12px 14px",
+                fontSize: 12, color: B.white, lineHeight: 1.65,
+                fontFamily: "inherit", outline: "none", resize: "vertical",
+                marginBottom: 10, transition: "border-color 0.15s",
+              }}
+              onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = "rgba(255,255,255,0.18)"; }}
+              onBlur={e  => { (e.target as HTMLTextAreaElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+            />
+
+            {/* Copy Script button */}
+            <button
+              onClick={copyScript}
+              style={{
+                width: "100%",
+                background: scriptCopied ? "rgba(16,185,129,0.12)" : "rgba(0,174,239,0.08)",
+                border: `1px solid ${scriptCopied ? "rgba(16,185,129,0.35)" : "rgba(0,174,239,0.25)"}`,
+                borderRadius: 10, padding: "9px 0",
+                fontSize: 12, fontWeight: 700,
+                color: scriptCopied ? B.emerald : B.blue,
+                cursor: "pointer", transition: "all 0.2s",
+              }}
+            >
+              {scriptCopied ? "✓ Copied!" : "📋 Copy Script"}
+            </button>
+          </div>
+
+          {/* ── JOB CONTENT SHOT LIST ── */}
+          <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: B.purple, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 4 }}>
+              📸 Job Content Shot List
+            </div>
+            <div style={{ fontSize: 11, color: B.dim, marginBottom: 14 }}>
+              {shotCount} of {SHOT_ITEMS.length} captured
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden", marginBottom: 14 }}>
+              <div style={{
+                height: "100%", borderRadius: 99,
+                width: `${Math.round((shotCount / SHOT_ITEMS.length) * 100)}%`,
+                background: shotCount === SHOT_ITEMS.length
+                  ? `linear-gradient(90deg, ${B.green}, #4ADE80)`
+                  : `linear-gradient(90deg, ${B.purple}, #C4B5FD)`,
+                transition: "width 0.3s ease",
+              }} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {SHOT_ITEMS.map(shot => {
+                const done = shotChecked[shot.id];
+                return (
+                  <div
+                    key={shot.id}
+                    onClick={() => toggleShot(shot.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: done ? "rgba(167,139,250,0.08)" : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${done ? "rgba(167,139,250,0.3)" : B.border}`,
+                      borderRadius: 9, padding: "8px 12px",
+                      cursor: "pointer", transition: "all 0.15s",
+                    }}
+                  >
+                    <span style={{
+                      width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                      background: done ? B.purple : "rgba(255,255,255,0.04)",
+                      border: `1.5px solid ${done ? B.purple : "rgba(255,255,255,0.15)"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 9, color: "#fff", fontWeight: 900, transition: "all 0.15s",
+                    }}>{done ? "✓" : ""}</span>
+                    <span style={{
+                      fontSize: 12, color: done ? B.silver : B.white,
+                      textDecoration: done ? "line-through" : "none",
+                      fontWeight: done ? 500 : 400, transition: "all 0.15s",
+                    }}>{shot.label}</span>
+                    {done && <span style={{ marginLeft: "auto", fontSize: 9, color: B.purple, fontWeight: 700 }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         {/* ── Bottom banner ── */}
         <div style={{

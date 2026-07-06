@@ -2,6 +2,7 @@
 // Frontend only. Zero API calls. Placeholder AI responses until next release.
 
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -53,6 +54,26 @@ const SUGGESTED_PROMPTS = [
   { icon: "💰", text: "Show revenue forecast",               color: "#22C55E" },
   { icon: "🎥", text: "Launch Media Engine",                 color: "#00AEEF" },
 ];
+
+// status: "connected" | "preview" | "soon"
+const LAUNCH_ENGINES = [
+  { icon: "☀️", label: "Morning Brief",     desc: "Overnight AI summary + live signals",  status: "connected", route: "/admin/morning-brief",  color: "#FBBF24" },
+  { icon: "🎥", label: "Media Engine",      desc: "AI content creation & publishing",     status: "connected", route: "/admin/media-engine",   color: "#00AEEF" },
+  { icon: "🔥", label: "Lead Recovery",     desc: "Capture & follow up missed leads",     status: "connected", route: "/admin/lead-recovery",  color: "#F97316" },
+  { icon: "📞", label: "AI Receptionist",   desc: "Emma — 24/7 call handling & textback", status: "soon",      route: null,                    color: "#22C55E" },
+  { icon: "🔍", label: "SEO Engine",        desc: "Local search rankings & visibility",   status: "soon",      route: null,                    color: "#06B6D4" },
+  { icon: "💰", label: "Revenue Forecast",  desc: "AI Profit Center & ROI dashboard",     status: "preview",   route: "/admin/profit-center",  color: "#10B981" },
+  { icon: "⭐", label: "Review Engine",     desc: "Reputation management & requests",     status: "preview",   route: "/admin/reviews",        color: "#FBBF24" },
+  { icon: "📤", label: "Publishing Center", desc: "Schedule & distribute all content",    status: "connected", route: "/admin/publishing",     color: "#A78BFA" },
+] as const;
+
+type LaunchStatus = "connected" | "preview" | "soon";
+
+const STATUS_STYLE: Record<LaunchStatus, { label: string; bg: string; border: string; color: string }> = {
+  connected: { label: "Connected",    bg: "rgba(34,197,94,0.10)",  border: "rgba(34,197,94,0.3)",   color: "#22C55E" },
+  preview:   { label: "Preview",      bg: "rgba(0,174,239,0.10)",  border: "rgba(0,174,239,0.3)",   color: "#00AEEF" },
+  soon:      { label: "Coming Soon",  bg: "rgba(100,116,139,0.10)",border: "rgba(100,116,139,0.25)",color: "#64748B" },
+};
 
 const HISTORY_PLACEHOLDER = [
   { icon: "💬", label: "BB&B Morning Brief",  sub: "Yesterday" },
@@ -141,6 +162,7 @@ function Bubble({ msg }: { msg: Message }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ApollosPage() {
+  const [, navigate]                = useLocation();
   const [messages, setMessages]     = useState<Message[]>([OPENING_MESSAGE]);
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
@@ -479,6 +501,64 @@ export default function ApollosPage() {
         <div style={{ marginTop: 16, padding: "8px 10px", borderRadius: 8, background: "rgba(0,174,239,0.05)", border: `1px solid ${B.border}`, textAlign: "center" }}>
           <div style={{ fontSize: 10, color: B.dim, marginBottom: 3 }}>Live business context</div>
           <div style={{ fontSize: 8, color: B.gold, fontWeight: 800, letterSpacing: "0.5px" }}>COMING SOON</div>
+        </div>
+
+        {/* ── Launch Panel ── */}
+        <div style={{ margin: "22px 0 10px", height: 1, background: B.border }} />
+        <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>
+          Launch an AI Edge Engine
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {LAUNCH_ENGINES.map(e => {
+            const s = STATUS_STYLE[e.status as LaunchStatus];
+            const canLaunch = e.status !== "soon" && e.route !== null;
+            return (
+              <div key={e.label} style={{
+                background: "rgba(255,255,255,0.02)",
+                border: `1px solid rgba(255,255,255,0.06)`,
+                borderLeft: `2px solid ${e.color}44`,
+                borderRadius: 10, padding: "10px 11px",
+              }}>
+                {/* Card header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 14 }}>{e.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: B.white }}>{e.label}</span>
+                  </div>
+                  <span style={{
+                    fontSize: 7.5, fontWeight: 800, letterSpacing: "0.6px",
+                    background: s.bg, border: `1px solid ${s.border}`,
+                    color: s.color, borderRadius: 7, padding: "1px 5px", flexShrink: 0,
+                  }}>{s.label}</span>
+                </div>
+                {/* Description */}
+                <div style={{ fontSize: 10, color: B.dim, lineHeight: 1.4, marginBottom: 8 }}>{e.desc}</div>
+                {/* Action button */}
+                {canLaunch ? (
+                  <button
+                    onClick={() => navigate(e.route as string)}
+                    style={{
+                      width: "100%", background: `${e.color}14`,
+                      border: `1px solid ${e.color}33`, borderRadius: 7,
+                      padding: "5px 0", fontSize: 10.5, fontWeight: 700,
+                      color: e.color, cursor: "pointer", transition: "all 0.15s",
+                    }}
+                    onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${e.color}24`; }}
+                    onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = `${e.color}14`; }}
+                  >
+                    {e.status === "preview" ? "Open Preview →" : "Launch →"}
+                  </button>
+                ) : (
+                  <button disabled style={{
+                    width: "100%", background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.06)", borderRadius: 7,
+                    padding: "5px 0", fontSize: 10.5, fontWeight: 700,
+                    color: B.dim, cursor: "not-allowed",
+                  }}>Coming Soon</button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

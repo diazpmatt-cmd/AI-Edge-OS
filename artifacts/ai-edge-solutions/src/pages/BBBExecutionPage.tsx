@@ -37,8 +37,8 @@ const ACTION_ITEMS = [
   { id: "review", label: "Request one Google review",           icon: "⭐", color: B.gold,   action: { label: "Open Review Engine",     route: "/admin/reviews",       disabled: false } },
   { id: "leads",  label: "Follow up with recovered leads",      icon: "🔥", color: B.orange, action: { label: "Open Lead Recovery",     route: "/admin/lead-recovery", disabled: false } },
   { id: "video",  label: "Record one 30-second video",          icon: "🎬", color: B.purple, action: { label: "Open Media Engine",      route: "/admin/media-engine",  disabled: false } },
-  { id: "apple",  label: "Check Apple Business Connect",        icon: "🍎", color: B.silver, action: { label: "External Pending",       route: "",                     disabled: true  } },
-  { id: "tiktok", label: "Check TikTok approval",               icon: "🎵", color: B.cyan,   action: { label: "External Pending",       route: "",                     disabled: true  } },
+  { id: "apple",  label: "Check Apple Business Connect",        icon: "🍎", color: B.silver, action: { label: "Approval Pending",       route: "",                     disabled: true  } },
+  { id: "tiktok", label: "Check TikTok approval",               icon: "🎵", color: B.cyan,   action: { label: "Approval Pending",       route: "",                     disabled: true  } },
 ] as const;
 
 type ActionId = typeof ACTION_ITEMS[number]["id"];
@@ -279,10 +279,12 @@ export default function BBBExecutionPage() {
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <style>{`
+        @page { margin: 1.5cm; }
         @media print {
           .bbb-no-print { display: none !important; }
           body { background: #fff !important; color: #111 !important; margin: 0; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          div, section { page-break-inside: avoid; }
         }
       `}</style>
 
@@ -290,7 +292,7 @@ export default function BBBExecutionPage() {
       <div style={{
         background: `linear-gradient(135deg, ${B.bbbDark} 0%, #0A1A2E 60%, ${B.navy} 100%)`,
         borderBottom: `1px solid ${B.border}`, padding: "26px 36px 22px",
-        display: "flex", alignItems: "center", gap: 16,
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" as const,
       }}>
         <div style={{
           width: 46, height: 46, borderRadius: 12, flexShrink: 0,
@@ -383,13 +385,12 @@ export default function BBBExecutionPage() {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexDirection: "column",
               }}>
-                <div style={{ fontSize: 20, fontWeight: 900, color: missionDone ? B.green : B.white, lineHeight: 1 }}>
-                  {missionDone ? "1" : "0"}
+                <div style={{ fontSize: missionDone ? 22 : 15, fontWeight: 900, color: missionDone ? B.green : B.white, lineHeight: 1 }}>
+                  {missionDone ? "✓" : `${pct}%`}
                 </div>
-                <div style={{ fontSize: 9, color: B.dim, marginTop: 2 }}>/ 1</div>
               </div>
             </div>
-            <div style={{ fontSize: 10, color: B.dim, marginTop: 8 }}>Inspections Booked</div>
+            <div style={{ fontSize: 10, color: B.dim, marginTop: 8 }}>{missionDone ? "Mission Complete!" : "Today's Progress"}</div>
           </div>
         </div>
 
@@ -548,7 +549,7 @@ export default function BBBExecutionPage() {
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 }}
               >
-                🤖 {showSummary ? "Hide Apollos Summary" : "Generate Apollos Daily Summary"}
+                🤖 {showSummary ? "Hide Summary" : "Apollos Daily Summary"}
               </button>
 
               {showSummary && (
@@ -672,7 +673,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── THIS WEEK'S BB&B FOCUS ── */}
-        <div style={{ padding: "0 36px", marginBottom: 20 }}>
+        <div style={{ marginBottom: 20 }}>
           <div style={{
             background: B.panel, border: `1px solid ${B.border}`,
             borderRadius: 16, padding: "22px 24px",
@@ -743,7 +744,7 @@ export default function BBBExecutionPage() {
         </Section>
 
         {/* ── TWO-COLUMN: OUTREACH SCRIPTS + SHOT LIST ── */}
-        <div className="bbb-no-print" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+        <div className="bbb-no-print" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
 
           {/* ── OUTREACH SCRIPTS ── */}
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
@@ -868,7 +869,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── TWO-COLUMN: WEEKLY SCORECARD + NEXT BEST ACTION ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
 
           {/* ── WEEKLY GROWTH SCORECARD ── */}
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
@@ -972,7 +973,7 @@ export default function BBBExecutionPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               {[
                 { label: "Checklist",  value: `${completedCount}/8`, color: B.green   },
-                { label: "Reviews",    value: `${reviewStats.received} wk`, color: B.gold    },
+                { label: "Reviews",    value: `${reviewStats.received}`,     color: B.gold    },
                 { label: "Score",      value: `${weeklyScore}%`,     color: B.emerald },
               ].map(s => (
                 <div key={s.label} style={{
@@ -1005,7 +1006,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── TWO-COLUMN: SEO TARGETS + REVIEW TRACKER ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, padding: "0 36px", marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
 
           {/* ── LOCAL SEO TARGETS ── */}
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
@@ -1128,7 +1129,7 @@ export default function BBBExecutionPage() {
         </div>
 
         {/* ── END-OF-DAY RECAP BUILDER ── */}
-        <div className="bbb-no-print" style={{ padding: "0 36px", marginBottom: 20 }}>
+        <div className="bbb-no-print" style={{ marginBottom: 20 }}>
           <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px" }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 16 }}>
               📝 End-of-Day Recap Builder

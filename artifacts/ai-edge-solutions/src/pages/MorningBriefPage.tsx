@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
@@ -144,6 +145,230 @@ function AgentCard({ emoji, name, title, color, metrics, recommendation, live }:
   );
 }
 
+// ── Apollos Voice Card ────────────────────────────────────────────────────────
+const APOLLOS_SCRIPT = [
+  "Hi, I'm Apollos. Good morning, Matt. Welcome back to AI Edge OS.",
+  "While you were away, your AI team continued working on your business.",
+  "Would you like your morning briefing?",
+];
+
+const ACCENT_OPTIONS = [
+  { id: "british",    label: "British Executive",   lang: "en-GB", pitch: 0.95, rate: 0.88 },
+  { id: "american",   label: "American Professional",lang: "en-US", pitch: 1.0,  rate: 0.92 },
+  { id: "australian", label: "Australian Executive", lang: "en-AU", pitch: 0.98, rate: 0.90 },
+];
+
+function ApollosCard() {
+  const [playing, setPlaying]           = useState(false);
+  const [accentId, setAccentId]         = useState("british");
+  const [lineIndex, setLineIndex]       = useState<number | null>(null);
+  const [supported, setSupported]       = useState(true);
+  const [showScript, setShowScript]     = useState(false);
+  const utterQueueRef                   = useRef<SpeechSynthesisUtterance[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setSupported(false);
+    }
+  }, []);
+
+  function stop() {
+    window.speechSynthesis?.cancel();
+    setPlaying(false);
+    setLineIndex(null);
+    utterQueueRef.current = [];
+  }
+
+  function play() {
+    if (!supported) { setShowScript(true); return; }
+    stop();
+    const accent = ACCENT_OPTIONS.find(a => a.id === accentId) ?? ACCENT_OPTIONS[0];
+    const voices = window.speechSynthesis.getVoices();
+    const match  = voices.find(v => v.lang.startsWith(accent.lang)) ?? null;
+
+    utterQueueRef.current = APOLLOS_SCRIPT.map((line, i) => {
+      const u = new SpeechSynthesisUtterance(line);
+      u.lang  = accent.lang;
+      u.pitch = accent.pitch;
+      u.rate  = accent.rate;
+      if (match) u.voice = match;
+      u.onstart = () => { setPlaying(true); setLineIndex(i); };
+      u.onend   = () => { if (i === APOLLOS_SCRIPT.length - 1) { setPlaying(false); setLineIndex(null); } };
+      return u;
+    });
+
+    // Chain utterances sequentially
+    utterQueueRef.current.forEach(u => window.speechSynthesis.speak(u));
+    setPlaying(true);
+    setLineIndex(0);
+  }
+
+  const accent = ACCENT_OPTIONS.find(a => a.id === accentId)!;
+
+  return (
+    <div style={{
+      marginBottom: 24,
+      background: "linear-gradient(135deg, #080E1F 0%, #0A1228 50%, #080E1F 100%)",
+      border: "1px solid rgba(0,174,239,0.25)",
+      borderRadius: 16,
+      padding: "22px 26px",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      {/* Glow */}
+      <div style={{
+        position: "absolute", top: -40, left: -40, width: 200, height: 200,
+        borderRadius: "50%", background: "radial-gradient(circle, rgba(0,174,239,0.08) 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18, position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {/* Avatar */}
+          <div style={{
+            width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(135deg, #00AEEF22 0%, #06B6D408 100%)",
+            border: "2px solid rgba(0,174,239,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 26, position: "relative",
+          }}>
+            🎙️
+            {playing && (
+              <span style={{
+                position: "absolute", bottom: 0, right: 0,
+                width: 14, height: 14, borderRadius: "50%",
+                background: "#22C55E", border: "2px solid #080E1F",
+                animation: "pulse 1.2s infinite",
+              }} />
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: "#E2E8F0", letterSpacing: "-0.3px" }}>Apollos</div>
+            <div style={{ fontSize: 11, color: "#00AEEF", fontWeight: 600, marginTop: 1 }}>AI Voice Executive · {accent.label}</div>
+          </div>
+        </div>
+
+        {/* Coming Soon badges */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {[
+            { label: "ElevenLabs HD", icon: "🔊" },
+            { label: "OpenAI Voice",  icon: "🤖" },
+            { label: "MP3 Export",    icon: "📁" },
+          ].map(b => (
+            <div key={b.label} style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: "0.8px",
+              background: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.18)",
+              color: "#64748B", borderRadius: 10, padding: "3px 9px",
+              display: "flex", alignItems: "center", gap: 4,
+            }}>
+              {b.icon} {b.label} · <span style={{ color: "#FBBF24" }}>COMING SOON</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Script lines */}
+      <div style={{ marginBottom: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+        {APOLLOS_SCRIPT.map((line, i) => (
+          <div key={i} style={{
+            padding: "10px 14px", borderRadius: 10,
+            background: lineIndex === i ? "rgba(0,174,239,0.10)" : "rgba(255,255,255,0.02)",
+            border: `1px solid ${lineIndex === i ? "rgba(0,174,239,0.35)" : "rgba(255,255,255,0.05)"}`,
+            display: "flex", alignItems: "flex-start", gap: 10,
+            transition: "all 0.3s ease",
+          }}>
+            <span style={{
+              fontSize: 10, fontWeight: 800, color: lineIndex === i ? "#00AEEF" : "#334155",
+              background: lineIndex === i ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${lineIndex === i ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.06)"}`,
+              borderRadius: 6, padding: "1px 6px", flexShrink: 0, marginTop: 1,
+              transition: "all 0.3s ease",
+            }}>{i + 1}</span>
+            <span style={{
+              fontSize: 13, color: lineIndex === i ? "#E2E8F0" : "#64748B",
+              fontStyle: "italic", lineHeight: 1.55,
+              transition: "color 0.3s ease",
+            }}>"{line}"</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {/* Play / Stop button */}
+        {!playing ? (
+          <button onClick={play} style={{
+            background: "linear-gradient(135deg, #00AEEF 0%, #06B6D4 100%)",
+            border: "none", borderRadius: 10, padding: "10px 22px",
+            fontSize: 13, fontWeight: 700, color: "#030612", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 7, letterSpacing: "0.2px",
+            boxShadow: "0 4px 14px rgba(0,174,239,0.3)",
+          }}>
+            ▶ {supported ? "Play Apollos Intro" : "Show Script"}
+          </button>
+        ) : (
+          <button onClick={stop} style={{
+            background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.35)",
+            borderRadius: 10, padding: "10px 22px",
+            fontSize: 13, fontWeight: 700, color: "#F87171", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 7,
+          }}>
+            ■ Stop
+          </button>
+        )}
+
+        {/* Accent selector */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>Accent:</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {ACCENT_OPTIONS.map(a => (
+              <button key={a.id} onClick={() => { if (playing) stop(); setAccentId(a.id); }} style={{
+                fontSize: 10, fontWeight: 700, padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+                border: `1px solid ${accentId === a.id ? "rgba(0,174,239,0.55)" : "rgba(255,255,255,0.08)"}`,
+                background: accentId === a.id ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.02)",
+                color: accentId === a.id ? "#00AEEF" : "#475569",
+                transition: "all 0.15s",
+              }}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Script toggle */}
+        <button onClick={() => setShowScript(s => !s)} style={{
+          fontSize: 10, fontWeight: 700, padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)",
+          color: "#475569", marginLeft: "auto",
+        }}>
+          {showScript ? "Hide Script" : "Show Script"} 📄
+        </button>
+      </div>
+
+      {/* Script text fallback */}
+      {(showScript || !supported) && (
+        <div style={{
+          marginTop: 14, padding: "14px 16px", borderRadius: 10,
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          {!supported && (
+            <div style={{ fontSize: 10, color: "#FBBF24", fontWeight: 700, marginBottom: 8 }}>
+              ⚠️ speechSynthesis not available in this browser — showing script only
+            </div>
+          )}
+          {APOLLOS_SCRIPT.map((line, i) => (
+            <div key={i} style={{ fontSize: 13, color: "#94A3B8", fontStyle: "italic", marginBottom: 6, lineHeight: 1.6 }}>
+              <span style={{ color: "#475569" }}>[{i + 1}]</span> "{line}"
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pulse animation */}
+      <style>{`@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }`}</style>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function MorningBriefPage() {
   const apiFetch = useApiFetch();
@@ -286,6 +511,9 @@ export default function MorningBriefPage() {
 
   return (
     <AppShell>
+      {/* ── Apollos Voice Card ────────────────────────────────────────────────── */}
+      <ApollosCard />
+
       {/* ── Header ────────────────────────────────────────────────────────────── */}
       <div style={{ marginBottom: 32 }}>
         {/* Greeting row */}

@@ -46,6 +46,7 @@ function buildHealthScore(deductions: Deduction[]) {
 // ═══════════════════════════════════════════════════════════════════════════════
 type Intent =
   | "auto_brief"
+  | "greeting"
   | "next_action"
   | "publishing_status"
   | "reviews_status"
@@ -75,6 +76,8 @@ function detectIntent(msg: string): Intent {
   if (/how are we doing|why (isn'?t?|aren'?t?) (my |our |the )?score|business health|health score|how (do we|can we) improve|overall (status|performance)|are we on track/.test(m)) return "business_health";
   // end of day
   if (/end.{0,5}of.{0,5}day|end.{0,5}day|eod recap|day recap|today'?s? recap|wrap.{0,5}up|daily summary/.test(m)) return "end_of_day";
+  // greeting — natural hellos, time-of-day greetings, casual openers
+  if (/^(hi|hello|hey)([\s,!.]*apollos)?[\s!.?]*$|^good (morning|afternoon|evening)[\s,!.]*$|^(morning|afternoon|evening)[\s,!.]*$|^what'?s up\??[\s!.]*$|^ready to work\??[\s!.]*$/.test(m.trim())) return "greeting";
   return "general";
 }
 
@@ -105,6 +108,44 @@ function buildIntentDirective(intent: Intent, snap: IntentCtxSnapshot): string {
   };
 
   switch (intent) {
+    case "greeting": {
+      const h = new Date().getHours();
+      // 5am–11:59am → morning brief
+      if (h >= 5 && h < 12) {
+        const topDeductions = snap.deductions.slice(0, 3)
+          .map(d => `  -${d.points}pts ${d.name}: ${d.note}${d.waitingOn ? ` [Waiting: ${d.waitingOn}]` : ""}`)
+          .join("\n") || "  None — all systems optimal.";
+        return `DETECTED INTENT: greeting → morning brief
+FOCUS: Matt said good morning (or a natural hello during morning hours). Respond warmly and naturally — do NOT robotically say "Good morning, Matt." Make it feel like a real COO checking in. Then transition directly into the Morning Brief using ONLY live data below.
+
+Structure:
+1. One natural sentence acknowledging the time / start of day (vary this each time — e.g. "Morning — let's see where things stand." or "Right on time. Here's your day.")
+2. BUSINESS HEALTH: ${snap.healthScore}/100
+${topDeductions}
+3. ✅ Top win or positive data point (from live data — posts, leads, calls)
+4. ⚠️ Single most urgent action today (from health deductions or live data)
+5. One sentence hand-off ("Ask me anything or say 'what should I do first' for your top 3 priorities.")
+
+Keep it under 200 words. Conversational, not corporate. Never say "Certainly!" or "Absolutely!".`;
+      }
+      // 5pm–4:59am → end of day recap
+      if (h >= 17 || h < 5) {
+        return `DETECTED INTENT: greeting → end of day
+FOCUS: Matt said hello during evening hours. Respond naturally and transition into the End-of-Day Recap. One sentence acknowledgement (e.g. "Wrapping up? Here's how today went."), then:
+1. Today's Wins — what published, leads gained, calls handled (live data only)
+2. Missed Opportunities — unaddressed leads, missed calls, failed posts
+3. Tomorrow's #1 Priority — single most impactful action
+If data shows zero activity, state that honestly. Under 200 words.`;
+      }
+      // 12pm–4:59pm → afternoon operational summary
+      return `DETECTED INTENT: greeting → afternoon check-in
+FOCUS: Matt said hello during afternoon hours. Respond naturally (e.g. "Afternoon. Here's where things stand mid-day.") then give a concise operational pulse:
+1. What's active right now (posts published, leads in queue, calls handled)
+2. One thing that needs attention before end of day (from health deductions or live data)
+3. One sentence close ("Say 'what should I do next' for a prioritised list.")
+Under 150 words. Conversational, direct.`;
+    }
+
     case "next_action":
       return `DETECTED INTENT: next_action
 FOCUS: The user wants their top prioritised actions right now. List exactly 3, each with 🎯/✨/🍍, Impact (High/Medium/Low), Est. time, and Status (Ready / Blocked / Waiting on). Derive from the health deductions and live data below. Most urgent first.`;

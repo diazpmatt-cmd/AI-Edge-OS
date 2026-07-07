@@ -17,11 +17,27 @@ const router = Router();
 
 function getAiModel() {
   // Prefer Replit-managed integration (no billing quota); fall back to direct key
-  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
-    ?? process.env.OPENAI_BASE_URL
-    ?? "https://api.openai.com/v1";
-  const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
-    ?? process.env.OPENAI_API_KEY;
+  const replitBase = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const replitKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const directKey  = process.env.OPENAI_API_KEY;
+  const baseURL = replitBase ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const key = replitKey ?? directKey;
+
+  // ── DIAGNOSTIC LOG (temporary) ───────────────────────────────────────────
+  const baseSource = replitBase
+    ? "AI_INTEGRATIONS_OPENAI_BASE_URL"
+    : process.env.OPENAI_BASE_URL
+      ? "OPENAI_BASE_URL"
+      : "hardcoded:api.openai.com/v1";
+  const keySource = replitKey ? "AI_INTEGRATIONS_OPENAI_API_KEY" : directKey ? "OPENAI_API_KEY" : "NONE";
+  console.log(
+    "[APOLLOS-DIAG] getAiModel — baseSource:", baseSource,
+    "| baseURL:", baseURL,
+    "| keySource:", keySource,
+    "| model:", process.env.OPENAI_MODEL ?? "gpt-4o-mini (default)",
+  );
+  // ── END DIAGNOSTIC LOG ───────────────────────────────────────────────────
+
   if (!key) throw new Error("No OpenAI API key configured. Add OPENAI_API_KEY to Secrets.");
   const gw = createOpenAICompatible({
     name: "openai",
@@ -1197,6 +1213,18 @@ ${contextBlock}`;
   } catch (err: any) {
     // Always log the full technical error server-side — never expose it to the client
     console.error("[APOLLOS-CHAT] AI error:", err?.status ?? err?.statusCode, err?.message, err?.error ?? "");
+
+    // ── DIAGNOSTIC LOG (temporary) ─────────────────────────────────────────
+    console.log("[APOLLOS-DIAG] err type:", typeof err, "| constructor:", err?.constructor?.name);
+    console.log("[APOLLOS-DIAG] err.message:", JSON.stringify(err?.message));
+    console.log("[APOLLOS-DIAG] err.lastError?.message:", JSON.stringify(err?.lastError?.message));
+    console.log("[APOLLOS-DIAG] err.cause?.message:", JSON.stringify(err?.cause?.message));
+    console.log("[APOLLOS-DIAG] err.errors (count):", Array.isArray(err?.errors) ? err.errors.length : "none",
+      "| last:", JSON.stringify(err?.errors?.[err.errors?.length - 1]?.message));
+    console.log("[APOLLOS-DIAG] err.status:", err?.status, "| err.statusCode:", err?.statusCode,
+      "| err.error?.code:", err?.error?.code);
+    console.log("[APOLLOS-DIAG] isQuotaError result:", isQuotaError(err));
+    // ── END DIAGNOSTIC LOG ─────────────────────────────────────────────────
 
     if (isQuotaError(err)) {
       // Quota exhausted — return a live-data fallback brief instead of an error

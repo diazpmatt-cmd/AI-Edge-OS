@@ -273,9 +273,10 @@ export default function ApollosPage() {
   // ── Voice INPUT state (SpeechRecognition) ────────────────────────────────
   const [listenEnabled, setListenEnabled] = useState(false);
   const [micStatus, setMicStatus]         = useState<"idle"|"requesting"|"listening"|"heard"|"blocked"|"unsupported">("idle");
-  const recognitionRef   = useRef<any>(null);
-  const silenceTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const listenEnabledRef = useRef(false);
+  const recognitionRef      = useRef<any>(null);
+  const silenceTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenEnabledRef    = useRef(false);
+  const hasAutoStartedMicRef = useRef(false);
   const micSupported     = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();

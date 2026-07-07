@@ -264,6 +264,7 @@ export default function ApollosPage() {
   const [messages, setMessages]     = useState<Message[]>([OPENING_MESSAGE]);
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
+  const briefFiredRef               = useRef(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [recsOpen, setRecsOpen]         = useState(true);
   const [timelineOpen, setTimelineOpen] = useState(true);
@@ -428,6 +429,42 @@ export default function ApollosPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ── Proactive operational brief — fires once on page open ──────────────────
+  useEffect(() => {
+    if (briefFiredRef.current) return;
+    briefFiredRef.current = true;
+
+    const loadingId = uid();
+    setMessages(prev => [...prev, {
+      id: loadingId, role: "apollos",
+      text: "⏳ Loading your operational brief…",
+      time: nowTime(),
+    }]);
+    setResponding(true);
+
+    apiFetch("/api/apollos/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "__auto_brief__", history: [] }),
+    })
+      .then((data: any) => {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, text: data.reply ?? data.error ?? "(no brief)", time: nowTime() }
+            : m,
+        ));
+      })
+      .catch((err: any) => {
+        setMessages(prev => prev.map(m =>
+          m.id === loadingId
+            ? { ...m, text: `Unable to generate brief right now. Ask me anything to get started.\n\n(${err?.message ?? "Network error"})`, time: nowTime() }
+            : m,
+        ));
+      })
+      .finally(() => setResponding(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || responding) return;
@@ -452,11 +489,13 @@ export default function ApollosPage() {
       }, 450);
     } else {
       try {
+        // Pass conversation history for session focus detection
+        const history = messages.map(m => ({ role: m.role, content: m.text }));
         const data = await apiFetch("/api/apollos/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed }),
-        }) as { reply?: string; error?: string };
+          body: JSON.stringify({ message: trimmed, history }),
+        }) as { reply?: string; error?: string; intent?: string };
         setMessages(prev => [...prev, {
           id: uid(), role: "apollos",
           text: data.reply ?? data.error ?? "(no response)",

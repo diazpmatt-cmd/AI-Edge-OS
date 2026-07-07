@@ -45,6 +45,7 @@ function buildHealthScore(deductions: Deduction[]) {
 // Intent router — lightweight keyword detection
 // ═══════════════════════════════════════════════════════════════════════════════
 type Intent =
+  | "auto_brief"
   | "next_action"
   | "publishing_status"
   | "reviews_status"
@@ -56,6 +57,7 @@ type Intent =
   | "general";
 
 function detectIntent(msg: string): Intent {
+  if (msg === "__auto_brief__") return "auto_brief";
   const m = msg.toLowerCase();
   // next_action
   if (/what should i (do|focus|prioriti[sz]e)|only have \d+ min|what('s| is) my priority|what('s| is) (first|next)|where (should i |do i )?start/.test(m)) return "next_action";
@@ -169,10 +171,104 @@ FOCUS: Summarise the day for BB&B using only live data. Cover:
 4. Tomorrow's #1 Priority — single most impactful action
 If data shows zero or "no live data", state that honestly.`;
 
+    case "auto_brief": {
+      const greetHour = new Date().getHours();
+      const greeting = greetHour < 12 ? "Good morning" : greetHour < 17 ? "Good afternoon" : "Good evening";
+      const topDeductions = snap.deductions.slice(0, 3)
+        .map(d => `  -${d.points}pts ${d.name}: ${d.note}${d.waitingOn ? ` [Waiting: ${d.waitingOn}]` : ""}`)
+        .join("\n") || "  None — all systems optimal.";
+      const waitingOn = snap.deductions.filter(d => d.waitingOn)
+        .map(d => `  ⏳ ${d.name} — waiting on ${d.waitingOn}`)
+        .join("\n") || "  None currently.";
+      return `DETECTED INTENT: auto_brief
+FOCUS: Generate the proactive Operational Brief. Use ONLY live data below. Never fabricate.
+Use this EXACT structure (replace bracketed placeholders with real data):
+
+${greeting}, Matt.
+
+BUSINESS HEALTH: ${snap.healthScore}/100
+${topDeductions}
+
+✅ TOP SUCCESS TODAY
+[Identify the single strongest positive data point from live data — e.g. posts published, leads captured, reviews sent. If nothing, say "No activity recorded yet."]
+
+⚠️ TOP CONCERN
+[Identify the single most urgent problem from the health deductions. Be specific — use the actual number or status.]
+
+🎯 TARGET TODAY
+[Highest-impact action Matt can do right now. Include: Impact: High | Est. time | Status: Ready or Blocked]
+→ Open [Exact Page Name]
+
+✨ SPARKLE THIS WEEK
+[Medium-priority improvement. Include: Impact: Medium | Est. time]
+→ Open [Exact Page Name]
+
+🍍 PINEAPPLE
+[Low-urgency or third-party-blocked item.]
+→ [Waiting on: third party name, if applicable]
+
+⏳ WAITING ON THIRD PARTIES
+${waitingOn}
+
+📤 PUBLISHING
+[Summarise: X published, last on [date] via [platforms]. Note any failures or cooldowns.]
+
+🔥 LEADS & CALLS
+[Summarise: X leads (Y unaddressed), X calls (Z missed). Flag urgency if missed calls are high.]
+
+⭐ REVIEWS
+[Summarise: X requests sent, coverage %, Google/Facebook rating if available.]
+
+Keep total response under 320 words. Every section must reference a real number from live data or say "No live data yet."`;
+    }
+
     default:
       return `DETECTED INTENT: general
 FOCUS: Answer naturally using live BB&B data as context. Stay within 220 words.`;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Session focus detection — scans conversation history for stated focus
+// ═══════════════════════════════════════════════════════════════════════════════
+interface HistoryMsg { role: string; content: string }
+
+function detectSessionFocus(history: HistoryMsg[]): string | null {
+  const focusPatterns = [
+    /(?:focusing|focus|let'?s? focus|working|let'?s? work|concentrat\w+) on (.{3,40?}?)(?:\s+tonight|\s+today|\s+now|\.?$)/i,
+    /(?:prioriti[sz]ing|prioriti[sz]e) (.{3,40?}?)(?:\s+tonight|\s+today|\s+now|\.?$)/i,
+    /tonight(?:'?s?)? (?:we'?re? |i'?m? )?(?:focusing|working|doing) on (.{3,40?}?)(?:\.?$)/i,
+    /(?:my |our )?focus (?:is |tonight |today |now )?(?:is |on |=\s*)?(.{3,40?}?)(?:\s+tonight|\s+today|\.?$)/i,
+  ];
+  // Scan last 30 user messages, most recent first
+  const userMsgs = history.filter(m => m.role === "user").slice(-30).reverse();
+  for (const msg of userMsgs) {
+    for (const pattern of focusPatterns) {
+      const match = pattern.exec(msg.content);
+      if (match) {
+        const topic = (match[1] ?? "").trim().replace(/[.!?]+$/, "");
+        if (topic.length >= 3) return topic;
+      }
+    }
+  }
+  return null;
+}
+
+function buildFocusDirective(focus: string): string {
+  // Map common topic words to intent-aware directives
+  const lower = focus.toLowerCase();
+  const domain =
+    /review/.test(lower)     ? "reviews and review requests" :
+    /lead/.test(lower)       ? "leads and lead follow-up" :
+    /call/.test(lower)       ? "calls and missed call recovery" :
+    /publish|post|content/.test(lower) ? "social publishing and content" :
+    /google|gbp/.test(lower) ? "Google Business Profile" :
+    /tiktok/.test(lower)     ? "TikTok connection and content" :
+    /revenue|profit/.test(lower) ? "revenue attribution and profit tracking" :
+    focus;
+  return `SESSION FOCUS: "${focus}"
+Matt has stated he is focusing on ${domain} this session.
+Prioritise ${domain} in every recommendation. Surface ${domain}-related actions first, even if other items have slightly higher general priority. Acknowledge the focus at the start of your response when relevant.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -182,7 +278,7 @@ router.post("/apollos/chat", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const { message } = req.body as { message: string };
+  const { message, history = [] } = req.body as { message: string; history?: HistoryMsg[] };
   if (!message?.trim()) { res.status(400).json({ error: "Message required" }); return; }
 
   // ── Context buckets ─────────────────────────────────────────────────────────
@@ -654,9 +750,11 @@ ${contextBlock}`;
     localPresenceChannels: ctx.localPresenceChannels,
   };
   const intentDirective = buildIntentDirective(intent, snap);
+  const sessionFocus    = detectSessionFocus(history);
+  const focusBlock      = sessionFocus ? `\n${buildFocusDirective(sessionFocus)}\n` : "";
   const finalSystemPrompt = systemPrompt.replace(
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA",
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intentDirective}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intentDirective}${focusBlock}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA`,
   );
 
   try {

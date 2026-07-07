@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useTheme } from "@/contexts/theme-context";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
@@ -103,6 +103,128 @@ function NavGrid({ items, location }: { items: typeof PRIMARY_NAV; location: str
           </Link>
         );
       })}
+    </div>
+  );
+}
+
+// ── Floating Command Center — quick-access FAB ────────────────────────────────
+const FAB_ACTIONS = [
+  { to: "/admin/dashboard",        icon: "🏠", label: "Command Center"  },
+  { to: "/admin/morning-brief",    icon: "🎯", label: "Morning Brief"   },
+  { to: "/admin/mission-control",  icon: "⚡", label: "Mission Control" },
+  { to: "/admin/social-publishing",icon: "📣", label: "Publishing"      },
+  { to: "/admin/reviews",          icon: "⭐", label: "Reviews"         },
+  { to: "/admin/lead-recovery",    icon: "☎",  label: "Leads"           },
+  { to: "/admin/apollos",          icon: "🤖", label: "Apollos"         },
+  { to: "/admin/diagnostics",      icon: "🛠", label: "Diagnostics"     },
+];
+
+function FloatingCommandCenter({ location }: { location: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Close on navigation
+  useEffect(() => { setOpen(false); }, [location]);
+
+  return (
+    <div ref={ref} style={{ position: "fixed", bottom: 24, right: 24, zIndex: 100 }}>
+
+      {/* Quick Actions menu — expands upward */}
+      {open && (
+        <div style={{
+          position: "absolute", bottom: 64, right: 0,
+          background: "linear-gradient(180deg, #0B1629 0%, #060E1E 100%)",
+          border: "1px solid rgba(0,174,239,0.25)",
+          borderRadius: 14, padding: "8px 6px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,174,239,0.08)",
+          display: "flex", flexDirection: "column", gap: 3,
+          minWidth: 190,
+          animation: "fabMenuIn 0.15s ease-out",
+        }}>
+          <div style={{
+            fontSize: 9, fontWeight: 700, color: "#00AEEF",
+            letterSpacing: "1px", textTransform: "uppercase",
+            padding: "2px 10px 6px", opacity: 0.7,
+          }}>
+            Quick Access
+          </div>
+          {FAB_ACTIONS.map(({ to, icon, label }) => {
+            const active = location.startsWith(to);
+            return (
+              <Link key={to} to={to} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 12px", borderRadius: 9, textDecoration: "none",
+                background: active ? "rgba(0,174,239,0.12)" : "transparent",
+                border: active ? "1px solid rgba(0,174,239,0.25)" : "1px solid transparent",
+                color: active ? "#00AEEF" : "rgba(200,215,235,0.85)",
+                fontSize: 13, fontWeight: active ? 700 : 500,
+                transition: "all 0.12s",
+              }}
+                onMouseEnter={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(0,174,239,0.07)";
+                    (e.currentTarget as HTMLElement).style.color = "#fff";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!active) {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.color = "rgba(200,215,235,0.85)";
+                  }
+                }}
+              >
+                <span style={{ fontSize: 16, minWidth: 22, textAlign: "center" }}>{icon}</span>
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* FAB trigger button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Command Center"
+        style={{
+          width: 52, height: 52, borderRadius: "50%",
+          background: open
+            ? "linear-gradient(135deg, #0077B6 0%, #00AEEF 100%)"
+            : "linear-gradient(135deg, #030612 0%, #0B1629 100%)",
+          border: `2px solid ${open ? "#00AEEF" : "rgba(0,174,239,0.4)"}`,
+          boxShadow: open
+            ? "0 0 0 4px rgba(0,174,239,0.18), 0 4px 20px rgba(0,174,239,0.4)"
+            : "0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,174,239,0.12)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 0.2s",
+          transform: open ? "scale(1.05)" : "scale(1)",
+        }}
+        onMouseEnter={e => {
+          if (!open) {
+            (e.currentTarget as HTMLElement).style.border = "2px solid rgba(0,174,239,0.75)";
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 24px rgba(0,174,239,0.25), 0 0 0 1px rgba(0,174,239,0.2)";
+          }
+        }}
+        onMouseLeave={e => {
+          if (!open) {
+            (e.currentTarget as HTMLElement).style.border = "2px solid rgba(0,174,239,0.4)";
+            (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,174,239,0.12)";
+          }
+        }}
+      >
+        <span style={{ fontSize: 22, lineHeight: 1, transition: "transform 0.2s", transform: open ? "rotate(45deg)" : "none" }}>
+          {open ? "✕" : "⚡"}
+        </span>
+      </button>
     </div>
   );
 }
@@ -329,6 +451,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </main>
 
+      {/* Floating Command Center — visible on all admin pages */}
+      <FloatingCommandCenter location={location} />
+
       <style>{`
         .app-sidebar nav::-webkit-scrollbar { display: none; }
         @media (max-width: 900px) {
@@ -340,6 +465,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           .app-mobile-header { display: none !important; }
         }
         * { transition: background-color 0.2s, border-color 0.2s, color 0.2s; }
+        @keyframes fabMenuIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0)   scale(1);    }
+        }
       `}</style>
     </div>
   );

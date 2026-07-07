@@ -270,6 +270,14 @@ export default function ApollosPage() {
   const [timelineOpen, setTimelineOpen] = useState(true);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
+  // ── Voice INPUT state (SpeechRecognition) ────────────────────────────────
+  const [listenEnabled, setListenEnabled] = useState(false);
+  const [micStatus, setMicStatus]         = useState<"idle"|"requesting"|"listening"|"heard"|"blocked"|"unsupported">("idle");
+  const recognitionRef   = useRef<any>(null);
+  const silenceTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listenEnabledRef = useRef(false);
+  const micSupported     = typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();
 
   // ── Live data queries ────────────────────────────────────────────────────────
@@ -425,9 +433,127 @@ export default function ApollosPage() {
     setVoicePlaying(true);
   }
 
+  // ── Voice INPUT functions (SpeechRecognition) ────────────────────────────
+
+  function stopListening() {
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    if (recognitionRef.current) {
+      recognitionRef.current._intentionalStop = true;
+      recognitionRef.current.abort();
+      recognitionRef.current = null;
+    }
+    setMicStatus("idle");
+  }
+
+  function startListening() {
+    if (!micSupported) { setMicStatus("unsupported"); return; }
+    if (recognitionRef.current) return;
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    const rec: any = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.maxAlternatives = 1;
+    rec._intentionalStop = false;
+
+    rec.onstart = () => setMicStatus("listening");
+
+    rec.onresult = (e: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      const txt = (final || interim).trim();
+      if (txt) { setInput(txt); setMicStatus("heard"); }
+      if (final.trim()) {
+        const snapshot = final.trim();
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          silenceTimerRef.current = null;
+          send(snapshot);
+          setInput("");
+          setMicStatus("listening");
+        }, 1500);
+      }
+    };
+
+    rec.onerror = (e: any) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setMicStatus("blocked");
+        listenEnabledRef.current = false;
+        setListenEnabled(false);
+        recognitionRef.current = null;
+      }
+      // "no-speech" and other transient errors: recognition restarts via onend
+    };
+
+    rec.onend = () => {
+      recognitionRef.current = null;
+      if (rec._intentionalStop) return;
+      // Auto-restart if still enabled (handles browser timeout / no-speech)
+      if (listenEnabledRef.current) {
+        setTimeout(() => { if (listenEnabledRef.current) startListening(); }, 400);
+      } else {
+        setMicStatus("idle");
+      }
+    };
+
+    setMicStatus("requesting");
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+    } catch {
+      recognitionRef.current = null;
+      setMicStatus("idle");
+    }
+  }
+
+  function toggleListen() {
+    if (!micSupported) { setMicStatus("unsupported"); return; }
+    const next = !listenEnabled;
+    listenEnabledRef.current = next;
+    setListenEnabled(next);
+    if (next) startListening();
+    else stopListening();
+  }
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Pause mic while Apollos speaks or awaits response; resume after
+  useEffect(() => {
+    if (!listenEnabled) return;
+    if (voicePlaying || responding) {
+      if (recognitionRef.current) {
+        recognitionRef.current._intentionalStop = true;
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
+        setMicStatus("idle");
+      }
+    } else {
+      if (!recognitionRef.current) startListening();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voicePlaying, responding, listenEnabled]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      listenEnabledRef.current = false;
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (recognitionRef.current) {
+        recognitionRef.current._intentionalStop = true;
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
+      }
+      window.speechSynthesis?.cancel();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Proactive operational brief — fires once on page open ──────────────────
   useEffect(() => {
@@ -614,6 +740,35 @@ export default function ApollosPage() {
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: B.green, display: "inline-block" }} />
               <span style={{ fontSize: 11, color: B.green, fontWeight: 600 }}>Ready</span>
             </div>
+            {/* Mic listening status pill */}
+            {listenEnabled && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: micStatus === "blocked" ? "rgba(248,113,113,0.08)" : "rgba(0,174,239,0.08)",
+                border: `1px solid ${micStatus === "blocked" ? "rgba(248,113,113,0.25)" : "rgba(0,174,239,0.22)"}`,
+                borderRadius: 8, padding: "4px 10px",
+              }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%", display: "inline-block", flexShrink: 0,
+                  background:
+                    micStatus === "listening"  ? B.blue :
+                    micStatus === "heard"      ? B.cyan :
+                    micStatus === "requesting" ? B.gold :
+                    micStatus === "blocked"    ? "#F87171" : B.dim,
+                }} />
+                <span style={{
+                  fontSize: 10, fontWeight: 700,
+                  color: micStatus === "blocked" ? "#F87171" : micStatus === "heard" ? B.cyan : B.blue,
+                }}>
+                  {micStatus === "requesting" ? "Requesting mic…" :
+                   micStatus === "listening"  ? "Listening" :
+                   micStatus === "heard"      ? "Heard speech" :
+                   micStatus === "blocked"    ? "Mic blocked" :
+                   responding                 ? "Thinking…" :
+                   voicePlaying               ? "Speaking" : "Mic on"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -880,15 +1035,47 @@ export default function ApollosPage() {
               }}
             />
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, paddingBottom: 2 }}>
-              {/* Voice */}
+              {/* Voice input toggle */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                <button disabled style={{
-                  width: 34, height: 34, borderRadius: "50%",
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-                  color: B.dim, cursor: "not-allowed", fontSize: 15,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>🎤</button>
-                <ComingSoon />
+                {micSupported ? (
+                  <button
+                    onClick={toggleListen}
+                    title={listenEnabled ? "Turn off microphone (Auto Listen ON)" : "Turn on microphone (Auto Listen OFF)"}
+                    style={{
+                      width: 34, height: 34, borderRadius: "50%",
+                      background: listenEnabled
+                        ? (micStatus === "heard" ? "rgba(6,182,212,0.22)" : "rgba(0,174,239,0.16)")
+                        : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${
+                        listenEnabled
+                          ? (micStatus === "blocked" ? "rgba(248,113,113,0.55)" : "rgba(0,174,239,0.55)")
+                          : "rgba(255,255,255,0.10)"
+                      }`,
+                      color: listenEnabled
+                        ? (micStatus === "blocked" ? "#F87171" : B.blue)
+                        : B.dim,
+                      cursor: "pointer", fontSize: 15,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "all 0.2s",
+                      boxShadow: listenEnabled && micStatus === "listening"
+                        ? "0 0 10px rgba(0,174,239,0.35)"
+                        : "none",
+                    }}
+                  >🎤</button>
+                ) : (
+                  <button disabled style={{
+                    width: 34, height: 34, borderRadius: "50%",
+                    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                    color: B.dim, cursor: "not-allowed", fontSize: 15,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>🎤</button>
+                )}
+                <span style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: "0.5px",
+                  color: !micSupported ? B.dim : listenEnabled ? (micStatus === "blocked" ? "#F87171" : B.blue) : B.dim,
+                }}>
+                  {!micSupported ? "N/A" : listenEnabled ? (micStatus === "blocked" ? "BLOCKED" : "ON") : "OFF"}
+                </span>
               </div>
               {/* Attach */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
@@ -918,8 +1105,14 @@ export default function ApollosPage() {
                 }}>➤</button>
             </div>
           </div>
-          <div style={{ fontSize: 10, color: B.dim, marginTop: 7, textAlign: "center" }}>
-            Enter to send · Shift+Enter for new line · Apollos reads your live BB&amp;B data before every reply
+          <div style={{ fontSize: 10, color: micStatus === "blocked" ? "#F87171" : B.dim, marginTop: 7, textAlign: "center" }}>
+            {micStatus === "blocked"
+              ? "⚠ Microphone blocked — allow access in browser settings, then click 🎤 again."
+              : micStatus === "requesting"
+              ? "💬 Allow microphone access when prompted to enable Apollos listening."
+              : listenEnabled
+              ? "🎤 Auto Listen ON — speak naturally, Apollos will transcribe and send after a pause."
+              : "Enter to send · Shift+Enter for new line · click 🎤 to enable voice input"}
           </div>
         </div>
       </div>

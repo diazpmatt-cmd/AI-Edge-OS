@@ -17,26 +17,11 @@ const router = Router();
 
 function getAiModel() {
   // Prefer Replit-managed integration (no billing quota); fall back to direct key
-  const replitBase = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const replitKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  const directKey  = process.env.OPENAI_API_KEY;
-  const baseURL = replitBase ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-  const key = replitKey ?? directKey;
-
-  // ── DIAGNOSTIC LOG (temporary) ───────────────────────────────────────────
-  const baseSource = replitBase
-    ? "AI_INTEGRATIONS_OPENAI_BASE_URL"
-    : process.env.OPENAI_BASE_URL
-      ? "OPENAI_BASE_URL"
-      : "hardcoded:api.openai.com/v1";
-  const keySource = replitKey ? "AI_INTEGRATIONS_OPENAI_API_KEY" : directKey ? "OPENAI_API_KEY" : "NONE";
-  console.log(
-    "[APOLLOS-DIAG] getAiModel — baseSource:", baseSource,
-    "| baseURL:", baseURL,
-    "| keySource:", keySource,
-    "| model:", process.env.OPENAI_MODEL ?? "gpt-4o-mini (default)",
-  );
-  // ── END DIAGNOSTIC LOG ───────────────────────────────────────────────────
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
+    ?? process.env.OPENAI_BASE_URL
+    ?? "https://api.openai.com/v1";
+  const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+    ?? process.env.OPENAI_API_KEY;
 
   if (!key) throw new Error("No OpenAI API key configured. Add OPENAI_API_KEY to Secrets.");
   const gw = createOpenAICompatible({
@@ -48,18 +33,29 @@ function getAiModel() {
 }
 
 // ── Quota / billing error detection ─────────────────────────────────────────
+// The AI SDK's RetryError wraps the real error in err.lastError / err.errors[].
+// We must walk the full nested chain — err.message alone is only "Failed after N attempts."
 function isQuotaError(err: any): boolean {
-  const msg  = (err?.message ?? "").toLowerCase();
-  const code = err?.error?.code ?? err?.code ?? "";
-  const status = err?.status ?? err?.statusCode ?? 0;
+  function checkOne(e: any): boolean {
+    if (!e) return false;
+    const msg    = (e?.message ?? "").toLowerCase();
+    const code   = e?.error?.code ?? e?.code ?? "";
+    const status = e?.status ?? e?.statusCode ?? 0;
+    return (
+      code === "insufficient_quota" ||
+      msg.includes("insufficient_quota") ||
+      msg.includes("exceeded your current quota") ||
+      msg.includes("quota exceeded") ||
+      msg.includes("you exceeded") ||
+      msg.includes("billing") ||
+      (status === 429 && (msg.includes("quota") || msg.includes("exceeded")))
+    );
+  }
   return (
-    code === "insufficient_quota" ||
-    msg.includes("insufficient_quota") ||
-    msg.includes("exceeded your current quota") ||
-    msg.includes("quota exceeded") ||
-    msg.includes("you exceeded") ||
-    msg.includes("billing") ||
-    (status === 429 && (msg.includes("quota") || msg.includes("exceeded")))
+    checkOne(err) ||
+    checkOne(err?.lastError) ||
+    checkOne(err?.cause) ||
+    (Array.isArray(err?.errors) && err.errors.some((e: any) => checkOne(e)))
   );
 }
 
@@ -1214,39 +1210,31 @@ ${contextBlock}`;
     // Always log the full technical error server-side — never expose it to the client
     console.error("[APOLLOS-CHAT] AI error:", err?.status ?? err?.statusCode, err?.message, err?.error ?? "");
 
-    // ── DIAGNOSTIC LOG (temporary) ─────────────────────────────────────────
-    console.log("[APOLLOS-DIAG] err type:", typeof err, "| constructor:", err?.constructor?.name);
-    console.log("[APOLLOS-DIAG] err.message:", JSON.stringify(err?.message));
-    console.log("[APOLLOS-DIAG] err.lastError?.message:", JSON.stringify(err?.lastError?.message));
-    console.log("[APOLLOS-DIAG] err.cause?.message:", JSON.stringify(err?.cause?.message));
-    console.log("[APOLLOS-DIAG] err.errors (count):", Array.isArray(err?.errors) ? err.errors.length : "none",
-      "| last:", JSON.stringify(err?.errors?.[err.errors?.length - 1]?.message));
-    console.log("[APOLLOS-DIAG] err.status:", err?.status, "| err.statusCode:", err?.statusCode,
-      "| err.error?.code:", err?.error?.code);
-    console.log("[APOLLOS-DIAG] isQuotaError result:", isQuotaError(err));
-    // ── END DIAGNOSTIC LOG ─────────────────────────────────────────────────
-
     if (isQuotaError(err)) {
-      // Quota exhausted — return a live-data fallback brief instead of an error
       console.warn("[APOLLOS-CHAT] Quota exceeded — serving data-only fallback brief");
-      const fallback = buildFallbackBrief({
-        callsTotal:              ctx.callsTotal,
-        callsMissed:             ctx.callsMissed,
-        leadsTotal:              ctx.leadsTotal,
-        leadsNew:                ctx.leadsNew,
-        postsPublished:          ctx.postsPublished,
-        postsDraft:              ctx.postsDraft,
-        postsFailed:             ctx.postsFailed,
-        reviewsThisWeek:         ctx.reviewsThisWeek,
-        reviewsSent:             ctx.reviewsSent,
-        fbConnected:             ctx.fbConnected,
-        igConnected:             ctx.igConnected,
-        gbpConnected:            ctx.gbpConnected,
-        autopilotEnabled:        ctx.autopilotEnabled,
-        autopilotPaused:         ctx.autopilotPaused,
-        gorilladeskCustomerCount: ctx.gorilladeskCustomerCount,
-      });
-      res.json({ reply: fallback, intent });
+      try {
+        const fallback = buildFallbackBrief({
+          callsTotal:               ctx.callsTotal,
+          callsMissed:              ctx.callsMissed,
+          leadsTotal:               ctx.leadsTotal,
+          leadsNew:                 ctx.leadsNew,
+          postsPublished:           ctx.postsPublished,
+          postsDraft:               ctx.postsDraft,
+          postsFailed:              ctx.postsFailed,
+          reviewsThisWeek:          ctx.reviewsThisWeek,
+          reviewsSent:              ctx.reviewsSent,
+          fbConnected:              ctx.fbConnected,
+          igConnected:              ctx.igConnected,
+          gbpConnected:             ctx.gbpConnected,
+          autopilotEnabled:         ctx.autopilotEnabled,
+          autopilotPaused:          ctx.autopilotPaused,
+          gorilladeskCustomerCount: ctx.gorilladeskCustomerCount,
+        });
+        res.json({ reply: fallback, intent });
+      } catch (fallbackErr) {
+        console.error("[APOLLOS-CHAT] Fallback brief failed:", fallbackErr);
+        res.json({ reply: "Apollos is temporarily unavailable — the AI API quota is exhausted. Please contact your administrator to restore service.", intent });
+      }
     } else if (isMissingKeyError(err)) {
       res.status(500).json({ error: "Apollos AI is not configured. The OpenAI API key is missing — contact your administrator." });
     } else {

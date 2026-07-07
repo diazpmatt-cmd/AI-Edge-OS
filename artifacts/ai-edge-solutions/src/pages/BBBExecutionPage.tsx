@@ -5,6 +5,8 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { WorkflowNav } from "@/components/WorkflowNav";
+import { useQuery }    from "@tanstack/react-query";
+import { useApiFetch } from "@/lib/api";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -81,21 +83,6 @@ const SEO_STATUS_STYLE: Record<SeoStatus, { color: string; bg: string; border: s
   "Needs Content": { color: B.gold,    bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.25)"  },
 };
 
-// ── Weekly content ────────────────────────────────────────────────────────────
-const WEEK_DAYS = [
-  { day: "Monday",    icon: "📘", theme: "Facebook post — Bed Bug ID tips",           status: "scheduled" },
-  { day: "Tuesday",   icon: "📍", theme: "Google Business post — after-job photo",    status: "draft"     },
-  { day: "Wednesday", icon: "🎬", theme: "30-sec video — before/after treatment",     status: "pending"   },
-  { day: "Thursday",  icon: "⭐", theme: "Review request follow-up email",            status: "pending"   },
-  { day: "Friday",    icon: "📊", theme: "Weekly recap + weekend promo offer",        status: "pending"   },
-] as const;
-
-type DayStatus = "scheduled" | "draft" | "pending";
-const DAY_STATUS_STYLE: Record<DayStatus, { label: string; color: string; bg: string; border: string }> = {
-  scheduled: { label: "Scheduled", color: B.green,  bg: "rgba(34,197,94,0.1)",  border: "rgba(34,197,94,0.25)"  },
-  draft:     { label: "Draft",     color: B.gold,   bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.25)" },
-  pending:   { label: "Pending",   color: B.dim,    bg: "rgba(100,116,139,0.1)",border: "rgba(100,116,139,0.2)" },
-};
 
 // ── Success wall ──────────────────────────────────────────────────────────────
 const WINS: { icon: string; label: string; color: string; sub: string }[] = [];
@@ -122,9 +109,72 @@ function Section({ title, children, accent = B.blue, noPrint }: { title: string;
   );
 }
 
+// ── API types ─────────────────────────────────────────────────────────────────
+interface TodayCalls {
+  metrics: { total_calls: number; missed_calls: number; recovery_rate: number | null };
+}
+interface LeadsResp   { stats: { total: number; active: number; thisMonth: number } }
+interface SocialPost  { id: string; platform: string; status: string; content: string; publishedAt: string | null; createdAt: string }
+interface ReviewsResp { requests: Array<{ id: string; status: string | null; sentAt: string | null }> }
+interface SyncResp    { realtimeStats: { revenueMatched: number; totalLeads: number; wonLeads: number } }
+
+function platformIcon(p: string) {
+  if (p === "facebook")        return "📘";
+  if (p === "instagram")       return "📷";
+  if (p === "google_business") return "📍";
+  if (p === "tiktok")          return "🎵";
+  return "📱";
+}
+function postStatusStyle(s: string): { label: string; color: string; bg: string } {
+  if (s === "published") return { label: "Published", color: "#22C55E", bg: "rgba(34,197,94,0.12)"   };
+  if (s === "scheduled") return { label: "Scheduled", color: "#38BDF8", bg: "rgba(56,189,248,0.12)"  };
+  return                        { label: "Draft",     color: "#FBBf24", bg: "rgba(251,191,36,0.12)"  };
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function BBBExecutionPage() {
   const [, navigate] = useLocation();
+  const apiFetch = useApiFetch();
+
+  const callsQ   = useQuery<TodayCalls>({
+    queryKey: ["exec-calls-today"],
+    queryFn:  () => apiFetch("/call-intelligence?period=today"),
+    staleTime: 60_000,
+  });
+  const leadsQ   = useQuery<LeadsResp>({
+    queryKey: ["exec-leads"],
+    queryFn:  () => apiFetch("/leads"),
+    staleTime: 2 * 60_000,
+  });
+  const postsQ   = useQuery<SocialPost[]>({
+    queryKey: ["exec-posts"],
+    queryFn:  () => apiFetch("/social-posts"),
+    staleTime: 2 * 60_000,
+  });
+  const reviewsQ = useQuery<ReviewsResp>({
+    queryKey: ["exec-reviews"],
+    queryFn:  () => apiFetch("/reviews/requests"),
+    staleTime: 2 * 60_000,
+  });
+  const syncQ    = useQuery<SyncResp>({
+    queryKey: ["exec-sync-status"],
+    queryFn:  () => apiFetch("/revenue-attribution/sync-status?clientId=default"),
+    staleTime: 5 * 60_000,
+  });
+
+  const todayMetrics   = callsQ.data?.metrics;
+  const leadsStats     = leadsQ.data?.stats;
+  const revenueMatched = syncQ.data?.realtimeStats?.revenueMatched ?? 0;
+
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weekPosts    = (postsQ.data ?? [])
+    .filter(p => new Date(p.createdAt).getTime() > sevenDaysAgo)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  const monthStart   = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const reviewsSent  = (reviewsQ.data?.requests ?? [])
+    .filter(r => r.sentAt && new Date(r.sentAt).getTime() > monthStart).length;
 
   const [checked, setChecked] = useState<Record<ActionId, boolean>>({
     fb: false, gbp: false, photo: false, review: false,
@@ -591,22 +641,25 @@ export default function BBBExecutionPage() {
           {/* ── LEAD GOALS + APOLLOS + SUCCESS WALL ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-            {/* ── LEAD GOALS ── */}
-            <Section title="📊 Lead Goals" accent={B.cyan}>
+            {/* ── TODAY'S SIGNALS ── */}
+            <Section title="📊 Today's Signals" accent={B.cyan}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {[
-                  { label: "Today's Calls",    value: "3",      icon: "📞", color: B.blue    },
-                  { label: "Today's Leads",    value: "1",      icon: "🔥", color: B.orange  },
-                  { label: "Quotes Sent",      value: "0",      icon: "📋", color: B.cyan    },
-                  { label: "Jobs Booked",      value: "0",      icon: "✅", color: B.green   },
-                  { label: "Revenue Estimate", value: "$0",     icon: "💰", color: B.gold    },
-                ].map(m => (
+                {([
+                  { label: "Calls Today",       value: todayMetrics ? String(todayMetrics.total_calls)  : "—", icon: "📞", color: B.blue,    loading: callsQ.isLoading   },
+                  { label: "Missed Calls",       value: todayMetrics ? String(todayMetrics.missed_calls) : "—", icon: "📵", color: B.red,     loading: callsQ.isLoading   },
+                  { label: "Active Leads",       value: leadsStats   ? String(leadsStats.active)         : "—", icon: "🔥", color: B.orange,  loading: leadsQ.isLoading   },
+                  { label: "Leads This Month",   value: leadsStats   ? String(leadsStats.thisMonth)      : "—", icon: "📋", color: B.cyan,    loading: leadsQ.isLoading   },
+                  { label: "Revenue Matched",    value: !syncQ.isLoading && revenueMatched > 0 ? `$${revenueMatched.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : !syncQ.isLoading ? "$0" : "—", icon: "💰", color: B.gold,    loading: syncQ.isLoading    },
+                  { label: "Reviews Sent (Mo)",  value: reviewsQ.isLoading ? "—" : String(reviewsSent),  icon: "⭐", color: B.purple, loading: reviewsQ.isLoading },
+                ] as Array<{ label: string; value: string; icon: string; color: string; loading: boolean }>).map(m => (
                   <div key={m.label} style={{
                     background: `${m.color}0D`, border: `1px solid ${m.color}25`,
                     borderRadius: 10, padding: "12px 14px",
                   }}>
                     <div style={{ fontSize: 11, color: B.dim, marginBottom: 4 }}>{m.icon} {m.label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: m.color }}>{m.value}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: m.loading ? B.dim : m.color }}>
+                      {m.loading ? "…" : m.value}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -723,26 +776,58 @@ export default function BBBExecutionPage() {
           </div>
         </div>
 
-        {/* ── THIS WEEK'S CONTENT ── */}
-        <Section title="📅 This Week's Content" accent={B.sky} noPrint>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
-            {WEEK_DAYS.map(d => {
-              const s = DAY_STATUS_STYLE[d.status];
-              return (
-                <div key={d.day} style={{
-                  background: B.panel2, border: `1px solid ${B.border}`,
-                  borderRadius: 12, padding: "14px 14px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: B.silver }}>{d.day}</span>
-                    <span style={{ fontSize: 7.5, fontWeight: 800, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 5, padding: "2px 6px" }}>{s.label}</span>
+        {/* ── RECENT CONTENT ── */}
+        <Section title="📅 Recent Content (Last 7 Days)" accent={B.sky} noPrint>
+          {postsQ.isLoading ? (
+            <div style={{ padding: "20px 0", textAlign: "center" as const, color: B.dim, fontSize: 12 }}>
+              Loading posts…
+            </div>
+          ) : weekPosts.length === 0 ? (
+            <div style={{ padding: "24px 0", textAlign: "center" as const }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>📭</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: B.silver, marginBottom: 4 }}>No posts in the last 7 days</div>
+              <div style={{ fontSize: 11, color: B.dim, marginBottom: 12 }}>
+                Publish a Facebook, Google Business, or Instagram post to see it here.
+              </div>
+              <button
+                onClick={() => navigate("/admin/social-publishing")}
+                style={{
+                  background: `${B.sky}12`, border: `1px solid ${B.sky}35`,
+                  borderRadius: 8, padding: "6px 16px",
+                  fontSize: 11, fontWeight: 700, color: B.sky, cursor: "pointer",
+                }}
+              >
+                Open Publishing Center →
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${weekPosts.length}, 1fr)`, gap: 10 }}>
+              {weekPosts.map(p => {
+                const ss   = postStatusStyle(p.status);
+                const icon = platformIcon(p.platform);
+                const date = new Date(p.publishedAt ?? p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                const preview = (p.content ?? "").slice(0, 80) + ((p.content?.length ?? 0) > 80 ? "…" : "");
+                return (
+                  <div key={p.id} style={{
+                    background: B.panel2, border: `1px solid ${B.border}`,
+                    borderRadius: 12, padding: "14px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: B.silver, textTransform: "capitalize" as const, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                        {p.platform.replace(/_/g, " ")}
+                      </span>
+                      <span style={{ fontSize: 7.5, fontWeight: 800, color: ss.color, background: ss.bg, border: `1px solid ${ss.color}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>
+                        {ss.label}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 18, marginBottom: 6 }}>{icon}</div>
+                    <div style={{ fontSize: 10, color: B.dim, lineHeight: 1.5, marginBottom: 4 }}>{preview || "No content"}</div>
+                    <div style={{ fontSize: 9, color: B.dim }}>{date}</div>
                   </div>
-                  <div style={{ fontSize: 18, marginBottom: 6 }}>{d.icon}</div>
-                  <div style={{ fontSize: 11, color: B.dim, lineHeight: 1.5 }}>{d.theme}</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </Section>
 
         {/* ── TWO-COLUMN: OUTREACH SCRIPTS + SHOT LIST ── */}

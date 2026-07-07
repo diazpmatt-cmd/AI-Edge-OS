@@ -86,7 +86,7 @@ router.get("/diagnostics/health", async (req, res) => {
 
   // Meta OAuth: does NOT use refresh tokens. Facebook issues long-lived user tokens
   // (~60 days) and permanent page access tokens. Health is based on:
-  // access token present + not expired + page access token stored + no recent failures.
+  // access token present + not expired + page access token stored + no recent FB-specific failures.
   function metaHealth(meta: Record<string, any>): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
     const c = connections.find(r => r.provider === "facebook");
     if (!c?.accessToken) return { status: "failed", detail: "Not connected", connectedAt: null };
@@ -100,20 +100,29 @@ router.get("/diagnostics/health", async (req, res) => {
       return { status: "warning", detail: "No page access token — complete Facebook Page setup in Connected Accounts", connectedAt: c.createdAt?.toISOString() ?? null };
     }
 
-    // Check recent publish failures on Facebook/Instagram platforms (last 24h)
+    // Check recent publish failures on Facebook/Instagram platforms (last 24h).
+    // For "partial" posts (one platform succeeded, one failed), only flag as a Facebook
+    // failure if the error message clearly indicates a Facebook/Instagram error.
+    // Google quota failures on a multi-platform post must NOT count as a Facebook failure.
     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const recentFailed = posts.filter(p => {
+    const recentFbFailed = posts.filter(p => {
       if (p.status !== "failed" && p.status !== "partial") return false;
       const ts = p.updatedAt ?? p.createdAt;
       if (new Date(ts) < cutoff) return false;
       try {
         const pl: string[] = JSON.parse(p.platforms ?? "[]");
-        return pl.some(x => x === "facebook" || x === "instagram");
+        if (!pl.some(x => x === "facebook" || x === "instagram")) return false;
+        // For partial posts: only count as FB failure if error is not Google/quota-related
+        if (p.status === "partial" && p.errorMessage) {
+          const errUp = p.errorMessage.toUpperCase();
+          if (/GOOGLE|GBP|QUOTA|MYBUSINESS|LOCATIONS|429|COOLDOWN/.test(errUp)) return false;
+        }
+        return true;
       } catch { return false; }
     });
 
-    if (recentFailed.length > 0) {
-      return { status: "warning", detail: `Page connected — ${recentFailed.length} failed post(s) in last 24h`, connectedAt: c.createdAt?.toISOString() ?? null };
+    if (recentFbFailed.length > 0) {
+      return { status: "warning", detail: `Page connected — ${recentFbFailed.length} Facebook/Instagram failure(s) in last 24h (see Error Center)`, connectedAt: c.createdAt?.toISOString() ?? null };
     }
 
     const pageName = meta.pageName ?? c.accountName ?? null;
@@ -123,11 +132,33 @@ router.get("/diagnostics/health", async (req, res) => {
   // Generic OAuth health (for providers like TikTok, YouTube where we store refresh tokens)
   function connHealth(provider: string): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
     const c = connections.find(r => r.provider === provider);
-    if (!c?.accessToken) return { status: "failed", detail: "Not connected", connectedAt: null };
+    if (!c?.accessToken) return { status: "warning", detail: "Not connected", connectedAt: null };
     const exp = c.expiresAt ? new Date(c.expiresAt) : null;
     const expired = exp ? exp < now : false;
     if (expired) return { status: "warning", detail: "Token expired — reconnect to restore access", connectedAt: c.createdAt?.toISOString() ?? null };
     return { status: "healthy", detail: c.accountName ? `Connected — ${c.accountName}` : "Connected", connectedAt: c.createdAt?.toISOString() ?? null };
+  }
+
+  // YouTube-specific health with clearer messaging
+  function youtubeHealth(): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+    const c = connections.find(r => r.provider === "youtube");
+    if (!c?.accessToken) return { status: "warning", detail: "Not connected — reconnect YouTube in Connected Accounts to restore access", connectedAt: null };
+    const exp = c.expiresAt ? new Date(c.expiresAt) : null;
+    const expired = exp ? exp < now : false;
+    if (expired) return { status: "warning", detail: "Token expired — reconnect YouTube to restore access", connectedAt: c.createdAt?.toISOString() ?? null };
+    return { status: "healthy", detail: c.accountName ? `Connected — ${c.accountName}` : "Connected", connectedAt: c.createdAt?.toISOString() ?? null };
+  }
+
+  // OpenAI health — checks key presence and recent quota errors in the log buffer
+  function openaiHealth(): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+    const hasKey = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY);
+    if (!hasKey) return { status: "failed", detail: "No API key configured — AI content generation unavailable", connectedAt: null };
+    const recentQuota = LOG_BUFFER.slice(0, 100).some(e => {
+      const u = e.message.toUpperCase();
+      return /QUOTA|INSUFFICIENT_QUOTA|429|RATE.LIMIT/.test(u) && /OPENAI|AI.GENERATE|AUTO.CONTENT|\[AI\]/.test(u);
+    });
+    if (recentQuota) return { status: "warning", detail: "AI unavailable — OpenAI quota exhausted. Content generation is paused until quota resets.", connectedAt: null };
+    return { status: "healthy", detail: "API key configured — AI content generation ready", connectedAt: null };
   }
 
   const fbConn = connections.find(c => c.provider === "facebook");
@@ -169,7 +200,7 @@ router.get("/diagnostics/health", async (req, res) => {
         return { status: "failed" as const, detail: "Missing TIKTOK_CLIENT_KEY or TIKTOK_CLIENT_SECRET", connectedAt: null, scopesRequested: SCOPES, publishReady: false };
       }
       if (!c?.accessToken) {
-        return { status: "warning" as const, detail: "Credentials set — OAuth not completed. Connect TikTok in Connected Accounts.", connectedAt: null, scopesRequested: SCOPES, publishReady: false };
+        return { status: "warning" as const, detail: "Waiting for TikTok authorization — credentials configured, OAuth not yet completed", connectedAt: null, scopesRequested: SCOPES, publishReady: false };
       }
       const exp     = c.expiresAt ? new Date(c.expiresAt) : null;
       const expired = exp ? exp < now : false;
@@ -177,18 +208,17 @@ router.get("/diagnostics/health", async (req, res) => {
         return { status: "warning" as const, detail: "Token expired — reconnect TikTok to restore access", connectedAt: c.createdAt?.toISOString() ?? null, scopesRequested: SCOPES, publishReady: false };
       }
       const name = c.accountName ?? c.accountId ?? null;
-      // Token exists and is not expired — consider connected.
-      // publishReady will only be true once video.publish scope is approved via app review.
       return {
         status: "healthy" as const,
-        detail: name ? `Connected — ${name} | Scopes: ${SCOPES}` : `Connected | Scopes: ${SCOPES}`,
+        detail: name ? `Connected — ${name} | Awaiting TikTok app-review approval for video.publish` : `Connected | Awaiting TikTok app-review approval for video.publish`,
         connectedAt: c.createdAt?.toISOString() ?? null,
         scopesRequested: SCOPES,
-        publishReady: false, // set to true once TikTok app review approves video.publish
-        publishNote: "video.publish requires TikTok app review — run Test Publish Readiness to check status",
+        publishReady: false,
+        publishNote: "video.publish requires TikTok app review — pending approval",
       };
     })(),
-    youtube:        connHealth("youtube"),
+    youtube: youtubeHealth(),
+    openai: openaiHealth(),
     telnyx: {
       status: ((): "healthy" | "warning" | "failed" => {
         const missing: string[] = [];

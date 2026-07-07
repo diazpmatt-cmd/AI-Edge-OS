@@ -1,0 +1,206 @@
+Production QA Pass — System Diagnostics Cleanup
+
+Now that Bed Bugs & Beyond is our live production business, I want to clean up every warning and error that is within our control.
+
+IMPORTANT:
+Do NOT fabricate data.
+Do NOT hide errors.
+If an error is legitimate but outside our control (Google quota, TikTok approval, etc.), leave it visible with an accurate explanation.
+
+Please perform a complete audit of the System Diagnostics page and address the following:
+
+========================
+1. Facebook Warning
+========================
+
+Investigate the "1 failed post in last 24h" warning.
+
+Determine:
+
+- Did Facebook actually fail?
+- Did Google fail while Facebook succeeded?
+- Is the warning stale?
+- Is the dashboard incorrectly marking a partial publish as a Facebook failure?
+
+If Facebook published successfully, clear the warning.
+
+If it genuinely failed, display the exact reason.
+
+========================
+2. Google Business
+========================
+
+Leave Google warnings if they are legitimate.
+
+Improve the wording so it clearly explains:
+
+- Google quota cooldown
+- Token refresh status
+- Next automatic retry
+- Whether user action is required
+
+Never display confusing or generic errors.
+
+========================
+3. YouTube
+========================
+
+Verify whether the token is actually expired.
+
+If so:
+
+Display:
+
+"Reconnect YouTube to restore access."
+
+instead of a generic warning.
+
+========================
+4. TikTok
+========================
+
+Leave as pending if OAuth approval is still waiting.
+
+Display a friendly status such as:
+
+"Waiting for TikTok authorization."
+
+instead of making it appear broken.
+
+========================
+5. OpenAI
+========================
+
+Apollos is currently offline because the OpenAI API quota has been exhausted.
+
+Improve diagnostics so they clearly state:
+
+AI unavailable because OpenAI quota has been reached.
+
+instead of a generic AI failure.
+
+========================
+6. Backup Center
+========================
+
+Verify all backup functionality.
+
+Test:
+
+- Code Backup
+- Database Backup
+- Asset Backup
+- Full Backup
+
+Confirm each:
+
+- executes successfully
+- stores correctly
+- reports success
+- reports file size
+- reports timestamp
+
+If anything fails, fix it.
+
+========================
+7. Image Engine
+========================
+
+Current coverage is 0%.
+
+This is NOT an error.
+
+Display it as an opportunity.
+
+Example:
+
+"No tagged images yet. Upload pest-control photos to improve AI-generated content."
+
+Do not display it like a system failure.
+
+========================
+8. Local Presence Engine
+========================
+
+Review how the Local Presence score is calculated.
+
+Current score:
+36 / 100
+
+Improve the UI so the score is actionable.
+
+Example:
+
+✓ Google Business
+
+□ Apple Business Connect (+15)
+
+□ Bing Places (+15)
+
+□ Nextdoor (+10)
+
+Next recommended action:
+Complete Apple Business Connect.
+
+The goal is to show HOW to improve the score instead of only displaying the number.
+
+========================
+9. Publishing Queue
+========================
+
+Verify:
+
+Draft count
+
+Scheduled count
+
+Published count
+
+Partial count
+
+Failed count
+
+Ensure every status reflects actual publishing results.
+
+A Google quota issue should not automatically imply Facebook failed.
+
+========================
+10. Live Logs
+========================
+
+Verify logs contain only real production events.
+
+No demo events.
+
+No placeholder events.
+
+No fabricated logs.
+
+========================
+11. Voice Diagnostics
+========================
+
+Verify simulator buttons are clearly labeled as TEST functions.
+
+Prevent production users from confusing simulated calls with real customer activity.
+
+========================
+12. Final QA
+========================
+
+Return a report showing:
+
+✅ Fixed issues
+
+⚠ Legitimate external warnings
+(Google quota, TikTok approval, etc.)
+
+❌ Remaining production issues
+
+For every remaining warning, explain:
+
+- Why it exists
+- Whether it is within our control
+- Recommended next action
+
+The goal is for the System Diagnostics page to accurately reflect the real health of Bed Bugs & Beyond without false alarms, misleading warnings, or hidden issues.

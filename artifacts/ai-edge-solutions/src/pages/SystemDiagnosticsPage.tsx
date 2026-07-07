@@ -30,6 +30,7 @@ type HealthData = {
     google_business: PlatformHealth;
     tiktok: PlatformHealth;
     youtube: PlatformHealth;
+    openai: PlatformHealth;
     telnyx: PlatformHealth;
   };
   postCounts: { draft: number; scheduled: number; pending: number; published: number; failed: number; partial: number };
@@ -95,6 +96,7 @@ const PLATFORM_DISPLAY: Record<string, { label: string; icon: string; color: str
   google_business:{ label: "Google Business", icon: "G",  color: "#EA4335" },
   tiktok:         { label: "TikTok",          icon: "♪",  color: "#69C9D0" },
   youtube:        { label: "YouTube",         icon: "▶",  color: "#FF0000" },
+  openai:         { label: "OpenAI / AI",     icon: "✦",  color: "#10A37F" },
   telnyx:         { label: "Telnyx",          icon: "☎",  color: "#00A699" },
 };
 
@@ -126,7 +128,8 @@ function fmtDate(ts: string) {
 
 function suggestFix(msg: string): string {
   const u = msg.toUpperCase();
-  if (/QUOTA.*COOLDOWN|COOLDOWN.*ACTIVE|COOLDOWN ACTIVATED/.test(u)) return "Google quota exceeded. Publishing will use the cached GBP location automatically. Wait for the cooldown to expire, then click 'Refresh GBP Location' to re-fetch from the API.";
+  if (/QUOTA.*COOLDOWN|COOLDOWN.*ACTIVE|COOLDOWN ACTIVATED/.test(u)) return "Google quota exceeded. Publishing uses the cached GBP location automatically. Wait for the cooldown to expire, then click 'Refresh GBP Location' to re-fetch from the API.";
+  if (/INSUFFICIENT_QUOTA|OPENAI.*QUOTA|QUOTA.*OPENAI/.test(u)) return "OpenAI quota exhausted — AI content generation is paused. No action needed; it will resume automatically once quota resets. This does not affect publishing of already-generated posts.";
   if (/QUOTA|429/.test(u)) return "Google API quota exceeded — check System Diagnostics for cooldown status. Publishing continues using the cached location if available.";
   if (/UNAUTHENTICATED|401/.test(u)) return "Token is invalid — reconnect in Connected Accounts.";
   if (/403/.test(u)) return "Permission denied — check API scopes in Connected Accounts.";
@@ -711,8 +714,26 @@ export default function SystemDiagnosticsPage() {
       {/* ── SECTION: Voice Receptionist V1 ── */}
       <div style={SECTION_STYLE}>
         <div style={SECTION_TITLE}><span>☎</span> Voice Receptionist V1 — Simulator</div>
+
+        {/* TEST MODE banner */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, marginBottom: 16,
+          padding: "10px 14px", borderRadius: 10,
+          background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+        }}>
+          <span style={{ fontSize: 16 }}>🧪</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#F59E0B", letterSpacing: "0.04em" }}>
+              TEST MODE — Simulator Only
+            </div>
+            <div style={{ fontSize: 11, color: "#64748B", marginTop: 1 }}>
+              Buttons below simulate calls for testing purposes. No real calls are made and no customers are contacted. Test events appear in the Telnyx log tab.
+            </div>
+          </div>
+        </div>
+
         <div style={{ fontSize: 12, color: "#64748B", marginBottom: 16, lineHeight: 1.6 }}>
-          Simulate inbound calls to test the IVR menu flow and lead logging. All events appear in the Telnyx log tab below.
+          Simulate inbound calls to verify the IVR flow and lead logging.
           <br />
           <span style={{ color: "#00AEEF", fontWeight: 600 }}>
             Webhook URL for Telnyx portal: <code style={{ background: "rgba(0,174,239,0.08)", padding: "1px 6px", borderRadius: 4 }}>POST /api/telnyx/voice</code>
@@ -1225,9 +1246,13 @@ export default function SystemDiagnosticsPage() {
                 { label: "Untagged Assets", value: imageStats.untagged,      sub: "need tagging",      color: imageStats.untagged > 0 ? "#F59E0B" : "#22C55E" },
                 {
                   label: "Coverage Score",
-                  value: `${imageStats.coverageScore}%`,
-                  sub: imageStats.coverageScore >= 80 ? "Excellent coverage" : imageStats.coverageScore >= 50 ? "Good — add more images" : "Low — upload more",
-                  color: imageStats.coverageScore >= 80 ? "#22C55E" : imageStats.coverageScore >= 50 ? "#F59E0B" : "#EF4444",
+                  value: imageStats.total === 0 ? "0%" : `${imageStats.coverageScore}%`,
+                  sub: imageStats.total === 0
+                    ? "Upload pest-control photos to boost AI content quality"
+                    : imageStats.coverageScore >= 80 ? "Excellent coverage" : imageStats.coverageScore >= 50 ? "Good — add more images" : "Add more tagged images to improve AI content",
+                  color: imageStats.total === 0
+                    ? "#00AEEF"
+                    : imageStats.coverageScore >= 80 ? "#22C55E" : imageStats.coverageScore >= 50 ? "#F59E0B" : "#F59E0B",
                 },
               ].map(card => (
                 <div key={card.label} style={{
@@ -1240,6 +1265,24 @@ export default function SystemDiagnosticsPage() {
                 </div>
               ))}
             </div>
+
+            {/* Opportunity banner when no images uploaded yet */}
+            {imageStats.total === 0 && (
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14,
+                padding: "12px 16px", borderRadius: 10,
+                background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.2)",
+              }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>📸</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#00AEEF", marginBottom: 3 }}>No tagged images yet — this is an opportunity</div>
+                  <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
+                    Upload real pest-control photos (bed bug treatments, termite inspections, technician on-site) to boost AI-generated post quality and authenticity.
+                    Images with topic and city tags enable the AI to attach relevant visuals automatically.
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* AI Coverage Suggestions */}
             {imageStats.suggestions.length > 0 && (
@@ -1366,17 +1409,39 @@ export default function SystemDiagnosticsPage() {
           })}
         </div>
 
-        {/* Visibility score bar */}
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "12px 16px" }}>
+        {/* Visibility score bar + actionable breakdown */}
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.8px", textTransform: "uppercase" }}>Local Visibility Score</span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B" }}>36 / 100 <span style={{ fontSize: 10, color: "#475569", fontWeight: 400 }}>— 3 channels pending setup</span></span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B" }}>36 / 100 <span style={{ fontSize: 10, color: "#475569", fontWeight: 400 }}>— 3 channels pending</span></span>
           </div>
-          <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden", marginBottom: 14 }}>
             <div style={{ height: "100%", width: "36%", background: "linear-gradient(90deg, #F59E0B, #00AEEF)", borderRadius: 3 }} />
           </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>
-            Complete Apple, Bing, and Nextdoor setup to reach 100% local channel coverage.
+
+          {/* Point breakdown */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+            {[
+              { label: "Google Business Profile", done: true,  pts: 36, icon: "✓", color: "#22C55E", note: "Connected · Bed Bugs & Beyond" },
+              { label: "Apple Business Connect",  done: false, pts: 22, icon: "□", color: "#F59E0B", note: "+22 pts — claim your free listing at businessconnect.apple.com" },
+              { label: "Bing Places for Business",done: false, pts: 22, icon: "□", color: "#F59E0B", note: "+22 pts — import from Google Business at bingplaces.com" },
+              { label: "Nextdoor Business",       done: false, pts: 20, icon: "□", color: "#475569", note: "+20 pts — free neighborhood advertising at nextdoor.com/business" },
+            ].map(item => (
+              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: item.done ? "rgba(34,197,94,0.05)" : "rgba(255,255,255,0.02)", border: `1px solid ${item.done ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)"}` }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: item.color, width: 14, flexShrink: 0 }}>{item.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: item.done ? "#22C55E" : "#E2E8F0" }}>{item.label}</div>
+                  <div style={{ fontSize: 10.5, color: "#475569", marginTop: 1 }}>{item.note}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 800, color: item.done ? "#22C55E" : "#F59E0B", flexShrink: 0, whiteSpace: "nowrap" }}>
+                  {item.done ? `${item.pts} pts` : `+${item.pts} pts`}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#00AEEF", padding: "7px 10px", borderRadius: 8, background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)" }}>
+            ⚡ Next recommended action: Claim Apple Business Connect at businessconnect.apple.com (+22 pts)
           </div>
         </div>
       </div>

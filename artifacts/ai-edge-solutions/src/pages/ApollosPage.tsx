@@ -528,20 +528,10 @@ export default function ApollosPage() {
         <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1.5px", textTransform: "uppercase", padding: "14px 4px 6px" }}>
           Recent
         </div>
-        {HISTORY_PLACEHOLDER.map(h => (
-          <div key={h.label} style={{
-            padding: "8px 10px", borderRadius: 8, marginBottom: 3,
-            background: "rgba(255,255,255,0.01)", border: `1px solid ${B.border}`,
-            cursor: "pointer", opacity: 0.6,
-          }}>
-            <div style={{ fontSize: 11.5, color: B.silver, fontWeight: 600 }}>{h.icon} {h.label}</div>
-            <div style={{ fontSize: 9.5, color: B.dim, marginTop: 2 }}>{h.sub}</div>
+        <div style={{ padding: "10px", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.06)", textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: B.dim, lineHeight: 1.5 }}>
+            Conversation history<br />not yet persisted
           </div>
-        ))}
-
-        <div style={{ marginTop: 6, padding: "7px 10px", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.06)", textAlign: "center" }}>
-          <div style={{ fontSize: 9, color: B.dim }}>History sync</div>
-          <div style={{ fontSize: 8, color: B.gold, fontWeight: 800, letterSpacing: "0.5px" }}>COMING SOON</div>
         </div>
       </div>
 
@@ -753,23 +743,23 @@ export default function ApollosPage() {
                   </div>
                 </div>
               ))}
-              {/* Generate button */}
+              {/* Generate button — calls real AI */}
               <button
-                onClick={() => {
-                  const recapMsg = "End-of-day recap preview is ready. Today's wins, missed opportunities, revenue notes, completed content, and tomorrow's top priority will be generated automatically in the next release.";
-                  setMessages(prev => [...prev, { id: uid(), role: "apollos", text: recapMsg, time: nowTime() }]);
-                }}
+                onClick={() => send("Generate my end-of-day recap for BB&B. Using only live data, summarise: Today's Wins, Missed Opportunities, Revenue Notes, Content Completed today, and the single most important priority for tomorrow. If data is missing say 'No live data yet'.")}
+                disabled={responding}
                 style={{
                   marginTop: 14, width: "100%",
                   background: "linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(6,182,212,0.12) 100%)",
                   border: "1px solid rgba(167,139,250,0.35)", borderRadius: 10,
                   padding: "9px 0", fontSize: 12, fontWeight: 700,
-                  color: "#A78BFA", cursor: "pointer", transition: "all 0.15s",
+                  color: responding ? "#64748B" : "#A78BFA",
+                  cursor: responding ? "not-allowed" : "pointer", transition: "all 0.15s",
+                  opacity: responding ? 0.6 : 1,
                 }}
-                onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(167,139,250,0.28) 0%, rgba(6,182,212,0.2) 100%)"; }}
+                onMouseEnter={ev => { if (!responding) (ev.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(167,139,250,0.28) 0%, rgba(6,182,212,0.2) 100%)"; }}
                 onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(167,139,250,0.18) 0%, rgba(6,182,212,0.12) 100%)"; }}
               >
-                🔮 Generate Recap Preview
+                {responding ? "⏳ Generating…" : "🔮 Generate End-of-Day Recap"}
               </button>
             </div>
           </div>

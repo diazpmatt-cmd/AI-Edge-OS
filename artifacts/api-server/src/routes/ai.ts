@@ -6,10 +6,16 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 const router = Router();
 
 function getAiModel() {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error("OPENAI_API_KEY is not set. Add it in Secrets.");
+  // Prefer Replit-managed integration (no billing quota); fall back to direct key
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
+    ?? process.env.OPENAI_BASE_URL
+    ?? "https://api.openai.com/v1";
+  const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+    ?? process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("No OpenAI API key configured. Add OPENAI_API_KEY to Secrets.");
   const gw = createOpenAICompatible({
-    name: "openai", baseURL: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+    name: "openai",
+    baseURL,
     headers: { Authorization: `Bearer ${key}` },
   });
   return gw(process.env.OPENAI_MODEL ?? "gpt-4o-mini");

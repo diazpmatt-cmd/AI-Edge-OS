@@ -402,15 +402,13 @@ export default function ApollosPage() {
     voiceUtterRef.current = [];
   }
 
-  function playVoiceIntro() {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    stopVoice();
+  // ── Shared voice picker ────────────────────────────────────────────────────
+  function pickVoice(): SpeechSynthesisVoice | null {
     const voices = window.speechSynthesis.getVoices();
     const PREF_NAMES = ["Daniel", "Google UK English Male", "Microsoft Ryan Online (Natural)", "Microsoft George"];
     const isMale = (v: SpeechSynthesisVoice) =>
       v.name.toLowerCase().includes("male") ||
       PREF_NAMES.some(n => v.name.toLowerCase().includes(n.toLowerCase()));
-
     let voice: SpeechSynthesisVoice | null =
       PREF_NAMES.reduce<SpeechSynthesisVoice | null>((found, name) =>
         found ?? (voices.find(v => v.lang.startsWith("en-GB") && v.name.toLowerCase().includes(name.toLowerCase())) ?? null)
@@ -418,6 +416,38 @@ export default function ApollosPage() {
     if (!voice) voice = voices.find(v => v.lang.startsWith("en-GB") && isMale(v)) ?? null;
     if (!voice) voice = voices.find(v => v.lang.startsWith("en") && isMale(v)) ?? null;
     if (!voice) voice = voices.find(v => v.lang.startsWith("en-GB")) ?? null;
+    return voice;
+  }
+
+  // ── Speak an Apollos reply aloud ───────────────────────────────────────────
+  function speakResponse(text: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    stopVoice();
+    // Strip emoji, markdown-style symbols, and truncate to avoid very long TTS
+    const clean = text
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")   // emojis
+      .replace(/[🎯✨🍍→]/g, "")
+      .replace(/\*+/g, "")
+      .replace(/#{1,3}\s?/g, "")
+      .trim();
+    const speakText = clean.length > 650 ? clean.slice(0, 647) + "…" : clean;
+    if (!speakText) return;
+    const voice = pickVoice();
+    const u = new SpeechSynthesisUtterance(speakText);
+    u.lang = "en-GB"; u.pitch = 0.92; u.rate = 0.98;
+    if (voice) u.voice = voice;
+    u.onstart = () => setVoicePlaying(true);
+    u.onend   = () => { setVoicePlaying(false); voiceUtterRef.current = []; };
+    u.onerror = () => { setVoicePlaying(false); voiceUtterRef.current = []; };
+    voiceUtterRef.current = [u];
+    window.speechSynthesis.speak(u);
+    setVoicePlaying(true);
+  }
+
+  function playVoiceIntro() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    stopVoice();
+    const voice = pickVoice();
 
     voiceUtterRef.current = INTRO_SCRIPT.map((line, i) => {
       const u = new SpeechSynthesisUtterance(line);
@@ -556,6 +586,22 @@ export default function ApollosPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Auto-start mic once the initial brief finishes loading ─────────────────
+  useEffect(() => {
+    if (hasAutoStartedMicRef.current) return;
+    if (responding) return;              // still loading the brief
+    if (!briefFiredRef.current) return;  // brief hasn't fired yet
+    hasAutoStartedMicRef.current = true;
+    if (!micSupported) return;
+    const t = setTimeout(() => {
+      listenEnabledRef.current = true;
+      setListenEnabled(true);
+      startListening();
+    }, 900);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [responding]);
+
   // ── Proactive operational brief — fires once on page open ──────────────────
   useEffect(() => {
     if (briefFiredRef.current) return;
@@ -623,11 +669,13 @@ export default function ApollosPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed, history }),
         }) as { reply?: string; error?: string; intent?: string };
+        const replyText = data.reply ?? data.error ?? "(no response)";
         setMessages(prev => [...prev, {
           id: uid(), role: "apollos",
-          text: data.reply ?? data.error ?? "(no response)",
+          text: replyText,
           time: nowTime(),
         }]);
+        if (listenEnabled) speakResponse(replyText);
       } catch (err: any) {
         setMessages(prev => [...prev, {
           id: uid(), role: "apollos",

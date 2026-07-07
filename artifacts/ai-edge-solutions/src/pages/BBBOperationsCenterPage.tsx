@@ -223,6 +223,44 @@ export default function BBBOperationsCenterPage() {
   const doneCount   = checked.filter(Boolean).length;
   const todayLabel  = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
+  const [reviewName,  setReviewName]  = useState("");
+  const [reviewPhone, setReviewPhone] = useState("");
+  const [reviewState, setReviewState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  async function handleSendReviewSms() {
+    if (!reviewName.trim() || !reviewPhone.trim()) return;
+    setReviewState("sending");
+    setReviewError(null);
+    try {
+      const result = await apiFetch<{ request: unknown; smsSent: boolean; smsError?: string }>(
+        "/reviews/requests",
+        {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            customerName: reviewName.trim(),
+            contact:      reviewPhone.trim(),
+            contactType:  "sms",
+            platform:     "google",
+          }),
+        }
+      );
+      if (result.smsSent) {
+        setReviewState("sent");
+        setReviewName("");
+        setReviewPhone("");
+        setTimeout(() => setReviewState("idle"), 5000);
+      } else {
+        setReviewState("error");
+        setReviewError(result.smsError ?? "SMS failed — check TELNYX_API_KEY and GOOGLE_REVIEW_LINK env vars");
+      }
+    } catch (e: unknown) {
+      setReviewState("error");
+      setReviewError(e instanceof Error ? e.message : "Request failed");
+    }
+  }
+
   return (
     <AppShell>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 32px 64px" }}>
@@ -406,6 +444,86 @@ export default function BBBOperationsCenterPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+
+        {/* ── Send Review Request ── */}
+        <div style={{
+          background: "rgba(11,22,41,0.7)", border: "1px solid rgba(251,191,36,0.2)",
+          borderRadius: 16, padding: "22px", marginBottom: 20,
+        }}>
+          <SectionHeader icon="⭐" title="Send Google Review Request via SMS" accent="#FBBF24" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "flex-end", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10.5, color: "#64748B", marginBottom: 5 }}>Customer Name</div>
+              <input
+                type="text"
+                value={reviewName}
+                onChange={e => setReviewName(e.target.value)}
+                placeholder="Jane Smith"
+                disabled={reviewState === "sending"}
+                style={{
+                  width: "100%", boxSizing: "border-box" as const,
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8, padding: "9px 12px",
+                  fontSize: 13, color: "#E2E8F0", fontFamily: "inherit", outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, color: "#64748B", marginBottom: 5 }}>Phone Number</div>
+              <input
+                type="tel"
+                value={reviewPhone}
+                onChange={e => setReviewPhone(e.target.value)}
+                placeholder="(251) 555-0100"
+                disabled={reviewState === "sending"}
+                onKeyDown={e => { if (e.key === "Enter") handleSendReviewSms(); }}
+                style={{
+                  width: "100%", boxSizing: "border-box" as const,
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8, padding: "9px 12px",
+                  fontSize: 13, color: "#E2E8F0", fontFamily: "inherit", outline: "none",
+                }}
+              />
+            </div>
+            <button
+              onClick={handleSendReviewSms}
+              disabled={reviewState === "sending" || !reviewName.trim() || !reviewPhone.trim()}
+              style={{
+                padding: "9px 22px", borderRadius: 8, fontFamily: "inherit",
+                fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" as const,
+                background: reviewState === "sent" ? "rgba(34,197,94,0.15)" : "rgba(251,191,36,0.12)",
+                border: `1px solid ${reviewState === "sent" ? "rgba(34,197,94,0.4)" : "rgba(251,191,36,0.35)"}`,
+                color: reviewState === "sent" ? "#22C55E" : "#FBBF24",
+                opacity: (reviewState === "sending" || !reviewName.trim() || !reviewPhone.trim()) ? 0.5 : 1,
+                transition: "all 0.15s",
+              }}
+            >
+              {reviewState === "sending" ? "Sending…" : reviewState === "sent" ? "✓ Sent!" : "Send SMS →"}
+            </button>
+          </div>
+
+          {reviewState === "error" && reviewError && (
+            <div style={{
+              fontSize: 11, color: "#EF4444",
+              background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+              borderRadius: 7, padding: "7px 12px", marginBottom: 8,
+            }}>
+              ⚠ {reviewError}
+            </div>
+          )}
+          {reviewState === "sent" && (
+            <div style={{
+              fontSize: 11, color: "#22C55E",
+              background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.18)",
+              borderRadius: 7, padding: "7px 12px", marginBottom: 8,
+            }}>
+              ✓ Google review request sent via Telnyx · Logged to Reviews Engine
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: "#1E293B" }}>
+            Sends a personalized SMS with your Google review link · Set <code style={{ color: "#334155" }}>GOOGLE_REVIEW_LINK</code> env var to your business link
           </div>
         </div>
 

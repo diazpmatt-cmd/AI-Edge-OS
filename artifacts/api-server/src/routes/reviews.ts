@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { reviewRequestsTable, reviewPlatformStatsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { sendSms } from "../lib/sms";
 
 const router = Router();
 
@@ -90,18 +91,41 @@ router.post("/reviews/requests", async (req, res) => {
   }
 
   try {
+    // Send SMS immediately when contactType is "sms"
+    let smsSent  = false;
+    let smsError: string | undefined;
+    let status   = contactType === "sms" ? "pending" : "logged";
+
+    if (contactType === "sms") {
+      const reviewLink = process.env.GOOGLE_REVIEW_LINK ?? "https://g.page/r/review";
+      const msg =
+        `Hi ${customerName}! Thank you for choosing Bed Bugs & Beyond. ` +
+        `We hope your service went great! Would you mind leaving us a quick Google review? ` +
+        `It really helps our small Baldwin County team: ${reviewLink} — BB&B Team`;
+      const result = await sendSms(contact, msg);
+      smsSent  = result.ok;
+      smsError = result.error;
+      status   = result.ok ? "sent" : "failed";
+    }
+
     const inserted = await db
       .insert(reviewRequestsTable)
       .values({
         customerName,
         contact,
         contactType,
-        platform: platform ?? "google",
+        platform:   platform   ?? "google",
         templateId: templateId ?? null,
-        notes: notes ?? null,
+        notes:      notes      ?? null,
+        status,
       })
       .returning();
-    res.status(201).json({ request: inserted[0] });
+
+    res.status(201).json({
+      request: inserted[0],
+      smsSent,
+      ...(smsError ? { smsError } : {}),
+    });
   } catch (err) {
     console.error("reviews/requests POST error:", err);
     res.status(500).json({ error: "Failed to log review request" });

@@ -551,7 +551,7 @@ function AssetBrowser({
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8,
               }}>
                 <div style={{ fontSize: 48, filter: `drop-shadow(0 0 16px ${a.color}44)` }}>{a.icon}</div>
-                <div style={{ fontSize: 11, color: "#334155" }}>Preview not available — generation coming soon</div>
+                <div style={{ fontSize: 11, color: "#334155" }}>No preview available for this file type</div>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16, fontSize: 12 }}>

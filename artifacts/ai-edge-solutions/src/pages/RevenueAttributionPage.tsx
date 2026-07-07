@@ -18,7 +18,6 @@ type Lead = {
   matchedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  _demo?: boolean;
 };
 
 const SOURCES = [
@@ -28,24 +27,6 @@ const SOURCES = [
   "Callback Requests",
   "Voicemail",
   "AI Visibility Engine",
-];
-
-const DEMO_LEADS: Lead[] = [
-  { id: "demo-1",  leadId: null, clientId: "demo", customerName: "Karen Mitchell",    phone: "(251) 445-7823", leadSource: "AI Receptionist",    status: "won",      revenue: 2400,  serviceType: "Bed Bug Treatment",        notes: "Full heat treatment, 2 units",   gorilladeskJobId: "GD-10041", matchedAt: "2026-06-05T14:22:00Z", createdAt: "2026-06-01T10:30:00Z", updatedAt: "2026-06-05T14:22:00Z", _demo: true },
-  { id: "demo-2",  leadId: null, clientId: "demo", customerName: "Robert Davis",       phone: "(251) 332-9901", leadSource: "Voicemail",           status: "won",      revenue: 1800,  serviceType: "Bed Bug Inspection",       notes: "Annual service plan signed",     gorilladeskJobId: "GD-10042", matchedAt: "2026-06-06T11:00:00Z", createdAt: "2026-06-02T09:15:00Z", updatedAt: "2026-06-06T11:00:00Z", _demo: true },
-  { id: "demo-3",  leadId: null, clientId: "demo", customerName: "Lisa Thompson",      phone: "(251) 778-2341", leadSource: "Missed Call Recovery", status: "pending",  revenue: null,  serviceType: null,                       notes: null,                             gorilladeskJobId: null,       matchedAt: null,                   createdAt: "2026-06-03T13:45:00Z", updatedAt: "2026-06-03T13:45:00Z", _demo: true },
-  { id: "demo-4",  leadId: null, clientId: "demo", customerName: "James Wilson",       phone: "(251) 443-5567", leadSource: "AI Receptionist",    status: "won",      revenue: 3200,  serviceType: "Full Pest Control Package", notes: "Commercial property, quarterly", gorilladeskJobId: "GD-10043", matchedAt: "2026-06-08T09:30:00Z", createdAt: "2026-06-04T11:20:00Z", updatedAt: "2026-06-08T09:30:00Z", _demo: true },
-  { id: "demo-5",  leadId: null, clientId: "demo", customerName: "Maria Santos",       phone: "(251) 229-8823", leadSource: "SMS",                status: "lost",     revenue: null,  serviceType: null,                       notes: "Went with competitor",           gorilladeskJobId: null,       matchedAt: null,                   createdAt: "2026-06-05T08:00:00Z", updatedAt: "2026-06-10T15:00:00Z", _demo: true },
-  { id: "demo-6",  leadId: null, clientId: "demo", customerName: "David Brown",        phone: "(251) 554-7612", leadSource: "Callback Requests",  status: "matched",  revenue: null,  serviceType: null,                       notes: null,                             gorilladeskJobId: "GD-10044", matchedAt: "2026-06-09T10:15:00Z", createdAt: "2026-06-06T14:00:00Z", updatedAt: "2026-06-09T10:15:00Z", _demo: true },
-  { id: "demo-7",  leadId: null, clientId: "demo", customerName: "Jennifer Lee",       phone: "(251) 667-3389", leadSource: "AI Visibility Engine", status: "won",     revenue: 1650,  serviceType: "Rodent Control",           notes: "Exclusion + bait stations",      gorilladeskJobId: "GD-10045", matchedAt: "2026-06-11T12:00:00Z", createdAt: "2026-06-07T10:00:00Z", updatedAt: "2026-06-11T12:00:00Z", _demo: true },
-  { id: "demo-8",  leadId: null, clientId: "demo", customerName: "Michael Johnson",    phone: "(251) 891-4421", leadSource: "Missed Call Recovery", status: "won",     revenue: 2100,  serviceType: "Cockroach Treatment",      notes: "Restaurant account, monthly",    gorilladeskJobId: "GD-10046", matchedAt: "2026-06-12T08:00:00Z", createdAt: "2026-06-08T09:30:00Z", updatedAt: "2026-06-12T08:00:00Z", _demo: true },
-  { id: "demo-9",  leadId: null, clientId: "demo", customerName: "Patricia Moore",     phone: "(251) 334-8891", leadSource: "AI Receptionist",    status: "pending",  revenue: null,  serviceType: null,                       notes: null,                             gorilladeskJobId: null,       matchedAt: null,                   createdAt: "2026-06-09T15:00:00Z", updatedAt: "2026-06-09T15:00:00Z", _demo: true },
-  { id: "demo-10", leadId: null, clientId: "demo", customerName: "Christopher Taylor", phone: "(251) 552-1234", leadSource: "SMS",                status: "won",      revenue: 4800,  serviceType: "Commercial Pest Control",  notes: "Hotel — 6 month contract",       gorilladeskJobId: "GD-10047", matchedAt: "2026-06-14T10:00:00Z", createdAt: "2026-06-10T11:00:00Z", updatedAt: "2026-06-14T10:00:00Z", _demo: true },
-  { id: "demo-11", leadId: null, clientId: "demo", customerName: "Amanda Martinez",    phone: "(251) 778-9901", leadSource: "Voicemail",          status: "unmatched", revenue: null,  serviceType: null,                       notes: null,                             gorilladeskJobId: null,       matchedAt: null,                   createdAt: "2026-06-11T08:45:00Z", updatedAt: "2026-06-11T08:45:00Z", _demo: true },
-  { id: "demo-12", leadId: null, clientId: "demo", customerName: "Daniel Anderson",    phone: "(251) 443-2256", leadSource: "AI Receptionist",    status: "won",      revenue: 1950,  serviceType: "Ant Treatment",            notes: "Recurring quarterly",            gorilladeskJobId: "GD-10048", matchedAt: "2026-06-15T09:00:00Z", createdAt: "2026-06-12T14:00:00Z", updatedAt: "2026-06-15T09:00:00Z", _demo: true },
-  { id: "demo-13", leadId: null, clientId: "demo", customerName: "Sarah Thomas",       phone: "(251) 332-7788", leadSource: "AI Visibility Engine", status: "matched", revenue: null,  serviceType: null,                       notes: null,                             gorilladeskJobId: "GD-10049", matchedAt: "2026-06-16T11:00:00Z", createdAt: "2026-06-13T10:30:00Z", updatedAt: "2026-06-16T11:00:00Z", _demo: true },
-  { id: "demo-14", leadId: null, clientId: "demo", customerName: "Kevin Jackson",      phone: "(251) 669-4412", leadSource: "Callback Requests",  status: "lost",     revenue: null,  serviceType: null,                       notes: "No answer, stopped responding",  gorilladeskJobId: null,       matchedAt: null,                   createdAt: "2026-06-14T09:00:00Z", updatedAt: "2026-06-17T14:00:00Z", _demo: true },
-  { id: "demo-15", leadId: null, clientId: "demo", customerName: "Nancy White",        phone: "(251) 556-3341", leadSource: "Missed Call Recovery", status: "won",     revenue: 2750,  serviceType: "Bed Bug Treatment",        notes: "Referral from Karen Mitchell",   gorilladeskJobId: "GD-10050", matchedAt: "2026-06-18T10:00:00Z", createdAt: "2026-06-15T13:00:00Z", updatedAt: "2026-06-18T10:00:00Z", _demo: true },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -73,7 +54,7 @@ export default function RevenueAttributionPage() {
   const { colors: t, isDark } = useTheme();
   const [leads, setLeads]       = useState<Lead[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [isDemo, setIsDemo]     = useState(false);
+  const [isDemo, setIsDemo]     = useState(false); // kept for API-level empty state tracking
   const [selected, setSelected] = useState<Lead | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<string | null>(null);
@@ -93,11 +74,11 @@ export default function RevenueAttributionPage() {
     setLoading(true);
     try {
       const data = await apiFetch<Lead[]>("/api/revenue-attribution?clientId=demo");
-      if (data.length === 0) { setLeads(DEMO_LEADS); setIsDemo(true); }
+      if (data.length === 0) { setLeads([]); setIsDemo(false); }
       else { setLeads(data); setIsDemo(false); }
     } catch {
-      setLeads(DEMO_LEADS);
-      setIsDemo(true);
+      setLeads([]);
+      setIsDemo(false);
     } finally {
       setLoading(false);
     }
@@ -134,9 +115,7 @@ export default function RevenueAttributionPage() {
         notes:            form.notes || null,
         gorilladeskJobId: form.gorilladeskJobId || null,
       };
-      if (selected._demo) {
-        setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, ...payload } : l));
-      } else {
+      {
         const updated = await apiFetch<Lead>(`/api/revenue-attribution/${selected.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

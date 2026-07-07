@@ -1,0 +1,123 @@
+🎯 FINAL TARGET TONIGHT: BB&B Production Closeout + Tomorrow Launch Plan
+
+IMPORTANT:
+Audit first.
+Do NOT build new features.
+Do NOT create new dashboards.
+Do NOT duplicate anything.
+Only fix something if it is clearly broken, misleading, or blocking production use.
+
+Goal:
+Close out tonight by confirming Bed Bugs & Beyond is ready to operate through AI Edge tomorrow.
+
+========================
+PART 1 — Full Production Audit
+========================
+
+Verify these areas:
+
+1. Morning Brief
+2. Apollos
+3. Floating Command Center button
+4. Content Autopilot
+5. Social Publishing
+6. Publishing Status / Activity Log
+7. Reviews Engine
+8. Review SMS
+9. BB&B Ops Center
+10. Growth Execution
+11. Profit Center
+12. Customer Timeline
+13. Lead Recovery
+14. AI Receptionist
+15. System Diagnostics
+16. Revenue Attribution
+17. Asset Library
+18. Local Presence
+
+For each classify:
+
+🟢 Production Ready
+🟡 Operational but waiting on data/config/third party
+🔴 Broken or needs code
+
+========================
+PART 2 — Verify No Fake Production Data
+========================
+
+Search for:
+
+DEMO
+DemoBadge
+Mock
+Fake
+Sample
+Placeholder
+Coming Soon
+Under Construction
+Test Data
+Automation Coming Soon
+createMockRecord
+hardcoded revenue
+hardcoded leads
+hardcoded reviews
+
+For each finding:
+- Keep only if it is honest and intentional.
+- Remove or replace if it misleads production users.
+- Do not remove legitimate third-party pending labels.
+
+========================
+PART 3 — Final Integration Checks
+========================
+
+Verify:
+
+- Facebook ready
+- Instagram ready
+- Google Business Profile status and cooldown
+- TikTok pending
+- Apple pending
+- Telnyx env vars present
+- GOOGLE_REVIEW_LINK present
+- Review SMS ready
+- Missed-call recovery scheduler ready
+- Publishing status only turns green after API confirmation
+
+========================
+PART 4 — Tomorrow Morning Launch Checklist
+========================
+
+Create a clear checklist for Matt to follow tomorrow:
+
+1. Open Morning Brief
+2. Ask Apollos: “Good morning”
+3. Check Google cooldown
+4. Refresh GBP Location if cooldown expired
+5. Generate next content batch
+6. Publish/schedule Facebook
+7. Publish/schedule Instagram
+8. Try Google Business Profile publish if location cache succeeds
+9. Send one test review SMS to Matt
+10. Send first real review request if appropriate
+11. Confirm Activity Log / traffic lights
+12. Check missed-call recovery
+13. End day with Growth Execution recap
+
+========================
+PART 5 — Report
+========================
+
+Report:
+
+- What is fully ready
+- What is waiting on Google / TikTok / Apple / GorillaDesk
+- What requires no code, only action
+- What actually still needs development
+- Production readiness percentage
+- Exact first 5 actions for tomorrow
+
+Run build and report result.
+
+Success:
+Matt should be able to wake up tomorrow, open AI Edge, and know exactly what to do to operate Bed Bugs & Beyond through the platform.

@@ -47,34 +47,6 @@ interface LeadsResponse {
   stats: { total: number; active: number; thisMonth: number; withMessages: number };
 }
 
-// ── Demo / mock fallback data ──────────────────────────────────────────────────
-const MOCK_CALL_ACTIVITY = [
-  { time: "8:04 AM", caller: "(251) 555-0182", type: "AI Answered",   service: "Bed bug inspection",  outcome: "Booked",           revenue: "$350" },
-  { time: "8:41 AM", caller: "(251) 555-0234", type: "Missed → Text", service: "Roach treatment",      outcome: "Text sent",        revenue: "$180" },
-  { time: "9:12 AM", caller: "(251) 555-0099", type: "AI Answered",   service: "Flea treatment",       outcome: "Booked",           revenue: "$225" },
-  { time: "10:08 AM",caller: "(251) 555-0317", type: "AI Answered",   service: "Rodent control",       outcome: "Quote needed",     revenue: "$400+" },
-  { time: "11:33 AM",caller: "(251) 555-0451", type: "Missed → Text", service: "Mosquito service",     outcome: "Customer replied", revenue: "$275" },
-  { time: "12:19 PM",caller: "(251) 555-0512", type: "AI Answered",   service: "General inspection",   outcome: "Booked",           revenue: "$150" },
-  { time: "2:47 PM", caller: "(251) 555-0678", type: "After Hours",   service: "Bed bugs (urgent)",    outcome: "Text sent",        revenue: "$450" },
-  { time: "4:02 PM", caller: "(251) 555-0744", type: "AI Answered",   service: "Ant problem",          outcome: "Booked",           revenue: "$195" },
-];
-
-const MOCK_LEAD_RECOVERY = [
-  { caller: "(251) 555-0182", service: "Bed bug inspection",  missed: true, textSent: true,  replied: true,  booked: true,  followUp: false },
-  { caller: "(251) 555-0234", service: "Roach treatment",     missed: true, textSent: true,  replied: false, booked: false, followUp: true  },
-  { caller: "(251) 555-0451", service: "Mosquito service",    missed: true, textSent: true,  replied: true,  booked: false, followUp: true  },
-  { caller: "(251) 555-0678", service: "Bed bugs (urgent)",   missed: true, textSent: true,  replied: false, booked: false, followUp: true  },
-  { caller: "(251) 555-0891", service: "Flea & tick",         missed: true, textSent: true,  replied: true,  booked: true,  followUp: false },
-  { caller: "(251) 555-0922", service: "Rodent exclusion",    missed: true, textSent: false, replied: false, booked: false, followUp: true  },
-];
-
-const MOCK_OPPORTUNITIES = [
-  { type: "🔥 Hot Lead",             caller: "(251) 555-0678", service: "Bed bugs (urgent)",  note: "After-hours caller, no callback yet",  priority: "high" },
-  { type: "💰 Needs Quote",          caller: "(251) 555-0317", service: "Rodent control",     note: "Requested estimate, AI logged interest",priority: "high" },
-  { type: "📞 Missed Estimate",      caller: "(251) 555-0922", service: "Rodent exclusion",   note: "Text not yet sent — needs follow-up",   priority: "high" },
-  { type: "💬 Needs Follow-Up",      caller: "(251) 555-0234", service: "Roach treatment",    note: "Texted, no reply in 24 hrs",            priority: "med"  },
-  { type: "⭐ Review Request Ready", caller: "(251) 555-0182", service: "Bed bug inspection", note: "Job completed — prime review window",   priority: "low"  },
-];
 
 const SERVICES = [
   { label: "Bed Bugs",   count: 89, icon: "🐛", color: "#00AEEF", revenue: "$5,200" },
@@ -520,28 +492,6 @@ export default function BBBSuccessPage() {
                 <div style={{ fontSize: 12, color: "#475569" }}>Call activity will appear here once the AI receptionist handles its first call.</div>
               </div>
             )}
-            {false && (
-              <>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <tbody>
-                    {MOCK_CALL_ACTIVITY.map((row, i) => {
-                      const oc = row.outcome === "Booked" ? "#34D399" : row.outcome === "Text sent" ? "#60A5FA" : row.outcome === "Customer replied" ? "#A78BFA" : "#FBBF24";
-                      const tc = row.type === "AI Answered" ? "#00AEEF" : row.type === "After Hours" ? "#FB923C" : "#F472B6";
-                      return (
-                        <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td style={{ padding: "10px 12px", color: "#64748B", whiteSpace: "nowrap" }}>{row.time}</td>
-                          <td style={{ padding: "10px 12px", color: "#94A3B8", fontFamily: "monospace", fontSize: 11 }}>{row.caller}</td>
-                          <td style={{ padding: "10px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: `${tc}14`, border: `1px solid ${tc}33`, color: tc }}>{row.type}</span></td>
-                          <td style={{ padding: "10px 12px", color: "#CBD5E1" }}>{row.service}</td>
-                          <td style={{ padding: "10px 12px" }}><span style={{ padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: `${oc}14`, border: `1px solid ${oc}33`, color: oc }}>{row.outcome}</span></td>
-                          <td style={{ padding: "10px 12px", color: "#22C55E", fontWeight: 700 }}>{row.revenue}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </>
-            )}
           </div>
         </div>
       )}
@@ -589,7 +539,7 @@ export default function BBBSuccessPage() {
 
           {/* Pipeline summary */}
           {(() => {
-            const rows = hasLiveLeads ? liveLeadRows : MOCK_LEAD_RECOVERY;
+            const rows = liveLeadRows;
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginTop: 16 }}>
                 {[

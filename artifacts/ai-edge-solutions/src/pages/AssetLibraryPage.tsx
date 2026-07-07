@@ -30,25 +30,6 @@ interface Prompt {
   icon: string;
 }
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-const MOCK_ASSETS: Asset[] = [
-  { id: "a1",  name: "BB&B Summer Pest Ad",       type: "image",    brand: "BB&B",  date: "2026-07-04", size: "1.2 MB",  tags: ["summer", "ad", "pest"],      icon: "🖼️",  color: "#00AEEF" },
-  { id: "a2",  name: "AI Edge Hero Video",         type: "video",    brand: "AIE",   date: "2026-07-03", size: "24 MB",   tags: ["hero", "brand"],             icon: "🎬",  color: "#A78BFA" },
-  { id: "a3",  name: "BB&B Receptionist Script",   type: "audio",    brand: "BB&B",  date: "2026-07-02", size: "0.9 MB",  tags: ["receptionist", "phone"],     icon: "🎙️", color: "#34D399" },
-  { id: "a4",  name: "Q3 Pest Campaign",           type: "campaign", brand: "BB&B",  date: "2026-07-01", size: "—",       tags: ["campaign", "q3"],            icon: "🚀",  color: "#FB923C" },
-  { id: "a5",  name: "AI Edge Logo Full",          type: "logo",     brand: "AIE",   date: "2026-06-30", size: "0.3 MB",  tags: ["logo", "brand"],             icon: "🏷️", color: "#C0C0C0" },
-  { id: "a6",  name: "BB&B Instagram Reel",        type: "video",    brand: "BB&B",  date: "2026-06-29", size: "18 MB",   tags: ["instagram", "reel", "social"],icon: "🎬", color: "#A78BFA" },
-  { id: "a7",  name: "Bed Bug Alert Facebook Ad",  type: "image",    brand: "BB&B",  date: "2026-06-28", size: "0.8 MB",  tags: ["facebook", "ad", "bed-bug"], icon: "🖼️",  color: "#00AEEF" },
-  { id: "a8",  name: "AI Edge Brand Kit v2",       type: "brand-kit",brand: "AIE",   date: "2026-06-27", size: "—",       tags: ["brand", "kit", "design"],    icon: "🎨",  color: "#00AEEF" },
-  { id: "a9",  name: "Spring Pest Control Promo",  type: "campaign", brand: "BB&B",  date: "2026-06-26", size: "—",       tags: ["spring", "promo"],           icon: "🚀",  color: "#FB923C" },
-  { id: "a10", name: "AI Receptionist Greeting",   type: "audio",    brand: "BB&B",  date: "2026-06-25", size: "1.1 MB",  tags: ["greeting", "ai", "voice"],   icon: "🎙️", color: "#34D399" },
-  { id: "a11", name: "Social Post Template Set",   type: "template", brand: "AIE",   date: "2026-06-24", size: "—",       tags: ["template", "social"],        icon: "📋",  color: "#F472B6" },
-  { id: "a12", name: "BB&B Logo Primary",          type: "logo",     brand: "BB&B",  date: "2026-06-23", size: "0.2 MB",  tags: ["logo", "primary"],           icon: "🏷️", color: "#00AEEF" },
-  { id: "a13", name: "AI Edge Demo Reel",          type: "video",    brand: "AIE",   date: "2026-06-22", size: "31 MB",   tags: ["demo", "showcase"],          icon: "🎬",  color: "#A78BFA" },
-  { id: "a14", name: "Google Display Ad Set",      type: "image",    brand: "BB&B",  date: "2026-06-21", size: "2.1 MB",  tags: ["google", "display", "ad"],   icon: "🖼️",  color: "#00AEEF" },
-  { id: "a15", name: "Q4 Holiday Campaign",        type: "campaign", brand: "BB&B",  date: "2026-06-20", size: "—",       tags: ["holiday", "q4", "promo"],    icon: "🚀",  color: "#FB923C" },
-];
-
 const TYPE_COLORS: Record<AssetType, string> = {
   image:    "#00AEEF",
   video:    "#A78BFA",
@@ -107,16 +88,6 @@ const COLLECTIONS = [
   { id: "websites",     label: "Websites",           icon: "🌐", color: "#60A5FA", count: 1  },
 ];
 
-const ACTIVITY = [
-  { id: "r1", icon: "🖼️",  label: "Image created",      detail: "BB&B Summer Pest Ad",        time: "2 hours ago",   color: "#00AEEF" },
-  { id: "r2", icon: "🎬",  label: "Video generated",     detail: "AI Edge Hero Video",          time: "5 hours ago",   color: "#A78BFA" },
-  { id: "r3", icon: "📋",  label: "Prompt copied",       detail: "BB&B Phone Receptionist",     time: "1 day ago",     color: "#34D399" },
-  { id: "r4", icon: "🚀",  label: "Campaign exported",   detail: "Q3 Pest Campaign",            time: "2 days ago",    color: "#FB923C" },
-  { id: "r5", icon: "🎨",  label: "Brand updated",       detail: "AI Edge Brand Kit v2",        time: "3 days ago",    color: "#F472B6" },
-  { id: "r6", icon: "🎙️", label: "Audio generated",     detail: "AI Receptionist Greeting",    time: "4 days ago",    color: "#34D399" },
-  { id: "r7", icon: "🖼️",  label: "Image created",       detail: "Google Display Ad Set",       time: "5 days ago",    color: "#00AEEF" },
-  { id: "r8", icon: "📋",  label: "Prompt copied",       detail: "Summer Pest Lead Gen",        time: "6 days ago",    color: "#FBBF24" },
-];
 
 const BRAND_ASSETS = {
   logos: [
@@ -465,13 +436,7 @@ function AssetBrowser({
                 background: filter === f.key ? "rgba(0,174,239,0.2)" : "rgba(255,255,255,0.06)",
                 borderRadius: 10, padding: "0 5px", fontSize: 9, fontWeight: 800, color: filter === f.key ? "#00AEEF" : "#475569",
               }}>
-                {f.key === "image" ? MOCK_ASSETS.filter(a => a.type === "image").length
-                  : f.key === "video" ? MOCK_ASSETS.filter(a => a.type === "video").length
-                  : f.key === "audio" ? MOCK_ASSETS.filter(a => a.type === "audio").length
-                  : f.key === "campaign" ? MOCK_ASSETS.filter(a => a.type === "campaign").length
-                  : f.key === "logo" ? MOCK_ASSETS.filter(a => a.type === "logo").length
-                  : f.key === "brand-kit" ? MOCK_ASSETS.filter(a => a.type === "brand-kit").length
-                  : MOCK_ASSETS.filter(a => a.type === "template").length}
+                {assets.filter(a => a.type === f.key).length}
               </span>
             )}
           </button>
@@ -991,30 +956,10 @@ function RecentActivitySection() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={sectionLabel}>Recent Activity</div>
       <Panel>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {ACTIVITY.map((item, i) => (
-            <div key={item.id} style={{
-              display: "flex", alignItems: "flex-start", gap: 14,
-              paddingBottom: i < ACTIVITY.length - 1 ? 16 : 0,
-              marginBottom: i < ACTIVITY.length - 1 ? 16 : 0,
-              borderBottom: i < ACTIVITY.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-            }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0 }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: 10,
-                  background: `${item.color}14`, border: `1px solid ${item.color}28`,
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                }}>{item.icon}</div>
-                {i < ACTIVITY.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 12, background: "rgba(255,255,255,0.05)", margin: "4px 0" }} />}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#CBD5E1", marginBottom: 2 }}>{item.label}</div>
-                <div style={{ fontSize: 11.5, color: "#475569", marginBottom: 3 }}>{item.detail}</div>
-                <div style={{ fontSize: 10.5, color: "#334155" }}>🕐 {item.time}</div>
-              </div>
-              <span style={labelStyle(item.color)}>{item.label.split(" ")[0]}</span>
-            </div>
-          ))}
+        <div style={{ padding: "36px", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🕐</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>No activity yet</div>
+          <div style={{ fontSize: 12, color: "#475569" }}>Asset generation history will appear here once you start creating content.</div>
         </div>
       </Panel>
     </div>
@@ -1117,7 +1062,7 @@ export default function AssetLibraryPage() {
     }
   }
 
-  const allAssets      = [...dbAssets, ...MOCK_ASSETS];
+  const allAssets      = [...dbAssets];
   const totalImages    = allAssets.filter(a => a.type === "image").length;
   const totalVideos    = allAssets.filter(a => a.type === "video").length;
   const totalAudio     = allAssets.filter(a => a.type === "audio").length;

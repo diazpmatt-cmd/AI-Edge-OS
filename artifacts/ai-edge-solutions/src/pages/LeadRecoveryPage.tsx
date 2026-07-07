@@ -395,7 +395,7 @@ export default function LeadRecoveryPage() {
                         {liveleads.map((lead, i) => {
                           const sm = LEAD_STATUS_STYLE[lead.status] ?? LEAD_STATUS_STYLE.new;
                           const isSelected = lead.id === selectedId;
-                          const icon = lead.eventType === "sms" ? "💬" : lead.eventType === "missed_call" ? "📵" : "📞";
+                          const icon = lead.eventType === "telnyx_voicemail" ? "🎙" : lead.eventType === "sms" ? "💬" : lead.eventType === "missed_call" ? "📵" : "📞";
                           return (
                             <tr
                               key={lead.id}
@@ -452,6 +452,20 @@ export default function LeadRecoveryPage() {
                             <div style={{ fontSize: 13, color: "#D1D5DB", background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 12px", lineHeight: 1.6 }}>{selectedLive.message}</div>
                           </div>
                         )}
+                        {selectedLive.eventType === "telnyx_voicemail" && (() => {
+                          const urlMatch = selectedLive.message?.match(/https?:\/\/\S+/);
+                          const url = urlMatch ? urlMatch[0] : null;
+                          return (
+                            <div>
+                              <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>Voicemail Recording</div>
+                              {url ? (
+                                <audio controls src={url} style={{ width: "100%", borderRadius: 8, outline: "none" }} />
+                              ) : (
+                                <div style={{ fontSize: 12, color: "#6B7280", padding: "8px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>No recording available</div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: "#475569", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Status</div>

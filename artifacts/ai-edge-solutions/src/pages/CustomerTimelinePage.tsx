@@ -75,15 +75,16 @@ interface ReviewsResponse {
 
 // ── Unified event type ────────────────────────────────────────────────────────
 interface TimelineEvent {
-  id:         string;
-  timestamp:  string;
-  icon:       string;
-  title:      string;
-  desc:       string;
-  color:      string;
-  customer:   string;
-  phone:      string;
-  source:     "lead" | "attribution" | "review";
+  id:           string;
+  timestamp:    string;
+  icon:         string;
+  title:        string;
+  desc:         string;
+  color:        string;
+  customer:     string;
+  phone:        string;
+  source:       "lead" | "attribution" | "review";
+  recordingUrl?: string;
 }
 
 // ── Event builders ────────────────────────────────────────────────────────────
@@ -119,6 +120,9 @@ function leadsToEvents(leads: Lead[]): TimelineEvent[] {
     const desc = msg
       ? `${name}${phone ? ` · ${phone}` : ""} — "${msg.slice(0, 120)}${msg.length > 120 ? "…" : ""}"`
       : `${name}${phone ? ` · ${phone}` : ""}`;
+    const recordingUrl = (l.eventType === "telnyx_voicemail" && l.message)
+      ? (l.message.match(/https?:\/\/\S+/)?.[0] ?? undefined)
+      : undefined;
     return {
       id:        l.id,
       timestamp: l.createdAt,
@@ -127,6 +131,7 @@ function leadsToEvents(leads: Lead[]): TimelineEvent[] {
       phone,
       desc,
       source:    "lead" as const,
+      recordingUrl,
     };
   });
 }
@@ -411,6 +416,13 @@ export default function CustomerTimelinePage() {
                           {fmtTime(ev.timestamp)}
                         </div>
                         <div style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6 }}>{ev.desc}</div>
+                        {ev.title === "Voicemail Left" && (
+                          ev.recordingUrl ? (
+                            <audio controls src={ev.recordingUrl} style={{ marginTop: 8, width: "100%", maxWidth: 380, borderRadius: 6, outline: "none" }} />
+                          ) : (
+                            <div style={{ marginTop: 5, fontSize: 11, color: B.dim }}>No recording available</div>
+                          )
+                        )}
                       </div>
                     </div>
                   );

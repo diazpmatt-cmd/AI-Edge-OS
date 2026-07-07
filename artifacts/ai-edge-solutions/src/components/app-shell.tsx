@@ -301,6 +301,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         style={{ flex: 1, minWidth: 0, overflowX: "hidden", paddingLeft: SIDEBAR_W, transition: "background 0.25s" }}
         className="app-main"
       >
+        {/* Back to Command Center — shown on every page except the dashboard itself */}
+        {!location.startsWith("/admin/dashboard") && (
+          <div style={{
+            padding: "8px 24px",
+            borderBottom: isDark ? "1px solid rgba(0,174,239,0.07)" : "1px solid rgba(0,174,239,0.12)",
+            background: isDark ? "rgba(3,6,18,0.6)" : "rgba(240,247,255,0.8)",
+          }}>
+            <Link
+              to="/admin/dashboard"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 600, color: "#00AEEF",
+                textDecoration: "none", opacity: 0.75,
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "1")}
+              onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "0.75")}
+            >
+              ← Command Center
+            </Link>
+          </div>
+        )}
         <div style={{ maxWidth: 1200, width: "100%", boxSizing: "border-box", margin: "0 auto", padding: "32px 24px 48px" }}>
           {children}
         </div>

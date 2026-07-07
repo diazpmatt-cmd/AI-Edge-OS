@@ -156,7 +156,7 @@ export default function CallIntelligencePage() {
 
   const { data, isLoading, isError } = useQuery<CallIntelligenceData>({
     queryKey: ["call-intelligence", period],
-    queryFn: () => apiFetch(`/api/call-intelligence?period=${period}`),
+    queryFn: () => apiFetch(`/call-intelligence?period=${period}`),
     refetchInterval: 60_000,
   });
 

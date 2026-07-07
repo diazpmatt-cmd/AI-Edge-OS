@@ -120,17 +120,17 @@ export default function MissionControlPage() {
 
   const { data: ci, isSuccess: ciOk } = useQuery<CIResponse>({
     queryKey: ["ci-mission"],
-    queryFn:  () => apiFetch("/api/call-intelligence?period=30days"),
+    queryFn:  () => apiFetch("/call-intelligence?period=30days"),
     retry: 1,
   });
   const { data: leads, isSuccess: leadsOk } = useQuery<LeadsResponse>({
     queryKey: ["leads-mission"],
-    queryFn:  () => apiFetch("/api/leads"),
+    queryFn:  () => apiFetch("/leads"),
     retry: 1,
   });
   const { data: postsRaw, isSuccess: postsOk } = useQuery<Post[] | { posts: Post[] }>({
     queryKey: ["posts-mission"],
-    queryFn:  () => apiFetch("/api/social-posts"),
+    queryFn:  () => apiFetch("/social-posts"),
     retry: 1,
   });
 

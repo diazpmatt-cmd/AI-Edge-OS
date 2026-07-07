@@ -198,42 +198,42 @@ export default function MorningBriefPage() {
 
   const ciQuery = useQuery<CIResponse>({
     queryKey: ["mb-ci"],
-    queryFn: () => apiFetch("/api/call-intelligence?period=30days"),
+    queryFn: () => apiFetch("/call-intelligence?period=30days"),
     staleTime: 60_000, retry: 1,
   });
   const leadsQuery = useQuery<LeadsResponse>({
     queryKey: ["mb-leads"],
-    queryFn: () => apiFetch("/api/leads"),
+    queryFn: () => apiFetch("/leads"),
     staleTime: 60_000, retry: 1,
   });
   const postsQuery = useQuery<SocialPost[] | { posts: SocialPost[] }>({
     queryKey: ["mb-posts"],
-    queryFn: () => apiFetch("/api/social-posts"),
+    queryFn: () => apiFetch("/social-posts"),
     staleTime: 60_000, retry: 1,
   });
   const connectionsQuery = useQuery<SocialConnection[]>({
     queryKey: ["mb-connections"],
-    queryFn: () => apiFetch("/api/social-connections"),
+    queryFn: () => apiFetch("/social-connections"),
     staleTime: 60_000, retry: 1,
   });
   const reviewStatsQuery = useQuery<{ stats: ReviewStat[] }>({
     queryKey: ["mb-review-stats"],
-    queryFn: () => apiFetch("/api/reviews/stats"),
+    queryFn: () => apiFetch("/reviews/stats"),
     staleTime: 60_000, retry: 1,
   });
   const reviewReqQuery = useQuery<{ requests: ReviewRequest[] }>({
     queryKey: ["mb-review-requests"],
-    queryFn: () => apiFetch("/api/reviews/requests"),
+    queryFn: () => apiFetch("/reviews/requests"),
     staleTime: 60_000, retry: 1,
   });
   const receptionistQuery = useQuery<AIReceptionist>({
     queryKey: ["mb-receptionist"],
-    queryFn: () => apiFetch("/api/ai-receptionist/settings"),
+    queryFn: () => apiFetch("/ai-receptionist/settings"),
     staleTime: 60_000, retry: 1,
   });
   const presenceQuery = useQuery<LocalPresenceScore>({
     queryKey: ["mb-presence"],
-    queryFn: () => apiFetch("/api/local-presence/score"),
+    queryFn: () => apiFetch("/local-presence/score"),
     staleTime: 60_000, retry: 1,
   });
 

@@ -97,7 +97,7 @@ export default function AssessmentsInboxPage() {
 
   const loadLeads = useCallback(async () => {
     try {
-      const data = await apiFetch("/api/assessments") as { assessments?: Assessment[] };
+      const data = await apiFetch("/assessments") as { assessments?: Assessment[] };
       const rows: Assessment[] = data.assessments ?? [];
       setLeads(rows);
     } catch {
@@ -139,7 +139,7 @@ export default function AssessmentsInboxPage() {
   // ── Patch helpers ──
   async function patchLead(id: string, patch: { status?: string; notes?: string }) {
     try {
-      const updated = await apiFetch(`/api/assessments/${id}`, { method: "PATCH", body: JSON.stringify(patch) }) as Partial<Assessment>;
+      const updated = await apiFetch(`/assessments/${id}`, { method: "PATCH", body: JSON.stringify(patch) }) as Partial<Assessment>;
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updated } : l));
     } catch (e) {
       console.error("patch failed", e);

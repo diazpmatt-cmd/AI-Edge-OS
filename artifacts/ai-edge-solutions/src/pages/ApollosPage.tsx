@@ -275,15 +275,15 @@ export default function ApollosPage() {
   // ── Live data queries ────────────────────────────────────────────────────────
   const ciQuery = useQuery<{ metrics: { total_calls: number; missed_calls: number; leads_captured: number } }>({
     queryKey: ["apollos-ci"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/api/call-intelligence?period=30days"),
+    queryFn: () => apiFetch("/call-intelligence?period=30days"),
   });
   const leadsQuery = useQuery<{ stats: { total: number; active: number; thisMonth: number } }>({
     queryKey: ["apollos-leads"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/api/leads"),
+    queryFn: () => apiFetch("/leads"),
   });
   const postsQuery = useQuery<{ posts?: { status: string }[] } | { status: string }[]>({
     queryKey: ["apollos-posts"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/api/social-posts"),
+    queryFn: () => apiFetch("/social-posts"),
   });
 
   const ci       = ciQuery.data;
@@ -442,7 +442,7 @@ export default function ApollosPage() {
     }]);
     setResponding(true);
 
-    apiFetch("/api/apollos/chat", {
+    apiFetch("/apollos/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "__auto_brief__", history: [] }),
@@ -491,7 +491,7 @@ export default function ApollosPage() {
       try {
         // Pass conversation history for session focus detection
         const history = messages.map(m => ({ role: m.role, content: m.text }));
-        const data = await apiFetch("/api/apollos/chat", {
+        const data = await apiFetch("/apollos/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed, history }),

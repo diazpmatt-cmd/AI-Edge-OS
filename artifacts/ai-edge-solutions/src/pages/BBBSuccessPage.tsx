@@ -159,13 +159,13 @@ export default function BBBSuccessPage() {
   // ── Fetch live data ──────────────────────────────────────────────────────────
   const ciQuery = useQuery<CIResponse>({
     queryKey: ["bbb-call-intelligence"],
-    queryFn:  () => apiFetch("/api/call-intelligence?period=30days"),
+    queryFn:  () => apiFetch("/call-intelligence?period=30days"),
     staleTime: 60_000,
     retry: 1,
   });
   const leadsQuery = useQuery<LeadsResponse>({
     queryKey: ["bbb-leads"],
-    queryFn:  () => apiFetch("/api/leads"),
+    queryFn:  () => apiFetch("/leads"),
     staleTime: 60_000,
     retry: 1,
   });

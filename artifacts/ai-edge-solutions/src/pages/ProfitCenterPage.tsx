@@ -64,14 +64,14 @@ function Panel({ children, style = {} }: { children: React.ReactNode; style?: Re
 
 // ── Static data ───────────────────────────────────────────────────────────────
 const KPI_CARDS = [
-  { label: "Revenue Today",            value: "$485",    sub: "1 service completed",          color: B.emerald, icon: "💵", est: false },
-  { label: "Revenue This Week",        value: "$2,340",  sub: "3 jobs + pipeline movement",   color: B.emerald, icon: "📅", est: true  },
-  { label: "Revenue This Month",       value: "$8,920",  sub: "Based on closed leads",        color: B.green,   icon: "📆", est: true  },
-  { label: "Pipeline Value",           value: "$18,400", sub: "Active leads tracked by Mason",color: B.cyan,    icon: "🔥", est: true  },
-  { label: "AI Revenue Protected",     value: "$1,240",  sub: "Calls answered before missed", color: B.gold,    icon: "🛡️", est: true  },
-  { label: "Missed Revenue Prevented", value: "$975",    sub: "3 missed callers recovered",   color: B.orange,  icon: "📞", est: true  },
-  { label: "AI Hours Saved",           value: "47 hrs",  sub: "This month vs. no automation", color: B.purple,  icon: "⏱️", est: true  },
-  { label: "Overall ROI",              value: "83×",     sub: "$23 AI cost → $1,920 value",   color: B.gold,    icon: "📈", est: true  },
+  { label: "Revenue Today",            value: "—", sub: "Connect booking system to track",   color: B.emerald, icon: "💵" },
+  { label: "Revenue This Week",        value: "—", sub: "Connect booking system to track",   color: B.emerald, icon: "📅" },
+  { label: "Revenue This Month",       value: "—", sub: "Connect booking system to track",   color: B.green,   icon: "📆" },
+  { label: "Pipeline Value",           value: "—", sub: "Connect GorillaDesk to see leads",  color: B.cyan,    icon: "🔥" },
+  { label: "AI Revenue Protected",     value: "—", sub: "Requires call intelligence data",   color: B.gold,    icon: "🛡️" },
+  { label: "Missed Revenue Prevented", value: "—", sub: "Requires call intelligence data",   color: B.orange,  icon: "📞" },
+  { label: "AI Hours Saved",           value: "—", sub: "Calculated once calls are tracked", color: B.purple,  icon: "⏱️" },
+  { label: "Overall ROI",              value: "—", sub: "Calculated once revenue is tracked",color: B.gold,    icon: "📈" },
 ];
 
 const AGENT_REVENUE = [
@@ -208,7 +208,7 @@ export default function ProfitCenterPage() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${B.green}15`, border: `1px solid ${B.green}33`, borderRadius: 20, padding: "7px 14px" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: B.green, display: "inline-block" }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: B.green }}>🟢 LIVE Revenue Signals</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: B.silver }}>⚪ Awaiting Integration</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${B.gold}15`, border: `1px solid ${B.gold}33`, borderRadius: 20, padding: "7px 14px" }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: B.gold }}>🟡 Estimated Values</span>
@@ -228,7 +228,7 @@ export default function ProfitCenterPage() {
             <Panel key={k.label} style={{ borderColor: `${k.color}33` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                 <span style={{ fontSize: 22 }}>{k.icon}</span>
-                {k.est ? <EstBadge /> : <LiveBadge />}
+                <DemoBadge />
               </div>
               <div style={{ fontSize: "clamp(22px,2.5vw,30px)", fontWeight: 900, color: k.color, letterSpacing: "-1px", marginBottom: 4 }}>{k.value}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: B.white, marginBottom: 4 }}>{k.label}</div>

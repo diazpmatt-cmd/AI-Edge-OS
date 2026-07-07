@@ -98,13 +98,7 @@ const DAY_STATUS_STYLE: Record<DayStatus, { label: string; color: string; bg: st
 };
 
 // ── Success wall ──────────────────────────────────────────────────────────────
-const WINS = [
-  { icon: "★", label: "New 5-star review",        color: B.gold,    sub: "Google · 2 days ago"   },
-  { icon: "🔥", label: "Lead recovered",           color: B.orange,  sub: "Missed call → booked"  },
-  { icon: "📘", label: "Facebook post published",  color: B.blue,    sub: "Reached 340 people"    },
-  { icon: "🎬", label: "Commercial created",       color: B.purple,  sub: "30-sec video · live"   },
-  { icon: "🌐", label: "Website updated",          color: B.emerald, sub: "New services page"     },
-];
+const WINS: { icon: string; label: string; color: string; sub: string }[] = [];
 
 // ── Scorecard ────────────────────────────────────────────────────────────────
 const SCORECARD_GOALS = { calls: 25, leads: 10, jobs: 5, reviews: 5, posts: 5, media: 5 } as const;
@@ -651,7 +645,7 @@ export default function BBBExecutionPage() {
             {/* ── SUCCESS WALL ── */}
             <Section title="🏆 Success Wall — Recent Wins" accent={B.gold}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {WINS.map((w, i) => (
+                {WINS.length > 0 ? WINS.map((w, i) => (
                   <div key={i} style={{
                     display: "flex", alignItems: "center", gap: 10,
                     background: `${w.color}0A`, border: `1px solid ${w.color}25`,
@@ -668,7 +662,13 @@ export default function BBBExecutionPage() {
                       color: w.color, borderRadius: 5, padding: "2px 7px",
                     }}>WIN</span>
                   </div>
-                ))}
+                )) : (
+                  <div style={{ padding: "24px 0", textAlign: "center" }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>🏆</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: B.silver, marginBottom: 4 }}>No wins logged yet</div>
+                    <div style={{ fontSize: 11, color: B.dim }}>Book a job, earn a review, or publish a post — wins will appear here.</div>
+                  </div>
+                )}
               </div>
             </Section>
           </div>

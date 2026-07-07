@@ -474,16 +474,7 @@ export default function MorningBriefPage() {
       text: `${draftPosts} social post${draftPosts > 1 ? "s" : ""} waiting to be published`,
     });
   }
-  // Fill to max 3 with demo items if fewer than 3
-  const demoAttention = [
-    { icon: "⭐", color: "#A78BFA", live: false, text: "No Google reviews this week — consider requesting from recent customers" },
-    { icon: "📊", color: "#34D399", live: false, text: "Weekly performance report ready — review AI activity summary" },
-    { icon: "📅", color: "#FB923C", live: false, text: "Schedule next month's content calendar — Mia is ready to generate" },
-  ];
-  const shownAttention = [
-    ...attentionItems,
-    ...demoAttention.slice(0, Math.max(0, 3 - attentionItems.length)),
-  ].slice(0, 3);
+  const shownAttention = attentionItems.slice(0, 3);
 
   // ── Agent configs ────────────────────────────────────────────────────────────
   const emmaMetrics = hasLiveCalls
@@ -493,9 +484,9 @@ export default function MorningBriefPage() {
         { label: "Leads Captured", value: ci!.metrics.leads_captured },
       ]
     : [
-        { label: "Calls Answered", value: 312 },
-        { label: "Missed Recovered", value: 47 },
-        { label: "Leads Captured", value: 38 },
+        { label: "Calls Answered",  value: "—" },
+        { label: "Missed Recovered",value: "—" },
+        { label: "Leads Captured",  value: "—" },
       ];
 
   const emmaRec = hasLiveCalls && missedCalls > 0
@@ -511,9 +502,9 @@ export default function MorningBriefPage() {
         { label: "This Month",   value: leads!.stats.thisMonth },
       ]
     : [
-        { label: "Hot Leads",     value: 3 },
-        { label: "Pipeline",      value: "$4,200" },
-        { label: "Est. Today",    value: "$850" },
+        { label: "Hot Leads",  value: "—" },
+        { label: "Pipeline",   value: "—" },
+        { label: "This Month", value: "—" },
       ];
 
   const masonRec = hasLiveLeads && hotLead
@@ -529,9 +520,9 @@ export default function MorningBriefPage() {
         { label: "Platforms",  value: "FB + IG" },
       ]
     : [
-        { label: "Posts Published", value: 5 },
-        { label: "Est. Reach",      value: "2.4K" },
-        { label: "Engagement",      value: "4.2%" },
+        { label: "Posts Published", value: "—" },
+        { label: "Reach",           value: "—" },
+        { label: "Engagement",      value: "—" },
       ];
 
   const miaRec = hasLivePosts && draftPosts > 0

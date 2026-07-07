@@ -231,27 +231,27 @@ export default function BBBSuccessPage() {
   const IMPACT_CARDS = [
     {
       label: "Calls Answered by AI",   icon: "🤖", color: "#00AEEF", sub: "this month",
-      value: liveCallsAnswered ?? "312", live: hasLiveCalls,
+      value: liveCallsAnswered ?? "—",   live: hasLiveCalls,
     },
     {
       label: "Missed Leads Recovered", icon: "📞", color: "#34D399", sub: "missed calls",
-      value: liveMissedCalls ?? "47",   live: hasLiveCalls,
+      value: liveMissedCalls ?? "—",    live: hasLiveCalls,
     },
     {
       label: "Appointments Booked",    icon: "📅", color: "#A78BFA", sub: "from AI calls",
-      value: "29",                      live: false,
+      value: "—",                       live: false,
     },
     {
       label: "Texts Sent",             icon: "💬", color: "#FB923C", sub: "auto follow-up",
-      value: liveSmsCount ?? "163",     live: hasLiveSms,
+      value: liveSmsCount ?? "—",       live: hasLiveSms,
     },
     {
       label: "Revenue Influenced",     icon: "💰", color: "#22C55E", sub: "est. from AI leads",
-      value: "$18,400",                 live: false,
+      value: "—",                       live: false,
     },
     {
       label: "Hours Saved",            icon: "⏱",  color: "#60A5FA", sub: "receptionist time",
-      value: "94 hrs",                  live: false,
+      value: "—",                       live: false,
     },
   ];
 
@@ -322,22 +322,22 @@ export default function BBBSuccessPage() {
     });
   }
   const useLiveOpps = liveOpps.length > 0;
-  const opportunityRows = useLiveOpps ? liveOpps : MOCK_OPPORTUNITIES;
+  const opportunityRows = liveOpps;
 
   // ── Receptionist metrics — live where possible ───────────────────────────────
   const recepMetrics = [
     {
       label: "Avg Call Length",
-      value: avgDurationSecs != null ? fmtDuration(avgDurationSecs) : "2m 14s",
+      value: avgDurationSecs != null ? fmtDuration(avgDurationSecs) : "—",
       icon: "⏱", color: "#00AEEF", live: hasLiveDuration,
     },
     {
       label: "Transfer Rate",
-      value: liveTransferRate ?? "18%",
+      value: liveTransferRate ?? "—",
       icon: "📲", color: "#A78BFA", live: hasLiveCalls,
     },
-    { label: "Booking Intent Rate", value: "64%",  icon: "📅", color: "#34D399", live: false },
-    { label: "Unanswered Questions",value: "7",    icon: "❓", color: "#FB923C", live: false },
+    { label: "Booking Intent Rate", value: "—", icon: "📅", color: "#34D399", live: false },
+    { label: "Unanswered Questions",value: "—", icon: "❓", color: "#FB923C", live: false },
   ];
 
   const TABS = [
@@ -516,20 +516,15 @@ export default function BBBSuccessPage() {
                 </tbody>
               </table>
             ) : (
+              <div style={{ padding: "36px", textAlign: "center" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>📵</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>No call records yet</div>
+                <div style={{ fontSize: 12, color: "#475569" }}>Call activity will appear here once the AI receptionist handles its first call.</div>
+              </div>
+            )}
+            {false && (
               <>
-                <div style={{ marginBottom: 12, fontSize: 11, color: "#FBBF24" }}>🟡 No live call records yet — showing demo data</div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      {["Time", "Caller", "Call Type", "Service Requested", "Outcome", "Revenue Opp"].map(h => (
-                        <th key={h} style={{
-                          padding: "8px 12px", textAlign: "left", fontWeight: 700, fontSize: 10,
-                          color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px",
-                          borderBottom: "1px solid rgba(255,255,255,0.06)", whiteSpace: "nowrap",
-                        }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
                   <tbody>
                     {MOCK_CALL_ACTIVITY.map((row, i) => {
                       const oc = row.outcome === "Booked" ? "#34D399" : row.outcome === "Text sent" ? "#60A5FA" : row.outcome === "Customer replied" ? "#A78BFA" : "#FBBF24";
@@ -565,7 +560,13 @@ export default function BBBSuccessPage() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {(hasLiveLeads ? liveLeadRows : MOCK_LEAD_RECOVERY).map((lead, i) => (
+            {liveLeadRows.length === 0 && (
+              <div style={{ padding: "36px", textAlign: "center", color: "#475569" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#94A3B8", marginBottom: 6 }}>No lead recovery records yet</div>
+                <div style={{ fontSize: 12 }}>Recovered leads will appear here as calls come in.</div>
+              </div>
+            )}
+            {liveLeadRows.map((lead, i) => (
               <div key={i} style={{
                 ...card, display: "grid",
                 gridTemplateColumns: "2fr repeat(5,1fr)", gap: 8, alignItems: "center", padding: "12px 16px",

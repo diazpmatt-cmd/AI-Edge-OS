@@ -97,21 +97,21 @@ const AGENTS_META = [
 ];
 
 const TIMELINE_ITEMS = [
-  { time: "7:00 AM", agent: "Emma",   emoji: "📞", action: "Checked overnight calls · flagged missed leads for follow-up" },
-  { time: "7:05 AM", agent: "Mason",  emoji: "💼", action: "Reviewed new leads · prioritized top 3 for morning outreach" },
-  { time: "7:10 AM", agent: "Mia",    emoji: "📣", action: "Prepared today's marketing content · queued social posts" },
-  { time: "7:15 AM", agent: "Alex",   emoji: "🔍", action: "Reviewed search rankings · identified two ranking opportunities" },
-  { time: "7:20 AM", agent: "Ava",    emoji: "🎨", action: "Generated branded creative assets for this week's campaign" },
-  { time: "7:25 AM", agent: "Olivia", emoji: "⭐", action: "Checked all review platforms · flagged one unanswered review" },
-  { time: "7:30 AM", agent: "Riley",  emoji: "📊", action: "Analyzed business health · compiled executive morning brief" },
+  { time: "7:00 AM", agent: "Emma",   emoji: "📞", action: "Check overnight calls and flag missed leads for follow-up" },
+  { time: "7:05 AM", agent: "Mason",  emoji: "💼", action: "Review new leads and prioritize top leads for morning outreach" },
+  { time: "7:10 AM", agent: "Mia",    emoji: "📣", action: "Prepare today's marketing content and queue social posts" },
+  { time: "7:15 AM", agent: "Alex",   emoji: "🔍", action: "Review search rankings and identify ranking opportunities" },
+  { time: "7:20 AM", agent: "Ava",    emoji: "🎨", action: "Generate branded creative assets for this week's campaign" },
+  { time: "7:25 AM", agent: "Olivia", emoji: "⭐", action: "Check all review platforms and flag any unanswered reviews" },
+  { time: "7:30 AM", agent: "Riley",  emoji: "📊", action: "Analyze business health and compile executive morning brief" },
 ];
 
 const RECOMMENDED_ACTIONS = [
-  { priority: 1, impact: "HIGH",   color: B.red,    icon: "🔥", title: "Follow up on missed call from 11:42 PM",            sub: "Emma logged a missed lead — high-intent inquiry for residential treatment", agent: "Emma → Mason" },
-  { priority: 2, impact: "HIGH",   color: "#F97316", icon: "💼", title: "Call your top-priority lead this morning",          sub: "Mason flagged: new lead arrived 2:14 AM · best conversion window is now", agent: "Mason" },
-  { priority: 3, impact: "MED",    color: B.gold,   icon: "✏️", title: "Approve 2 draft posts before 10 AM",                sub: "Mia prepared Tuesday content — needs your approval to publish", agent: "Mia" },
-  { priority: 4, impact: "MED",    color: "#A78BFA", icon: "⭐", title: "Respond to 1 unanswered Google review",            sub: "Olivia flagged a review from last week with no response yet", agent: "Olivia" },
-  { priority: 5, impact: "LOW",    color: B.blue,   icon: "🔍", title: "Review this week's ranking progress report",        sub: "Alex prepared a 3-page ranking opportunity summary", agent: "Alex" },
+  { priority: 1, impact: "HIGH",   color: B.red,    icon: "🔥", title: "Follow up on any missed calls",                   sub: "Check call log — missed calls with no callback are high-intent lost revenue", agent: "Emma → Mason" },
+  { priority: 2, impact: "HIGH",   color: "#F97316", icon: "💼", title: "Contact your highest-priority open lead",         sub: "New leads cool fast — response within the hour improves close rates", agent: "Mason" },
+  { priority: 3, impact: "MED",    color: B.gold,   icon: "✏️", title: "Review and approve any draft social posts",       sub: "Check Content Autopilot — queued drafts are waiting in Publishing Center", agent: "Mia" },
+  { priority: 4, impact: "MED",    color: "#A78BFA", icon: "⭐", title: "Respond to any unanswered Google reviews",       sub: "Check Reviews Engine — unanswered reviews affect your local ranking", agent: "Olivia" },
+  { priority: 5, impact: "LOW",    color: B.blue,   icon: "🔍", title: "Check local SEO rankings this week",              sub: "Review Local Presence Engine for ranking changes and opportunities", agent: "Alex" },
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -140,14 +140,14 @@ export default function MissionControlPage() {
   const hasLiveLeads = leadsOk && (leads?.stats.total ?? 0) > 0;
   const hasLivePosts = postsOk && posts.length > 0;
 
-  const answered     = hasLiveCalls ? (ci!.metrics.total_calls - ci!.metrics.missed_calls) : 47;
-  const missed       = hasLiveCalls ? ci!.metrics.missed_calls   : 3;
-  const leadsTotal   = hasLiveLeads ? leads!.stats.total          : 12;
-  const leadsActive  = hasLiveLeads ? leads!.stats.active         : 8;
-  const published    = hasLivePosts ? posts.filter(p => p.status === "published").length : 23;
-  const drafts       = hasLivePosts ? posts.filter(p => p.status === "draft").length     : 2;
+  const answered     = hasLiveCalls ? (ci!.metrics.total_calls - ci!.metrics.missed_calls) : 0;
+  const missed       = hasLiveCalls ? ci!.metrics.missed_calls   : 0;
+  const leadsTotal   = hasLiveLeads ? leads!.stats.total          : 0;
+  const leadsActive  = hasLiveLeads ? leads!.stats.active         : 0;
+  const published    = hasLivePosts ? posts.filter(p => p.status === "published").length : 0;
+  const drafts       = hasLivePosts ? posts.filter(p => p.status === "draft").length     : 0;
 
-  const healthScore  = Math.min(100, 72 + (hasLiveCalls ? 8 : 0) + (hasLiveLeads ? 8 : 0) + (hasLivePosts ? 7 : 0));
+  const healthScore  = Math.min(100, (hasLiveCalls ? 40 : 0) + (hasLiveLeads ? 35 : 0) + (hasLivePosts ? 25 : 0));
 
   // Per-agent metric strings
   const agentMetrics: Record<string, { metric: string; live: boolean }> = {
@@ -163,9 +163,9 @@ export default function MissionControlPage() {
   const activityFeed = [
     { time: "7:30 AM", agent: "Riley",  emoji: "📊", text: `Business health score computed: ${healthScore}/100`,         live: hasLiveCalls || hasLiveLeads },
     { time: "7:28 AM", agent: "Mason",  emoji: "💼", text: `${leadsActive} active leads in pipeline · ${leadsTotal} total tracked`, live: hasLiveLeads },
-    { time: "7:25 AM", agent: "Olivia", emoji: "⭐", text: "All 4 review platforms checked — 1 unanswered review flagged",          live: false },
-    { time: "7:22 AM", agent: "Ava",    emoji: "🎨", text: "3 new branded creatives added to asset library",                       live: false },
-    { time: "7:18 AM", agent: "Alex",   emoji: "🔍", text: "2 keyword ranking opportunities identified for this week",              live: false },
+    { time: "7:25 AM", agent: "Olivia", emoji: "⭐", text: "Review platforms monitored — awaiting platform connection",           live: false },
+    { time: "7:22 AM", agent: "Ava",    emoji: "🎨", text: "Creative library ready — no assets uploaded yet",                      live: false },
+    { time: "7:18 AM", agent: "Alex",   emoji: "🔍", text: "SEO monitoring active — no ranking data yet",                          live: false },
     { time: "7:14 AM", agent: "Mia",    emoji: "📣", text: `${published} posts published this month · ${drafts} drafts awaiting approval`, live: hasLivePosts },
     { time: "7:08 AM", agent: "Emma",   emoji: "📞", text: `${answered} calls answered overnight · ${missed} flagged for follow-up`, live: hasLiveCalls },
     { time: "2:14 AM", agent: "Emma",   emoji: "📞", text: "New high-intent lead captured from incoming call — routing to Mason",    live: hasLiveCalls },
@@ -292,7 +292,7 @@ export default function MissionControlPage() {
 
         {/* ── Section 3: Mission Timeline ── */}
         <div>
-          {sectionLabel("Mission Timeline — This Morning")}
+          {sectionLabel("Today's AI Agent Schedule")}
           <div style={{ ...card({ padding: "20px 24px" }), display: "flex", flexDirection: "column", gap: 0 }}>
             {TIMELINE_ITEMS.map((t, i) => (
               <div key={t.time} style={{ display: "flex", gap: 14, paddingBottom: i < TIMELINE_ITEMS.length - 1 ? 16 : 0, position: "relative" }}>

@@ -584,25 +584,32 @@ router.post("/telnyx/voice/gather", async (req, res) => {
       `));
 
     } else if (digit === "3") {
-      const recordUrl = `${baseUrl(req)}/api/telnyx/voice/recording`;
-      const vmPrompt  = cfg.voicemailMessage ?? "Please leave your name, phone number, and a brief description after the beep. Press star or hang up when finished.";
-      console.log(`[TELNYX] Voicemail recording started for ${from || "unknown"}`);
-      await db.update(callsTable)
-        .set({ callType: "voicemail", digitsPressed: "3", outcome: "pending" })
-        .where(
-          and(
-            eq(callsTable.callerNumber, from),
-            eq(callsTable.callType, "incoming"),
-            gte(callsTable.createdAt, since5m),
-            ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+      const forward = cfg.transferPhone;
+      console.log(`[TELNYX] Voicemail transfer to ${forward} for ${from || "unknown"}`);
+      await Promise.all([
+        db.insert(leadsTable).values({
+          clientName: getClientName(),
+          source:     "telnyx_voicemail",
+          phone:      from,
+          message:    `Caller pressed 3 — transferred to ${forward} for voicemail`,
+          eventType:  "telnyx_voicemail",
+          status:     "new",
+        }).catch(e => console.error("[TELNYX] leadsTable insert error (voicemail transfer):", e)),
+        db.update(callsTable)
+          .set({ callType: "voicemail", digitsPressed: "3", outcome: "transferred" })
+          .where(
+            and(
+              eq(callsTable.callerNumber, from),
+              eq(callsTable.callType, "incoming"),
+              gte(callsTable.createdAt, since5m),
+              ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
+            )
           )
-        )
-        .catch(e => console.error("[TELNYX] callsTable update error (voicemail start):", e));
+          .catch(e => console.error("[TELNYX] callsTable update error (voicemail transfer):", e)),
+      ]);
       res.send(texml(`
-        <Say voice="${cfg.voiceStyle}">${vmPrompt}</Say>
-        <Record action="${recordUrl}" method="POST" maxLength="120" playBeep="true" finishOnKey="*"/>
-        <Say voice="${cfg.voiceStyle}">We did not receive your message. Please call back and try again. Goodbye.</Say>
-        <Hangup/>
+        <Say voice="${cfg.voiceStyle}">Please hold while we connect you. If we don't answer, please leave a voicemail after the tone.</Say>
+        <Dial>${forward}</Dial>
       `));
 
     } else if (digit === "4") {

@@ -34,7 +34,7 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Voicemail stays on the BB&B business phone (+12513249090). Press 3 transfers the caller there; native phone voicemail handles messages. Do not build Telnyx recording, AI Edge voicemail storage, or transcription unless explicitly requested.
 
 ## Gotchas
 

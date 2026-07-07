@@ -332,7 +332,7 @@ export default function AIReceptionistPage() {
                   {[
                     { key: "1", icon: "↗",  label: "Press 1",   action: "Live Transfer",   color: "#22C55E", sub: settings.transferPhone },
                     { key: "2", icon: "📲", label: "Press 2",   action: "Callback",          color: "#00AEEF", sub: "Log lead + confirm" },
-                    { key: "3", icon: "🎙", label: "Press 3",   action: "Voicemail",         color: "#F59E0B", sub: "Record + save" },
+                    { key: "3", icon: "🎙", label: "Press 3",   action: "Voicemail",         color: "#F59E0B", sub: "Transfer to BB&B" },
                     { key: "4", icon: "💬", label: "Press 4",   action: "Continue by Text",  color: "#06B6D4", sub: "SMS auto-sent" },
                   ].map(b => (
                     <div key={b.key} style={{
@@ -450,8 +450,10 @@ export default function AIReceptionistPage() {
                       <textarea rows={2} value={form.callbackMessage} onChange={e => setForm(f => ({ ...f, callbackMessage: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
                     </div>
                     <div>
-                      {label("Press 3 — Voicemail Prompt", "Played before recording begins")}
-                      <textarea rows={2} value={form.voicemailMessage} onChange={e => setForm(f => ({ ...f, voicemailMessage: e.target.value }))} style={{ ...inputStyle, resize: "vertical" }} />
+                      {label("Press 3 — Voicemail", "Caller is transferred to the BB&B business number")}
+                      <div style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)", fontSize: 12.5, color: "#D97706", lineHeight: 1.5 }}>
+                        Voicemail is handled by the BB&B business phone&nbsp;<strong>(251) 324-9090</strong>. When a caller presses 3, they are connected to that number — if unanswered, the phone's native voicemail takes the message.
+                      </div>
                     </div>
                     <div>
                       {label("Press 4 — Text Routing Message", "SMS sent to caller when they press 4")}

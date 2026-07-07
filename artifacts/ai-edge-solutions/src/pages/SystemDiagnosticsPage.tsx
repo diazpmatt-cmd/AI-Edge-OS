@@ -722,7 +722,7 @@ export default function SystemDiagnosticsPage() {
           {[
             { label: "Simulate Call → Press 1", desc: "Live transfer to business number", icon: "📞", sel: "1", color: "#22C55E" },
             { label: "Simulate Call → Press 2", desc: "Callback request lead logged", icon: "📋", sel: "2", color: "#00AEEF" },
-            { label: "Simulate Call → Press 3", desc: "Voicemail recorded + lead logged", icon: "🎙", sel: "3", color: "#3B82F6" },
+            { label: "Simulate Call → Press 3", desc: "Voicemail transfer to (251) 324-9090", icon: "🎙", sel: "3", color: "#3B82F6" },
           ].map(btn => (
             <button
               key={btn.sel}
@@ -769,7 +769,7 @@ export default function SystemDiagnosticsPage() {
         <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(0,174,239,0.04)", border: "1px solid rgba(0,174,239,0.1)" }}>
           <div style={{ fontSize: 10.5, color: "#475569", lineHeight: 1.7 }}>
             <strong style={{ color: "#94A3B8" }}>IVR Flow:</strong> Caller dials (251) 286-3200 →
-            Greeting plays → Press 1: forward to (254) 324-9090 · Press 2: callback lead logged · Press 3: voicemail recorded
+            Greeting plays → Press 1: live transfer to (251) 324-9090 · Press 2: callback lead logged · Press 3: transfer to (251) 324-9090 for native voicemail
             <br />
             <strong style={{ color: "#94A3B8" }}>Event types saved to DB:</strong>{" "}
             <code style={{ color: "#00AEEF" }}>telnyx_voice_call</code> ·{" "}

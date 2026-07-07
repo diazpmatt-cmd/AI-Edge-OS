@@ -3,14 +3,15 @@ import { useAuth } from "@clerk/react";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export async function apiFetch<T>(path: string, init?: RequestInit, token?: string | null): Promise<T> {
+  const { headers: initHeaders, ...restInit } = init ?? {};
   const res = await fetch(`${BASE}/api${path}`, {
     credentials: "include",
+    ...restInit,
     headers: {
       "Content-Type": "application/json",
+      ...(initHeaders as Record<string, string> | undefined),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers as Record<string, string> | undefined),
     },
-    ...init,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);

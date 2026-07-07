@@ -418,7 +418,7 @@ router.post("/revenue-attribution/sync-gorilladesk-jobs", async (req, res) => {
   return res.json({
     ok:             true,
     syncedAt:       lastSyncAt,
-    gdJobsAvailable,
+    gdApiJobsAvailable,
     gdApiMessage,
     gdJobCount:     gdJobs.length,
     gdCustomerCount: gdCustomers.length,

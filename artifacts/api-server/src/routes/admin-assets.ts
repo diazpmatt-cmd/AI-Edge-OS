@@ -170,7 +170,7 @@ router.patch("/admin/assets/:id", async (req: Request, res: Response) => {
     const [row] = await db
       .update(assetsTable)
       .set(updates)
-      .where(and(eq(assetsTable.id, id), eq(assetsTable.userId, userId)))
+      .where(and(eq(assetsTable.id, String(id)), eq(assetsTable.userId, userId)))
       .returning();
 
     if (!row) { res.status(404).json({ error: "Asset not found or access denied" }); return; }
@@ -190,7 +190,7 @@ router.delete("/admin/assets/:id", async (req: Request, res: Response) => {
   try {
     const [deleted] = await db
       .delete(assetsTable)
-      .where(and(eq(assetsTable.id, id), eq(assetsTable.userId, userId)))
+      .where(and(eq(assetsTable.id, String(id)), eq(assetsTable.userId, userId)))
       .returning({ id: assetsTable.id });
 
     if (!deleted) { res.status(404).json({ error: "Asset not found or access denied" }); return; }

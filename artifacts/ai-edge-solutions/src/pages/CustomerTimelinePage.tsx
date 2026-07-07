@@ -437,13 +437,12 @@ export default function CustomerTimelinePage() {
         <SectionLabel text="Recommended Next Actions" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
           {NEXT_ACTIONS.map((a, i) => (
-            <Panel key={a.priority} style={{
+            <div key={a.priority} onClick={() => setActiveAction(i)} style={{ cursor: "pointer" }}>
+            <Panel style={{
               borderColor: i === activeAction ? `${a.color}55` : B.border,
-              cursor: "pointer",
               background: i === activeAction ? `${a.color}08` : B.panel,
               transition: "all 0.2s",
             }}
-              onClick={() => setActiveAction(i)}
             >
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <div style={{
@@ -476,6 +475,7 @@ export default function CustomerTimelinePage() {
                 </div>
               </div>
             </Panel>
+            </div>
           ))}
         </div>
       </div>

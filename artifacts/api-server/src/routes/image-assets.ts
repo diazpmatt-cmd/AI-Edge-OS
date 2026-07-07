@@ -85,7 +85,7 @@ router.patch("/image-assets/:id", async (req: Request, res: Response) => {
     const [row] = await db
       .update(imageAssetsTable)
       .set(updates)
-      .where(and(eq(imageAssetsTable.id, id), eq(imageAssetsTable.userId, userId)))
+      .where(and(eq(imageAssetsTable.id, String(id)), eq(imageAssetsTable.userId, userId)))
       .returning();
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ asset: toClient(row) });
@@ -103,7 +103,7 @@ router.delete("/image-assets/:id", async (req: Request, res: Response) => {
   try {
     await db
       .delete(imageAssetsTable)
-      .where(and(eq(imageAssetsTable.id, id), eq(imageAssetsTable.userId, userId)));
+      .where(and(eq(imageAssetsTable.id, String(id)), eq(imageAssetsTable.userId, userId)));
     res.json({ ok: true });
   } catch (err) {
     console.error("[image-assets] DELETE error", err);

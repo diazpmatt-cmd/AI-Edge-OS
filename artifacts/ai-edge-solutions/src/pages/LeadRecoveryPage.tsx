@@ -79,7 +79,7 @@ const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
 
 const SMS_FLOW = [
   { step: 1, delay: "0 sec",  trigger: "Missed call detected", message: "Sorry we missed your call! This is Bed Bugs & Beyond. How can we help you today? 🐛" },
-  { step: 2, delay: "Reply",  trigger: "Customer responds",     message: "Thanks for reaching out! What pest issue are you dealing with? (bed bugs, roaches, termites, ants, etc.)" },
+  { step: 2, delay: "Reply",  trigger: "Customer responds",     message: "Thanks for reaching out! What pest issue are you dealing with? (bed bugs, roaches, ants, mosquitoes, etc.)" },
   { step: 3, delay: "Reply",  trigger: "Customer answers",      message: "Got it! What city are you located in? We serve Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, and Spanish Fort." },
   { step: 4, delay: "Reply",  trigger: "City confirmed",        message: "Great news — we service your area! Would you prefer a callback from our team or an on-site inspection appointment?" },
 ];

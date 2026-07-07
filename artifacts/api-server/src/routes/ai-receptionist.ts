@@ -106,7 +106,7 @@ router.put("/ai-receptionist/settings", async (req, res) => {
     } else {
       [row] = await db
         .insert(aiReceptionistSettingsTable)
-        .values({ clientId, ...DEFAULT_SETTINGS, ...updates })
+        .values({ ...DEFAULT_SETTINGS, ...updates, clientId })
         .returning();
     }
 

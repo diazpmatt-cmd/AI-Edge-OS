@@ -206,20 +206,12 @@ export default function BBBOperationsCenterPage() {
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["leads"],
-    queryFn: async () => {
-      const r = await apiFetch("/api/leads");
-      if (!r.ok) throw new Error("leads fetch failed");
-      return r.json();
-    },
+    queryFn: () => apiFetch<Lead[]>("/leads"),
   });
 
   const { data: posts = [] } = useQuery<SocialPost[]>({
     queryKey: ["social-posts"],
-    queryFn: async () => {
-      const r = await apiFetch("/api/social-posts");
-      if (!r.ok) throw new Error("posts fetch failed");
-      return r.json();
-    },
+    queryFn: () => apiFetch<SocialPost[]>("/social-posts"),
   });
 
   const leadsToday    = leads.filter(l => isToday(l.created_at)).length;

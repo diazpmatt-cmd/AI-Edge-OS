@@ -347,7 +347,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };
     } else {
       try {
-        const token = await getGoogleAccessToken(gbpConn);
+        const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });
         const googleCaption = post.captionGoogle ?? post.caption;
         const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
         const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);

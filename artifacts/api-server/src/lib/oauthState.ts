@@ -34,7 +34,7 @@ export function verifyState(
   if (sigBuf.length !== expBuf.length) return null;
   if (!timingSafeEqual(sigBuf, expBuf)) return null;
 
-  let parsed: { userId?: string; provider?: string; nonce?: string; exp?: number; returnTo?: string };
+  let parsed: { userId?: string; provider?: string; nonce?: string; exp?: number; returnTo?: string; devOrigin?: string };
   try {
     parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
   } catch {

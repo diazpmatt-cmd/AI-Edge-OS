@@ -1207,7 +1207,7 @@ router.get("/social-connections/meta-oauth-debug", async (req, res) => {
     // ── /me — confirm token identity ──────────────────────────────────────────
     try {
       const meR = await fetch(`https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${tok}`);
-      const meBody = await meR.json();
+      const meBody = await meR.json() as Record<string, any>;
       meIdentity = { httpStatus: meR.status, ...meBody };
       console.log(`[META-DEBUG] /me → status=${meR.status} id=${meBody.id ?? "?"} name="${meBody.name ?? "?"}"`);
       if (meBody.error) console.error(`[META-DEBUG] /me error code=${meBody.error.code}: ${meBody.error.message}`);

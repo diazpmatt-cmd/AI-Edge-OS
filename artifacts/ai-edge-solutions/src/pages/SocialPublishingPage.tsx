@@ -60,9 +60,30 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 
 const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; label: string }> = {
   facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "f", label: "Facebook" },
-  instagram: { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "✦", label: "Instagram" },
-  google:    { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "G", label: "Google Business" },
+  instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: "✦", label: "Instagram" },
+  google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: "G", label: "Google Business" },
 };
+
+function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | null; error?: string }> {
+  const { status, errorMessage, platforms } = post;
+  if (status === "published") return Object.fromEntries(platforms.map(p => [p, { ok: true }]));
+  if (status === "draft" || status === "scheduled") return Object.fromEntries(platforms.map(p => [p, { ok: null }]));
+  const errs: Record<string, string> = {};
+  if (errorMessage) {
+    for (const seg of errorMessage.split(/[;|]/)) {
+      const ci = seg.indexOf(":");
+      if (ci > 0) {
+        const k = seg.slice(0, ci).trim().toLowerCase();
+        const v = seg.slice(ci + 1).trim();
+        if (k) errs[k] = v;
+      }
+    }
+  }
+  return Object.fromEntries(platforms.map(p => [
+    p,
+    errs[p] ? { ok: false, error: errs[p] } : { ok: status === "partial" },
+  ]));
+}
 
 const COMING_SOON_PLATFORMS = [
   { key: "youtube", label: "YouTube Shorts", icon: "▶", color: "#FF0000", note: "Video/Shorts uploads only" },
@@ -341,6 +362,27 @@ export default function SocialPublishingPage() {
             </button>
           )}
         </div>
+
+        {/* ── Publishing Status Banner ── */}
+        {!isLoading && posts.length > 0 && (() => {
+          const hasFailed = counts.failed > 0;
+          const hasScheduled = counts.scheduled > 0;
+          const allGood = !hasFailed && counts.published > 0;
+          const bannerBg     = hasFailed ? "rgba(239,68,68,0.07)"   : hasScheduled ? "rgba(245,158,11,0.07)"   : "rgba(34,197,94,0.07)";
+          const bannerBorder = hasFailed ? "rgba(239,68,68,0.2)"    : hasScheduled ? "rgba(245,158,11,0.2)"    : "rgba(34,197,94,0.2)";
+          return (
+            <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 10, background: bannerBg, border: `1px solid ${bannerBorder}`, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px", flexShrink: 0 }}>Publishing Status</span>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", flex: 1 }}>
+                {counts.published > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: "#22C55E" }}>🟢 {counts.published} Published</span>}
+                {counts.scheduled > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: "#F59E0B" }}>🟡 {counts.scheduled} Scheduled</span>}
+                {counts.draft > 0     && <span style={{ fontSize: 13, fontWeight: 700, color: "#64748B" }}>⚪ {counts.draft} Draft{counts.draft !== 1 ? "s" : ""}</span>}
+                {counts.failed > 0    && <span style={{ fontSize: 13, fontWeight: 700, color: "#EF4444" }}>🔴 {counts.failed} Failed — see Activity Log below</span>}
+              </div>
+              {allGood && <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 600 }}>✓ API-confirmed</span>}
+            </div>
+          );
+        })()}
 
         {/* ── Publish toast ── */}
         {publishResult && (
@@ -669,7 +711,13 @@ export default function SocialPublishingPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                         {post.platforms.map(p => {
                           const ps = PLATFORM_STYLE[p];
-                          return <span key={p} style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: ps.bg, color: ps.color, textTransform: "uppercase", letterSpacing: "0.4px" }}>{p}</span>;
+                          const pr = parsePlatformResults(post)[p];
+                          const dot = pr?.ok === true ? "🟢" : pr?.ok === false ? "🔴" : post.status === "scheduled" ? "🟡" : "⚪";
+                          return (
+                            <span key={p} title={pr?.error ?? undefined} style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: ps.bg, color: ps.color, textTransform: "uppercase", letterSpacing: "0.4px", cursor: pr?.error ? "help" : "default" }}>
+                              {dot} {ps.label.split(" ")[0]}
+                            </span>
+                          );
                         })}
                         <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: ss.bg, color: ss.color, textTransform: "capitalize" }}>{post.status}</span>
                         {post.ctaType !== "none" && (
@@ -767,6 +815,67 @@ export default function SocialPublishingPage() {
             </div>
           )}
         </div>
+
+        {/* ── Activity Log ── */}
+        {(() => {
+          const actPosts = [...posts]
+            .filter(p => p.status === "published" || p.status === "partial" || p.status === "failed")
+            .sort((a, b) => new Date(b.publishedAt ?? b.updatedAt).getTime() - new Date(a.publishedAt ?? a.updatedAt).getTime())
+            .slice(0, 20);
+          return (
+            <div style={{ marginTop: 28, background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>📋 Activity Log</span>
+                <span style={{ fontSize: 12, color: "#475569" }}>Publish history — all results are API-confirmed</span>
+              </div>
+              {actPosts.length === 0 ? (
+                <div style={{ padding: "40px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📭</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 4 }}>No publish activity yet</div>
+                  <div style={{ fontSize: 12, color: "#334155" }}>Published and failed posts appear here with per-platform results.</div>
+                </div>
+              ) : (
+                <div>
+                  {actPosts.map((p, i) => {
+                    const pr = parsePlatformResults(p);
+                    return (
+                      <div key={p.id} style={{ display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 16, padding: "12px 20px", borderBottom: i < actPosts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: "#475569", marginBottom: 2 }}>{fmtDate(p.publishedAt ?? p.updatedAt)}</div>
+                          <div style={{ fontSize: 10, color: "#334155" }}>{timeAgo(p.publishedAt ?? p.updatedAt)}</div>
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+                            {p.platforms.map(plt => {
+                              const ps = PLATFORM_STYLE[plt];
+                              const r  = pr[plt];
+                              const ok = r?.ok;
+                              return (
+                                <span key={plt} title={r?.error ?? undefined} style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, cursor: r?.error ? "help" : "default", background: ok === true ? "rgba(34,197,94,0.12)" : ok === false ? "rgba(239,68,68,0.12)" : "rgba(100,116,139,0.12)", color: ok === true ? "#22C55E" : ok === false ? "#EF4444" : "#64748B" }}>
+                                  <span style={{ color: ps.color, marginRight: 3 }}>{ps.icon}</span>
+                                  {ok === true ? "✓" : ok === false ? "✗" : "○"} {ps.label.split(" ")[0]}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {p.aiTopic ?? p.caption.slice(0, 90)}
+                          </div>
+                          {p.errorMessage && (
+                            <div style={{ marginTop: 3, fontSize: 11, color: "#EF4444" }}>⚠ {p.errorMessage}</div>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 10, fontWeight: 800, padding: "3px 10px", borderRadius: 20, whiteSpace: "nowrap", background: p.status === "published" ? "rgba(34,197,94,0.12)" : p.status === "partial" ? "rgba(245,158,11,0.12)" : "rgba(239,68,68,0.12)", color: p.status === "published" ? "#22C55E" : p.status === "partial" ? "#F59E0B" : "#EF4444" }}>
+                          {p.status === "published" ? "🟢 Published" : p.status === "partial" ? "🟡 Partial" : "🔴 Failed"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 8, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", fontSize: 12, color: "#D97706", lineHeight: 1.6 }}>
           <strong>Instagram tip:</strong> Select both Facebook + Instagram together. The image uploads to Facebook first, and that hosted URL is automatically reused for Instagram.

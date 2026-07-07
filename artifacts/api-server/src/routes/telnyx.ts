@@ -815,7 +815,7 @@ router.post("/telnyx/test-textback", async (req, res) => {
     }
   } catch (err: any) {
     console.error("[telnyx/test-textback]", err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -848,10 +848,10 @@ router.post("/telnyx/test-textback-reply", async (req, res) => {
       status:     mapped.status,
     }).returning();
 
-    res.status(201).json({ ok: true, lead: row, parsed: mapped.label });
+    return res.status(201).json({ ok: true, lead: row, parsed: mapped.label });
   } catch (err) {
     console.error("[telnyx/test-textback-reply]", err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

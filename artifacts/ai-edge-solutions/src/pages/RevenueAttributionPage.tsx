@@ -72,7 +72,7 @@ export default function RevenueAttributionPage() {
   const loadLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch<Lead[]>("/api/revenue-attribution?clientId=demo");
+      const data = await apiFetch<Lead[]>("/api/revenue-attribution?clientId=default");
       setLeads(data.length === 0 ? [] : data);
     } catch {
       setLeads([]);
@@ -83,7 +83,7 @@ export default function RevenueAttributionPage() {
 
   const loadSyncStatus = useCallback(async () => {
     try {
-      const data = await apiFetch<any>("/api/revenue-attribution/sync-status?clientId=demo");
+      const data = await apiFetch<any>("/api/revenue-attribution/sync-status?clientId=default");
       setSyncStatus(data);
     } catch {}
   }, [apiFetch]);

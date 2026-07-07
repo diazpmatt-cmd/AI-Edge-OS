@@ -58,7 +58,7 @@ const NAV_INTENTS: { patterns: string[]; response: string; route: string }[] = [
 const TODAY_RECS = [
   {
     icon: "🔥", title: "Follow up with recovered leads",
-    reason: "3 new leads captured overnight — respond before competitors do.",
+    reason: "Check the Lead Recovery dashboard for any new missed-call leads.",
     priority: "High", priorityColor: "#F97316",
     route: "/admin/lead-recovery", btnLabel: "Review Leads →",
     color: "#F97316",

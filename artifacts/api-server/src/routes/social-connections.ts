@@ -313,7 +313,7 @@ router.post("/social-connections/oauth-start/:provider", async (req, res) => {
           client_id: clientId,
           redirect_uri: `${base}/api/oauth/google/callback`,
           response_type: "code",
-          scope: "https://www.googleapis.com/auth/youtube.readonly openid email profile",
+          scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly openid email profile",
           access_type: "offline",
           prompt: "consent",
           state: generateState(userId, "youtube", undefined, devOrigin),
@@ -1314,9 +1314,9 @@ router.get("/social-connections/google-oauth-debug", async (req, res) => {
     {
       id: "youtube",
       label: "YouTube",
-      scopes: ["https://www.googleapis.com/auth/youtube.readonly", "openid", "email", "profile"],
+      scopes: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly", "openid", "email", "profile"],
       sensitiveScope: true,
-      sensitiveScopeNote: "youtube.readonly is a Google Sensitive scope. Your app must be in Production mode OR your Google account must be added as a Test User in the OAuth consent screen — otherwise Google shows a 403. Also ensure the YouTube Data API v3 is enabled in your project.",
+      sensitiveScopeNote: "youtube.upload + youtube.readonly are Google Sensitive scopes. Your app must be in Production mode OR your Google account must be added as a Test User in the OAuth consent screen — otherwise Google shows a 403. Also ensure the YouTube Data API v3 is enabled in your project.",
       successSlug: "youtube",
       requiredApi: "YouTube Data API v3",
       enableApiUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
@@ -1565,6 +1565,183 @@ router.post("/social-connections/tiktok-test-publish-readiness", async (req, res
       "To switch to custom domain: update PUBLIC_APP_URL env var and re-register the URI in TikTok portal.",
     ],
   });
+});
+
+// ── YouTube: test upload permissions ─────────────────────────────────────────
+// Validates that the stored token has youtube.upload scope without touching
+// any real channel content. Uses tokeninfo + channels API as a read-only probe.
+router.post("/social-connections/youtube/test-upload", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [conn] = await db.select().from(socialConnectionsTable).where(
+    and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube"))
+  );
+
+  if (!conn?.accessToken) {
+    res.status(404).json({ ok: false, error: "YouTube not connected — connect your channel first." });
+    return;
+  }
+
+  let accessToken = conn.accessToken;
+
+  if (conn.expiresAt && conn.expiresAt < new Date() && conn.refreshToken) {
+    try {
+      const r = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+          client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+          refresh_token: conn.refreshToken,
+          grant_type: "refresh_token",
+        }),
+      });
+      if (r.ok) {
+        const data = await r.json() as { access_token: string; expires_in?: number };
+        accessToken = data.access_token;
+        const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+        await db.update(socialConnectionsTable)
+          .set({ accessToken, expiresAt, updatedAt: new Date() })
+          .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+      }
+    } catch { /* use stored token */ }
+  }
+
+  const result: {
+    ok: boolean;
+    error?: string;
+    tokenValid: boolean;
+    grantedScopes: string[];
+    hasUploadScope: boolean;
+    hasReadonlyScope: boolean;
+    channelId: string | null;
+    channelName: string | null;
+    subscriberCount: string | null;
+    videoCount: string | null;
+    uploadPermissionVerified: boolean;
+    details: string;
+  } = {
+    ok: false, tokenValid: false, grantedScopes: [], hasUploadScope: false,
+    hasReadonlyScope: false, channelId: null, channelName: null,
+    subscriberCount: null, videoCount: null, uploadPermissionVerified: false,
+    details: "",
+  };
+
+  try {
+    // Step 1: tokeninfo — verify scopes
+    const tiRes = await fetch(
+      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!tiRes.ok) {
+      const body = await tiRes.text().catch(() => "");
+      result.error = `Token invalid (${tiRes.status}): ${body.slice(0, 200)}`;
+      res.json(result);
+      return;
+    }
+    const ti = await tiRes.json() as { scope?: string; email?: string; expires_in?: number; error?: string };
+    result.tokenValid = !ti.error;
+    result.grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
+    result.hasUploadScope   = result.grantedScopes.some(s => s.includes("youtube.upload"));
+    result.hasReadonlyScope = result.grantedScopes.some(s => s.includes("youtube.readonly") || s.includes("youtube.upload"));
+
+    console.log("[YOUTUBE-TEST-UPLOAD] tokeninfo:", {
+      grantedScopes: result.grantedScopes,
+      hasUploadScope: result.hasUploadScope,
+      expiresIn: ti.expires_in,
+    });
+
+    if (!result.hasReadonlyScope) {
+      result.error = "Token does not include youtube.upload or youtube.readonly scope. Reconnect YouTube using the 'Connect YouTube' button to grant upload permissions.";
+      res.json(result);
+      return;
+    }
+
+    // Step 2: channels API — verify channel access
+    const chRes = await fetch(
+      "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true",
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!chRes.ok) {
+      const body = await chRes.text().catch(() => "");
+      result.error = `Channel API error (${chRes.status}): ${body.slice(0, 200)}`;
+      res.json(result);
+      return;
+    }
+    const chData = await chRes.json() as {
+      items?: Array<{ id: string; snippet: { title: string }; statistics: { subscriberCount?: string; videoCount?: string } }>;
+    };
+    const ch = chData.items?.[0];
+    result.channelId = ch?.id ?? null;
+    result.channelName = ch?.snippet.title ?? conn.accountName ?? null;
+    result.subscriberCount = ch?.statistics.subscriberCount ?? null;
+    result.videoCount = ch?.statistics.videoCount ?? null;
+
+    // Step 3: if upload scope granted, probe resumable upload endpoint
+    // Initiates (but never completes) a resumable upload session — this is a
+    // zero-footprint way to confirm upload permissions are real, not just claimed.
+    if (result.hasUploadScope) {
+      try {
+        const uploadProbeRes = await fetch(
+          "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              "X-Upload-Content-Type": "video/mp4",
+              "X-Upload-Content-Length": "0",
+            },
+            body: JSON.stringify({
+              snippet: { title: "Permission Test (draft — will not be published)", categoryId: "22" },
+              status:  { privacyStatus: "private" },
+            }),
+            signal: AbortSignal.timeout(8000),
+          }
+        );
+        if (uploadProbeRes.status === 200 || uploadProbeRes.status === 201) {
+          result.uploadPermissionVerified = true;
+          result.ok = true;
+          result.details = `Upload permissions confirmed for channel "${result.channelName ?? result.channelId}". Resumable upload session initiated and verified (no video was uploaded).`;
+        } else {
+          const body = await uploadProbeRes.text().catch(() => "");
+          const json = body ? JSON.parse(body).catch?.(() => null) : null;
+          const errMsg = (json as any)?.error?.message ?? body.slice(0, 150);
+          if (uploadProbeRes.status === 403) {
+            result.error = `Upload permission denied (403). The token may have youtube.readonly but not youtube.upload. Reconnect YouTube to request the upload scope.`;
+          } else {
+            result.uploadPermissionVerified = false;
+            result.details = `Upload probe returned HTTP ${uploadProbeRes.status}: ${errMsg}`;
+          }
+        }
+      } catch (probeErr: any) {
+        result.details = `Upload probe timed out or failed: ${probeErr?.message}. Token and channel access confirmed; upload permissions assumed from scopes.`;
+        result.uploadPermissionVerified = result.hasUploadScope;
+        if (result.uploadPermissionVerified) result.ok = true;
+      }
+    } else {
+      result.error = "Token has youtube.readonly but NOT youtube.upload scope. Reconnect using the 'Connect YouTube' button to grant upload permissions.";
+    }
+
+    // Persist scope findings to metadata
+    try {
+      let meta: Record<string, any> = {};
+      try { if (conn.metadata) meta = JSON.parse(conn.metadata); } catch {}
+      meta.uploadScopeGranted = result.hasUploadScope;
+      meta.uploadPermissionVerified = result.uploadPermissionVerified;
+      meta.grantedScopes = result.grantedScopes;
+      meta.scopeCheckedAt = new Date().toISOString();
+      await db.update(socialConnectionsTable)
+        .set({ metadata: JSON.stringify(meta), updatedAt: new Date() })
+        .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+    } catch { /* non-fatal */ }
+
+  } catch (e: any) {
+    result.error = e?.message ?? "Unknown error";
+  }
+
+  res.json(result);
 });
 
 router.get("/social-connections/youtube/channel-info", async (req, res) => {

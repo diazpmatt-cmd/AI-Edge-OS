@@ -140,13 +140,44 @@ router.get("/diagnostics/health", async (req, res) => {
   }
 
   // YouTube-specific health with clearer messaging
-  function youtubeHealth(): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null } {
+  function youtubeHealth(): { status: "healthy" | "warning" | "failed"; detail: string; connectedAt: string | null; uploadScopeGranted: boolean; uploadPermissionVerified: boolean; channelName: string | null } {
     const c = connections.find(r => r.provider === "youtube");
-    if (!c?.accessToken) return { status: "warning", detail: "Not connected — reconnect YouTube in Connected Accounts to restore access", connectedAt: null };
+    const base = { uploadScopeGranted: false, uploadPermissionVerified: false, channelName: null as string | null };
+    if (!c?.accessToken) return { status: "warning", detail: "Not connected — reconnect YouTube in Connected Accounts to restore access", connectedAt: null, ...base };
     const exp = c.expiresAt ? new Date(c.expiresAt) : null;
     const expired = exp ? exp < now : false;
-    if (expired) return { status: "warning", detail: "Token expired — reconnect YouTube to restore access", connectedAt: c.createdAt?.toISOString() ?? null };
-    return { status: "healthy", detail: c.accountName ? `Connected — ${c.accountName}` : "Connected", connectedAt: c.createdAt?.toISOString() ?? null };
+    if (expired) return { status: "warning", detail: "Token expired — reconnect YouTube to restore access", connectedAt: c.createdAt?.toISOString() ?? null, ...base };
+
+    let meta: Record<string, any> = {};
+    try { if (c.metadata) meta = JSON.parse(c.metadata); } catch {}
+
+    const uploadScopeGranted      = !!meta.uploadScopeGranted;
+    const uploadPermissionVerified = !!meta.uploadPermissionVerified;
+    const channelName = c.accountName ?? null;
+
+    if (!uploadScopeGranted && meta.scopeCheckedAt) {
+      return {
+        status: "warning",
+        detail: `Connected as ${channelName ?? "unknown"} — missing youtube.upload scope. Reconnect YouTube to grant upload permissions, then run the Test Upload to verify.`,
+        connectedAt: c.createdAt?.toISOString() ?? null,
+        uploadScopeGranted: false, uploadPermissionVerified: false, channelName,
+      };
+    }
+
+    const uploadStatus = uploadPermissionVerified
+      ? "Upload permissions verified ✓"
+      : uploadScopeGranted
+        ? "Upload scope granted — run Test Upload to verify end-to-end"
+        : "Run Test Upload to verify permissions";
+
+    return {
+      status: "healthy",
+      detail: `Connected — ${channelName ?? "channel linked"} | ${uploadStatus}`,
+      connectedAt: c.createdAt?.toISOString() ?? null,
+      uploadScopeGranted,
+      uploadPermissionVerified,
+      channelName,
+    };
   }
 
   // OpenAI health — checks key presence and recent quota errors in the log buffer

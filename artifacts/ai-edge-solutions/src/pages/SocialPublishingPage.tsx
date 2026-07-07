@@ -7,7 +7,7 @@ import { useApiFetch } from "@/lib/api";
 import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
 
-type Platform = "facebook" | "instagram" | "google";
+type Platform = "facebook" | "instagram" | "google" | "youtube";
 
 type SocialPost = {
   id: string;
@@ -62,6 +62,7 @@ const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; 
   facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "f", label: "Facebook" },
   instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: "✦", label: "Instagram" },
   google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: "G", label: "Google Business" },
+  youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: "▶", label: "YouTube" },
 };
 
 function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | null; error?: string }> {
@@ -86,7 +87,6 @@ function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | 
 }
 
 const COMING_SOON_PLATFORMS = [
-  { key: "youtube", label: "YouTube Shorts", icon: "▶", color: "#FF0000", note: "Video/Shorts uploads only" },
   { key: "tiktok",  label: "TikTok",         icon: "♪", color: "#69C9D0", note: "Video + creator integration" },
 ];
 
@@ -498,7 +498,7 @@ export default function SocialPublishingPage() {
 
                   {/* Active platforms */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                    {(["facebook", "instagram", "google"] as Platform[]).map(p => {
+                    {(["facebook", "instagram", "google", "youtube"] as Platform[]).map(p => {
                       const s = PLATFORM_STYLE[p];
                       const checked = form.platforms.includes(p);
                       return (
@@ -521,10 +521,15 @@ export default function SocialPublishingPage() {
 
                   {/* Helper text */}
                   <p style={{ margin: 0, fontSize: 11.5, color: "#4B5563", lineHeight: 1.6 }}>
-                    Facebook, Instagram, and Google Business Profile are active. YouTube Shorts and TikTok are coming next.
+                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok coming next.
                     {form.platforms.includes("google") && (
                       <span style={{ display: "block", marginTop: 4, color: "#EA4335", opacity: 0.8 }}>
                         Google Business: posts go to your first verified location. Connect your account in <strong>Connected Accounts</strong> if not done yet.
+                      </span>
+                    )}
+                    {form.platforms.includes("youtube") && (
+                      <span style={{ display: "block", marginTop: 4, color: "#FF5555", opacity: 0.85 }}>
+                        YouTube: requires video content — image-only posts will be skipped for YouTube. Connect your channel in <strong>Connected Accounts</strong> and run Test Upload to verify permissions.
                       </span>
                     )}
                   </p>

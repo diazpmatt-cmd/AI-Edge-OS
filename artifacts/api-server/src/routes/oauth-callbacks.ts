@@ -254,6 +254,34 @@ router.get("/oauth/google/callback", async (req, res) => {
     }
 
     // ── 4b. Verify granted scopes via tokeninfo ──
+    if (provider === "youtube") {
+      try {
+        const tiR = await fetch(
+          `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${tokens.access_token}`,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (tiR.ok) {
+          const ti = await tiR.json() as { scope?: string; email?: string; expires_in?: number };
+          const grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
+          const hasUploadScope   = grantedScopes.some(s => s.includes("youtube.upload"));
+          const hasReadonlyScope = grantedScopes.some(s => s.includes("youtube.readonly") || s.includes("youtube.upload"));
+          console.log(`[YOUTUBE-SCOPE] granted=${ti.scope ?? "(none)"} hasUpload=${hasUploadScope} hasReadonly=${hasReadonlyScope}`);
+          if (!hasUploadScope) {
+            console.warn(`[YOUTUBE-SCOPE] ⚠️ youtube.upload NOT in granted scopes — user may have used an old read-only token`);
+          }
+          try {
+            await db.update(socialConnectionsTable)
+              .set({ metadata: JSON.stringify({ uploadScopeGranted: hasUploadScope, hasReadonlyScope, grantedScopes, scopeCheckedAt: new Date().toISOString() }), updatedAt: new Date() })
+              .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+          } catch { /* non-fatal */ }
+        } else {
+          console.warn(`[YOUTUBE-SCOPE] tokeninfo check HTTP ${tiR.status} — skipping scope verification`);
+        }
+      } catch (tiErr: any) {
+        console.warn(`[YOUTUBE-SCOPE] tokeninfo fetch failed (non-fatal): ${tiErr?.message}`);
+      }
+    }
+
     if (provider === "google_business") {
       try {
         const tiR = await fetch(

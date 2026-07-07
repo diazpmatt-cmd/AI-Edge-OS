@@ -50,7 +50,7 @@ const LOVABLE_MIGRATION: Record<string, MigrationState> = {
 type StatusKind = "connected" | "connected_readonly" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
-  if (dbConn) return (provider === "youtube" || provider === "tiktok") ? "connected_readonly" : "connected";
+  if (dbConn) return (provider === "tiktok") ? "connected_readonly" : "connected";
   // Instagram is locked until Facebook is connected in the database
   if (provider === "instagram" && !facebookConnected) return "coming_soon";
   const m = LOVABLE_MIGRATION[provider];
@@ -316,6 +316,27 @@ export default function ConnectionsPage() {
     },
     onError: (e: any) => toast.error(e?.message ?? "Failed to disconnect"),
   });
+
+  const [ytTestResult, setYtTestResult] = useState<{
+    ok: boolean; error?: string; tokenValid: boolean; grantedScopes: string[];
+    hasUploadScope: boolean; channelId: string | null; channelName: string | null;
+    subscriberCount: string | null; videoCount: string | null;
+    uploadPermissionVerified: boolean; details: string;
+  } | null>(null);
+  const [ytTesting, setYtTesting] = useState(false);
+
+  const handleYtTestUpload = async () => {
+    setYtTesting(true);
+    setYtTestResult(null);
+    try {
+      const result = await authFetch<any>("/social-connections/youtube/test-upload", { method: "POST", body: "{}" });
+      setYtTestResult(result);
+    } catch (e: any) {
+      setYtTestResult({ ok: false, error: e?.message ?? "Test failed", tokenValid: false, grantedScopes: [], hasUploadScope: false, channelId: null, channelName: null, subscriberCount: null, videoCount: null, uploadPermissionVerified: false, details: "" });
+    } finally {
+      setYtTesting(false);
+    }
+  };
 
   const refreshGBPLocationMut = useMutation({
     mutationFn: () => authFetch<{ ok: boolean; locationTitle: string; locationName: string; locationCount: number }>(
@@ -1000,7 +1021,47 @@ export default function ConnectionsPage() {
                     </div>
                   </div>
                 </div>
-                {/* YouTube channel info — shown when connected with readonly scope */}
+                {/* YouTube: Test Upload button — shown when connected */}
+                {platform.id === "youtube" && isConnected && (
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={handleYtTestUpload}
+                      disabled={ytTesting}
+                      style={{
+                        padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: ytTesting ? "not-allowed" : "pointer",
+                        background: "rgba(255,0,0,0.12)", border: "1px solid rgba(255,60,60,0.4)", color: "#FF5555",
+                        opacity: ytTesting ? 0.6 : 1, transition: "all 0.2s",
+                      }}
+                    >
+                      {ytTesting ? "⏳ Testing…" : "▶ Test Upload Permissions"}
+                    </button>
+                    {ytTestResult && (
+                      <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: ytTestResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)", border: `1px solid ${ytTestResult.ok ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}` }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: ytTestResult.ok ? "#22C55E" : "#EF4444", marginBottom: 4 }}>
+                          {ytTestResult.ok ? "✓ Upload permissions confirmed" : "✗ Upload permissions check failed"}
+                        </div>
+                        {ytTestResult.error && (
+                          <div style={{ fontSize: 11.5, color: "#F87171", marginBottom: 4 }}>{ytTestResult.error}</div>
+                        )}
+                        {ytTestResult.details && (
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>{ytTestResult.details}</div>
+                        )}
+                        <div style={{ fontSize: 11, color: "#6B7280", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                          <span>Token valid: <strong style={{ color: ytTestResult.tokenValid ? "#22C55E" : "#EF4444" }}>{ytTestResult.tokenValid ? "Yes" : "No"}</strong></span>
+                          <span>Upload scope: <strong style={{ color: ytTestResult.hasUploadScope ? "#22C55E" : "#EF4444" }}>{ytTestResult.hasUploadScope ? "Granted" : "Missing"}</strong></span>
+                          <span>Permission verified: <strong style={{ color: ytTestResult.uploadPermissionVerified ? "#22C55E" : "#F59E0B" }}>{ytTestResult.uploadPermissionVerified ? "Yes" : "Not yet"}</strong></span>
+                        </div>
+                        {ytTestResult.grantedScopes.length > 0 && (
+                          <div style={{ fontSize: 10.5, color: "#6B7280", marginTop: 4 }}>
+                            Scopes: <code style={{ color: "#94A3B8" }}>{ytTestResult.grantedScopes.filter(s => s.includes("youtube")).join(", ")}</code>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* YouTube channel info — shown when connected */}
                 {platform.id === "youtube" && isConnected && ytChannelInfo && (
                   <div style={{ marginTop: 14, padding: "12px 14px", background: "rgba(255,0,0,0.05)", borderRadius: 10, border: "1px solid rgba(255,60,60,0.13)" }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#FF5555", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.8px" }}>

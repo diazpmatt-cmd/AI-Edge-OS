@@ -444,6 +444,126 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     }
   }
 
+  // ── YouTube ────────────────────────────────────────────────────────────────
+  // YouTube Data API v3 requires video content — image posts are skipped.
+  // When a videoUrl is present the upload uses the resumable upload protocol.
+  if (platforms.includes("youtube")) {
+    const ytConn = await getConnection("youtube");
+    console.log("[YOUTUBE-PUBLISH]", JSON.stringify({
+      hasConnection: !!ytConn,
+      hasAccessToken: !!ytConn?.accessToken,
+      expiresAt: ytConn?.expiresAt ?? null,
+      tokenExpired: ytConn?.expiresAt ? new Date(ytConn.expiresAt) < new Date() : null,
+    }));
+
+    if (!ytConn?.accessToken) {
+      results.youtube = { ok: false, error: "YouTube not connected — link your channel in Connected Accounts." };
+      errors.push("YouTube: Not connected");
+    } else {
+      const videoUrl: string | null = (post as any).videoUrl ?? null;
+
+      if (!videoUrl) {
+        console.log("[YOUTUBE-PUBLISH] Skipped — post has no video content (YouTube requires video)");
+        results.youtube = {
+          ok: false,
+          error: "YouTube publishing requires video content. This post was skipped for YouTube — add a video URL to publish.",
+        };
+        errors.push("YouTube: Video required — post has no video content");
+      } else {
+        try {
+          let accessToken = ytConn.accessToken;
+
+          if (ytConn.expiresAt && ytConn.expiresAt < new Date() && ytConn.refreshToken) {
+            const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+                client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+                refresh_token: ytConn.refreshToken,
+                grant_type:    "refresh_token",
+              }),
+            });
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json() as { access_token: string; expires_in?: number };
+              accessToken = refreshData.access_token;
+              await db.update(socialConnectionsTable).set({
+                accessToken,
+                expiresAt: refreshData.expires_in ? new Date(Date.now() + refreshData.expires_in * 1000) : null,
+                updatedAt: new Date(),
+              }).where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+            }
+          }
+
+          const title   = (post.caption ?? "").slice(0, 100).replace(/\n/g, " ").trim() || "New video";
+          const desc    = post.caption ?? "";
+          const metaBody = {
+            snippet: { title, description: desc, categoryId: "22" },
+            status:  { privacyStatus: "public" },
+          };
+
+          // Step 1: Initiate resumable upload session
+          const initRes = await fetch(
+            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+            {
+              method: "POST",
+              headers: {
+                Authorization:             `Bearer ${accessToken}`,
+                "Content-Type":            "application/json",
+                "X-Upload-Content-Type":   "video/mp4",
+              },
+              body: JSON.stringify(metaBody),
+            }
+          );
+
+          if (!initRes.ok) {
+            const body = await initRes.text().catch(() => "");
+            let errMsg = `YouTube upload initiation failed (${initRes.status})`;
+            try {
+              const json = JSON.parse(body);
+              errMsg = json?.error?.message ?? errMsg;
+            } catch { /* use default */ }
+            const hint =
+              initRes.status === 403 ? " — upload permission denied. Reconnect YouTube to grant youtube.upload scope." :
+              initRes.status === 401 ? " — token expired or invalid. Reconnect YouTube in Connected Accounts." :
+              "";
+            throw new Error(`${errMsg}${hint}`);
+          }
+
+          const uploadUrl = initRes.headers.get("location");
+          if (!uploadUrl) throw new Error("YouTube did not return an upload URL — check YouTube Data API v3 is enabled.");
+
+          // Step 2: Stream video from URL → YouTube
+          const videoRes = await fetch(videoUrl, { signal: AbortSignal.timeout(60000) });
+          if (!videoRes.ok) throw new Error(`Cannot fetch video source (${videoRes.status}): ${videoUrl.slice(0, 80)}`);
+          const videoBlob = await videoRes.blob();
+          const contentType = videoRes.headers.get("content-type") ?? "video/mp4";
+
+          const uploadRes = await fetch(uploadUrl, {
+            method:  "PUT",
+            headers: { "Content-Type": contentType, "Content-Length": String(videoBlob.size) },
+            body:    videoBlob,
+            signal:  AbortSignal.timeout(120000),
+          });
+
+          if (!uploadRes.ok && uploadRes.status !== 200 && uploadRes.status !== 201) {
+            const body = await uploadRes.text().catch(() => "");
+            throw new Error(`YouTube upload failed (${uploadRes.status}): ${body.slice(0, 200)}`);
+          }
+
+          const uploadData = await uploadRes.json() as { id?: string };
+          const videoId = uploadData.id ?? null;
+          console.log("[YOUTUBE-PUBLISH] ✓ uploaded:", { videoId, title });
+          results.youtube = { ok: true, postId: videoId ?? undefined };
+        } catch (e: any) {
+          console.error("[YOUTUBE-PUBLISH] Error:", e.message);
+          results.youtube = { ok: false, error: e.message };
+          errors.push(`YouTube: ${e.message}`);
+        }
+      }
+    }
+  }
+
   const allOk = platforms.every(p => results[p]?.ok === true);
   const anyOk = platforms.some(p => results[p]?.ok === true);
   const newStatus = allOk ? "published" : anyOk ? "partial" : "failed";

@@ -14,6 +14,7 @@ type SocialPost = {
   clientName: string;
   platforms: Platform[];
   imageUrl: string | null;
+  videoUrl: string | null;
   caption: string;
   captionFacebook: string | null;
   captionGoogle: string | null;
@@ -113,6 +114,7 @@ const EMPTY_FORM = {
   clientName:   "Bed Bugs & Beyond",
   platforms:    ["facebook"] as Platform[],
   imageUrl:     null as string | null,
+  videoUrl:     "" as string,
   caption:      "",
   ctaType:      "call_now",
   ctaValue:     "(251) 324-9090",
@@ -244,6 +246,7 @@ export default function SocialPublishingPage() {
       clientName:   post.clientName,
       platforms:    post.platforms,
       imageUrl:     post.imageUrl,
+      videoUrl:     post.videoUrl ?? "",
       caption:      post.caption,
       ctaType:      post.ctaType,
       ctaValue:     post.ctaValue ?? "",
@@ -305,6 +308,7 @@ export default function SocialPublishingPage() {
     clientName:  form.clientName,
     platforms:   form.platforms,
     imageUrl:    form.imageUrl,
+    videoUrl:    form.videoUrl.trim() || null,
     caption:     form.caption,
     ctaType:     form.ctaType,
     ctaValue:    form.ctaValue || null,
@@ -635,6 +639,25 @@ export default function SocialPublishingPage() {
                   style={{ display: "none" }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
                 />
+
+                {/* Video URL — required for YouTube publishing */}
+                {form.platforms.includes("youtube") && (
+                  <div style={{ marginTop: 16 }}>
+                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 15 }}>▶</span> YouTube Video URL
+                    </label>
+                    <input
+                      type="url"
+                      value={form.videoUrl}
+                      onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
+                      placeholder="https://storage.googleapis.com/… or direct .mp4 URL"
+                      style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
+                    />
+                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                      Direct link to an .mp4 file. YouTube requires video — image-only posts will be skipped.
+                    </div>
+                  </div>
+                )}
 
                 {/* Post preview card */}
                 {(form.caption || form.imageUrl) && !isUploading && (

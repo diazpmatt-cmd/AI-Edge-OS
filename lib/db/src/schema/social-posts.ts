@@ -24,6 +24,8 @@ export const socialPostsTable = pgTable("social_posts", {
   bestPlatform:        text("best_platform"),
   imageRecommendation: text("image_recommendation"),
   duplicateRisk:       text("duplicate_risk"),
+  // YouTube / video publishing
+  videoUrl: text("video_url"),
   // V4: Auto Image Attachment
   matchedImageId:    text("matched_image_id"),
   matchedImageUrl:   text("matched_image_url"),

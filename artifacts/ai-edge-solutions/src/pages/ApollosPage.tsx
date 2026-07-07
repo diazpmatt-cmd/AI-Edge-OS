@@ -133,15 +133,15 @@ const LEFT_NAV_ACTIONS = [
 ];
 
 const SUGGESTED_PROMPTS = [
-  { icon: "🔥", text: "Review today's opportunities",        color: "#FBBF24" },
-  { icon: "📣", text: "Build a Facebook campaign",           color: "#3B82F6" },
-  { icon: "📍", text: "Generate a Google Business post",     color: "#4ADE80" },
-  { icon: "🔍", text: "Analyze SEO",                         color: "#06B6D4" },
-  { icon: "🎯", text: "Create an ad campaign",               color: "#F97316" },
-  { icon: "🎬", text: "Build a commercial",                  color: "#A78BFA" },
-  { icon: "📞", text: "Review missed calls",                 color: "#F87171" },
-  { icon: "💰", text: "Show revenue forecast",               color: "#22C55E" },
-  { icon: "🎥", text: "Launch Media Engine",                 color: "#00AEEF" },
+  { icon: "🎯", text: "What should I do next?",              color: "#FBBF24" },
+  { icon: "📊", text: "How are we doing?",                   color: "#22C55E" },
+  { icon: "❓", text: "Why isn't my score 100%?",            color: "#F97316" },
+  { icon: "⏱️", text: "I only have 30 minutes.",             color: "#06B6D4" },
+  { icon: "🔌", text: "What's still disconnected?",          color: "#F87171" },
+  { icon: "⏳", text: "What's waiting on third parties?",    color: "#A78BFA" },
+  { icon: "📚", text: "Teach me AI Edge.",                   color: "#00AEEF" },
+  { icon: "💰", text: "What does Profit Center do?",         color: "#10B981" },
+  { icon: "📞", text: "Review my missed calls.",             color: "#3B82F6" },
 ];
 
 const QUICK_ACTIONS = [

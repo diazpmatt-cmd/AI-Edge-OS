@@ -261,27 +261,16 @@ export default function MissionControlPage() {
               Start your day with a full AI executive briefing
             </h2>
             <div style={{ display: "inline-block", position: "relative" }}>
-              <button disabled style={{
-                background: `linear-gradient(135deg, ${B.blue}55, #0284C755)`,
-                color: `${B.white}88`, border: `1px solid ${B.blue}44`,
+              <a href="/admin/morning-brief" style={{
+                display: "inline-block",
+                background: `linear-gradient(135deg, ${B.blue}, #0284C7)`,
+                color: B.white, border: "none",
                 borderRadius: 50, padding: "16px 48px",
-                fontSize: 18, fontWeight: 800, cursor: "not-allowed",
-                letterSpacing: "-0.3px",
+                fontSize: 18, fontWeight: 800, cursor: "pointer",
+                letterSpacing: "-0.3px", textDecoration: "none",
               }}>
                 🚀 Start My Day
-              </button>
-              <div style={{
-                position: "absolute", top: -10, right: -16,
-                background: B.gold, color: "#030612",
-                fontSize: 9, fontWeight: 900, letterSpacing: "1.5px",
-                padding: "4px 10px", borderRadius: 20,
-              }}>
-                AUTOMATION COMING SOON
-              </div>
-            </div>
-            <div style={{ marginTop: 14, fontSize: 12, color: "#475569" }}>
-              Full automation activation ships Q3 2026 · Manual briefing available now at{" "}
-              <a href="/admin/morning-brief" style={{ color: B.blue, textDecoration: "none" }}>Morning Brief →</a>
+              </a>
             </div>
           </div>
         </div>
@@ -452,13 +441,6 @@ export default function MissionControlPage() {
                     <span style={{ color: B.blue }}>Agent: </span>{r.agent}
                   </div>
                 </div>
-                <button disabled style={{
-                  background: "transparent", border: `1px solid rgba(255,255,255,0.1)`,
-                  color: "#475569", borderRadius: 8, padding: "5px 12px",
-                  fontSize: 11, cursor: "not-allowed", flexShrink: 0, alignSelf: "center",
-                }}>
-                  Automate
-                </button>
               </div>
             ))}
           </div>

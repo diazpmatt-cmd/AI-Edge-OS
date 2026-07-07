@@ -1035,8 +1035,6 @@ export default function AssetLibraryPage() {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [showNewCollection, setShowNewCollection] = useState(false);
   const [dbAssets,    setDbAssets]    = useState<Asset[]>([]);
-  const [mockCounter, setMockCounter] = useState(1);
-  const [isCreating,  setIsCreating]  = useState(false);
   const [toast,       setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
   const [editAsset,   setEditAsset]   = useState<Asset | null>(null);
   const [deleteAsset, setDeleteAsset] = useState<Asset | null>(null);
@@ -1061,36 +1059,6 @@ export default function AssetLibraryPage() {
     setTimeout(() => setToast(null), 3500);
   }
 
-  async function createMockRecord() {
-    const types: AssetType[] = ["image", "video", "audio", "campaign", "template"];
-    const type = types[mockCounter % types.length];
-    const brand = mockCounter % 2 === 0 ? "BB&B" : "AIE";
-    setIsCreating(true);
-    try {
-      await authFetch("/admin/assets", {
-        method: "POST",
-        body: JSON.stringify({
-          name:         `DB Asset Record #${mockCounter}`,
-          assetType:    type,
-          brand,
-          sourceModule: "Asset Library",
-          fileUrl:      "placeholder://pending",
-          thumbnailUrl: "",
-          mimeType:     "application/octet-stream",
-          fileSize:     0,
-          metadata:     {},
-        }),
-      });
-      setMockCounter(c => c + 1);
-      await loadAssets();
-      setActiveSection("browser");
-      showToast("✓ Asset record created", true);
-    } catch {
-      showToast("✗ Failed to create asset", false);
-    } finally {
-      setIsCreating(false);
-    }
-  }
 
   async function toggleFav(id: string) {
     const isDb = dbAssets.some(a => a.id === id);
@@ -1231,12 +1199,6 @@ export default function AssetLibraryPage() {
         <DisabledBtn label="⬆ Upload Asset" />
         <DisabledBtn label="📥 Import Media" />
         <DisabledBtn label="🔄 Sync with Backend" />
-        <button onClick={createMockRecord} disabled={isCreating} style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "8px 16px", borderRadius: 8, cursor: isCreating ? "wait" : "pointer", fontSize: 12, fontWeight: 700,
-          background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)", color: "#34D399",
-          opacity: isCreating ? 0.6 : 1,
-        }}>{isCreating ? "⏳ Creating…" : "🗄 Create DB Asset Record"}</button>
         {toast && (
           <span style={{
             padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600,

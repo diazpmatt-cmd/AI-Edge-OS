@@ -422,8 +422,6 @@ export default function BBBSuccessPage() {
           <span style={{ fontSize: 11, color: hasLiveSms ? "#22C55E" : "#FBBF24", fontWeight: 600 }}>
             {hasLiveSms ? "🟢" : "🟡"} SMS {hasLiveSms ? "LIVE" : "DEMO"}
           </span>
-          <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>🟡 Top Services DEMO</span>
-          <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>🟡 AI Receptionist DEMO</span>
           <span style={{ fontSize: 11, color: useLiveOpps ? "#22C55E" : "#FBBF24", fontWeight: 600 }}>
             {useLiveOpps ? "🟢" : "🟡"} Opportunities {useLiveOpps ? "LIVE" : "DEMO"}
           </span>
@@ -714,18 +712,13 @@ export default function BBBSuccessPage() {
                     </div>
                     <div style={{ fontSize: 11.5, color: "#64748B" }}>{opp.note}</div>
                   </div>
-                  <button disabled style={{
-                    padding: "7px 14px", borderRadius: 8, cursor: "not-allowed", fontSize: 11, fontWeight: 700,
-                    background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", color: "#334155",
-                    flexShrink: 0,
+                  <a href="/admin/lead-recovery" style={{
+                    padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.3)", color: "#F97316",
+                    flexShrink: 0, textDecoration: "none", display: "inline-block",
                   }}>
-                    Take Action
-                    <span style={{
-                      marginLeft: 6, padding: "1px 5px", borderRadius: 3,
-                      fontSize: 8, fontWeight: 800, letterSpacing: "0.5px",
-                      background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
-                    }}>SOON</span>
-                  </button>
+                    Take Action →
+                  </a>
                 </div>
               );
             })}

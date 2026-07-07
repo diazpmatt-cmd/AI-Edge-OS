@@ -54,7 +54,6 @@ export default function RevenueAttributionPage() {
   const { colors: t, isDark } = useTheme();
   const [leads, setLeads]       = useState<Lead[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [isDemo, setIsDemo]     = useState(false); // kept for API-level empty state tracking
   const [selected, setSelected] = useState<Lead | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<string | null>(null);
@@ -74,11 +73,9 @@ export default function RevenueAttributionPage() {
     setLoading(true);
     try {
       const data = await apiFetch<Lead[]>("/api/revenue-attribution?clientId=demo");
-      if (data.length === 0) { setLeads([]); setIsDemo(false); }
-      else { setLeads(data); setIsDemo(false); }
+      setLeads(data.length === 0 ? [] : data);
     } catch {
       setLeads([]);
-      setIsDemo(false);
     } finally {
       setLoading(false);
     }
@@ -115,14 +112,12 @@ export default function RevenueAttributionPage() {
         notes:            form.notes || null,
         gorilladeskJobId: form.gorilladeskJobId || null,
       };
-      {
-        const updated = await apiFetch<Lead>(`/api/revenue-attribution/${selected.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
-      }
+      const updated = await apiFetch<Lead>(`/api/revenue-attribution/${selected.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
       setSelected(null);
       showToast("Lead updated successfully");
     } catch {
@@ -251,12 +246,6 @@ export default function RevenueAttributionPage() {
               Track which AI Edge calls become real jobs and revenue in GorillaDesk.
             </p>
           </div>
-          {isDemo && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F59E0B22", border: "1px solid #F59E0B44", borderRadius: 8, padding: "7px 14px" }}>
-              <span style={{ fontSize: 13 }}>⚡</span>
-              <span style={{ fontSize: 12, color: "#F59E0B", fontWeight: 600 }}>Demo Mode — Bed Bugs & Beyond</span>
-            </div>
-          )}
         </div>
 
         {loading ? (

@@ -1,0 +1,102 @@
+🎯 TARGET: Apollos Intent Router + Keyword Understanding
+
+Audit first before coding.
+
+Goal:
+Make Apollos understand common business keywords, user intent, and natural questions so he can respond like an AI operations guide.
+
+Do NOT create a new AI engine.
+Do NOT create a new dashboard.
+Reuse the existing /api/apollos/chat endpoint and ApollosPage.
+
+First audit:
+1. What intent/keyword handling already exists in Apollos.
+2. What live context is already injected.
+3. Whether prompts already include routing instructions.
+4. Whether frontend quick prompts already exist.
+5. What is missing.
+
+Build only what is missing.
+
+Required intents:
+1. next_action
+   Trigger examples:
+   - “What should I do next?”
+   - “I only have 20 minutes”
+   - “What should I focus on?”
+   Response:
+   - Give top 3 Targets using live BB&B data.
+
+2. publishing_status
+   Trigger examples:
+   - “Did posts go out?”
+   - “What published?”
+   - “Did anything fail?”
+   Response:
+   - Summarize Facebook, Instagram, Google status.
+   - Mention Activity Log if relevant.
+   - Never fake success.
+
+3. reviews_status
+   Trigger examples:
+   - “How are reviews?”
+   - “Who needs a review request?”
+   - “Did review texts go out?”
+   Response:
+   - Use real Reviews Engine data.
+   - Recommend review actions.
+
+4. leads_calls_status
+   Trigger examples:
+   - “Any missed calls?”
+   - “Any leads?”
+   - “Who do I need to call back?”
+   Response:
+   - Use real leads and call-intelligence data.
+
+5. integrations_status
+   Trigger examples:
+   - “What’s disconnected?”
+   - “What’s waiting?”
+   - “Is Google working?”
+   - “What about TikTok or Apple?”
+   Response:
+   - Report connected, pending, cooldown, disconnected.
+
+6. platform_teacher
+   Trigger examples:
+   - “Teach me AI Edge”
+   - “What does Profit Center do?”
+   - “Where should I start?”
+   Response:
+   - Explain the correct page/workflow simply.
+
+7. business_health
+   Trigger examples:
+   - “How are we doing?”
+   - “Why aren’t we at 100%?”
+   - “How do we improve?”
+   Response:
+   - Give honest health summary and opportunities.
+   - Use Target / Sparkles / Pineapple language.
+
+Implementation:
+- Add lightweight intent detection based on keywords/phrases.
+- Feed detected intent into the existing AI system prompt.
+- Add a short structured context block for each intent.
+- Prefer deterministic guidance first, then let the AI phrase it naturally.
+- If data is missing, say “No live data yet.”
+- Do not fabricate metrics.
+- Do not hardcode fake business results.
+- Add frontend quick prompt buttons if useful, but keep UI clean.
+
+Run build and report:
+- Existing intent support found
+- New intents added
+- APIs reused
+- Files changed
+- Whether real AI still responds naturally
+- Build result
+
+Success:
+Apollos should understand what the user is asking, route the question to the right business context, and answer like a helpful AI operations manager for Bed Bugs & Beyond.

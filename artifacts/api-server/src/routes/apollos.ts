@@ -42,6 +42,140 @@ function buildHealthScore(deductions: Deduction[]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Intent router — lightweight keyword detection
+// ═══════════════════════════════════════════════════════════════════════════════
+type Intent =
+  | "next_action"
+  | "publishing_status"
+  | "reviews_status"
+  | "leads_calls_status"
+  | "integrations_status"
+  | "platform_teacher"
+  | "business_health"
+  | "end_of_day"
+  | "general";
+
+function detectIntent(msg: string): Intent {
+  const m = msg.toLowerCase();
+  // next_action
+  if (/what should i (do|focus|prioriti[sz]e)|only have \d+ min|what('s| is) my priority|what('s| is) (first|next)|where (should i |do i )?start/.test(m)) return "next_action";
+  // publishing
+  if (/did (the |any )?post|what (published|went out|posted)|did (anything|it) fail|post(s| go| went) out|publish(ing|ed)|content (fail|go out|went out)|fail.*post|post.*fail/.test(m)) return "publishing_status";
+  // reviews
+  if (/review request|review text|how are.*review|review.*go out|who need.*review|review.*status|send.*review|did.*review/.test(m)) return "reviews_status";
+  // leads + calls
+  if (/missed call|any (lead|call)|who.*call back|lead.*status|new lead|follow.{0,5}up|call back|who called/.test(m)) return "leads_calls_status";
+  // integrations
+  if (/what('s| is) (dis)?connected|what('s| is) waiting|is google (working|connected)|tiktok|apple business|facebook.*connect|instagram.*connect|integration|what about.*connect/.test(m)) return "integrations_status";
+  // platform teacher
+  if (/teach me|what does .* do|how does .* work|explain (the |my )?(platform|system|page|tool|engine|center)|what is (mission|profit|morning|media|review|publishing|customer|lead|receptionist|local|connection|diagnostic)|where should i start/.test(m)) return "platform_teacher";
+  // business health
+  if (/how are we doing|why (isn'?t?|aren'?t?) (my |our |the )?score|business health|health score|how (do we|can we) improve|overall (status|performance)|are we on track/.test(m)) return "business_health";
+  // end of day
+  if (/end.{0,5}of.{0,5}day|end.{0,5}day|eod recap|day recap|today'?s? recap|wrap.{0,5}up|daily summary/.test(m)) return "end_of_day";
+  return "general";
+}
+
+interface IntentCtxSnapshot {
+  healthScore: number;
+  deductions: Deduction[];
+  postsPublished: number; postsDraft: number; postsPartial: number; postsFailed: number;
+  lastPublishedAt: string | null; lastPublishedPlatforms: string | null;
+  reviewsSent: number; reviewsFailed: number; reviewsThisWeek: number;
+  googleReviewCount: number; googleRating: number;
+  fbReviewCount: number; fbRating: number;
+  reviewCoverage: number | null; gorilladeskCustomerCount: number;
+  leadsTotal: number; leadsNew: number; callsTotal: number; callsMissed: number;
+  fbConnected: boolean; igConnected: boolean; tikTokConnected: boolean;
+  gbpConnected: boolean; gbpHasLocation: boolean;
+  gbpInCooldown: boolean; gbpCooldownMinsLeft: number;
+  receptionistConfigured: boolean;
+  gorilladeskJobCount: number;
+  autopilotEnabled: boolean; autopilotPaused: boolean;
+  daysSinceLastGenerated: number | null;
+  localPresenceChannels: { name: string; status: string; score: number; verification: string; action: string }[];
+}
+
+function buildIntentDirective(intent: Intent, snap: IntentCtxSnapshot): string {
+  const fmtPlatforms = (raw: string | null) => {
+    if (!raw) return "unknown";
+    try { return (JSON.parse(raw) as string[]).join(", "); } catch { return raw ?? "unknown"; }
+  };
+
+  switch (intent) {
+    case "next_action":
+      return `DETECTED INTENT: next_action
+FOCUS: The user wants their top prioritised actions right now. List exactly 3, each with 🎯/✨/🍍, Impact (High/Medium/Low), Est. time, and Status (Ready / Blocked / Waiting on). Derive from the health deductions and live data below. Most urgent first.`;
+
+    case "publishing_status":
+      return `DETECTED INTENT: publishing_status
+FOCUS: Report exactly what happened with publishing. Use the numbers below:
+- Published: ${snap.postsPublished}, Draft: ${snap.postsDraft}, Partial (some platforms failed): ${snap.postsPartial}, Failed: ${snap.postsFailed}
+- Last published: ${snap.lastPublishedAt ? `${new Date(snap.lastPublishedAt).toLocaleDateString("en-US")} on ${fmtPlatforms(snap.lastPublishedPlatforms)}` : "Never"}
+${snap.gbpInCooldown ? `- GBP in cooldown: ${snap.gbpCooldownMinsLeft}m remaining before retry.` : ""}
+Do not pad with unrelated topics. If something failed, say so directly. Direct Matt to Publishing Center (/admin/social-publishing) or System Diagnostics (/admin/diagnostics) where relevant.`;
+
+    case "reviews_status":
+      return `DETECTED INTENT: reviews_status
+FOCUS: Report review request activity and reputation status using live data:
+- Requests sent (30 days): ${snap.reviewsSent}, Failed: ${snap.reviewsFailed}, This week: ${snap.reviewsThisWeek}
+- Review coverage: ${snap.reviewCoverage !== null ? `${Math.round(snap.reviewCoverage * 100)}% of ${snap.gorilladeskCustomerCount} customers` : "Cannot calculate"}
+- Google: ${snap.googleReviewCount} reviews, ${snap.googleRating > 0 ? `${snap.googleRating.toFixed(1)}★` : "no rating data yet"}
+- Facebook: ${snap.fbReviewCount} reviews, ${snap.fbRating > 0 ? `${snap.fbRating.toFixed(1)}★` : "no rating data yet"}
+Recommend next action with 🎯/✨/🍍. Direct to Reviews Engine (/admin/reviews) where relevant.`;
+
+    case "leads_calls_status":
+      return `DETECTED INTENT: leads_calls_status
+FOCUS: Report lead and call data only. Use these exact numbers:
+- Leads (30 days): ${snap.leadsTotal} total, ${snap.leadsNew} unaddressed (status = new)
+- Calls (30 days): ${snap.callsTotal} total, ${snap.callsMissed} missed
+${snap.callsMissed > 0 ? `- ${snap.callsMissed} missed call${snap.callsMissed > 1 ? "s" : ""} — each is a potential lost job.` : ""}
+${snap.leadsNew > 0 ? `- ${snap.leadsNew} lead${snap.leadsNew > 1 ? "s" : ""} with no follow-up yet.` : ""}
+Be direct about urgency. Direct to Lead Recovery (/admin/lead-recovery) or AI Receptionist (/admin/ai-receptionist).`;
+
+    case "integrations_status":
+      return `DETECTED INTENT: integrations_status
+FOCUS: Give a clear platform connection status report. Use only these facts:
+- Facebook: ${snap.fbConnected ? "✅ Connected" : "❌ Not connected"}
+- Instagram: ${snap.igConnected ? "✅ Connected" : "❌ Not connected"}
+- TikTok: ${snap.tikTokConnected ? "✅ Connected" : "❌ Not connected — pending TikTok Business registration"}
+- Google Business Profile: ${snap.gbpConnected ? "✅ Connected" : "❌ Not connected"}${snap.gbpConnected && !snap.gbpHasLocation ? " (location not cached — run Refresh in Diagnostics)" : ""}${snap.gbpInCooldown ? ` (cooldown: ${snap.gbpCooldownMinsLeft}m remaining)` : ""}
+- AI Receptionist: ${snap.receptionistConfigured ? "✅ Configured" : "❌ Transfer phone not set"}
+- GorillaDesk jobs: ${snap.gorilladeskJobCount === 0 ? `❌ 0 jobs synced (${snap.gorilladeskCustomerCount} customers exist)` : `✅ ${snap.gorilladeskJobCount} jobs synced`}
+Local presence channels:
+${snap.localPresenceChannels.map(ch => {
+  const icon = ch.status === "connected" || ch.status === "verified_publishing" ? "✅" : ch.status === "setup_in_progress" ? "🟡" : "🔴";
+  return `  ${icon} ${ch.name}: ${ch.status}`;
+}).join("\n")}
+Group your response: Connected, Pending (third party), Action needed. For each disconnected item state what reconnecting unlocks.`;
+
+    case "platform_teacher":
+      return `DETECTED INTENT: platform_teacher
+FOCUS: Answer the platform knowledge question simply and conversationally. Use the platform documentation below. Do not list every page — answer only what was asked. If "where should I start?" or "teach me", give a 3-step onboarding path for BB&B.`;
+
+    case "business_health":
+      return `DETECTED INTENT: business_health
+FOCUS: Give the Business Health score and explain every deduction using live data. Score: ${snap.healthScore}/100.
+Deductions:
+${snap.deductions.length === 0 ? "  None — all systems optimal." : snap.deductions.map(d => `  -${d.points}pts ${d.name}: ${d.note}${d.waitingOn ? ` [Waiting: ${d.waitingOn}]` : ""}`).join("\n")}
+Group by: Quick Wins (can fix today), This Week, Waiting on Third Parties. End with one positive.`;
+
+    case "end_of_day":
+      return `DETECTED INTENT: end_of_day
+FOCUS: Summarise the day for BB&B using only live data. Cover:
+1. Today's Wins — what published, leads gained, calls handled
+2. Missed Opportunities — unaddressed leads, missed calls, failed posts
+3. Revenue Notes — any revenue data available
+4. Tomorrow's #1 Priority — single most impactful action
+If data shows zero or "no live data", state that honestly.`;
+
+    default:
+      return `DETECTED INTENT: general
+FOCUS: Answer naturally using live BB&B data as context. Stay within 220 words.`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // POST /apollos/chat
 // ═══════════════════════════════════════════════════════════════════════════════
 router.post("/apollos/chat", async (req, res) => {
@@ -481,10 +615,54 @@ LIVE BUSINESS DATA (ground truth — do not contradict or invent values)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${contextBlock}`;
 
+  // ── Intent detection + focused directive injection ─────────────────────────
+  const intent = detectIntent(message);
+  const snap: IntentCtxSnapshot = {
+    healthScore,
+    deductions,
+    postsPublished: ctx.postsPublished,
+    postsDraft: ctx.postsDraft,
+    postsPartial: ctx.postsPartial,
+    postsFailed: ctx.postsFailed,
+    lastPublishedAt: ctx.lastPublishedAt,
+    lastPublishedPlatforms: ctx.lastPublishedPlatforms,
+    reviewsSent: ctx.reviewsSent,
+    reviewsFailed: ctx.reviewsFailed,
+    reviewsThisWeek: ctx.reviewsThisWeek,
+    googleReviewCount: ctx.googleReviewCount,
+    googleRating: ctx.googleRating,
+    fbReviewCount: ctx.fbReviewCount,
+    fbRating: ctx.fbRating,
+    reviewCoverage,
+    gorilladeskCustomerCount: ctx.gorilladeskCustomerCount,
+    leadsTotal: ctx.leadsTotal,
+    leadsNew: ctx.leadsNew,
+    callsTotal: ctx.callsTotal,
+    callsMissed: ctx.callsMissed,
+    fbConnected: ctx.fbConnected,
+    igConnected: ctx.igConnected,
+    tikTokConnected: ctx.tikTokConnected,
+    gbpConnected: ctx.gbpConnected,
+    gbpHasLocation: ctx.gbpHasLocation,
+    gbpInCooldown: ctx.gbpInCooldown,
+    gbpCooldownMinsLeft: ctx.gbpCooldownMinsLeft,
+    receptionistConfigured: ctx.receptionistConfigured,
+    gorilladeskJobCount: ctx.gorilladeskJobCount,
+    autopilotEnabled: ctx.autopilotEnabled,
+    autopilotPaused: ctx.autopilotPaused,
+    daysSinceLastGenerated: ctx.daysSinceLastGenerated,
+    localPresenceChannels: ctx.localPresenceChannels,
+  };
+  const intentDirective = buildIntentDirective(intent, snap);
+  const finalSystemPrompt = systemPrompt.replace(
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA",
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intentDirective}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA`,
+  );
+
   try {
     const model = getAiModel();
-    const { text } = await generateText({ model, system: systemPrompt, prompt: message });
-    res.json({ reply: text.trim() });
+    const { text } = await generateText({ model, system: finalSystemPrompt, prompt: message });
+    res.json({ reply: text.trim(), intent });
   } catch (err: any) {
     console.error("[APOLLOS-CHAT] AI error:", err?.message);
     res.status(500).json({ error: err?.message ?? "AI model error" });

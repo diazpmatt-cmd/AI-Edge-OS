@@ -27,6 +27,7 @@ import revenueAttributionRouter from "./revenue-attribution";
 import aiReceptionistRouter from "./ai-receptionist";
 import localPresenceRouter from "./local-presence";
 import adminAssetsRouter from "./admin-assets";
+import apollosRouter from "./apollos";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(revenueAttributionRouter);
 router.use(aiReceptionistRouter);
 router.use(localPresenceRouter);
 router.use(adminAssetsRouter);
+router.use(apollosRouter);
 
 export default router;

@@ -1,8 +1,10 @@
 // ── Apollos Conversation Mode ─────────────────────────────────────────────────
-// Frontend only. Zero API calls. Placeholder AI responses until next release.
+// Apollos AI — live chat backed by OpenAI, context pulled from live BB&B data.
 
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useApiFetch } from "@/lib/api";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -35,7 +37,7 @@ const OPENING_MESSAGE: Message = {
   time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
 };
 
-const PLACEHOLDER_RESPONSE = "Conversation mode will be powered by AI in the next release.";
+// Chat is live — see POST /api/apollos/chat
 
 // ── Navigation intents ─────────────────────────────────────────────────────────
 // Matched case-insensitively via includes(). First match wins.
@@ -267,6 +269,116 @@ export default function ApollosPage() {
   const [timelineOpen, setTimelineOpen] = useState(true);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
+  const apiFetch = useApiFetch();
+
+  // ── Live data queries ────────────────────────────────────────────────────────
+  const ciQuery = useQuery<{ metrics: { total_calls: number; missed_calls: number; leads_captured: number } }>({
+    queryKey: ["apollos-ci"], staleTime: 60_000, retry: 1,
+    queryFn: () => apiFetch("/api/call-intelligence?period=30days"),
+  });
+  const leadsQuery = useQuery<{ stats: { total: number; active: number; thisMonth: number } }>({
+    queryKey: ["apollos-leads"], staleTime: 60_000, retry: 1,
+    queryFn: () => apiFetch("/api/leads"),
+  });
+  const postsQuery = useQuery<{ posts?: { status: string }[] } | { status: string }[]>({
+    queryKey: ["apollos-posts"], staleTime: 60_000, retry: 1,
+    queryFn: () => apiFetch("/api/social-posts"),
+  });
+
+  const ci       = ciQuery.data;
+  const leads    = leadsQuery.data;
+  const rawPosts = postsQuery.data;
+  const posts: { status: string }[] = rawPosts
+    ? (Array.isArray(rawPosts) ? rawPosts : (rawPosts as any).posts ?? [])
+    : [];
+
+  const hasLiveCalls   = (ci?.metrics.total_calls ?? 0) > 0;
+  const hasLiveLeads   = (leads?.stats.total ?? 0) > 0;
+  const hasLivePosts   = posts.length > 0;
+  const postsPublished = hasLivePosts ? posts.filter(p => p.status === "published").length : 0;
+  const postsDraft     = hasLivePosts ? posts.filter(p => p.status === "draft").length : 0;
+  const leadsActive    = hasLiveLeads ? (leads?.stats.active ?? 0) : 0;
+  const missedCalls    = hasLiveCalls ? (ci?.metrics.missed_calls ?? 0) : 0;
+
+  // ── Live-derived recommendations ─────────────────────────────────────────────
+  const todayRecs = [
+    {
+      icon: "🔥",
+      title: hasLiveLeads && leadsActive > 0 ? `Follow up with ${leadsActive} lead${leadsActive !== 1 ? "s" : ""}` : "Follow up with recovered leads",
+      reason: hasLiveLeads && leadsActive > 0
+        ? `${leadsActive} lead${leadsActive !== 1 ? "s" : ""} in 'new' status — respond before competitors do.`
+        : "Check Lead Recovery for new contacts captured overnight.",
+      priority: "High", priorityColor: "#F97316",
+      route: "/admin/lead-recovery", btnLabel: "Review Leads →", color: "#F97316",
+    },
+    {
+      icon: "📣",
+      title: postsDraft > 0 ? `Publish ${postsDraft} queued draft${postsDraft !== 1 ? "s" : ""}` : "Create today's social post",
+      reason: postsDraft > 0
+        ? `${postsDraft} draft${postsDraft !== 1 ? "s" : ""} waiting in Publishing Center — approve and publish.`
+        : "Consistent daily posts keep BB&B top of mind in Baldwin County.",
+      priority: "Medium", priorityColor: "#3B82F6",
+      route: "/admin/social-publishing", btnLabel: "Open Publisher →", color: "#3B82F6",
+    },
+    {
+      icon: "💰",
+      title: "Review revenue forecast",
+      reason: "Weekly check-in — compare actuals vs. projected growth targets.",
+      priority: "Medium", priorityColor: "#10B981",
+      route: "/admin/profit-center", btnLabel: "View Forecast →", color: "#10B981",
+    },
+    {
+      icon: missedCalls > 0 ? "📞" : "📢",
+      title: missedCalls > 0 ? `Recover ${missedCalls} missed call${missedCalls !== 1 ? "s" : ""}` : "Build a BB&B ad campaign",
+      reason: missedCalls > 0
+        ? `${missedCalls} missed call${missedCalls !== 1 ? "s" : ""} with no follow-up — high-intent revenue at risk.`
+        : "Summer pest season peaks now — launch a targeted local ad.",
+      priority: missedCalls > 0 ? "High" : "Medium",
+      priorityColor: missedCalls > 0 ? "#EF4444" : "#A78BFA",
+      route: missedCalls > 0 ? "/admin/lead-recovery" : "/admin/media-engine",
+      btnLabel: missedCalls > 0 ? "See Calls →" : "Open Media Engine →",
+      color: missedCalls > 0 ? "#EF4444" : "#A78BFA",
+    },
+  ];
+
+  // ── Live-derived briefing timeline ────────────────────────────────────────────
+  const briefingTimeline: { icon: string; title: string; desc: string; status: TimelineStatus; engine: string; route: string | null; btnLabel: string | null }[] = [
+    {
+      icon: "☀️", title: "Morning Brief",
+      desc: "Review overnight signals and identify today's top opportunities.",
+      status: "ready", engine: "Morning Brief",
+      route: "/admin/morning-brief", btnLabel: "Open Brief",
+    },
+    {
+      icon: "🔥", title: "Lead Review",
+      desc: hasLiveLeads
+        ? `${leadsActive} lead${leadsActive !== 1 ? "s" : ""} in 'new' status need${leadsActive === 1 ? "s" : ""} follow-up.`
+        : "Check recovered leads and send follow-up messages.",
+      status: hasLiveLeads && leadsActive > 0 ? "ready" : hasLiveLeads ? "done" : "pending",
+      engine: "Lead Recovery", route: "/admin/lead-recovery", btnLabel: "View Leads",
+    },
+    {
+      icon: "⚡", title: "Content Autopilot",
+      desc: hasLivePosts
+        ? `${postsPublished} posts published · ${postsDraft} draft${postsDraft !== 1 ? "s" : ""} queued.`
+        : "Generate and queue today's social posts for review.",
+      status: postsPublished > 0 ? "done" : hasLivePosts ? "ready" : "pending",
+      engine: "Content Autopilot", route: "/admin/bbb-autopilot", btnLabel: "Open Autopilot",
+    },
+    {
+      icon: "✈", title: "Publishing Center",
+      desc: postsDraft > 0
+        ? `${postsDraft} draft${postsDraft !== 1 ? "s" : ""} awaiting approval and publish.`
+        : "Review drafts and publish approved posts.",
+      status: postsDraft > 0 ? "ready" : postsPublished > 0 ? "done" : "pending",
+      engine: "Publishing Center", route: "/admin/social-publishing", btnLabel: "Open Publisher",
+    },
+    {
+      icon: "🌙", title: "End-of-Day Recap",
+      desc: "Review today's activity and plan tomorrow's priorities.",
+      status: "pending", engine: "Apollos AI", route: null, btnLabel: null,
+    },
+  ];
 
   const INTRO_SCRIPT = [
     "Hi, I'm Apollos.",
@@ -316,7 +428,7 @@ export default function ApollosPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function send(text: string) {
+  async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || responding) return;
 
@@ -329,7 +441,6 @@ export default function ApollosPage() {
     const intent = NAV_INTENTS.find(i => i.patterns.some(p => lower.includes(p)));
 
     if (intent) {
-      // Show natural response first, then navigate after 800ms
       setTimeout(() => {
         setMessages(prev => [...prev, {
           id: uid(), role: "apollos",
@@ -340,15 +451,26 @@ export default function ApollosPage() {
         setTimeout(() => navigate(intent.route), 800);
       }, 450);
     } else {
-      // Fallback — no fetch, no axios, no backend
-      setTimeout(() => {
+      try {
+        const data = await apiFetch("/api/apollos/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed }),
+        }) as { reply?: string; error?: string };
         setMessages(prev => [...prev, {
           id: uid(), role: "apollos",
-          text: PLACEHOLDER_RESPONSE,
+          text: data.reply ?? data.error ?? "(no response)",
           time: nowTime(),
         }]);
+      } catch (err: any) {
+        setMessages(prev => [...prev, {
+          id: uid(), role: "apollos",
+          text: `I'm having trouble connecting right now. Please try again in a moment.\n\n(${err?.message ?? "Network error"})`,
+          time: nowTime(),
+        }]);
+      } finally {
         setResponding(false);
-      }, 650);
+      }
     }
   }
 
@@ -436,18 +558,11 @@ export default function ApollosPage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: B.white, letterSpacing: "-0.2px" }}>Apollos</span>
-              {/* AI Coming Soon badge */}
               <span style={{
                 fontSize: 8, fontWeight: 800, letterSpacing: "1px",
-                background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)",
-                color: "#A78BFA", borderRadius: 8, padding: "2px 7px",
-              }}>🤖 AI COMING SOON</span>
-              {/* Frontend Preview Only badge */}
-              <span style={{
-                fontSize: 8, fontWeight: 800, letterSpacing: "1px",
-                background: "rgba(251,191,36,0.10)", border: "1px solid rgba(251,191,36,0.28)",
-                color: "#FBBF24", borderRadius: 8, padding: "2px 7px",
-              }}>👁 FRONTEND PREVIEW</span>
+                background: "rgba(34,197,94,0.10)", border: "1px solid rgba(34,197,94,0.3)",
+                color: "#22C55E", borderRadius: 8, padding: "2px 7px",
+              }}>🟢 AI LIVE</span>
             </div>
             <div style={{ fontSize: 11, color: B.blue, fontWeight: 600, marginTop: 2 }}>AI Business Advisor · British Executive</div>
           </div>
@@ -491,7 +606,7 @@ export default function ApollosPage() {
             </button>
             <div style={{ overflow: "hidden", maxHeight: recsOpen ? "800px" : "0px", transition: "max-height 0.3s ease", }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, paddingBottom: 4 }}>
-              {TODAY_RECS.map(r => (
+              {todayRecs.map(r => (
                 <div key={r.title} style={{
                   background: "linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%)",
                   border: `1px solid rgba(255,255,255,0.07)`,
@@ -547,9 +662,9 @@ export default function ApollosPage() {
             </button>
             <div style={{ overflow: "hidden", maxHeight: timelineOpen ? "1200px" : "0px", transition: "max-height 0.3s ease" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {BRIEFING_TIMELINE.map((item, idx) => {
+              {briefingTimeline.map((item, idx) => {
                 const s = TIMELINE_STATUS_STYLE[item.status];
-                const isLast = idx === BRIEFING_TIMELINE.length - 1;
+                const isLast = idx === briefingTimeline.length - 1;
                 return (
                   <div key={item.title} style={{ display: "flex", gap: 12, position: "relative" }}>
                     {/* Connector line */}
@@ -775,7 +890,7 @@ export default function ApollosPage() {
             </div>
           </div>
           <div style={{ fontSize: 10, color: B.dim, marginTop: 7, textAlign: "center" }}>
-            Enter to send · Shift+Enter for new line · Full AI integration coming in next release
+            Enter to send · Shift+Enter for new line · Apollos reads your live BB&amp;B data before every reply
           </div>
         </div>
       </div>
@@ -812,7 +927,7 @@ export default function ApollosPage() {
           Active Context
         </div>
         {[
-          { icon: "🐛", label: "BB&B",              sub: "Demo client"   },
+          { icon: "🐛", label: "BB&B",              sub: "Live client"   },
           { icon: "📍", label: "Baldwin County, AL", sub: "Service area" },
           { icon: "🏷️", label: "Pest Control",       sub: "Industry"     },
         ].map(c => (
@@ -828,9 +943,12 @@ export default function ApollosPage() {
           </div>
         ))}
 
-        <div style={{ marginTop: 16, padding: "8px 10px", borderRadius: 8, background: "rgba(0,174,239,0.05)", border: `1px solid ${B.border}`, textAlign: "center" }}>
+        <div style={{ marginTop: 16, padding: "8px 10px", borderRadius: 8, background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.2)", textAlign: "center" }}>
           <div style={{ fontSize: 10, color: B.dim, marginBottom: 3 }}>Live business context</div>
-          <div style={{ fontSize: 8, color: B.gold, fontWeight: 800, letterSpacing: "0.5px" }}>COMING SOON</div>
+          <div style={{ fontSize: 9, color: "#22C55E", fontWeight: 800, letterSpacing: "0.5px" }}>🟢 CONNECTED</div>
+          {hasLivePosts && <div style={{ fontSize: 9, color: B.dim, marginTop: 3 }}>{postsPublished} posts published</div>}
+          {hasLiveLeads && <div style={{ fontSize: 9, color: B.dim }}>{leadsActive} lead{leadsActive !== 1 ? "s" : ""} need follow-up</div>}
+          {hasLiveCalls && missedCalls > 0 && <div style={{ fontSize: 9, color: "#F87171" }}>{missedCalls} missed call{missedCalls !== 1 ? "s" : ""}</div>}
         </div>
 
         {/* ── Launch Panel ── */}

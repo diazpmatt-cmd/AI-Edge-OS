@@ -1,3 +1,27 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="90" fill="#030612"/>
+  <defs>
+    <linearGradient id="blueG" x1="0" y1="380" x2="200" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0055A5"/>
+      <stop offset="55%" stop-color="#00AEEF"/>
+      <stop offset="100%" stop-color="#38C8FF"/>
+    </linearGradient>
+    <linearGradient id="silverG" x1="280" y1="360" x2="460" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#606060"/>
+      <stop offset="50%" stop-color="#B8B8B8"/>
+      <stop offset="100%" stop-color="#E5E5E5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- A — left leg (thick diagonal, blue) -->
+  <polygon points="52,385 115,385 228,105 165,105" fill="url(#blueG)"/>
+  <!-- A — right leg (shorter diagonal, blue) -->
+  <polygon points="222,105 285,105 268,208 205,208" fill="url(#blueG)"/>
+
+  <!-- E — top bar (silver, slight parallelogram lean) -->
+  <polygon points="300,105 462,105 458,148 296,148" fill="url(#silverG)"/>
+  <!-- E — middle bar -->
+  <polygon points="300,215 445,215 441,258 296,258" fill="url(#silverG)"/>
+  <!-- E — bottom bar -->
+  <polygon points="300,325 462,325 458,368 296,368" fill="url(#silverG)"/>
 </svg>

@@ -34,6 +34,7 @@ const SECONDARY_NAV = [
   { to: "/admin/bbb-success",        icon: "🐛", label: "BB&B\nSuccess",            bg: "#0D1A10", accent: "#22C55E" },
   { to: "/admin/bizai",              icon: "🧠", label: "BizAI",                    bg: "#1A0D2E", accent: "#C084FC" },
   { to: "/admin/client-onboarding",  icon: "🚀", label: "Client\nOnboarding",       bg: "#0D1A2E", accent: "#38BDF8" },
+  { to: "/admin/publishing",          icon: "📄", label: "Article\nPublishing",      bg: "#1A0A28", accent: "#C084FC" },
   { to: "/admin/distribution",       icon: "📦", label: "Distribution",             bg: "#0A2020", accent: "#06B6D4" },
   { to: "/admin/repurpose",          icon: "🎯", label: "Repurpose",                bg: "#26071A", accent: "#F472B6" },
   { to: "/admin/call-intelligence",  icon: "📊", label: "Call\nIntelligence",       bg: "#0D1828", accent: "#60A5FA" },

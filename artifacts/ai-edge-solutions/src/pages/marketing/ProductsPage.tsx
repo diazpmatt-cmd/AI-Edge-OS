@@ -161,7 +161,7 @@ export default function ProductsPage() {
                 </div>
                 <div style={{ padding: "24px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
                   {[
-                    { time: "2:14 PM", type: "system", text: "📞 Missed call from (602) 555-0197 — Sarah M." },
+                    { time: "2:14 PM", type: "system", text: "📞 Missed call from (602) 867-5300 — Sarah M." },
                     { time: "2:14 PM", type: "ai", text: "Hi Sarah! Sorry we missed your call. This is Mike from Sunshine HVAC. How can we help you today?" },
                     { time: "2:15 PM", type: "customer", text: "Hey! My AC stopped working. Can someone come out today?" },
                     { time: "2:15 PM", type: "ai", text: "Absolutely! We have a 4 PM slot available today. Can I get your address to confirm the appointment?" },

@@ -204,7 +204,7 @@ function SlideMorningBrief() {
           border: `1px solid ${BRAND.blue}33`,
         }}>
           <div style={{ fontSize: 10, color: BRAND.blue, fontWeight: 700, letterSpacing: "1px", marginBottom: 4 }}>🎯 TODAY'S TOP PRIORITY</div>
-          <div style={{ fontSize: 13, color: BRAND.white, fontWeight: 600 }}>New lead: (251) 555-0198 — residential treatment inquiry</div>
+          <div style={{ fontSize: 13, color: BRAND.white, fontWeight: 600 }}>New lead: inbound call — residential treatment inquiry</div>
           <div style={{ fontSize: 11, color: "#64748B", marginTop: 3 }}>Received 2:14 AM · Call within 2 hours for best conversion</div>
         </div>
       </div>

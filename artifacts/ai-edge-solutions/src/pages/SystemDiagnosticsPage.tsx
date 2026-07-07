@@ -309,7 +309,7 @@ export default function SystemDiagnosticsPage() {
   });
 
   const testVoiceCall = useMutation({
-    mutationFn: (selection: string) => authFetch<{ ok: boolean; call: any; followUp: any }>("/telnyx/test-voice-call", { method: "POST", body: JSON.stringify({ phone: "+15550000003", selection }) }),
+    mutationFn: (selection: string) => authFetch<{ ok: boolean; call: any; followUp: any }>("/telnyx/test-voice-call", { method: "POST", body: JSON.stringify({ phone: "+18089530744", selection }) }),
     onSuccess: (_, sel) => {
       const labels: Record<string, string> = { "1": "live transfer", "2": "callback request", "3": "voicemail" };
       toast.success(`Voice call simulated → option ${sel} (${labels[sel] ?? sel})`);
@@ -319,20 +319,20 @@ export default function SystemDiagnosticsPage() {
   });
 
   const testCallbackReq = useMutation({
-    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-callback-request", { method: "POST", body: JSON.stringify({ phone: "+15550000004" }) }),
+    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-callback-request", { method: "POST", body: JSON.stringify({ phone: "+18089530744" }) }),
     onSuccess: () => { toast.success("Callback request lead logged"); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
     onError: (e: any) => toast.error(e?.message ?? "Callback test failed"),
   });
 
   const testVoicemail = useMutation({
-    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-voicemail", { method: "POST", body: JSON.stringify({ phone: "+15550000005" }) }),
+    mutationFn: () => authFetch<{ ok: boolean }>("/telnyx/test-voicemail", { method: "POST", body: JSON.stringify({ phone: "+18089530744" }) }),
     onSuccess: () => { toast.success("Voicemail lead logged"); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
     onError: (e: any) => toast.error(e?.message ?? "Voicemail test failed"),
   });
 
   const testTextback = useMutation({
     mutationFn: (skipDedup: boolean) => authFetch<{ ok: boolean; sent: boolean; skipped?: boolean; reason?: string; messageId?: string; error?: string }>(
-      "/telnyx/test-textback", { method: "POST", body: JSON.stringify({ phone: "+15550000006", skipDedup }) }
+      "/telnyx/test-textback", { method: "POST", body: JSON.stringify({ phone: "+18089530744", skipDedup }) }
     ),
     onSuccess: (d) => {
       if (d.skipped) { toast.info(`Dedup active — ${d.reason}`); return; }
@@ -346,7 +346,7 @@ export default function SystemDiagnosticsPage() {
 
   const testTextbackReply = useMutation({
     mutationFn: (reply: string) => authFetch<{ ok: boolean; parsed: string }>(
-      "/telnyx/test-textback-reply", { method: "POST", body: JSON.stringify({ phone: "+15550000007", reply }) }
+      "/telnyx/test-textback-reply", { method: "POST", body: JSON.stringify({ phone: "+18089530744", reply }) }
     ),
     onSuccess: (d) => { toast.success(`Reply logged: ${d.parsed}`); refetchTextback(); qc.invalidateQueries({ queryKey: ["diagnostics_logs"] }); },
     onError: (e: any) => toast.error(e?.message ?? "Reply test failed"),

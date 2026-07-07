@@ -176,7 +176,7 @@ export default function ContactPage() {
                 <div>
                   <FieldLabel>Phone *</FieldLabel>
                   <Input
-                    placeholder="(602) 555-0100"
+                    placeholder="(602) 867-5300"
                     type="tel"
                     value={form.phone}
                     onChange={v => setForm(f => ({ ...f, phone: v }))}

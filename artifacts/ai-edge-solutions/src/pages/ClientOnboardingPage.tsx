@@ -50,8 +50,8 @@ type ModuleId = typeof MODULES[number]["id"];
 const BBB = {
   businessName:    "Bed Bugs & Beyond",
   industry:        "Pest Control",
-  phone:           "(251) 555-0123",
-  forwardingPhone: "(251) 555-0124",
+  phone:           "",
+  forwardingPhone: "",
   website:         "bedbugsandbeyond.com",
   serviceArea:     "Baldwin County, AL",
   hours:           "Mon–Fri 7AM–6PM, Sat 8AM–3PM",

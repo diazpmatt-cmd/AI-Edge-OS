@@ -523,7 +523,7 @@ export default function ReviewsEnginePage() {
                     <input
                       required value={form.contact}
                       onChange={e => setForm(f => ({ ...f, contact: e.target.value }))}
-                      placeholder="e.g. (251) 555-0100 or jane@email.com"
+                      placeholder="e.g. (251) 867-5309 or jane@email.com"
                       style={inputStyle}
                     />
                   </div>

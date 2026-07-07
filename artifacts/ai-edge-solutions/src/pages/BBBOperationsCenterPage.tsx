@@ -476,7 +476,7 @@ export default function BBBOperationsCenterPage() {
                 type="tel"
                 value={reviewPhone}
                 onChange={e => setReviewPhone(e.target.value)}
-                placeholder="(251) 555-0100"
+                placeholder="(251) 867-5309"
                 disabled={reviewState === "sending"}
                 onKeyDown={e => { if (e.key === "Enter") handleSendReviewSms(); }}
                 style={{

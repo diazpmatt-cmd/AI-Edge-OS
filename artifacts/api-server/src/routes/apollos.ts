@@ -26,6 +26,67 @@ function getAiModel() {
   return gw(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
 }
 
+// ── Quota / billing error detection ─────────────────────────────────────────
+function isQuotaError(err: any): boolean {
+  const msg  = (err?.message ?? "").toLowerCase();
+  const code = err?.error?.code ?? err?.code ?? "";
+  const status = err?.status ?? err?.statusCode ?? 0;
+  return (
+    code === "insufficient_quota" ||
+    msg.includes("insufficient_quota") ||
+    msg.includes("exceeded your current quota") ||
+    msg.includes("quota exceeded") ||
+    msg.includes("you exceeded") ||
+    msg.includes("billing") ||
+    (status === 429 && (msg.includes("quota") || msg.includes("exceeded")))
+  );
+}
+
+function isMissingKeyError(err: any): boolean {
+  const msg = (err?.message ?? "").toLowerCase();
+  return msg.includes("openai_api_key is not set") || msg.includes("api key") || msg.includes("invalid_api_key");
+}
+
+// ── Fallback brief built from live data (no OpenAI call) ────────────────────
+function buildFallbackBrief(snap: {
+  callsTotal: number; callsMissed: number;
+  leadsTotal: number; leadsNew: number;
+  postsPublished: number; postsDraft: number; postsFailed: number;
+  reviewsThisWeek: number; reviewsSent: number;
+  fbConnected: boolean; igConnected: boolean; gbpConnected: boolean;
+  autopilotEnabled: boolean; autopilotPaused: boolean;
+  gorilladeskCustomerCount: number;
+}): string {
+  const conn: string[] = [];
+  if (snap.fbConnected) conn.push("Facebook ✅");
+  if (snap.igConnected) conn.push("Instagram ✅");
+  if (snap.gbpConnected) conn.push("Google Business ✅");
+  if (!snap.fbConnected) conn.push("Facebook ❌");
+  if (!snap.igConnected) conn.push("Instagram ❌");
+  if (!snap.gbpConnected) conn.push("Google Business ❌");
+
+  const autopilot = snap.autopilotEnabled
+    ? (snap.autopilotPaused ? "Enabled — currently paused" : "Running ✅")
+    : "Off";
+
+  return `Apollos is temporarily unavailable because the AI API quota is exhausted.
+
+Here is your live BB&B snapshot as of right now:
+
+📞 Calls (30 days): ${snap.callsTotal} total · ${snap.callsMissed} missed
+👥 Leads: ${snap.leadsTotal} total · ${snap.leadsNew} need follow-up
+📣 Content: ${snap.postsPublished} published · ${snap.postsDraft} drafts queued${snap.postsFailed > 0 ? ` · ${snap.postsFailed} failed` : ""}
+⭐ Reviews: ${snap.reviewsThisWeek} sent this week (${snap.reviewsSent} total)
+🏢 Customers: ${snap.gorilladeskCustomerCount > 0 ? `${snap.gorilladeskCustomerCount} in GorillaDesk` : "GorillaDesk not connected"}
+🔗 Connections: ${conn.join(" · ")}
+⚙️ Content Autopilot: ${autopilot}
+
+To restore AI responses, add credits at:
+👉 platform.openai.com → Settings → Billing → Add to credit balance
+
+Your live data above is accurate. All dashboard features remain fully functional.`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Health score deduction helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1129,8 +1190,35 @@ ${contextBlock}`;
     const { text } = await generateText({ model, system: finalSystemPrompt, prompt: message });
     res.json({ reply: text.trim(), intent });
   } catch (err: any) {
-    console.error("[APOLLOS-CHAT] AI error:", err?.message);
-    res.status(500).json({ error: err?.message ?? "AI model error" });
+    // Always log the full technical error server-side — never expose it to the client
+    console.error("[APOLLOS-CHAT] AI error:", err?.status ?? err?.statusCode, err?.message, err?.error ?? "");
+
+    if (isQuotaError(err)) {
+      // Quota exhausted — return a live-data fallback brief instead of an error
+      console.warn("[APOLLOS-CHAT] Quota exceeded — serving data-only fallback brief");
+      const fallback = buildFallbackBrief({
+        callsTotal:              ctx.callsTotal,
+        callsMissed:             ctx.callsMissed,
+        leadsTotal:              ctx.leadsTotal,
+        leadsNew:                ctx.leadsNew,
+        postsPublished:          ctx.postsPublished,
+        postsDraft:              ctx.postsDraft,
+        postsFailed:             ctx.postsFailed,
+        reviewsThisWeek:         ctx.reviewsThisWeek,
+        reviewsSent:             ctx.reviewsSent,
+        fbConnected:             ctx.fbConnected,
+        igConnected:             ctx.igConnected,
+        gbpConnected:            ctx.gbpConnected,
+        autopilotEnabled:        ctx.autopilotEnabled,
+        autopilotPaused:         ctx.autopilotPaused,
+        gorilladeskCustomerCount: ctx.gorilladeskCustomerCount,
+      });
+      res.json({ reply: fallback, intent });
+    } else if (isMissingKeyError(err)) {
+      res.status(500).json({ error: "Apollos AI is not configured. The OpenAI API key is missing — contact your administrator." });
+    } else {
+      res.status(500).json({ error: "Apollos is temporarily unavailable. Please try again in a moment." });
+    }
   }
 });
 

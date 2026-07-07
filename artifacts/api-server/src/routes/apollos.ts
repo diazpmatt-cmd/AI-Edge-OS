@@ -42,11 +42,96 @@ function buildHealthScore(deductions: Deduction[]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Weather intelligence — free wttr.in API, no key required
+// ═══════════════════════════════════════════════════════════════════════════════
+interface WeatherData {
+  tempF: number;
+  feelsLikeF: number;
+  maxTempF: number;
+  minTempF: number;
+  description: string;
+  humidity: number;
+  windMph: number;
+  chanceOfRain: number;
+  chanceOfThunder: number;
+}
+
+async function fetchWeather(): Promise<WeatherData | null> {
+  try {
+    const resp = await fetch("https://wttr.in/Foley+AL?format=j1", {
+      signal: AbortSignal.timeout(4500),
+      headers: { "User-Agent": "BBB-Apollos/1.0" },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json() as any;
+    const cur = data?.current_condition?.[0];
+    const day = data?.weather?.[0];
+    if (!cur || !day) return null;
+    const hourly: any[] = day.hourly ?? [];
+    const maxRain     = hourly.reduce((m: number, h: any) => Math.max(m, Number(h.chanceofrain     ?? 0)), 0);
+    const maxThunder  = hourly.reduce((m: number, h: any) => Math.max(m, Number(h.chanceofthunder  ?? 0)), 0);
+    return {
+      tempF:         Number(cur.temp_F       ?? 0),
+      feelsLikeF:    Number(cur.FeelsLikeF   ?? cur.temp_F ?? 0),
+      maxTempF:      Number(day.maxtempF     ?? 0),
+      minTempF:      Number(day.mintempF     ?? 0),
+      description:   cur.weatherDesc?.[0]?.value ?? "Unknown",
+      humidity:      Number(cur.humidity     ?? 0),
+      windMph:       Number(cur.windspeedMiles ?? 0),
+      chanceOfRain:  maxRain,
+      chanceOfThunder: maxThunder,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function interpretWeather(w: WeatherData): string {
+  const lines: string[] = [];
+  lines.push(`${w.description}, ${w.tempF}°F (feels ${w.feelsLikeF}°F) | H: ${w.maxTempF}°F  L: ${w.minTempF}°F`);
+  lines.push(`Wind: ${w.windMph}mph | Humidity: ${w.humidity}% | Rain chance: ${w.chanceOfRain}%${w.chanceOfThunder > 20 ? ` | ⚡ Thunder: ${w.chanceOfThunder}%` : ""}`);
+  lines.push("Operational impact:");
+  lines.push("  🟢 Bed Bug Treatments — interior, weather-independent");
+  lines.push("  🟢 Indoor Pest Control — interior, weather-independent");
+  if (w.chanceOfRain >= 50) {
+    lines.push("  🔴 Exterior Treatments — high rain chance, product will wash out");
+  } else if (w.chanceOfRain >= 25) {
+    lines.push("  🟡 Exterior Treatments — rain risk, schedule earlier in day");
+  } else {
+    lines.push("  🟢 Exterior Treatments — good conditions");
+  }
+  if (w.windMph >= 15 || w.chanceOfRain >= 50) {
+    lines.push("  🔴 Mosquito/Fogging — wind or rain makes treatment ineffective, reschedule");
+  } else if (w.windMph >= 10 || w.chanceOfRain >= 25) {
+    lines.push("  🟡 Mosquito/Fogging — marginal conditions, complete early in day");
+  } else {
+    lines.push("  🟢 Mosquito/Fogging — good conditions");
+  }
+  if (w.chanceOfRain >= 60) lines.push("⚠️ ADVISORY: High rain — move outdoor treatments earlier or reschedule.");
+  if (w.windMph >= 15)      lines.push("⚠️ ADVISORY: Wind >15mph — suspend fogging until conditions improve.");
+  if (w.chanceOfThunder >= 30) lines.push("⚠️ ADVISORY: Thunderstorm risk — prioritise inspections and indoor work today.");
+  return lines.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Intent router — lightweight keyword detection
 // ═══════════════════════════════════════════════════════════════════════════════
 type Intent =
   | "auto_brief"
   | "greeting"
+  | "target_single"
+  | "idea"
+  | "pineapple_cmd"
+  | "done_advance"
+  | "next_task"
+  | "stuck"
+  | "revenue_only"
+  | "marketing_only"
+  | "calls_only"
+  | "leads_only"
+  | "diagnose"
+  | "launch_checklist"
+  | "coo_mode"
   | "next_action"
   | "publishing_status"
   | "reviews_status"
@@ -60,6 +145,22 @@ type Intent =
 function detectIntent(msg: string): Intent {
   if (msg === "__auto_brief__") return "auto_brief";
   const m = msg.toLowerCase();
+  // ── Emoji / single-word command shortcuts (checked first — highest specificity) ──
+  const t = m.trim();
+  if (/^🎯[\s!.]*$|^target[\s!.]*$/.test(t))                          return "target_single";
+  if (/^✨[\s!.]*$|^sparkles?[\s!.]*$/.test(t))                       return "idea";
+  if (/^🍍[\s!.]*$|^pineapple[\s!.]*$/.test(t))                       return "pineapple_cmd";
+  if (/^✅[\s!.]*$|^done[\s!.]*$|^finished?[\s!.]*$|^completed?[\s!.]*$/.test(t)) return "done_advance";
+  if (/^➡[\s!.]*$|^next[\s!.]*$/.test(t))                             return "next_task";
+  if (/^🚧[\s!.]*$|^stuck[\s!.]*$|^blocked[\s!.]*$/.test(t))         return "stuck";
+  if (/^📊[\s!.]*$|^status[\s!.]*$/.test(t))                          return "business_health";
+  if (/^💰[\s!.]*$|^revenue[\s!.]*$/.test(t))                         return "revenue_only";
+  if (/^📣[\s!.]*$|^marketing[\s!.]*$/.test(t))                       return "marketing_only";
+  if (/^☎[\s!.]*$|^calls?[\s!.]*$/.test(t))                          return "calls_only";
+  if (/^👥[\s!.]*$|^leads?[\s!.]*$/.test(t))                          return "leads_only";
+  if (/^🛠[\s!.]*$|^diagnos\w*[\s!.]*$/.test(t))                      return "diagnose";
+  if (/^🚀[\s!.]*$|^launch(?:\s+checklist)?[\s!.]*$/.test(t))        return "launch_checklist";
+  if (/^💼[\s!.]*$|^coo(?:\s+mode)?[\s!.]*$/.test(t))                return "coo_mode";
   // next_action
   if (/what should i (do|focus|prioriti[sz]e)|only have \d+ min|what('s| is) my priority|what('s| is) (first|next)|where (should i |do i )?start/.test(m)) return "next_action";
   // publishing
@@ -119,14 +220,15 @@ function buildIntentDirective(intent: Intent, snap: IntentCtxSnapshot): string {
 FOCUS: Matt said good morning (or a natural hello during morning hours). Respond warmly and naturally — do NOT robotically say "Good morning, Matt." Make it feel like a real COO checking in. Then transition directly into the Morning Brief using ONLY live data below.
 
 Structure:
-1. One natural sentence acknowledging the time / start of day (vary this each time — e.g. "Morning — let's see where things stand." or "Right on time. Here's your day.")
+1. One natural sentence acknowledging the time / start of day (vary — e.g. "Morning — let's see where things stand." or "Right on time. Here's your day.")
 2. BUSINESS HEALTH: ${snap.healthScore}/100
 ${topDeductions}
-3. ✅ Top win or positive data point (from live data — posts, leads, calls)
-4. ⚠️ Single most urgent action today (from health deductions or live data)
-5. One sentence hand-off ("Ask me anything or say 'what should I do first' for your top 3 priorities.")
+3. 🌤 WEATHER: Use the WEATHER section of LIVE BUSINESS DATA. State conditions in one line. If rain ≥50% or wind ≥15mph, flag the operational impact on outdoor jobs. If weather affects operations, make it today's 🎯 Target advisory.
+4. ✅ Top win or positive data point (from live data — posts, leads, calls)
+5. ⚠️ Single most urgent action today (from health deductions or live data)
+6. One sentence hand-off ("Ask me anything or say 'what should I do first' for your top 3 priorities.")
 
-Keep it under 200 words. Conversational, not corporate. Never say "Certainly!" or "Absolutely!".`;
+Keep it under 220 words. Conversational, not corporate. Never say "Certainly!" or "Absolutely!".`;
       }
       // 5pm–4:59am → end of day recap
       if (h >= 17 || h < 5) {
@@ -230,6 +332,9 @@ ${greeting}, Matt.
 BUSINESS HEALTH: ${snap.healthScore}/100
 ${topDeductions}
 
+🌤 WEATHER (Foley, AL)
+[Use the WEATHER section of LIVE BUSINESS DATA. One line: conditions + temp. Then one line: operational impact — if rain ≥50% or wind ≥15mph, flag which outdoor treatments are affected and recommend scheduling earlier. If perfect conditions, say so. If no weather data, omit this section.]
+
 ✅ TOP SUCCESS TODAY
 [Identify the single strongest positive data point from live data — e.g. posts published, leads captured, reviews sent. If nothing, say "No activity recorded yet."]
 
@@ -260,8 +365,125 @@ ${waitingOn}
 ⭐ REVIEWS
 [Summarise: X requests sent, coverage %, Google/Facebook rating if available.]
 
-Keep total response under 320 words. Every section must reference a real number from live data or say "No live data yet."`;
+Keep total response under 350 words. Every section must reference a real number from live data or say "No live data yet."`;
     }
+
+    case "target_single":
+      return `DETECTED INTENT: target_single
+FOCUS: Matt wants his single highest-priority action right now. Return EXACTLY ONE task.
+Format:
+🎯 TARGET: [action name]
+What: [one sentence — what to do]
+Why now: [why this is #1 — cite live data]
+Impact: High | Est. time: [X min] | Status: Ready / Blocked: [reason if blocked]
+→ Open [Exact Page Name] (/path)
+
+Do not list secondary tasks. One target only. Under 80 words.`;
+
+    case "idea":
+      return `DETECTED INTENT: idea
+FOCUS: Matt sent ✨ — he has a great idea he wants acknowledged. Respond:
+1. Brief enthusiastic acknowledgement (e.g. "Noted — solid thinking.")
+2. Confirm it's tracked: "I'll add that as a Sparkle for this week."
+3. Redirect cleanly: "For now, today's 🎯 Target is [derive from top health deduction or live data]."
+Under 60 words. Light tone.`;
+
+    case "pineapple_cmd":
+      return `DETECTED INTENT: pineapple_cmd
+FOCUS: Matt sent 🍍 — we got distracted. Redirect politely:
+1. Acknowledge: "Noted — pineapple."
+2. Redirect: "Back to today's Target."
+3. State today's 🎯 Target (from top health deduction).
+Under 50 words. Casual, not corporate.`;
+
+    case "done_advance":
+      return `DETECTED INTENT: done_advance
+FOCUS: Matt completed a task. Acknowledge briefly, then surface the NEXT target.
+1. One-line acknowledgement (vary: "Good — ticked off." / "Nice work." / "One down.")
+2. Next 🎯 TARGET — second-highest priority from health deductions / live data. Same format as target_single.
+Under 80 words total.`;
+
+    case "next_task":
+      return `DETECTED INTENT: next_task
+FOCUS: Matt wants the next priority — give the second-highest action from health deductions and live data. Do not repeat what was already shown if context reveals it. Same format as target_single. Under 80 words.`;
+
+    case "stuck":
+      return `DETECTED INTENT: stuck
+FOCUS: Matt is stuck or blocked. Diagnose and respond with:
+1. What's blocking (specific — name the deduction, connection status, or third party)
+2. Who controls the blocker (Matt / TikTok / Google / etc.)
+3. Best workaround right now
+4. What to work on instead while waiting
+Direct. No padding. Under 120 words.`;
+
+    case "revenue_only":
+      return `DETECTED INTENT: revenue_only
+FOCUS: Revenue summary only. Use REVENUE ATTRIBUTION and LEADS & CALLS from LIVE BUSINESS DATA:
+- Total attributed revenue and jobs matched
+- Unaddressed leads: ${snap.leadsNew} (each = unbooked job)
+- Missed calls (30 days): ${snap.callsMissed} (each = potential lost job)
+One action recommendation to increase captured revenue. If GorillaDesk jobs = 0, explain what's needed. Under 100 words.`;
+
+    case "marketing_only":
+      return `DETECTED INTENT: marketing_only
+FOCUS: Marketing/publishing summary only.
+- Published: ${snap.postsPublished} | Draft: ${snap.postsDraft} | Failed: ${snap.postsFailed}
+- Last published: ${snap.lastPublishedAt ? new Date(snap.lastPublishedAt).toLocaleDateString("en-US") : "Never"}
+- Active channels: ${[snap.fbConnected && "Facebook", snap.igConnected && "Instagram", snap.tikTokConnected && "TikTok", snap.gbpConnected && "GBP"].filter(Boolean).join(", ") || "None connected"}
+${snap.gbpInCooldown ? `- GBP cooldown: ${snap.gbpCooldownMinsLeft}m remaining` : ""}
+One recommendation: what to post next and where. Under 100 words.`;
+
+    case "calls_only":
+      return `DETECTED INTENT: calls_only
+FOCUS: Calls summary only.
+- Calls (30 days): ${snap.callsTotal} total, ${snap.callsMissed} missed
+${snap.callsMissed > 0 ? `- ${snap.callsMissed} missed calls = potential lost jobs.` : "- No missed calls — excellent coverage."}
+- AI Receptionist: ${snap.receptionistConfigured ? "✅ configured" : "❌ not configured — missed calls go unanswered"}
+One action to improve call capture. Under 80 words.`;
+
+    case "leads_only":
+      return `DETECTED INTENT: leads_only
+FOCUS: Leads summary only.
+- Leads (30 days): ${snap.leadsTotal} total, ${snap.leadsNew} need follow-up
+${snap.leadsNew > 0 ? `- ${snap.leadsNew} lead${snap.leadsNew > 1 ? "s" : ""} uncontacted — these are unbooked jobs.` : "- All leads addressed — well done."}
+One action to convert leads. Under 80 words.`;
+
+    case "diagnose":
+      return `DETECTED INTENT: diagnose
+FOCUS: Run a full platform diagnostic. Report each system status:
+
+CONNECTIONS: Facebook ${snap.fbConnected ? "✅" : "❌"} | Instagram ${snap.igConnected ? "✅" : "❌"} | TikTok ${snap.tikTokConnected ? "✅" : "❌"} | GBP ${snap.gbpConnected ? "✅" : "❌"}${snap.gbpInCooldown ? ` ⛔ cooldown ${snap.gbpCooldownMinsLeft}m` : ""}
+CONTENT: ${snap.postsPublished} published, ${snap.postsFailed} failed
+RECEPTIONIST: ${snap.receptionistConfigured ? "✅ configured" : "❌ not configured"}
+GORILLADESK: ${snap.gorilladeskJobCount} jobs / ${snap.gorilladeskCustomerCount} customers
+HEALTH SCORE: ${snap.healthScore}/100
+
+Prioritise top 2 issues. Direct to System Diagnostics (/admin/diagnostics). Under 120 words.`;
+
+    case "launch_checklist":
+      return `DETECTED INTENT: launch_checklist
+FOCUS: Run the Production Launch Checklist. Check each item against live data:
+
+1. Social connections — FB ${snap.fbConnected ? "✅" : "❌"} | IG ${snap.igConnected ? "✅" : "❌"} | TikTok ${snap.tikTokConnected ? "✅" : "❌"} | GBP ${snap.gbpConnected ? "✅" : "❌"}
+2. Content published — ${snap.postsPublished > 0 ? "✅" : "❌"} (${snap.postsPublished} posts)
+3. AI Receptionist — ${snap.receptionistConfigured ? "✅" : "❌"} transfer phone configured
+4. Review requests running — ${snap.reviewsSent > 0 ? "✅" : "❌"} (${snap.reviewsSent} sent)
+5. Leads monitored — ${snap.leadsNew === 0 ? "✅" : `⚠️ ${snap.leadsNew} unaddressed`}
+6. GorillaDesk sync — ${snap.gorilladeskJobCount > 0 ? "✅" : "❌"} (${snap.gorilladeskJobCount} jobs)
+7. Health score — ${snap.healthScore >= 80 ? "✅" : "⚠️"} ${snap.healthScore}/100
+
+State overall launch readiness and the single blocking item (if any). Under 150 words.`;
+
+    case "coo_mode":
+      return `DETECTED INTENT: coo_mode
+FOCUS: Matt has activated COO Mode. Respond exactly:
+"💼 COO Mode active.
+
+I'm operating as Chief Operating Officer for Bed Bugs & Beyond. All decisions follow executive hierarchy: Revenue → Acquisition → Retention → Efficiency → Growth.
+
+What's on your agenda?"
+
+Then wait for Matt's input. No extra commentary.`;
 
     default:
       return `DETECTED INTENT: general
@@ -511,6 +733,9 @@ router.post("/apollos/chat", async (req, res) => {
     })(),
   ]);
 
+  // Weather — runs after DB fetches to avoid blocking them
+  const weather = await fetchWeather();
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PHASE 2 — Business Health Score
   // ═══════════════════════════════════════════════════════════════════════════
@@ -651,6 +876,7 @@ REVENUE ATTRIBUTION:
 
 LOCAL PRESENCE (9 directories):
 ${localPresenceBlock}
+${weather ? `\nWEATHER (Foley, AL — current):\n${interpretWeather(weather)}` : "\nWEATHER: Data unavailable (network timeout or service down)."}
 `.trim();
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -680,6 +906,25 @@ Every recommendation must include:
 → Impact: High / Medium / Low
 → Est. time: (5 min / 15 min / 30 min / 1 hour)
 → Status: Ready / Blocked: [reason] / Waiting on: [third party]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMMAND LANGUAGE — single-word shortcuts Matt can send
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+These are recognized commands. Respond in character — short, action-oriented.
+🎯 / "target"     → single highest-priority action right now
+✨ / "sparkles"   → acknowledge idea, roadmap it, redirect to today's Target
+🍍 / "pineapple"  → we got distracted — redirect back to today's Target
+✅ / "done"       → task complete, advance to next Target
+➡ / "next"        → show next priority
+🚧 / "stuck"      → diagnose the blocker, give workaround
+📊 / "status"     → business health summary
+💰 / "revenue"    → revenue summary only
+📣 / "marketing"  → marketing/publishing summary only
+☎ / "calls"       → calls summary only
+👥 / "leads"      → leads summary only
+🛠 / "diagnose"   → full platform diagnostic
+🚀 / "launch"     → production launch checklist
+💼 / "coo"        → activate COO Mode
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COACH MODE (Phase 4) — answer naturally

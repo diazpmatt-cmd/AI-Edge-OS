@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response as ExpressResponse } from "express";
 import { createHmac } from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -26,7 +26,7 @@ async function syncToDevServer(devOrigin: string, payload: {
     signaturePrefix: sig.slice(0, 12),
   });
 
-  let r: Response;
+  const r = await fetch(...);
   try {
     r = await fetch(syncUrl, {
       method: "POST",

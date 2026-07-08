@@ -26,15 +26,15 @@ async function syncToDevServer(devOrigin: string, payload: {
     signaturePrefix: sig.slice(0, 12),
   });
 
-  const r = await fetch(...);
-  try {
-    r = await fetch(syncUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, sig }),
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (fetchErr: any) {
+let r: globalThis.Response;
+try {
+  r = await fetch(syncUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, sig }),
+    signal: AbortSignal.timeout(8000),
+  });
+} catch (fetchErr: any) {
     console.error("[DEV-SYNC ERROR]", { error: fetchErr?.message ?? String(fetchErr) });
     throw fetchErr;
   }

@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttpImport from "pino-http";
 import path from "path";
 import { fileURLToPath } from "url";
-
+const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { clerkMiddleware } from "@clerk/express";

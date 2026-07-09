@@ -20,9 +20,15 @@ function rowToDto(r: SocialPostRow) {
 
 router.get("/", async (req, res) => {
   const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const rows = await db.select().from(socialPostsTable)
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const rows = await db
+    .select()
+    .from(socialPostsTable)
     .where(eq(socialPostsTable.userId, userId))
     .orderBy(desc(socialPostsTable.createdAt));
 
@@ -31,13 +37,22 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const post = await db.select().from(socialPostsTable)
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const post = await db
+    .select()
+    .from(socialPostsTable)
     .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
-    .then((r: Array<SocialPostRow>) => r[0]);
+    .then((r: Array<SocialPostRow>) => r[0] ?? null);
 
-  if (!post) return res.status(404).json({ error: "Post not found" });
+  if (!post) {
+    res.status(404).json({ error: "Post not found" });
+    return;
+  }
 
   res.json(rowToDto(post));
 });

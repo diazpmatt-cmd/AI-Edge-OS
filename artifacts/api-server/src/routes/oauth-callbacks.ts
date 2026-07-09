@@ -7,7 +7,17 @@ import { verifyState } from "../lib/oauthState";
 import { logCallback, getCallbackLog } from "../lib/callbackDebugLog";
 import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
+type FetchResponse = {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+};
 
+const httpFetch = globalThis.fetch as unknown as (
+  input: Parameters<typeof globalThis.fetch>[0],
+  init?: Parameters<typeof globalThis.fetch>[1],
+) => Promise<FetchResponse>;
 // After saving to the production DB, notify the dev server so it can sync the
 // same row to the dev DB.  This bridges the Replit dev/prod database split so
 // the dev frontend sees the token without requiring Facebook app-settings changes.
@@ -720,7 +730,7 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/linkedin/callback`;
-    const r = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+    const r = await fetch(...);("https://www.linkedin.com/oauth/v2/accessToken", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({

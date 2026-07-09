@@ -10,7 +10,7 @@ const router = Router();
 const TEXTBACK_DEDUP_MINUTES = 15;
 
 const TEXT_BACK_MESSAGE = `Hi, this is Bed Bugs & Beyond. Sorry we missed your call.
-
+import telnyxRouter from "./routes/telnyx";
 How can we help you today?
 
 Reply:
@@ -246,3 +246,4 @@ router.post("/telnyx/sms", async (req, res) => {
 });
 
 // rest of file unchanged
+export default router;

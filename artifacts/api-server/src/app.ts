@@ -10,7 +10,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import oauthCallbacksRouter from "./routes/oauth-callbacks";
-import telnyxRouter from "./routes/telnyx";
+import { router as telnyxRouter } from "./routes/telnyx";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,

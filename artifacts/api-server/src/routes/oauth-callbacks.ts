@@ -730,7 +730,7 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/linkedin/callback`;
-    const r = await fetch(...);("https://www.linkedin.com/oauth/v2/accessToken", {
+    const r = await httpFetch("https://www.linkedin.com/oauth/v2/accessToken", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({

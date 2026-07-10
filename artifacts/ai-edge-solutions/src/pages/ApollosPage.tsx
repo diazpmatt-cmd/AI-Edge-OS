@@ -153,8 +153,9 @@ const QUICK_ACTIONS = [
   { label: "💰 Revenue Forecast", route: "/admin/profit-center", msg: null,                        color: "#10B981" },
 ] as const;
 
-// status: "connected" | "preview" | "soon"
-const LAUNCH_ENGINES = [
+type LaunchStatus = "connected" | "preview" | "soon";
+
+const LAUNCH_ENGINES: { icon: string; label: string; desc: string; status: LaunchStatus; route: string | null; color: string }[] = [
   { icon: "☀️", label: "Morning Brief",     desc: "Overnight AI summary + live signals",  status: "connected", route: "/admin/morning-brief",  color: "#FBBF24" },
   { icon: "🎥", label: "Media Engine",      desc: "AI content creation & publishing",     status: "connected", route: "/admin/media-engine",   color: "#00AEEF" },
   { icon: "🔥", label: "Lead Recovery",     desc: "Capture & follow up missed leads",     status: "connected", route: "/admin/lead-recovery",  color: "#F97316" },
@@ -163,9 +164,7 @@ const LAUNCH_ENGINES = [
   { icon: "💰", label: "Revenue Forecast",  desc: "AI Profit Center & ROI dashboard",     status: "preview",   route: "/admin/profit-center",  color: "#10B981" },
   { icon: "⭐", label: "Review Engine",     desc: "Reputation management & requests",     status: "preview",   route: "/admin/reviews",        color: "#FBBF24" },
   { icon: "📤", label: "Publishing Center", desc: "Schedule & distribute all content",    status: "connected", route: "/admin/social-publishing", color: "#A78BFA" },
-] as const;
-
-type LaunchStatus = "connected" | "preview" | "soon";
+];
 
 const STATUS_STYLE: Record<LaunchStatus, { label: string; bg: string; border: string; color: string }> = {
   connected: { label: "Connected",    bg: "rgba(34,197,94,0.10)",  border: "rgba(34,197,94,0.3)",   color: "#22C55E" },

@@ -9,7 +9,7 @@ BB&B pilot: `auto_content_settings.autopilot_enabled` defaults to `'false'`.
 The scheduler's `runAutonomousContentGeneration()` queries `WHERE autopilot_enabled='true'`
 so it finds zero tenants and does nothing during the pilot.
 
-**To enable:** Set `autopilot_enabled='true'` and `next_generation_at` in Matthew's settings row.
+**To enable:** Set `autopilot_enabled='true'` and `next_generation_at` in the client's settings row.
 
 ## WeeklyPlanId Idempotency
 

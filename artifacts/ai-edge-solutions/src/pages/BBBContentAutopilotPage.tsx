@@ -384,6 +384,7 @@ export default function BBBContentAutopilotPage() {
     : { color: B.dim,    bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.2)", icon: "⚪", text: "No posts queued yet"              };
 
   function handleGenerate() {
+    if (selectedQueueable.length === 0) return; // nothing to generate
     setTemplateIdx(prev => prev === null ? 0 : (prev + 1) % TEMPLATES.length);
     // Default active tab to the first selected platform
     const firstSelected = QUEUEABLE_PROVIDERS.find(p => selectedPlatforms.has(p.id));
@@ -538,35 +539,55 @@ export default function BBBContentAutopilotPage() {
             <div style={{ fontSize: 13, color: B.silver, maxWidth: 520 }}>
               {generated
                 ? "Captions for all connected platforms — ready to copy or queue."
-                : "One click generates a complete weekly content plan for BB&B: captions for all supported platforms, an image idea, and a call-to-action."}
+                : "One click builds weekly content from the template library: platform-specific captions, an image idea, and a call-to-action for each selected channel."}
             </div>
           </div>
-          <button
-            onClick={handleGenerate}
-            style={{
-              flexShrink: 0,
-              background: `linear-gradient(135deg, rgba(242,108,33,0.2) 0%, rgba(0,119,182,0.15) 100%)`,
-              border: `1.5px solid rgba(242,108,33,0.5)`,
-              borderRadius: 12, padding: "14px 28px",
-              fontSize: 14, fontWeight: 800, color: B.white,
-              cursor: "pointer", transition: "all 0.2s",
-              display: "flex", alignItems: "center", gap: 10,
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.35) 0%, rgba(0,119,182,0.25) 100%)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.2) 0%, rgba(0,119,182,0.15) 100%)"; }}
-          >
-            <span style={{ fontSize: 20 }}>⚡</span>
-            {generated ? "Generate Next Week →" : "Generate Weekly Content"}
-            <span style={{
-              fontSize: 10, fontWeight: 700,
-              background: "rgba(0,0,0,0.2)",
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 6, padding: "2px 8px",
-              color: B.silver,
-            }}>
-              {selectedQueueable.length} {selectedQueueable.length === 1 ? "platform" : "platforms"}
-            </span>
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+            <button
+              onClick={handleGenerate}
+              disabled={selectedQueueable.length === 0}
+              style={{
+                flexShrink: 0,
+                background: selectedQueueable.length === 0
+                  ? `linear-gradient(135deg, rgba(242,108,33,0.08) 0%, rgba(0,119,182,0.05) 100%)`
+                  : `linear-gradient(135deg, rgba(242,108,33,0.2) 0%, rgba(0,119,182,0.15) 100%)`,
+                border: selectedQueueable.length === 0
+                  ? `1.5px solid rgba(242,108,33,0.15)`
+                  : `1.5px solid rgba(242,108,33,0.5)`,
+                borderRadius: 12, padding: "14px 28px",
+                fontSize: 14, fontWeight: 800,
+                color: selectedQueueable.length === 0 ? B.dim : B.white,
+                cursor: selectedQueueable.length === 0 ? "not-allowed" : "pointer",
+                transition: "all 0.2s",
+                display: "flex", alignItems: "center", gap: 10,
+              }}
+              onMouseEnter={e => {
+                if (selectedQueueable.length === 0) return;
+                (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.35) 0%, rgba(0,119,182,0.25) 100%)";
+              }}
+              onMouseLeave={e => {
+                if (selectedQueueable.length === 0) return;
+                (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.2) 0%, rgba(0,119,182,0.15) 100%)";
+              }}
+            >
+              <span style={{ fontSize: 20 }}>⚡</span>
+              {generated ? "Generate Next Week →" : "Generate Weekly Content"}
+              <span style={{
+                fontSize: 10, fontWeight: 700,
+                background: "rgba(0,0,0,0.2)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 6, padding: "2px 8px",
+                color: B.silver,
+              }}>
+                {selectedQueueable.length} {selectedQueueable.length === 1 ? "platform" : "platforms"}
+              </span>
+            </button>
+            {selectedQueueable.length === 0 && (
+              <div style={{ fontSize: 11, color: B.dim, textAlign: "center" }}>
+                Select at least one platform to generate content.
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Publishing Status Bar ── */}
@@ -1102,7 +1123,7 @@ export default function BBBContentAutopilotPage() {
           </div>
         )}
 
-        {/* ── Platform posting tips — dynamically sourced from CONTENT_PROFILES ── */}
+        {/* ── Platform posting tips — sourced from CONTENT_PROFILES registry ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
           {QUEUEABLE_PROVIDERS.map(p => {
             const prof = CONTENT_PROFILES[p.id];

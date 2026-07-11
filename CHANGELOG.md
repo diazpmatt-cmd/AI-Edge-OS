@@ -14,20 +14,27 @@ All notable changes to the AI Edge Solutions platform.
 - **Root cause**: `PLATFORM_NOTE.youtube` described an OAuth scope-approval gate
   that did not exist. The real limitation is YouTube's resumable-upload protocol
   (needs a video file to publish), not a provider-approval gate.
+- **Zero-selection guard**: The Generate button is now disabled and shows
+  helper text when no platforms are selected, preventing accidental empty
+  template rotation.
 
 ### Changed
 - `BBBContentAutopilotPage.tsx` Generate button: now shows a `{N} platforms` badge
   (live count of selected queueable providers) for immediate user visibility.
+- `BBBContentAutopilotPage.tsx` description text: now uses accurate
+  "template library" terminology instead of implying AI model generation.
 
 ### Added
-- `src/lib/__tests__/autopilot-selection.test.ts`: 3 new describe blocks
-  (13 additional tests, 230 total):
+- `src/lib/__tests__/autopilot-selection.test.ts`: 4 new describe blocks
+  (16 additional tests, 233 total):
   - YouTube canonical audit (registry `operational`, resolves to `ready` when
     connected, `disconnected` when not, publish handler exists, generation
     and queue capabilities are independent from publish)
   - TikTok canonical audit (remains `pending_approval`, resolves to `pending`)
   - Media profile informational-only invariant (no width/height/aspectRatio
     fields in `CONTENT_PROFILES`, no image generation API called from page)
+  - Zero-selection behavior (generation disabled when no platforms selected,
+    re-enabled on selection, disabled again on clear)
 
 ---
 

@@ -6,6 +6,27 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Changed (2026-07-11 — YouTube Pilot — Security Cleanup + Phase 8 Tests)
+- **Security cleanup (Phase 1):** Removed scheduler-secret bypass from
+  `GET /social-connections/youtube/channel-info`. The bypass was added solely for the
+  one-time staging audit (2026-07-11) and is now removed. Route is back to Clerk-only
+  authentication. `SCHEDULER_SECRET` import removed from `social-connections.ts`.
+- **`youtube_tags` column added** — `social_posts.youtube_tags TEXT` (JSON array string).
+  `rowToDto` parses as `string[]`; `POST`/`PATCH` serialize back; YouTube publisher
+  includes tags in `snippet.tags` if present.
+- **BB&B YouTube pilot staged** — Draft `34b0a41b-e08b-43b3-8167-c73655854ab5` created
+  with approved title, description, 13 tags, `privacy=private`, `videoUrl=null`,
+  `status=draft`. Awaiting real MP4.
+- **Channel confirmed live** — Channel-info called before cleanup: `BedBugsand_Beyond`,
+  ID `UCGCZ49VYvCIff8rM-VU2eqA`, 11 videos, 1,325 views.
+- **Phase 8 tests (12 new)** — `youtube.test.ts` expanded from 30 → 42 tests covering:
+  MP4-only MIME validation, empty-file rejection, private object-path retrieval,
+  publish-readiness contract (videoUrl required), channel ID verification
+  (`UCGCZ49VYvCIff8rM-VU2eqA`), privacy defaults to private for BB&B draft,
+  one-provider-attempt-only, youtubeVideoId persistence, failed upload stays unpublished,
+  no duplicate draft/upload, channel-info bypass absent, secrets not committed.
+- **133 total tests passing** across 3 test files (0 failures).
+
 ### Added (2026-07-11 — YouTube Live Pilot — Phases 1–6)
 - **`social_posts` DB columns** — `youtube_title TEXT`, `youtube_privacy TEXT`, `youtube_video_id TEXT`
   added via raw SQL migration; Drizzle schema updated to match

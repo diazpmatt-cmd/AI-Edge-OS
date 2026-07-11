@@ -13,7 +13,7 @@ Last updated: 2026-07-11
 | **Facebook** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ Graph API | Integrate image upload |
 | **Instagram** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ via FB Page | Requires public image URL |
 | **Google Business** | ✅ diaz.p.matt@gmail.com | ✅ Local copy + template | ❌ Not integrated | ✅ | ⚠️ BLOCKED — GCP API access unconfirmed | Verify APIs enabled in GCP Console (project 474786012895) |
-| **YouTube** | ✅ Matthew Diaz | ✅ Title + description + privacy | ❌ | ✅ Draft + queue | ⏸ AWAITING APPROVAL — Phase 6 stop | Matthew must confirm channel + provide MP4 URL + approve exact draft |
+| **YouTube** | ✅ BedBugsand_Beyond (`UCGCZ49VYvCIff8rM-VU2eqA`) | ✅ Title + description + 13 tags + privacy | ❌ | ✅ Draft `34b0a41b` staged | ⏸ AWAITING MP4 — Phase 2 stop | Matthew must attach real MP4 to draft `34b0a41b`; upload will be private |
 
 ### Deferred Platforms (Not in v1 Pilot)
 

@@ -6,7 +6,6 @@ import { eq, and } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { generateState } from "../lib/oauthState";
 import { getCallbackLog } from "../lib/callbackDebugLog";
-import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 
 const router = Router();
 
@@ -1760,20 +1759,8 @@ router.post("/social-connections/youtube/test-upload", async (req, res) => {
 });
 
 router.get("/social-connections/youtube/channel-info", async (req, res) => {
-  // Internal diagnostic access — scheduler secret allows server-to-server calls for a
-  // specific userId without requiring a Clerk browser session.
-  const schedulerUserId = req.headers["x-scheduler-user-id"] as string | undefined;
-  const isScheduler =
-    !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET && !!schedulerUserId;
-
-  let userId: string;
-  if (isScheduler) {
-    userId = schedulerUserId!;
-  } else {
-    const auth = getAuth(req);
-    if (!auth.userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-    userId = auth.userId;
-  }
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const [conn] = await db.select().from(socialConnectionsTable)
     .where(and(

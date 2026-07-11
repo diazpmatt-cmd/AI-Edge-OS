@@ -12,10 +12,15 @@ import {
   BBB_SERVICES,
   BBB_AUDIENCES,
   CAMPAIGN_GOALS,
+  selectWeeklyServices,
+  createWeeklyPlanId,
+  type WeeklyServiceSlot,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 
 const router = Router();
 
@@ -318,7 +323,11 @@ function buildScheduleSlots(
 // ── POST /auto-content/generate ───────────────────────────────────────────────
 
 router.post("/auto-content/generate", async (req, res) => {
-  const { userId } = getAuth(req);
+  // Allow the internal scheduler to call this route using x-scheduler-secret
+  // + x-scheduler-user-id header (same auth pattern as the publish route).
+  const isSchedulerCall = !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;
+  const { userId: clerkUserId } = getAuth(req);
+  const userId = clerkUserId ?? (isSchedulerCall ? (req.headers["x-scheduler-user-id"] as string) : null);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const {
@@ -408,6 +417,41 @@ router.post("/auto-content/generate", async (req, res) => {
   const effectiveAngles: string[] = Array.isArray(postAngles) && postAngles.length ? postAngles : DEFAULT_ANGLES;
   const effectiveTone: string[] = Array.isArray(toneStyle) && toneStyle.length ? toneStyle : DEFAULT_TONE;
   const effectiveTimes: string[] = Array.isArray(postingTimes) && postingTimes.length ? postingTimes : ["08:00", "12:00", "17:00"];
+
+  // Weekly plan identifiers — group all posts from this generation run together.
+  // weeklyPlanId is deterministic per-user-per-ISO-week (idempotency key).
+  // generationRunId is unique per invocation (distinguishes separate runs in the same week).
+  const weeklyPlanId    = (req.body.weeklyPlanId as string | undefined) ?? createWeeklyPlanId(userId);
+  const generationRunId = randomUUID();
+
+  // 60/25/15 mix position assignments — for count n slots:
+  //   first 60% = revenue, next 25% = education, last 15% = trust
+  function assignCampaignGoalByPosition(
+    idx: number, total: number, topic: string,
+  ): { campaignGoal: string; audienceId: string } {
+    const svc = matchServiceByTopic(topic);
+    const revEnd = Math.round(total * 0.60);
+    const eduEnd = Math.round(total * 0.85);
+    let bucket: "revenue" | "education" | "trust" =
+      idx < revEnd ? "revenue" : idx < eduEnd ? "education" : "trust";
+
+    if (svc?.campaignGoals?.length) {
+      const rev = ["call_generation","inspection_booking","treatment_booking","vacation_rental_outreach","property_manager_outreach","commercial_outreach"];
+      const edu = ["homeowner_education","prevention","seasonal_alert"];
+      const tst = ["review_trust","local_visibility"];
+      const pool = bucket === "revenue" ? rev : bucket === "education" ? edu : tst;
+      const eligible = svc.campaignGoals.filter((g: string) => pool.includes(g));
+      const goals = eligible.length ? eligible : svc.campaignGoals;
+      const goal = goals[idx % goals.length] as string;
+      const aud = svc.supportedAudiences?.[idx % (svc.supportedAudiences.length || 1)] ?? "homeowners";
+      return { campaignGoal: goal, audienceId: aud };
+    }
+    // Fallback when no registry match
+    const fallbackGoals: Record<string, string> = {
+      revenue: "call_generation", education: "homeowner_education", trust: "local_visibility",
+    };
+    return { campaignGoal: fallbackGoals[bucket], audienceId: "homeowners" };
+  }
 
   const slots = buildScheduleSlots(
     serviceAreas as string[], topics as string[], effectiveAngles,
@@ -530,6 +574,12 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       // V5: Campaign metadata from canonical registry
       serviceId: matchServiceByTopic(post.topic)?.serviceId ?? null,
       approvalStatus: postApprovalStatus,
+      // V5.1: Full campaign tracking — stored at generation time
+      weeklyPlanId,
+      generationRunId,
+      ...assignCampaignGoalByPosition(insertedIds.length, slots.length, post.topic),
+      revenueWeight: String(matchServiceByTopic(post.topic)?.revenueWeight ?? ""),
+      urgency:       matchServiceByTopic(post.topic)?.urgency ?? null,
     }).returning({ id: socialPostsTable.id });
     insertedIds.push(ins.id);
   }
@@ -593,7 +643,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
     frequency: frequency ?? "every_other_day",
     postingTimes: JSON.stringify(effectiveTimes),
     platforms: JSON.stringify(Array.isArray(platforms) ? platforms : ["facebook"]),
-    approvalMode: approvalMode ?? "auto_schedule",
+    approvalMode: approvalMode ?? BBB_DEFAULT_APPROVAL_MODE,
     ctaText: ctaText ?? "Call Now \u2014 (251) 324-9090",
     ctaPreference: ctaPreference ?? "call_now",
     toneStyle: JSON.stringify(effectiveTone),

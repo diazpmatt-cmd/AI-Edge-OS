@@ -1,15 +1,26 @@
 import { db } from "@workspace/db";
-import { socialPostsTable, leadsTable } from "@workspace/db/schema";
+import { socialPostsTable, leadsTable, autoContentSettingsTable } from "@workspace/db/schema";
+import { createWeeklyPlanId, getDefaultTopics } from "@workspace/db";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
 
-const POLL_INTERVAL_MS = 60_000;
+const POLL_INTERVAL_MS      = 60_000;      // post-publish tick: every 60s
+const AUTOPILOT_INTERVAL_MS = 30 * 60_000; // autonomous generation check: every 30min
+
+const DEFAULT_SERVICE_AREAS = [
+  "Foley, AL", "Daphne, AL", "Loxley, AL", "Fairhope, AL", "Gulf Shores, AL",
+  "Orange Beach, AL", "Summerdale, AL", "Spanish Fort, AL",
+];
 
 // Tracks posts currently being published — prevents duplicate publishes if a
 // tick fires while a previous publish is still in flight (e.g. slow GBP upload).
 const inFlight = new Set<string>();
+
+function parseJson<T>(raw: string | null | undefined, fallback: T): T {
+  try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
+}
 
 async function publishDuePosts(): Promise<void> {
   // Query for posts whose scheduled time has passed and are still "scheduled"
@@ -87,6 +98,118 @@ async function publishDuePosts(): Promise<void> {
   }
 }
 
+// ── Autonomous Content Generation ─────────────────────────────────────────────
+// Runs on its own tick (every 30min). Finds tenants where:
+//   - autopilot_enabled = 'true'
+//   - engine_paused IS DISTINCT FROM 'true'
+//   - next_generation_at IS NOT NULL AND <= now()
+//
+// For each due tenant:
+//   1. Computes the deterministic weeklyPlanId for the current ISO week.
+//   2. Checks idempotency — if posts with that weeklyPlanId already exist, skips.
+//   3. Calls POST /api/auto-content/generate via internal HTTP (scheduler auth bypass).
+//   4. Advances nextGenerationAt by 7 days.
+//
+// BB&B PILOT DEFAULT: autopilot_enabled = 'false' for all settings rows.
+// This function will find zero due tenants during the pilot and do nothing.
+// Enable by flipping autopilot_enabled = 'true' AFTER Matthew approves the first plan.
+
+async function runAutonomousContentGeneration(): Promise<void> {
+  const now = new Date();
+
+  // Find tenants whose autonomous generation is enabled and due
+  const dueTenants = await db
+    .select()
+    .from(autoContentSettingsTable)
+    .where(
+      and(
+        eq(autoContentSettingsTable.autopilotEnabled, "true"),
+        sql`(${autoContentSettingsTable.enginePaused} IS NULL OR ${autoContentSettingsTable.enginePaused} != 'true')`,
+        sql`${autoContentSettingsTable.nextGenerationAt} IS NOT NULL AND ${autoContentSettingsTable.nextGenerationAt} <= ${now}`,
+      )
+    );
+
+  if (!dueTenants.length) return;
+
+  logger.info({ count: dueTenants.length }, "[autopilot] autonomous generation tenants found");
+
+  const port = parseInt(process.env.PORT ?? "8080", 10);
+  const base  = `http://127.0.0.1:${port}`;
+
+  for (const settings of dueTenants) {
+    const weeklyPlanId = createWeeklyPlanId(settings.userId, now);
+
+    // ── Idempotency check ────────────────────────────────────────────────────
+    // Repeated scheduler ticks must not create a second plan for the same week.
+    const [existing] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(socialPostsTable)
+      .where(eq(socialPostsTable.weeklyPlanId, weeklyPlanId));
+
+    if ((existing?.cnt ?? 0) > 0) {
+      logger.info(
+        { userId: settings.userId, weeklyPlanId, cnt: existing?.cnt },
+        "[autopilot] weekly plan already exists — skipping (idempotent)",
+      );
+      // Advance nextGenerationAt if it's still stuck in the past after an earlier partial run
+      const nextAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      await db.update(autoContentSettingsTable)
+        .set({ nextGenerationAt: nextAt, updatedAt: new Date() })
+        .where(eq(autoContentSettingsTable.userId, settings.userId));
+      continue;
+    }
+
+    // ── Generate weekly plan via internal HTTP call ──────────────────────────
+    logger.info({ userId: settings.userId, weeklyPlanId }, "[autopilot] generating weekly plan");
+
+    const serviceAreas = parseJson<string[]>(settings.serviceAreas, DEFAULT_SERVICE_AREAS);
+    const topics       = parseJson<string[]>(settings.topics, getDefaultTopics());
+    const platforms    = parseJson<string[]>(settings.platforms, ["facebook", "google"]);
+
+    try {
+      const res = await fetch(`${base}/api/auto-content/generate`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":         "application/json",
+          "x-scheduler-secret":   SCHEDULER_SECRET,
+          "x-scheduler-user-id":  settings.userId,
+        },
+        body: JSON.stringify({
+          count:        7,            // 7-day weekly plan
+          weeklyPlanId,               // idempotency key passed through to inserts
+          approvalMode: settings.approvalMode ?? "approval_required",
+          serviceAreas,
+          topics,
+          platforms,
+          ctaText:  settings.ctaText  ?? "Call Now — (251) 324-9090",
+          clientName: settings.clientName ?? "Bed Bugs & Beyond",
+        }),
+      });
+
+      const body = await res.json() as Record<string, unknown>;
+
+      if (res.ok) {
+        logger.info(
+          { userId: settings.userId, weeklyPlanId, created: body.created },
+          "[autopilot] weekly plan generated successfully",
+        );
+        const nextAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        await db.update(autoContentSettingsTable)
+          .set({ lastGeneratedAt: now, nextGenerationAt: nextAt, updatedAt: new Date() })
+          .where(eq(autoContentSettingsTable.userId, settings.userId));
+      } else {
+        logger.error(
+          { userId: settings.userId, weeklyPlanId, httpStatus: res.status, body },
+          "[autopilot] weekly plan generation failed",
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ userId: settings.userId, weeklyPlanId, err: msg }, "[autopilot] generation request error");
+    }
+  }
+}
+
 // ── Missed-call recovery ──────────────────────────────────────────────────────
 
 const RECOVERY_LOOKBACK_MS = 2 * 60 * 60 * 1000;  // scan last 2 hours for missed calls
@@ -152,7 +275,7 @@ async function recoverMissedCalls(): Promise<void> {
 // ── Exports ────────────────────────────────────────────────────────────────────
 
 export function startScheduler(): void {
-  logger.info("[scheduler] started — posts every 60s · missed-call recovery every 5m");
+  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m");
 
   // ── Post publishing ──
   publishDuePosts().catch((err: unknown) => {
@@ -166,6 +289,21 @@ export function startScheduler(): void {
       logger.error({ err: msg }, "[scheduler] tick error");
     });
   }, POLL_INTERVAL_MS);
+
+  // ── Autonomous content generation ──
+  // BB&B pilot: no rows have autopilot_enabled='true', so this runs but finds nothing.
+  // Enable per-tenant by setting autopilot_enabled='true' and nextGenerationAt in the DB.
+  runAutonomousContentGeneration().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "[scheduler] startup autopilot error");
+  });
+
+  setInterval(() => {
+    runAutonomousContentGeneration().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] autopilot tick error");
+    });
+  }, AUTOPILOT_INTERVAL_MS);
 
   // ── Missed-call recovery ──
   recoverMissedCalls().catch((err: unknown) => {

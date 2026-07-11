@@ -163,3 +163,69 @@ analytics, live call log.
 
 ### GorillaDesk analytics
 `/admin/dashboard` GorillaDesk sync widget with live customer/revenue data.
+
+### Added (2026-07-11 — BB&B Content Autopilot Foundation — Phases 1–12)
+
+#### Phase 1: Status Colors
+- **Termites panel**: Fixed from gold/yellow → silver/neutral (`#94A3B8`) matching PENDING canonical state
+- **Approval Required chip**: Fixed from blue → yellow/amber (`#F59E0B`) matching ACTION_REQUIRED canonical state
+- All status-bearing elements now derive colors from `PLATFORM_STATUS_COLORS` map only — never from brand/service colors
+
+#### Phase 3: DB Schema
+- `social_posts`: Added `generation_run_id TEXT`, `revenue_weight TEXT`, `urgency TEXT`
+- `auto_content_settings`: Added `autopilot_enabled TEXT DEFAULT 'false'`, `generation_day TEXT`, `generation_time TEXT`
+- All migrations ran via raw SQL (drizzle push blocked by pre-existing constraint conflicts)
+- Drizzle schema files updated: `lib/db/src/schema/social-posts.ts`, `lib/db/src/schema/auto-content.ts`
+
+#### Phase 4: Autonomous Scheduler
+- Added `runAutonomousContentGeneration()` to `scheduler.ts` — runs every 30 minutes
+- Queries `WHERE autopilot_enabled='true' AND engine_paused IS DISTINCT FROM 'true' AND next_generation_at <= now()`
+- Full idempotency: `createWeeklyPlanId(userId)` is deterministic per ISO week — duplicate ticks produce no duplicate plan
+- Calls `POST /api/auto-content/generate` via internal HTTP with scheduler auth bypass headers
+- Advances `nextGenerationAt` by 7 days after successful generation
+- BB&B pilot: `autopilot_enabled='false'` by default — scheduler exists but fires for zero tenants during pilot
+
+#### Phase 5: Revenue-First Plan Logic
+- Added `selectWeeklyServices(count, recentTopics?)` to `bbb-services.ts`
+  - 60/25/15 revenue/education/trust bucket split using `BBB_DEFAULT_CAMPAIGN_MIX`
+  - Weighted random selection: `revenueWeight × contentFrequencyWeight`
+  - Service diversity rotation (avoids repeating same service consecutively)
+  - Moles remain low-frequency (contentFrequencyWeight=1, lowest of all services)
+  - Shuffles final slots so revenue/education/trust don't cluster on sequential days
+- Added `createWeeklyPlanId(userId, date?)` — ISO-week-deterministic idempotency key
+- Added `serviceStatusToOperationalState(status)` — maps ServiceStatus → OperationalState (4-state canonical system)
+- Added `WeeklyServiceSlot` interface for type-safe slot data
+
+#### Phase 6: Campaign Goals on Every Post
+- `POST /api/auto-content/generate` now stores on every post:
+  - `weeklyPlanId` (body-provided or auto-generated via `createWeeklyPlanId`)
+  - `generationRunId` (fresh UUID per invocation — distinguishes multiple runs in same week)
+  - `campaignGoal` (assigned by 60/25/15 position: first 60%=revenue, next 25%=education, last 15%=trust)
+  - `audienceId` (from service's `supportedAudiences` or fallback `homeowners`)
+  - `revenueWeight` (registry value at generation time)
+  - `urgency` (registry value at generation time)
+- Fixed `approvalMode` default in settings upsert: `"auto_schedule"` → `BBB_DEFAULT_APPROVAL_MODE` (`"approval_required"`)
+- Added scheduler auth bypass to generate route: `x-scheduler-secret` + `x-scheduler-user-id` headers
+
+#### Phase 7: Platform Behavior Rules (documented in code)
+- Google Business Profile: manual publish only during pilot (not in autonomous schedule)
+- YouTube: requires real MP4 (`videoUrl`) before publish — draft created, awaiting video
+- Facebook + Instagram: approval_required → pending_review → approve → scheduled → published
+- No platform uses auto_schedule during BB&B pilot
+
+#### Phase 8: First Proposed July Weekly Plan
+- Added static "First Proposed Weekly Plan" section to `BBBContentAutopilotPage`
+- Shows week of July 14–20, 2026 with 7 daily slots
+- Displays service, campaign goal, audience, bucket (revenue/education/trust), area, and editorial note
+- Mix: 4 revenue + 2 education + 1 trust = 60/25/15 split verified
+- Yellow pilot warning banner: approval required, autopilot off until Matthew enables it
+
+#### Phase 11: Tests (52 new tests, 404 total)
+- New file: `src/lib/__tests__/bbb-autopilot-engine.test.ts`
+- Coverage:
+  - Status colors 1–8: PLATFORM_STATUS_COLORS canonical map, serviceStatusToOperationalState adapter
+  - Weekly plan idempotency 12–13: same userId+week = same planId, different weeks = different planIds
+  - Campaign mix 14–22: 60/25/15 verified, service weights verified, moles low-frequency verified
+  - Service enforcement 23–26: termites/wildlife/heat-treatment blocked, fumigation safety rules enforced
+  - Approval workflow 29: approval_required default, never auto_schedule
+  - Pilot safety 9–10, 30: autopilot_enabled='false' default, no blind tenant migration

@@ -10,3 +10,4 @@
 - [Social Posts API shape](social-posts-api-shape.md) — API returns `platforms: string[]` (plural array), never `platform: string`; use `p.platforms?.[0] ?? ""` for primary platform display.
 - [useApiFetch stability](useapifetch-stability.md) — Hook now uses useCallback([getToken]); pages must use [apiFetch] deps (not []); useRef workaround pattern is obsolete.
 - [YouTube token refresh guard](youtube-token-refresh.md) — expires_at is NULL in dev DB (dropped by dev-sync); guard must be `refreshToken && (!expiresAt || expired)`, not `expiresAt && expired && refreshToken`.
+- [BBB Autopilot foundation](bbb-autopilot-foundation.md) — Phases 1-12 complete; autonomous scheduler exists but pilot uses autopilot_enabled='false' until Matthew approves; vitest in artifacts/ai-edge-solutions uses relative paths (not @workspace/db) for bbb-services imports.

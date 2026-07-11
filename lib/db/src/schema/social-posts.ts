@@ -52,6 +52,10 @@ export const socialPostsTable = pgTable("social_posts", {
   approvalStatus: text("approval_status"), // 'pending_review' | 'approved' | 'rejected' | null
   approvedAt:     timestamp("approved_at", { withTimezone: true }),
   approvedBy:     text("approved_by"),     // Clerk userId of approver
+  // V5.1: Autonomous generation tracking
+  generationRunId: text("generation_run_id"), // UUID grouping all posts from one scheduler run
+  revenueWeight:   text("revenue_weight"),    // registry revenueWeight at generation time
+  urgency:         text("urgency"),           // registry urgency at generation time
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

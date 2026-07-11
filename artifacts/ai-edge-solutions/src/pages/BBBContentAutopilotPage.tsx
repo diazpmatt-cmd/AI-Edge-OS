@@ -570,13 +570,13 @@ export default function BBBContentAutopilotPage() {
 
             {/* Restricted Services */}
             <div style={{ flex: "1 1 220px" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: B.gold, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
-                🔜 Coming Soon
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.silver, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+                ⬜ Coming Soon / Not Yet Active
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{
-                  fontSize: 12, color: B.gold,
-                  background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)",
+                  fontSize: 12, color: B.silver,
+                  background: "rgba(148,163,184,0.06)", border: "1px solid rgba(148,163,184,0.15)",
                   borderRadius: 8, padding: "8px 12px",
                 }}>
                   <div style={{ fontWeight: 700 }}>Termites</div>
@@ -612,14 +612,14 @@ export default function BBBContentAutopilotPage() {
 
             {/* Approval Mode */}
             <div style={{ flex: "1 1 180px" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: B.blue, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
-                🔒 Autopilot Mode
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+                ⚠️ Action Required
               </div>
               <div style={{
-                background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)",
+                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
                 borderRadius: 10, padding: "12px 14px",
               }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: B.blue }}>Approval Required</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B" }}>Approval Required</div>
                 <div style={{ fontSize: 11, color: B.dim, marginTop: 4 }}>
                   Each generated post requires explicit approval before scheduling.
                   BB&amp;B pilot default — not auto-publishing.
@@ -1304,6 +1304,101 @@ export default function BBBContentAutopilotPage() {
             </div>
           </div>
         )}
+
+        {/* ── Phase 8: First Proposed July Weekly Plan ── */}
+        <div style={{
+          background: B.panel, border: `1px solid rgba(242,108,33,0.25)`,
+          borderRadius: 18, padding: "24px 28px", marginBottom: 16,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap" as const, gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>
+                📋 First Proposed Weekly Plan
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: B.white, letterSpacing: "-0.3px" }}>
+                Week of July 14–20, 2026
+              </div>
+              <div style={{ fontSize: 12, color: B.dim, marginTop: 4 }}>
+                7 posts · 60% revenue · 25% education · 15% trust · Baldwin County, AL
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+              {[
+                { label: "Revenue", count: 4, color: B.emerald, bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)" },
+                { label: "Education", count: 2, color: B.blue, bg: "rgba(0,174,239,0.08)", border: "rgba(0,174,239,0.2)" },
+                { label: "Trust", count: 1, color: B.purple, bg: "rgba(167,139,250,0.08)", border: "rgba(167,139,250,0.2)" },
+              ].map(b => (
+                <div key={b.label} style={{ background: b.bg, border: `1px solid ${b.border}`, borderRadius: 8, padding: "6px 12px", textAlign: "center" as const }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: b.color }}>{b.count}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: b.color, letterSpacing: "0.5px" }}>{b.label.toUpperCase()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[
+              { day: "Mon 7/14", service: "Bed Bug Treatment", goal: "call_generation", audience: "Homeowners", bucket: "revenue" as const, area: "Foley, AL", angle: "promotional", note: "Summer spike — peak bed bug season for vacation rentals." },
+              { day: "Tue 7/15", service: "Vacation Rental Inspection", goal: "inspection_booking", audience: "Vacation Rental Owners", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "seasonal", note: "Book before high-traffic holiday weeks fill up." },
+              { day: "Wed 7/16", service: "Cockroach Control", goal: "homeowner_education", audience: "Homeowners", bucket: "education" as const, area: "Daphne, AL", angle: "educational", note: "Summer heat drives cockroaches indoors — awareness content." },
+              { day: "Thu 7/17", service: "Bed Bug Inspection", goal: "inspection_booking", audience: "Airbnb Hosts", bucket: "revenue" as const, area: "Orange Beach, AL", angle: "warning", note: "Airbnb hosts lose ratings from unreported infestations." },
+              { day: "Fri 7/18", service: "Ant & Spider Prevention", goal: "seasonal_alert", audience: "Homeowners", bucket: "education" as const, area: "Fairhope, AL", angle: "prevention", note: "Mid-summer prevention tip before rainy season push." },
+              { day: "Sat 7/19", service: "Commercial Pest Control", goal: "commercial_outreach", audience: "Restaurants", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "promotional", note: "Health inspection season — commercial kitchens need annual service." },
+              { day: "Sun 7/20", service: "Community Trust / Reviews", goal: "local_visibility", audience: "Homeowners", bucket: "trust" as const, area: "Baldwin County, AL", angle: "testimonial", note: "Sunday engagement — ask for reviews + reinforce local brand." },
+            ].map((slot, i) => {
+              const bucketColors = {
+                revenue:   { color: B.emerald, bg: "rgba(16,185,129,0.06)", border: "rgba(16,185,129,0.15)", badge: "rgba(16,185,129,0.12)" },
+                education: { color: B.blue,    bg: "rgba(0,174,239,0.06)",  border: "rgba(0,174,239,0.15)",  badge: "rgba(0,174,239,0.12)" },
+                trust:     { color: B.purple,  bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.15)", badge: "rgba(167,139,250,0.12)" },
+              };
+              const c = bucketColors[slot.bucket];
+              const goalLabel = slot.goal.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+              return (
+                <div key={i} style={{
+                  background: c.bg, border: `1px solid ${c.border}`, borderRadius: 12,
+                  padding: "12px 16px", display: "flex", alignItems: "center", gap: 14,
+                  flexWrap: "wrap" as const,
+                }}>
+                  <div style={{ width: 64, flexShrink: 0, textAlign: "center" as const }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: c.color, letterSpacing: "0.5px" }}>{slot.day}</div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: B.white }}>{slot.service}</div>
+                    <div style={{ fontSize: 11, color: B.dim, marginTop: 2 }}>{slot.area} · {slot.angle}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, alignItems: "center" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: c.color, background: c.badge, borderRadius: 6, padding: "2px 8px" }}>
+                      {slot.bucket.toUpperCase()}
+                    </span>
+                    <span style={{ fontSize: 10, color: B.silver, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "2px 8px" }}>
+                      {goalLabel}
+                    </span>
+                    <span style={{ fontSize: 10, color: B.dim, background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "2px 8px" }}>
+                      👥 {slot.audience}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: B.dim, fontStyle: "italic", maxWidth: 260, flexShrink: 0 }}>
+                    {slot.note}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{
+            marginTop: 16, padding: "12px 16px",
+            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+            borderRadius: 10, fontSize: 11, color: "#F59E0B",
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <span>⚠️</span>
+            <span>
+              <strong>Approval Required (Pilot):</strong> Click "Generate Weekly Content" above to create this plan as real drafts.
+              Each post will appear in the approval queue before anything is scheduled or published.
+              Autopilot autonomous scheduling is <strong>off</strong> until you enable it.
+            </span>
+          </div>
+        </div>
 
         {/* ── Platform posting tips — sourced from CONTENT_PROFILES registry ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>

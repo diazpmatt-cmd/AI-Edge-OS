@@ -696,3 +696,154 @@ export const APPROVAL_MODES: Record<ApprovalMode, { label: string; description: 
 
 /** The default approval mode for the BB&B pilot. Must not be auto_schedule. */
 export const BBB_DEFAULT_APPROVAL_MODE: ApprovalMode = "approval_required";
+
+// ── Service → Operational Status Adapter ─────────────────────────────────────
+// Maps canonical ServiceStatus values to the four-state operational color system
+// shared with PlatformStateChip. Never derive colors from service category/brand.
+//
+// READY          = active or seasonal (content generation enabled, no blockers)
+// ACTION_REQUIRED = would be available after an admin action (not used for services currently)
+// BLOCKED        = not offered or disabled — fatal block on generation + CTAs
+// PENDING        = coming_soon — future service, not active yet
+
+export type OperationalState = "ready" | "action_required" | "blocked" | "pending";
+
+export function serviceStatusToOperationalState(status: ServiceStatus): OperationalState {
+  switch (status) {
+    case "active":      return "ready";
+    case "seasonal":    return "ready";       // generatable when in season
+    case "limited":     return "action_required";
+    case "coming_soon": return "pending";
+    case "disabled":    return "blocked";
+  }
+}
+
+// ── Weekly Plan Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Creates a deterministic weeklyPlanId for a given userId and ISO week.
+ * Format: week-YYYY-WW-{userId} — guarantees one plan per user per calendar week.
+ * Idempotency: re-running generation in the same week yields the same ID,
+ * so the caller can check for existing posts with this ID to prevent duplicates.
+ */
+export function createWeeklyPlanId(userId: string, date: Date = new Date()): string {
+  // ISO week number (Monday-start)
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // make Sunday = 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  const shortId = userId.replace(/[^a-z0-9]/gi, "").slice(0, 8);
+  return `week-${d.getUTCFullYear()}-${String(weekNum).padStart(2, "0")}-${shortId}`;
+}
+
+/**
+ * Weighted random selection — returns a random item where each item's chance
+ * is proportional to its weight. Never throws on empty input.
+ */
+function weightedRandom<T>(items: T[], weightFn: (item: T) => number): T | undefined {
+  const total = items.reduce((sum, item) => sum + weightFn(item), 0);
+  if (total === 0 || items.length === 0) return items[0];
+  let rand = Math.random() * total;
+  for (const item of items) {
+    rand -= weightFn(item);
+    if (rand <= 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+export interface WeeklyServiceSlot {
+  service:      BBBService;
+  campaignGoal: CampaignGoal;
+  audienceId:   string;
+  bucket:       "revenue" | "education" | "trust";
+}
+
+/**
+ * Select `count` weekly service slots using the 60/25/15 revenue/education/trust mix.
+ * - Respects service weights (revenueWeight × contentFrequencyWeight)
+ * - Excludes coming_soon and disabled services
+ * - Moles appear rarely (contentFrequencyWeight=1)
+ * - Returns slots in a shuffled order suitable for day assignment
+ *
+ * Example for count=7: 4 revenue, 2 education, 1 trust
+ */
+export function selectWeeklyServices(
+  count: number,
+  recentTopics: string[] = [],
+): WeeklyServiceSlot[] {
+  const generatable = getGeneratableServices();
+
+  // Compute bucket sizes using floor + remainder
+  const revCount  = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.revenue   / 100);
+  const eduCount  = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.education / 100);
+  const trustCount = count - revCount - eduCount; // absorb rounding remainder
+
+  function pickService(pool: BBBService[], usedIds: Set<string>): BBBService | undefined {
+    const available = pool.filter(s => !usedIds.has(s.serviceId));
+    const candidates = available.length ? available : pool; // allow repeats when pool is small
+    return weightedRandom(candidates, s => s.revenueWeight * s.contentFrequencyWeight);
+  }
+
+  function pickGoalForBucket(
+    service: BBBService,
+    bucket: "revenue" | "education" | "trust",
+  ): CampaignGoal {
+    const goalSet = bucket === "revenue"    ? REVENUE_GOALS
+                  : bucket === "education"  ? EDUCATION_GOALS
+                  : TRUST_GOALS;
+
+    // Prefer goals the service explicitly supports, filtered by bucket
+    const eligible = (service.campaignGoals as CampaignGoal[]).filter(g => goalSet.has(g));
+    if (eligible.length) return eligible[Math.floor(Math.random() * eligible.length)];
+
+    // Fallback to any goal in the bucket
+    const bucketGoals = [...goalSet];
+    return bucketGoals[Math.floor(Math.random() * bucketGoals.length)];
+  }
+
+  function pickAudience(service: BBBService): string {
+    if (service.supportedAudiences.length) {
+      return service.supportedAudiences[Math.floor(Math.random() * service.supportedAudiences.length)];
+    }
+    return "homeowners";
+  }
+
+  const usedServiceIds = new Set<string>(
+    recentTopics.flatMap(t => {
+      const s = matchServiceByTopic(t);
+      return s ? [s.serviceId] : [];
+    })
+  );
+
+  const slots: WeeklyServiceSlot[] = [];
+
+  // Revenue bucket
+  for (let i = 0; i < revCount; i++) {
+    const svc = pickService(generatable, new Set([...usedServiceIds, ...slots.map(sl => sl.service.serviceId)]));
+    if (!svc) break;
+    slots.push({ service: svc, campaignGoal: pickGoalForBucket(svc, "revenue"), audienceId: pickAudience(svc), bucket: "revenue" });
+  }
+
+  // Education bucket
+  for (let i = 0; i < eduCount; i++) {
+    const svc = pickService(generatable, new Set(slots.map(sl => sl.service.serviceId)));
+    if (!svc) break;
+    slots.push({ service: svc, campaignGoal: pickGoalForBucket(svc, "education"), audienceId: pickAudience(svc), bucket: "education" });
+  }
+
+  // Trust bucket
+  for (let i = 0; i < trustCount; i++) {
+    const svc = pickService(generatable, new Set(slots.map(sl => sl.service.serviceId)));
+    if (!svc) break;
+    slots.push({ service: svc, campaignGoal: pickGoalForBucket(svc, "trust"), audienceId: pickAudience(svc), bucket: "trust" });
+  }
+
+  // Shuffle so revenue/education/trust don't cluster on sequential days
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]];
+  }
+
+  return slots;
+}

@@ -1,6 +1,5 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/react";
 import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
@@ -8,6 +7,9 @@ import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
 import { SOCIAL_PROVIDERS, getSocialProvider, type SocialProviderId } from "@/lib/social-providers";
 import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
+import { MediaUploader, type MediaAttachment } from "@/components/MediaUploader";
+import { resolvePreviewUrl } from "@/lib/media-config";
+import { PLATFORM_MEDIA_COMPAT } from "@/lib/media-compat";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube";
 
@@ -17,6 +19,7 @@ type SocialPost = {
   platforms: Platform[];
   imageUrl: string | null;
   videoUrl: string | null;
+  audioUrl: string | null;
   youtubeTitle:   string | null;
   youtubePrivacy: string | null;
   youtubeVideoId: string | null;
@@ -110,14 +113,13 @@ function fmtDate(iso: string | null) {
 }
 
 const MAX_CAPTION = 2200;
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
 
 const EMPTY_FORM = {
   clientName:   "Bed Bugs & Beyond",
   platforms:    ["facebook"] as Platform[],
   imageUrl:     null as string | null,
   videoUrl:     "" as string,
+  audioUrl:     null as string | null,
   youtubeTitle:   "" as string,
   youtubePrivacy: "private" as string,
   caption:      "",
@@ -145,9 +147,7 @@ type MetaPublishStatus = {
 
 export default function SocialPublishingPage() {
   const authFetch  = useApiFetch();
-  const { getToken } = useAuth();
   const qc         = useQueryClient();
-  const fileRef    = useRef<HTMLInputElement>(null);
   const search     = useSearch();
   const [, navigate] = useLocation();
   const { colors: t } = useTheme();
@@ -155,8 +155,6 @@ export default function SocialPublishingPage() {
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
   const [form,          setForm]          = useState({ ...EMPTY_FORM });
-  const [uploadState,   setUploadState]   = useState<"idle" | "uploading" | "done" | "error">("idle");
-  const [uploadError,   setUploadError]   = useState<string | null>(null);
   const [publishingId,      setPublishingId]      = useState<string | null>(null);
   const [publishResult,     setPublishResult]     = useState<{ ok: boolean; msg: string } | null>(null);
   const [publishStatusOpen, setPublishStatusOpen] = useState(false);
@@ -250,8 +248,6 @@ export default function SocialPublishingPage() {
     setShowForm(false);
     setEditId(null);
     setForm({ ...EMPTY_FORM });
-    setUploadState("idle");
-    setUploadError(null);
   };
 
   const startEdit = (post: SocialPost) => {
@@ -261,6 +257,7 @@ export default function SocialPublishingPage() {
       platforms:    post.platforms,
       imageUrl:     post.imageUrl,
       videoUrl:     post.videoUrl ?? "",
+      audioUrl:     post.audioUrl ?? null,
       youtubeTitle:   post.youtubeTitle   ?? "",
       youtubePrivacy: post.youtubePrivacy ?? "private",
       caption:      post.caption,
@@ -269,50 +266,30 @@ export default function SocialPublishingPage() {
       scheduleMode: post.scheduledAt ? "later" : "now",
       scheduledAt:  post.scheduledAt ? post.scheduledAt.slice(0, 16) : "",
     });
-    setUploadState(post.imageUrl ? "done" : "idle");
-    setUploadError(null);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const uploadFile = useCallback(async (file: File) => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setUploadError("Only JPG, PNG, WEBP, or GIF files are allowed.");
+  // Derive current media attachment from form fields (for MediaUploader)
+  const currentMedia = useMemo((): MediaAttachment | null => {
+    if (form.imageUrl) return { objectPath: form.imageUrl, kind: "image", mimeType: "image/jpeg", filename: "", byteSize: 0 };
+    if (form.videoUrl) return { objectPath: form.videoUrl, kind: "video", mimeType: "video/mp4", filename: "", byteSize: 0 };
+    if (form.audioUrl) return { objectPath: form.audioUrl, kind: "audio", mimeType: "audio/mpeg", filename: "", byteSize: 0 };
+    return null;
+  }, [form.imageUrl, form.videoUrl, form.audioUrl]);
+
+  const handleMediaChange = useCallback((att: MediaAttachment | null) => {
+    if (!att) {
+      setForm(f => ({ ...f, imageUrl: null, videoUrl: "", audioUrl: null }));
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadError("Image is too large. Maximum size is 10 MB.");
-      return;
-    }
-    setUploadError(null);
-    setUploadState("uploading");
-    setForm(f => ({ ...f, imageUrl: null }));
-
-    try {
-      const token = await getToken().catch(() => null);
-      const formData = new FormData();
-      formData.append("image", file);
-      const res = await fetch(`${BASE}/api/social-posts/upload-image`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        credentials: "include",
-      });
-      const data = await res.json() as any;
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setForm(f => ({ ...f, imageUrl: data.imageUrl }));
-      setUploadState("done");
-    } catch (e: any) {
-      setUploadError(e.message ?? "Upload failed. Try again.");
-      setUploadState("error");
-    }
-  }, [getToken]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
-  };
+    setForm(f => ({
+      ...f,
+      imageUrl: att.kind === "image" ? att.objectPath : null,
+      videoUrl: att.kind === "video" ? att.objectPath : "",
+      audioUrl: att.kind === "audio" ? att.objectPath : null,
+    }));
+  }, []);
 
   const togglePlatform = (p: Platform) =>
     setForm(f => ({
@@ -325,6 +302,7 @@ export default function SocialPublishingPage() {
     platforms:   form.platforms,
     imageUrl:    form.imageUrl,
     videoUrl:       form.videoUrl.trim() || null,
+    audioUrl:       form.audioUrl || null,
     youtubeTitle:   form.platforms.includes("youtube") ? form.youtubeTitle.trim() || null : null,
     youtubePrivacy: form.platforms.includes("youtube") ? form.youtubePrivacy || "private" : null,
     caption:     form.caption,
@@ -361,9 +339,8 @@ export default function SocialPublishingPage() {
     else if (p.status === "failed")                            counts.failed++;
   }
 
-  const isUploading   = uploadState === "uploading";
-  const canSave       = !saveMut.isPending && !isUploading;
-  const canPublish    = canSave && !publishMut.isPending && form.platforms.length > 0 && !!form.caption.trim();
+  const canSave    = !saveMut.isPending;
+  const canPublish = canSave && !publishMut.isPending && form.platforms.length > 0 && !!form.caption.trim();
 
   return (
     <AppShell>
@@ -633,73 +610,72 @@ export default function SocialPublishingPage() {
                 </div>
               </div>
 
-              {/* RIGHT — image upload */}
+              {/* RIGHT — media upload */}
               <div style={{ padding: "24px" }}>
-                <label style={labelStyle}>Photo / Image</label>
+                <label style={labelStyle}>Media</label>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>
+                  Image (JPG/PNG/WEBP/GIF · 10 MB) · Video MP4 (100 MB) · Audio MP3 (50 MB)
+                </div>
 
-                {/* Upload error */}
-                {uploadError && (
-                  <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444", fontSize: 12 }}>
-                    ⚠ {uploadError}
-                  </div>
-                )}
-
-                {/* Uploading spinner */}
-                {isUploading && (
-                  <div style={{ border: "2px dashed rgba(0,174,239,0.3)", borderRadius: 12, padding: "40px 20px", textAlign: "center", background: "rgba(0,174,239,0.04)" }}>
-                    <div style={{ fontSize: 12, color: "#00AEEF", fontWeight: 600 }}>⏳ Uploading image…</div>
-                  </div>
-                )}
-
-                {/* Preview */}
-                {!isUploading && form.imageUrl && (
-                  <div style={{ position: "relative" }}>
-                    <img src={form.imageUrl} alt="Preview" style={{ width: "100%", borderRadius: 10, objectFit: "cover", maxHeight: 280, display: "block" }} />
-                    <button onClick={() => { setForm(f => ({ ...f, imageUrl: null })); setUploadState("idle"); setUploadError(null); }} style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                    <button onClick={() => fileRef.current?.click()} style={{ marginTop: 10, width: "100%", padding: "8px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8", fontSize: 12, cursor: "pointer" }}>Replace image</button>
-                  </div>
-                )}
-
-                {/* Drop zone */}
-                {!isUploading && !form.imageUrl && (
-                  <div
-                    onDrop={handleDrop}
-                    onDragOver={e => e.preventDefault()}
-                    onClick={() => fileRef.current?.click()}
-                    style={{ border: "2px dashed rgba(0,174,239,0.25)", borderRadius: 12, padding: "40px 20px", textAlign: "center", cursor: "pointer", background: "rgba(0,174,239,0.03)" }}
-                  >
-                    <div style={{ fontSize: 36, marginBottom: 10 }}>🖼</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>Drop image here or click to browse</div>
-                    <div style={{ fontSize: 11, color: "#475569" }}>JPG, PNG, WEBP, GIF · Max 10 MB</div>
-                  </div>
-                )}
-
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-                  style={{ display: "none" }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
+                <MediaUploader
+                  value={currentMedia}
+                  onChange={handleMediaChange}
                 />
+
+                {/* Platform / media compatibility warnings */}
+                {currentMedia && form.platforms.length > 0 && (() => {
+                  const blockers: string[] = [];
+                  const warnings: string[] = [];
+                  for (const platform of form.platforms) {
+                    const pId = platform === "google" ? "google_business" : platform;
+                    const compat = PLATFORM_MEDIA_COMPAT[pId as keyof typeof PLATFORM_MEDIA_COMPAT];
+                    if (!compat) continue;
+                    const pLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
+                    if (currentMedia.kind === "video" && platform === "youtube") {
+                      // good
+                    } else if (currentMedia.kind === "audio") {
+                      warnings.push(`${pLabel}: MP3 stored as source asset — not published directly.`);
+                    } else if (currentMedia.kind === "video" && platform !== "youtube") {
+                      warnings.push(`${pLabel}: video publishing not yet implemented.`);
+                    }
+                  }
+                  if (form.platforms.includes("youtube") && currentMedia.kind !== "video") {
+                    blockers.push("YouTube requires an MP4 video to publish.");
+                  }
+                  if (form.platforms.includes("instagram") && currentMedia.kind !== "image") {
+                    blockers.push("Instagram requires an image (JPG/PNG/WEBP/GIF).");
+                  }
+                  if (!blockers.length && !warnings.length) return null;
+                  return (
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {blockers.map((b, i) => (
+                        <div key={i} style={{ padding: "6px 10px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 11, color: "#EF4444" }}>⚠ {b}</div>
+                      ))}
+                      {warnings.map((w, i) => (
+                        <div key={i} style={{ padding: "6px 10px", borderRadius: 6, background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)", fontSize: 11, color: "#F59E0B" }}>ℹ {w}</div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* YouTube-specific fields */}
                 {form.platforms.includes("youtube") && (
                   <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-                    {/* Video URL */}
+                    {/* Video URL status */}
                     <div>
                       <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 15 }}>▶</span> YouTube Video URL
+                        <span style={{ fontSize: 15 }}>▶</span> YouTube Video
                       </label>
-                      <input
-                        type="url"
-                        value={form.videoUrl}
-                        onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
-                        placeholder="https://storage.googleapis.com/… or direct .mp4 URL"
-                        style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
-                      />
-                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-                        Direct link to an .mp4 file. YouTube requires video — image-only posts will be skipped.
-                      </div>
+                      {form.videoUrl ? (
+                        <div style={{ padding: "7px 10px", borderRadius: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 11, color: "#22C55E" }}>
+                          ✓ MP4 attached · ready for upload
+                          <div style={{ marginTop: 2, fontFamily: "monospace", fontSize: 10, color: "#64748B", wordBreak: "break-all" }}>{form.videoUrl.startsWith("/objects/") ? `Object storage: ${form.videoUrl}` : form.videoUrl.slice(0, 60) + (form.videoUrl.length > 60 ? "…" : "")}</div>
+                        </div>
+                      ) : (
+                        <div style={{ padding: "7px 10px", borderRadius: 8, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", fontSize: 11, color: "#EF4444" }}>
+                          No video attached — upload an MP4 above to publish to YouTube.
+                        </div>
+                      )}
                     </div>
 
                     {/* YouTube Title */}
@@ -741,10 +717,10 @@ export default function SocialPublishingPage() {
                 )}
 
                 {/* Post preview card */}
-                {(form.caption || form.imageUrl) && !isUploading && (
+                {(form.caption || form.imageUrl) && (
                   <div style={{ marginTop: 20, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, overflow: "hidden" }}>
                     <div style={{ padding: "8px 12px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>Post Preview</div>
-                    {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", display: "block" }} />}
+                    {form.imageUrl && <img src={resolvePreviewUrl(form.imageUrl, BASE)} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", display: "block" }} />}
                     {form.caption && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "#D1D5DB", lineHeight: 1.6, maxHeight: 80, overflow: "hidden" }}>{form.caption}</div>}
                     {form.ctaType !== "none" && (
                       <div style={{ padding: "6px 12px 10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
@@ -806,7 +782,7 @@ export default function SocialPublishingPage() {
                     <div style={{ width: 64, height: 64, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                       {post.imageUrl || post.matchedImageUrl ? (
                         <>
-                          <img src={post.imageUrl ?? `${BASE}/api/storage${post.matchedImageUrl}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={post.imageUrl ? resolvePreviewUrl(post.imageUrl, BASE) : `${BASE}/api/storage${post.matchedImageUrl}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           {!post.imageUrl && post.matchedImageUrl && (
                             <div style={{ position: "absolute", bottom: 2, right: 2, background: "rgba(0,174,239,0.9)", borderRadius: 3, fontSize: 7, fontWeight: 800, color: "#fff", padding: "1px 3px", lineHeight: 1 }}>AI</div>
                           )}

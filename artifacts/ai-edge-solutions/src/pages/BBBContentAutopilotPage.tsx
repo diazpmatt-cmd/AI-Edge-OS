@@ -8,6 +8,7 @@ import { useApiFetch } from "@/lib/api";
 import { WorkflowNav } from "@/components/WorkflowNav";
 import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
 import { SOCIAL_PROVIDERS, QUEUEABLE_PROVIDERS, type SocialProviderId } from "@/lib/social-providers";
+import { MediaUploader, type MediaAttachment } from "@/components/MediaUploader";
 import {
   BBB_PILOT_PROVIDERS,
   BBB_DEFERRED_PROVIDERS,
@@ -330,6 +331,7 @@ export default function BBBContentAutopilotPage() {
   const [platformStatus,  setPlatformStatus]  = useState<Partial<Record<SocialProviderId, PlatformStatus>>>({ ...INITIAL_STATUS });
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
+  const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
 
   // Platform selection — persisted in localStorage.
   // Default = BB&B pilot platforms (Facebook, Instagram, Google Business, YouTube).
@@ -430,6 +432,9 @@ export default function BBBContentAutopilotPage() {
       captionGoogle:   captionFor(generated, "google_business"),
       platforms:       [platformKey],
       status:          "draft",
+      ...(mediaAttachment?.kind === "image" && { imageUrl: mediaAttachment.objectPath }),
+      ...(mediaAttachment?.kind === "video" && { videoUrl: mediaAttachment.objectPath }),
+      ...(mediaAttachment?.kind === "audio" && { audioUrl: mediaAttachment.objectPath }),
     }, {
       onSuccess: () => setDraftsSaved(prev => new Set([...prev, post.id])),
     });
@@ -593,6 +598,20 @@ export default function BBBContentAutopilotPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── Media Attachment (optional) ── */}
+        <div style={{
+          background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
+          padding: "18px 24px", marginBottom: 16,
+        }}>
+          <div style={{ fontSize: 9, fontWeight: 800, color: B.blue, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>
+            📎 Media Attachment (optional)
+          </div>
+          <div style={{ fontSize: 11, color: B.dim, marginBottom: 12 }}>
+            Attach an image, video (MP4), or audio (MP3) to include with every draft queued below. Leave empty for text-only posts.
+          </div>
+          <MediaUploader value={mediaAttachment} onChange={setMediaAttachment} />
         </div>
 
         {/* ── Publishing Status Bar ── */}

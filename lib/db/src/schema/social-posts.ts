@@ -30,6 +30,8 @@ export const socialPostsTable = pgTable("social_posts", {
   youtubePrivacy: text("youtube_privacy"),  // 'public' | 'unlisted' | 'private'; defaults to 'public'
   youtubeVideoId: text("youtube_video_id"), // provider video ID stored after a successful upload
   youtubeTags:    text("youtube_tags"),     // JSON array of tag strings e.g. '["bed bugs","Baldwin County"]'
+  // Media assets (object storage paths starting with /objects/ or legacy /api/uploads/ URLs)
+  audioUrl:       text("audio_url"),        // MP3 source asset path — stored for future use, not directly publishable
   // V4: Auto Image Attachment
   matchedImageId:    text("matched_image_id"),
   matchedImageUrl:   text("matched_image_url"),

@@ -12,8 +12,10 @@ import type { GbpEndpointCategory } from "../lib/gbp-cooldown.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { ObjectStorageService } from "../lib/objectStorage";
 
 const router = Router();
+const objectStorageService = new ObjectStorageService();
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads", "social-posts");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -46,6 +48,7 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     youtubePrivacy:  r.youtubePrivacy ?? null,
     youtubeVideoId:  r.youtubeVideoId ?? null,
     youtubeTags:     r.youtubeTags    ? (JSON.parse(r.youtubeTags) as string[]) : null,
+    audioUrl:        r.audioUrl ?? null,
     caption:         r.caption,
     captionFacebook: r.captionFacebook ?? null,
     captionGoogle:   r.captionGoogle ?? null,
@@ -115,6 +118,7 @@ router.post("/social-posts", async (req, res) => {
     platforms:   JSON.stringify(b.platforms ?? []),
     imageData:   b.imageUrl    ?? null,
     videoUrl:       b.videoUrl       ?? null,
+    audioUrl:       b.audioUrl       ?? null,
     youtubeTitle:   b.youtubeTitle   ?? null,
     youtubePrivacy: b.youtubePrivacy ?? null,
     youtubeTags:    Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : (b.youtubeTags ?? null),
@@ -136,6 +140,7 @@ router.patch("/social-posts/:id", async (req, res) => {
     ...(b.platforms       !== undefined && { platforms:       JSON.stringify(b.platforms) }),
     ...(b.imageUrl        !== undefined && { imageData:       b.imageUrl }),
     ...(b.videoUrl        !== undefined && { videoUrl:        b.videoUrl }),
+    ...(b.audioUrl        !== undefined && { audioUrl:        b.audioUrl }),
     ...(b.youtubeTitle    !== undefined && { youtubeTitle:    b.youtubeTitle }),
     ...(b.youtubePrivacy  !== undefined && { youtubePrivacy:  b.youtubePrivacy }),
     ...(b.youtubeTags     !== undefined && { youtubeTags:     Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : b.youtubeTags }),
@@ -565,11 +570,21 @@ router.post("/social-posts/:id/publish", async (req, res) => {
           const uploadUrl = initRes.headers.get("location");
           if (!uploadUrl) throw new Error("YouTube did not return an upload URL — check YouTube Data API v3 is enabled.");
 
-          // Step 2: Stream video from URL → YouTube
-          const videoRes = await fetch(videoUrl, { signal: AbortSignal.timeout(60000) });
-          if (!videoRes.ok) throw new Error(`Cannot fetch video source (${videoRes.status}): ${videoUrl.slice(0, 80)}`);
-          const videoBlob = await videoRes.blob();
-          const contentType = videoRes.headers.get("content-type") ?? "video/mp4";
+          // Step 2: Fetch video — object storage path (/objects/...) or external URL
+          let videoBlob: Blob;
+          let contentType: string;
+          if (videoUrl.startsWith("/objects/")) {
+            // Private object storage — download via ObjectStorageService (no HTTP needed)
+            const objectFile = await objectStorageService.getObjectEntityFile(videoUrl);
+            const storageRes = await objectStorageService.downloadObject(objectFile);
+            videoBlob  = await storageRes.blob();
+            contentType = storageRes.headers.get("content-type") ?? "video/mp4";
+          } else {
+            const videoRes = await fetch(videoUrl, { signal: AbortSignal.timeout(60000) });
+            if (!videoRes.ok) throw new Error(`Cannot fetch video source (${videoRes.status}): ${videoUrl.slice(0, 80)}`);
+            videoBlob   = await videoRes.blob();
+            contentType = videoRes.headers.get("content-type") ?? "video/mp4";
+          }
 
           const uploadRes = await fetch(uploadUrl, {
             method:  "PUT",

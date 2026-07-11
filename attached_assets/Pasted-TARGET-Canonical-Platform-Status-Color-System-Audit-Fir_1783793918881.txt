@@ -1,0 +1,397 @@
+TARGET: Canonical Platform Status Color System (Audit First)
+
+IMPORTANT
+
+Do NOT recolor cards based on platform branding.
+
+The current implementation mixes:
+
+- Facebook blue
+- Instagram pink
+- YouTube red
+- Pinterest red
+- TikTok teal
+
+These are BRAND COLORS.
+
+They are NOT STATUS COLORS.
+
+Status must come ONLY from the platform state.
+
+--------------------------------------------------
+PHASE 1 — AUDIT
+--------------------------------------------------
+
+Audit every component that renders platform cards, chips, badges or borders.
+
+Search for:
+
+PlatformStateChip
+PlatformCard
+ProviderCard
+BBBContentAutopilotPage
+PublishingCenter
+ConnectedAccounts
+SocialPublishingPage
+statusColor
+borderColor
+backgroundColor
+provider.color
+brandColor
+Facebook blue
+Instagram pink
+YouTube red
+
+Report every location where UI color is derived from:
+
+provider
+platform
+icon
+brand
+hard-coded CSS
+
+before changing anything.
+
+--------------------------------------------------
+PHASE 2 — CREATE ONE CANONICAL STATUS MAP
+--------------------------------------------------
+
+Create ONE shared source of truth.
+
+Example:
+
+export const PLATFORM_STATUS_COLORS = {
+
+ready: {
+
+badge: "green",
+
+border: "green",
+
+background: "greenTint",
+
+icon: "green"
+
+},
+
+action_required: {
+
+badge: "yellow",
+
+border: "yellow",
+
+background: "yellowTint",
+
+icon: "yellow"
+
+},
+
+blocked: {
+
+badge: "red",
+
+border: "red",
+
+background: "redTint",
+
+icon: "red"
+
+},
+
+pending: {
+
+badge: "white",
+
+border: "gray",
+
+background: "neutral",
+
+icon: "white"
+
+}
+
+}
+
+No page may create its own colors.
+
+--------------------------------------------------
+PHASE 3 — DEFINE STATUS RULES
+--------------------------------------------------
+
+Use ONLY these four operational states.
+
+READY
+
+Meaning:
+
+Platform is connected.
+
+Publishing works.
+
+No action needed.
+
+Color:
+
+Green
+
+Examples:
+
+Facebook
+
+Instagram
+
+Google Business (when quota restored)
+
+YouTube
+
+--------------------------------------------------
+
+ACTION REQUIRED
+
+Meaning:
+
+Platform exists.
+
+Publishing is possible after a user action.
+
+Examples:
+
+Reconnect account
+
+Google quota pending
+
+OAuth renewal
+
+Waiting on approval email
+
+Needs media
+
+Needs title
+
+Needs payment
+
+Needs verification
+
+Color:
+
+Yellow
+
+--------------------------------------------------
+
+BLOCKED
+
+Meaning:
+
+Publishing cannot occur.
+
+No backend exists.
+
+Feature disabled.
+
+Platform unsupported.
+
+API unavailable.
+
+Fatal configuration issue.
+
+Color:
+
+Red
+
+Examples:
+
+Missing publish handler
+
+API removed
+
+Unsupported workflow
+
+--------------------------------------------------
+
+PENDING
+
+Meaning:
+
+Future feature.
+
+Coming soon.
+
+Not yet released.
+
+Visible for roadmap only.
+
+Color:
+
+White badge
+
+Neutral card
+
+Gray border
+
+--------------------------------------------------
+PHASE 4 — PLATFORM BRANDING
+--------------------------------------------------
+
+Icons may retain brand colors ONLY if:
+
+they do NOT affect
+
+card background
+
+border
+
+shadow
+
+status badge
+
+status chip
+
+selection ring
+
+hover glow
+
+Everything else comes from status.
+
+--------------------------------------------------
+PHASE 5 — APPLY EVERYWHERE
+--------------------------------------------------
+
+Update:
+
+Publishing Center
+
+Content Autopilot
+
+Connected Accounts
+
+Platform Registry
+
+PlatformStateChip
+
+Dashboard widgets
+
+Any provider cards
+
+Every screen must produce identical colors.
+
+--------------------------------------------------
+PHASE 6 — BB&B PILOT EXPECTED RESULT
+--------------------------------------------------
+
+Current desired state
+
+Facebook
+
+Status:
+
+READY
+
+Color:
+
+Green
+
+Instagram
+
+READY
+
+Green
+
+Google Business
+
+ACTION REQUIRED
+
+Yellow
+
+Reason:
+
+Waiting on Google quota.
+
+YouTube
+
+READY
+
+Green
+
+TikTok
+
+PENDING
+
+White
+
+LinkedIn
+
+PENDING
+
+White
+
+Pinterest
+
+PENDING
+
+White
+
+Nextdoor
+
+PENDING
+
+White
+
+Do NOT color YouTube red because YouTube is red.
+
+Do NOT color Instagram pink because Instagram is pink.
+
+Do NOT color Facebook blue because Facebook is blue.
+
+Only operational status controls the UI.
+
+--------------------------------------------------
+PHASE 7 — REMOVE DUPLICATE LOGIC
+--------------------------------------------------
+
+If any page computes colors independently:
+
+delete it
+
+reuse the shared status helper.
+
+One source of truth.
+
+--------------------------------------------------
+PHASE 8 — TESTS
+--------------------------------------------------
+
+Verify:
+
+Ready -> Green
+
+Action Required -> Yellow
+
+Blocked -> Red
+
+Pending -> White
+
+Verify every page renders identical status colors.
+
+--------------------------------------------------
+PHASE 9 — REPORT
+--------------------------------------------------
+
+Return:
+
+1. Components audited
+
+2. Duplicate color logic removed
+
+3. Shared helper location
+
+4. Screens updated
+
+5. Tests
+
+6. Build
+
+7. Typecheck
+
+8. Screenshot verification
+
+No completion until every platform renders from the same shared status map.

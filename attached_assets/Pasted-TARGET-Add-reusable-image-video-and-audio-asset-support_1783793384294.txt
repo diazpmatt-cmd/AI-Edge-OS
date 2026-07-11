@@ -1,0 +1,483 @@
+TARGET: Add reusable image, video, and audio asset support to the Publishing Center and Content Autopilot.
+
+IMPORTANT
+
+Follow the AI Edge audit-first workflow:
+
+1. Audit
+2. Consolidate
+3. Verify
+4. Expand
+
+Current confirmed issue:
+
+The Publishing Center upload UI only accepts:
+
+- JPG
+- PNG
+- WEBP
+- GIF
+
+It rejects MP4 and MP3, even though the existing object-storage workflow can store arbitrary content types and the YouTube publisher already supports an attached MP4 through videoUrl.
+
+The same reusable media capability must be available in Content Autopilot.
+
+Do not:
+
+- create a second storage system
+- create a YouTube-only uploader
+- store media binaries in PostgreSQL
+- assume every platform accepts MP3 or MP4
+- claim bare MP3 publishing is supported where the provider cannot publish audio-only posts
+- bypass existing authentication
+- modify unrelated mobile code
+
+PHASE 1 — AUDIT THE CURRENT MEDIA FLOW
+
+Trace the exact implementation for:
+
+1. Publishing Center upload box
+2. Image validation
+3. Accepted MIME types
+4. Accepted file extensions
+5. Maximum file-size rules
+6. Signed-upload request
+7. Replit Object Storage upload
+8. Stored object path
+9. social_posts media fields
+10. imageUrl
+11. videoUrl
+12. any audio or mediaAssetId fields
+13. Content Autopilot image/media handling
+14. YouTube MP4 attachment flow
+15. provider-specific media validation
+
+Search for:
+
+- accept=
+- image/*
+- video/*
+- audio/*
+- JPG
+- PNG
+- WEBP
+- GIF
+- MP4
+- MP3
+- contentType
+- mimeType
+- imageUrl
+- videoUrl
+- audioUrl
+- mediaAsset
+- objectPath
+- request-url
+- uploadUrl
+- file validation
+- max file size
+
+Report all duplicated upload and validation logic before making changes.
+
+PHASE 2 — DEFINE ONE SHARED MEDIA-ASSET MODEL
+
+Create or reuse one shared media model.
+
+A media asset should support:
+
+- id or objectPath
+- originalFilename
+- mediaKind:
+  - image
+  - video
+  - audio
+- mimeType
+- extension
+- byteSize
+- width when known
+- height when known
+- durationSeconds when known
+- aspectRatio when known
+- storagePath
+- uploadStatus
+- validationStatus
+- createdAt
+
+Do not require every metadata field when the current server cannot inspect it.
+
+Keep unknown metadata explicitly null rather than guessing.
+
+Preserve backward compatibility with existing imageUrl and videoUrl records.
+
+If a new audio field is required, prefer:
+
+- audioUrl
+or
+- mediaAssetId
+
+based on the existing architecture.
+
+Update OpenAPI first if contracts change.
+
+Update Zod schemas and generated clients where applicable.
+
+PHASE 3 — CENTRALIZE FILE-TYPE RULES
+
+Create one shared media validation configuration instead of separate page-level arrays.
+
+Initial allowed types:
+
+Images:
+- image/jpeg
+- image/png
+- image/webp
+- image/gif
+
+Video:
+- video/mp4
+
+Audio:
+- audio/mpeg
+- audio/mp3 if encountered as a browser-reported alias
+
+Allowed extensions:
+
+- .jpg
+- .jpeg
+- .png
+- .webp
+- .gif
+- .mp4
+- .mp3
+
+Validate using:
+
+1. MIME type
+2. file extension
+3. nonzero byte size
+4. configured maximum size
+
+Do not trust filename alone.
+
+Reject MIME/extension mismatches safely.
+
+PHASE 4 — SIZE LIMITS
+
+Audit current infrastructure and apply truthful limits.
+
+Suggested initial pilot limits unless existing infrastructure supports safer values:
+
+Images:
+- maximum 10 MB
+
+MP3:
+- maximum 50 MB
+
+MP4:
+- maximum 100 MB for the current in-memory YouTube publishing flow
+
+If object storage allows larger files but the API publisher loads the entire file into memory, enforce the smaller publishing-safe limit.
+
+Display the actual limit in the UI.
+
+Do not advertise the storage provider’s maximum as the safe application limit.
+
+PHASE 5 — SHARED MEDIA UPLOADER
+
+Refactor or extend the current upload component into one reusable uploader used by:
+
+- Publishing Center
+- Content Autopilot
+
+Requirements:
+
+1. Drag-and-drop and file browse.
+2. Accept image, MP4, and MP3.
+3. Use the existing:
+   POST /storage/uploads/request-url
+4. Upload directly to object storage using the signed URL.
+5. Preserve private object storage.
+6. Return the canonical media reference.
+7. Show upload progress.
+8. Show validation errors clearly.
+9. Allow removing and replacing an attached asset.
+10. Do not duplicate the upload implementation between pages.
+
+Recommended UI label:
+
+“Photo, Video, or Audio”
+
+Accepted helper text:
+
+“JPG, PNG, WEBP, GIF, MP4, or MP3”
+
+Display real configured limits rather than hard-coded text.
+
+PHASE 6 — MEDIA PREVIEWS
+
+Render the appropriate preview:
+
+Image:
+- image preview
+- dimensions if known
+
+MP4:
+- HTML video preview with controls
+- filename
+- file size
+- dimensions and duration if known
+
+MP3:
+- HTML audio preview with controls
+- filename
+- file size
+- duration if known
+
+Do not attempt to render an MP3 as an image.
+
+Do not autoplay audio or video.
+
+PHASE 7 — PLATFORM CAPABILITY RULES
+
+Use the canonical provider registry and shared media compatibility logic.
+
+For the current BB&B pilot:
+
+FACEBOOK
+- images: supported if existing publisher supports them
+- MP4: supported only if the existing Meta video-post handler supports it
+- MP3 alone: not directly publishable as a normal Facebook post unless an existing supported workflow proves otherwise
+
+INSTAGRAM
+- images: supported
+- MP4: supported only if existing video/Reel publishing is implemented
+- MP3 alone: not directly publishable
+
+GOOGLE BUSINESS PROFILE
+- images: supported
+- MP4: do not claim support unless the existing GBP endpoint supports it
+- MP3: not directly publishable
+- while quota remains zero, status remains manual publish required
+
+YOUTUBE
+- MP4: supported and required for video upload
+- image: thumbnail candidate only; custom thumbnail upload may still be unimplemented
+- MP3 alone: not directly publishable as a YouTube video
+- MP3 may be stored as narration/source audio for future video assembly
+
+For deferred platforms, derive capability truthfully from the registry.
+
+Do not let “upload accepted” imply “provider publish supported.”
+
+PHASE 8 — PUBLISHING CENTER INTEGRATION
+
+Update the Create New Post modal shown in production.
+
+Requirements:
+
+1. Replace “PHOTO / IMAGE” with:
+   “MEDIA”
+   or
+   “PHOTO, VIDEO, OR AUDIO”
+
+2. Remove the image-only rejection for valid MP4 and MP3 files.
+
+3. Store the attachment in the correct field/model.
+
+4. When platforms are selected:
+   - show whether the attached media is compatible
+   - show which platforms require different media
+   - block incompatible publish attempts
+   - do not silently omit a selected platform
+
+5. For YouTube:
+   - require MP4 before publish-ready
+   - populate videoUrl/media reference correctly
+
+6. For MP3:
+   - show:
+     “Audio source attached — a finished video is required for YouTube and visual social platforms.”
+   - do not mark the post ready to publish solely because MP3 exists
+
+7. Preserve current image-post behavior.
+
+PHASE 9 — CONTENT AUTOPILOT INTEGRATION
+
+Add the same reusable media uploader/selector to Content Autopilot.
+
+The selected platform buttons remain the source of truth.
+
+Requirements:
+
+1. A campaign may attach:
+   - image
+   - MP4
+   - MP3 source audio
+
+2. Platform packages should derive compatibility from:
+   - selected platforms
+   - media kind
+   - provider capability
+   - placement requirements
+
+3. Examples:
+
+If YouTube is selected and MP4 is attached:
+- videoReady: true
+
+If YouTube is selected and only MP3 is attached:
+- audioSourceReady: true
+- videoReady: false
+- publishReady: false
+- status: “Video assembly required”
+
+If Facebook and Instagram are selected with an image:
+- imageReady: true
+
+If Google is selected with a copy-only post:
+- manual-ready state remains available while quota is blocked
+
+4. Queue All must not queue an incompatible asset as publish-ready.
+
+5. Unselected platforms should not receive packages.
+
+PHASE 10 — AUDIO-SOURCE SEMANTICS
+
+Treat MP3 as a reusable source asset.
+
+Possible future uses:
+
+- narration
+- podcast/audio publishing where supported
+- soundtrack
+- voiceover for an MP4
+- slideshow/video assembly
+
+For this task:
+
+- upload and store MP3
+- preview it
+- associate it with a content package or draft
+- display truthful readiness
+- do not build a full video compositor unless one already exists and can be reused
+- do not claim that MP3 automatically becomes a YouTube video
+
+PHASE 11 — BACKEND VALIDATION
+
+Enforce validation server-side as well as in the browser.
+
+Requirements:
+
+1. Validate MIME type.
+2. Validate extension.
+3. Validate size.
+4. Reject empty files.
+5. Normalize accepted MIME aliases.
+6. Prevent arbitrary executable or unsafe file types.
+7. Ensure object paths remain tenant-scoped where applicable.
+8. Ensure users cannot attach another tenant’s media asset.
+9. Return stable error codes and safe user-facing messages.
+
+PHASE 12 — TESTS
+
+Add or update tests for:
+
+1. JPG accepted.
+2. PNG accepted.
+3. WEBP accepted.
+4. GIF accepted.
+5. MP4 accepted.
+6. MP3 accepted.
+7. Empty file rejected.
+8. Unsupported MIME rejected.
+9. Extension/MIME mismatch rejected.
+10. Oversized image rejected.
+11. Oversized MP3 rejected.
+12. Oversized MP4 rejected.
+13. Image preview selection.
+14. MP4 preview selection.
+15. MP3 preview selection.
+16. YouTube + MP4 becomes video-ready.
+17. YouTube + MP3 remains video-not-ready.
+18. Facebook/Instagram image behavior remains working.
+19. Incompatible platform/media combinations are blocked.
+20. Publishing Center and Content Autopilot share the same validation source.
+21. Existing image-only posts remain backward compatible.
+22. Unknown media kinds fail safely.
+23. Cross-tenant media references are rejected.
+24. No duplicate uploader configuration exists.
+
+PHASE 13 — MANUAL ACCEPTANCE TESTS
+
+PUBLISHING CENTER
+
+1. Upload a JPG.
+2. Confirm preview and existing image workflow.
+3. Upload an MP4.
+4. Confirm video preview and YouTube readiness.
+5. Upload an MP3.
+6. Confirm audio preview.
+7. Confirm MP3 does not falsely mark YouTube publish-ready.
+8. Select incompatible platforms and confirm clear warnings.
+
+CONTENT AUTOPILOT
+
+1. Select YouTube.
+2. Attach MP4.
+3. Confirm videoReady = true.
+4. Remove MP4 and attach MP3.
+5. Confirm audio-source state but videoReady = false.
+6. Select Facebook and Instagram with an image.
+7. Confirm compatible image package states.
+8. Verify Queue All includes only compatible, selected packages.
+
+RESPONSIVE
+
+Verify uploader and previews at:
+
+- desktop
+- tablet
+- smallest supported mobile width
+
+PHASE 14 — REQUIRED REPORT
+
+Return:
+
+1. Production components audited.
+2. Existing storage system reused.
+3. Shared uploader created or reused.
+4. Shared validation configuration.
+5. Supported MIME types and extensions.
+6. Actual configured size limits.
+7. Database/API changes.
+8. Publishing Center behavior.
+9. Content Autopilot behavior.
+10. Platform/media compatibility matrix.
+11. MP3 behavior and limitations.
+12. MP4 behavior and limitations.
+13. Files changed.
+14. Tests and results.
+15. Typecheck result.
+16. Build result.
+17. Manual acceptance results.
+18. Remaining limitations.
+19. Recommended next phase.
+
+DOCUMENTATION
+
+Update:
+
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+- ARCHITECTURE_DECISIONS.md if the shared media-asset model is a durable architectural decision
+
+Do not mark complete merely because the file picker accepts .mp3 and .mp4.
+
+Completion requires:
+
+- valid MP3 and MP4 upload
+- correct preview behavior
+- shared use in Publishing Center and Content Autopilot
+- server-side validation
+- truthful platform compatibility
+- no false publish-ready state

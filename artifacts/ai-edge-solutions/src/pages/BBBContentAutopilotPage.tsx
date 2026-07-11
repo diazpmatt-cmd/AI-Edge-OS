@@ -215,7 +215,7 @@ const INITIAL_STATUS: Partial<Record<SocialProviderId, PlatformStatus>> = Object
 // Context-specific display notes shown in the caption panel for pending platforms.
 // These are UX strings — not registry metadata.
 const PLATFORM_NOTE: Partial<Record<SocialProviderId, string>> = {
-  youtube:   "Content saved as draft. Auto-publishing activates once YouTube channel is connected and OAuth scope is approved.",
+  youtube:   "YouTube content is saved as a video description draft. Publishing requires a video file — upload your video in the Publishing Center to auto-publish.",
   tiktok:    "Content saved as draft. Auto-publishing activates once TikTok Business app approval is complete.",
   linkedin:  "Content saved as draft. LinkedIn auto-publish handler is in progress — copy content to post manually in the meantime.",
   pinterest: "Content saved as draft. Pinterest API connection coming soon — copy and post manually to your Pinterest Business account.",
@@ -557,6 +557,15 @@ export default function BBBContentAutopilotPage() {
           >
             <span style={{ fontSize: 20 }}>⚡</span>
             {generated ? "Generate Next Week →" : "Generate Weekly Content"}
+            <span style={{
+              fontSize: 10, fontWeight: 700,
+              background: "rgba(0,0,0,0.2)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 6, padding: "2px 8px",
+              color: B.silver,
+            }}>
+              {selectedQueueable.length} {selectedQueueable.length === 1 ? "platform" : "platforms"}
+            </span>
           </button>
         </div>
 

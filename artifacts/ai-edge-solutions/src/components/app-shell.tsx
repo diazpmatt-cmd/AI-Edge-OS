@@ -120,6 +120,7 @@ function NavGrid({ items, location }: { items: typeof PRIMARY_NAV; location: str
 }
 
 // ── DraggableTile — one tile in edit mode, with a drag handle ─────────────────
+// Rendered as a single-row list item (flex-column container) so axis="y" works.
 function DraggableTile({ item, location }: { item: NavItem; location: string }) {
   const controls = useDragControls();
   const active   = location.startsWith(item.to);
@@ -127,45 +128,44 @@ function DraggableTile({ item, location }: { item: NavItem; location: string }) 
 
   return (
     <Reorder.Item
+      as="div"
       value={item}
       dragListener={false}
       dragControls={controls}
       whileDrag={{
-        scale: 1.04,
+        scale: 1.02,
         boxShadow: `0 8px 28px ${item.accent}44`,
         zIndex: 50,
         opacity: 0.95,
       }}
       style={{
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        padding: "14px 6px 12px",
-        borderRadius: 12,
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "10px 10px",
+        borderRadius: 10,
         background: active
           ? `linear-gradient(135deg, ${item.bg} 0%, ${item.bg}CC 100%)`
           : `linear-gradient(135deg, ${item.bg} 0%, ${item.bg}99 100%)`,
         border: active
           ? `1.5px solid ${item.accent}`
-          : `1.5px dashed ${item.accent}66`,
-        boxShadow: active ? `0 0 12px ${item.accent}33` : "none",
+          : `1.5px dashed ${item.accent}55`,
+        boxShadow: active ? `0 0 10px ${item.accent}28` : "none",
         cursor: "default",
-        minHeight: 78,
-        position: "relative",
         userSelect: "none",
         listStyle: "none",
+        touchAction: "none",
       }}
     >
       {/* Grip handle — only element that initiates drag */}
       <div
         onPointerDown={e => { e.preventDefault(); controls.start(e); }}
         style={{
-          position: "absolute", top: 4, right: 5,
           cursor: "grab",
           fontSize: 13,
           color: `${item.accent}99`,
           lineHeight: 1,
           touchAction: "none",
           padding: "2px 3px",
+          flexShrink: 0,
         }}
         aria-label="Drag to reorder"
         role="button"
@@ -173,25 +173,30 @@ function DraggableTile({ item, location }: { item: NavItem; location: string }) 
         ⠿
       </div>
 
-      <span style={{ fontSize: 26, lineHeight: 1, marginBottom: 7, filter: "saturate(0.85) brightness(0.9)" }}>
+      <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>
         {item.icon}
       </span>
-      <div style={{ textAlign: "center" }}>
+      <div style={{ flex: 1 }}>
         {lines.map((line, i) => (
           <div key={i} style={{
-            fontSize: 10.5, fontWeight: 600, lineHeight: 1.25,
-            color: active ? "#FFFFFF" : "rgba(200,215,235,0.65)",
+            fontSize: 11, fontWeight: 600, lineHeight: 1.2,
+            color: active ? "#FFFFFF" : "rgba(200,215,235,0.75)",
             letterSpacing: "0.2px",
           }}>
             {line}
           </div>
         ))}
       </div>
+      <span style={{ fontSize: 10, color: `${item.accent}60`, fontWeight: 700, flexShrink: 0 }}>↕</span>
     </Reorder.Item>
   );
 }
 
-// ── EditableNavGrid — Reorder.Group with 2-column CSS grid ────────────────────
+// ── EditableNavGrid — Reorder.Group as single-column flex list ────────────────
+// NOTE: Must use flexDirection:"column", NOT CSS grid.
+// Framer Motion Reorder axis="y" compares y-coordinates to find the insertion
+// point. In a 2-column grid items in the same row share y-coordinates and the
+// algorithm breaks. A flex-column ensures every item has a unique y-offset.
 function EditableNavGrid({
   items, location, onReorder,
 }: {
@@ -203,7 +208,7 @@ function EditableNavGrid({
       values={items}
       onReorder={onReorder}
       style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6,
+        display: "flex", flexDirection: "column", gap: 4,
         listStyle: "none", margin: 0, padding: 0,
       }}
     >

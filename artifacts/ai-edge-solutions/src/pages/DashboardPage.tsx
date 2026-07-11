@@ -158,35 +158,49 @@ const NEXT_ACTIONS = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Draggable quick-action tile (edit mode only)
+//
+// IMPORTANT: The Reorder.Group MUST use flexDirection:"column" (not CSS grid)
+// in edit mode. Framer Motion Reorder uses a 1-D algorithm that compares
+// y-coordinates to find the insertion point. In a 2-column CSS grid, items in
+// the same row share the same y-coordinate and the algorithm cannot distinguish
+// them — causing incorrect or no reordering. Switching to a single flex-column
+// list makes axis="y" work correctly.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DraggableActionTile({ tile }: { tile: DashTile }) {
   const controls = useDragControls();
   return (
     <Reorder.Item
+      as="div"
       value={tile}
       dragListener={false}
       dragControls={controls}
-      style={{ listStyle: "none" }}
-      whileDrag={{ scale: 1.04, zIndex: 50, boxShadow: "0 10px 32px rgba(0,0,0,0.5)" }}
+      whileDrag={{ scale: 1.02, zIndex: 50, boxShadow: "0 8px 28px rgba(0,0,0,0.55)", opacity: 0.95 }}
+      style={{ listStyle: "none", touchAction: "none" }}
     >
       <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        background: "rgba(11,22,41,0.85)",
-        border: `1px dashed ${tile.color}50`,
-        borderRadius: 10, padding: "10px 12px",
+        display: "flex", alignItems: "center", gap: 10,
+        background: "rgba(11,22,41,0.9)",
+        border: `1px solid ${tile.color}35`,
+        borderRadius: 10, padding: "11px 14px",
         userSelect: "none", cursor: "default",
       }}>
+        {/* Grip handle — sole initiator of drag; rest of card is inert */}
         <span
           onPointerDown={e => { e.preventDefault(); controls.start(e); }}
           style={{
-            fontSize: 13, color: "#475569", cursor: "grab",
+            fontSize: 14, color: "#475569",
+            cursor: "grab",
             touchAction: "none", flexShrink: 0, lineHeight: 1,
             padding: "2px 4px",
+            WebkitUserSelect: "none",
           }}
+          role="button"
+          aria-label="Drag to reorder"
         >⠿</span>
-        <span style={{ fontSize: 15 }}>{tile.icon}</span>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: "#94A3B8", flex: 1 }}>{tile.label}</span>
+        <span style={{ fontSize: 16, flexShrink: 0 }}>{tile.icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1", flex: 1 }}>{tile.label}</span>
+        <span style={{ fontSize: 10, color: `${tile.color}80`, fontWeight: 700 }}>↕</span>
       </div>
     </Reorder.Item>
   );
@@ -243,7 +257,11 @@ export default function DashboardPage() {
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "healthy">("all");
   const [dashEditMode,    setDashEditMode]    = useState(false);
   const [orderedActions,  setOrderedActions]  = useState<DashTile[]>(() => loadSavedDashOrder(QUICK_ACTIONS_DEFAULT));
-  const handleDashDone  = useCallback(() => { saveDashOrder(orderedActions); setDashEditMode(false); }, [orderedActions]);
+  const handleDashReorder = useCallback((next: DashTile[]) => {
+    setOrderedActions(next);
+    saveDashOrder(next);   // persist immediately on each reorder
+  }, []);
+  const handleDashDone  = useCallback(() => { setDashEditMode(false); }, []);
   const handleDashReset = useCallback(() => { clearDashOrder(); setOrderedActions(QUICK_ACTIONS_DEFAULT); setDashEditMode(false); }, []);
   const { data: gd, loading: gdLoading, error: gdError, syncing: gdSyncing, lastSyncedAt, syncFromGorillaDesk } = useGorilladeskAnalytics();
   const dashApiFetch = useApiFetch();
@@ -904,13 +922,17 @@ export default function DashboardPage() {
               </div>
             } />
             {dashEditMode ? (
+              /* Edit mode: single flex-column so axis="y" works correctly.
+                 CSS grid (2-col) breaks Framer Motion Reorder because items in
+                 the same row share y-coordinates — the 1-D insertion algorithm
+                 cannot distinguish them. */
               <Reorder.Group
                 axis="y"
                 values={orderedActions}
-                onReorder={setOrderedActions}
+                onReorder={handleDashReorder}
                 as="div"
                 style={{
-                  display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8,
+                  display: "flex", flexDirection: "column", gap: 6,
                   listStyle: "none", padding: 0, margin: 0,
                 }}
               >

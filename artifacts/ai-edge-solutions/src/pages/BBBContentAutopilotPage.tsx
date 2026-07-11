@@ -39,6 +39,11 @@ interface ContentTemplate {
   facebook:  string;
   instagram: string;
   gbp:       string;
+  youtube:   string;
+  tiktok:    string;
+  linkedin:  string;
+  pinterest: string;
+  nextdoor:  string;
   imageIdea: string;
   cta:       string;
 }
@@ -71,6 +76,16 @@ const TEMPLATES: ContentTemplate[] = [
       "🚨 Early bed bug signs:\n• Small bites in a line or cluster\n• Rust-colored spots on sheets\n• Musty odor near the bed\n\nDon't wait — they spread fast. Serving Baldwin County, AL 🐛\n\n#BedBugs #BaldwinCountyAL #PestControlAL #HomePestControl #GulfShores #Foley #OrangeBeach",
     gbp:
       "Noticing mysterious bites or spots on your sheets? Bed Bugs & Beyond offers same-week inspections across all of Baldwin County. Call or message us today for a free phone consultation — fast, discreet, and professional.",
+    youtube:
+      "🐛 Early Warning Signs of Bed Bugs — What to Look For | Bed Bugs & Beyond\n\nAre you waking up with mysterious bites? Noticing tiny rust-colored spots on your sheets? In this video we walk you through the exact warning signs of a bed bug infestation — and what to do the moment you spot them.\n\n🔍 What we cover:\n00:00 What bed bug bites look like\n00:45 Rust-colored stains on sheets & mattresses\n01:20 The musty odor sign most people miss\n02:00 When to call a professional\n\n📍 Serving all of Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort\n📞 Free phone consultation — call or message us today!\n\n#BedBugs #EarlyWarningSigns #BaldwinCounty #PestControl #BedBugInspection",
+    tiktok:
+      "🐛 3 early bed bug signs you NEED to know 😱\n\n1️⃣ Rust-colored spots on your sheets\n2️⃣ Bites in a line or cluster\n3️⃣ Musty smell near your bed\n\nSpot any of these? Call Bed Bugs & Beyond NOW 📞\nServing Baldwin County, AL\n\n#BedBugs #PestControl #HomeHacks #BaldwinCountyAL #FYP #PestAlert #BedBugSigns",
+    linkedin:
+      "Did you know bed bug infestations in vacation rentals and commercial properties can surface through early, easy-to-miss signs?\n\nRust-colored stains on bedding, unexplained bite patterns, and a faint musty odor are the first indicators — and acting fast prevents a small problem from becoming a major liability.\n\nBed Bugs & Beyond specializes in fast, discreet treatment for property managers, vacation rental hosts, and HOAs across Baldwin County, AL. Free consultations available.\n\n#BedBugs #PropertyManagement #VacationRental #PestControl #BaldwinCountyAL",
+    pinterest:
+      "🐛 Know the Early Warning Signs of Bed Bugs | Bed Bugs & Beyond, Baldwin County AL — Rust-colored spots on sheets, bite clusters, musty odor. Catch them early before they spread! Professional pest control serving Foley, Gulf Shores, Orange Beach & all of Baldwin County. Free phone consultation. #BedBugs #PestControl #HomeTips #BaldwinCounty #BedBugWarning",
+    nextdoor:
+      "Hey neighbors! 👋 Are you noticing mysterious bites in the morning, or tiny rust-colored spots on your sheets? These are early warning signs of bed bugs and they spread fast.\n\nI'm the owner of Bed Bugs & Beyond — your local Baldwin County bed bug specialist. We offer same-week inspections across Foley, Gulf Shores, Orange Beach, Fairhope, and surrounding areas. Fast, discreet, and professional.\n\nFree phone consultation — just reach out! 📞",
     imageIdea: "Close-up of bed bug warning signs: rust-colored stains on white sheets with BB&B logo and orange brand accent overlay",
     cta:       "Call now for a free phone consultation",
   },
@@ -82,6 +97,16 @@ const TEMPLATES: ContentTemplate[] = [
       "Before: sleepless nights 😓\nAfter: peace of mind ✅\n\nBed Bugs & Beyond — trusted pest control across Baldwin County, AL.\nFast. Discreet. Guaranteed.\n\n#BedBugFree #BaldwinCounty #PestControl #BeforeAndAfter #GulfShoresAL #FoleyAL",
     gbp:
       "Recent treatment success in Gulf Shores, AL. Our professional bed bug treatment eliminates infestations at the source — no shortcuts. Serving all of Baldwin County. Fast response and thorough results.",
+    youtube:
+      "✅ Before & After Bed Bug Treatment — Real Results | Bed Bugs & Beyond Baldwin County\n\nWatch what our professional bed bug treatment process actually looks like — from the initial inspection to a fully treated, certified-clean home. No guesswork, no shortcuts.\n\n🏠 This treatment was completed in Gulf Shores, AL.\n\n🔍 What we cover:\n00:00 What the home looked like before treatment\n01:10 Our inspection and assessment process\n02:30 Treatment walkthrough\n04:00 Post-treatment certification\n\n📍 Serving all of Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne\n📞 Book your inspection today!\n\n#BedBugTreatment #BeforeAndAfter #BaldwinCounty #PestControl #BedBugFree",
+    tiktok:
+      "Before 😩 vs After ✅ — bed bug treatment transformation!\n\nSleepless nights → full nights of rest 😴\nInfested home → certified clean 🏠\n\nBed Bugs & Beyond | Baldwin County, AL 🐛\nFast. Discreet. Guaranteed.\n\n#BedBugFree #BeforeAndAfter #PestControl #BaldwinCounty #HomeTransformation #FYP",
+    linkedin:
+      "Property manager or vacation rental host in Baldwin County? Here's what a single untreated bed bug report can cost:\n\n• Immediate negative reviews\n• Emergency rebook cancellations\n• Potential liability exposure\n\nBed Bugs & Beyond delivers fast, discreet treatment with before/after documentation for your records. We work with short-term rental properties, hotels, and residential managers across the Gulf Coast.\n\nReady to protect your property and your reviews? Let's talk.\n\n#VacationRental #PropertyManagement #BedBugTreatment #GulfCoast #BaldwinCountyAL",
+    pinterest:
+      "✅ Real Before & After Bed Bug Treatment Results | Bed Bugs & Beyond, Baldwin County AL — Professional bed bug elimination: from infestation to certified clean. Serving Foley, Gulf Shores, Orange Beach & all of Baldwin County. Fast, discreet, guaranteed results. Book your inspection today! #BedBugTreatment #BeforeAndAfter #PestControl #HomeCare #BaldwinCounty",
+    nextdoor:
+      "Neighbors — we just completed another successful bed bug treatment right here in Baldwin County! 🎉\n\nIf you or anyone you know is dealing with bed bugs, we offer fast, discreet service with guaranteed results. No judgment, no drama — just professional pest control.\n\nBed Bugs & Beyond serves all of Baldwin County including our local neighborhoods. Same-week appointments available.\n\nFeel free to message me directly or call for a free consultation! 📞",
     imageIdea: "Side-by-side before/after: messy infested bedroom vs. clean treated room, BB&B logo centered below",
     cta:       "Book your inspection today",
   },
@@ -93,6 +118,16 @@ const TEMPLATES: ContentTemplate[] = [
       "Summer travel = bed bug risk 🧳\n\n3 quick protection tips:\n1. Inspect before sleeping\n2. Luggage on racks, not floors\n3. Wash everything on high heat 🔥\n\nBed Bugs & Beyond — Baldwin County, AL 🐛\n\n#TravelTips #BedBugs #BaldwinCountyAL #PestPrevention #SummerTravel",
     gbp:
       "Traveling this summer? Protect your Baldwin County home from bed bugs with simple prevention habits. Bed Bugs & Beyond offers fast inspections for returning travelers. Call for same-week availability.",
+    youtube:
+      "🧳 How to Avoid Bringing Bed Bugs Home From Your Summer Vacation | Bed Bugs & Beyond\n\nEvery year, Baldwin County residents unknowingly bring bed bugs home from hotels, vacation rentals, and road trips. In this video, we show you exactly how to protect yourself — and what to do if you think you've already been exposed.\n\n🔍 What we cover:\n00:00 How bed bugs hitchhike in luggage\n01:00 Hotel room inspection checklist\n02:15 Where to store your luggage safely\n03:00 The HIGH HEAT laundry method\n04:20 When to call a professional\n\n📍 Serving all of Baldwin County, AL\n📞 Just returned from a trip and concerned? Call us for a same-week inspection!\n\n#TravelTips #BedBugs #SummerTravel #BaldwinCounty #PestPrevention",
+    tiktok:
+      "🧳 Traveling this summer? Watch this FIRST 🚨\n\nBed bugs hitchhike in your luggage!\n\n✅ Inspect hotel mattress seams\n✅ Use luggage racks — never the floor\n✅ Wash everything on HIGH HEAT when home 🔥\n\nServing Baldwin County, AL 🐛 | Bed Bugs & Beyond\n\n#TravelHacks #BedBugs #SummerTravel #PestPrevention #HotelTips #FYP",
+    linkedin:
+      "Summer travel season is the #1 driver of bed bug calls across Baldwin County, AL.\n\nFor property managers and short-term rental hosts: guests who travel frequently are the most common vector. A quick post-checkout inspection protocol can prevent a single guest from turning into a 1-star review crisis.\n\nBed Bugs & Beyond offers standing service agreements for vacation rental hosts — fast turnaround, discreet treatment, and documentation you can share with future guests.\n\nReaching out is free. 📞\n\n#ShortTermRental #VacationRental #BedBugs #PropertyManagement #BaldwinCountyAL #SummerSeason",
+    pinterest:
+      "🧳 Summer Travel Bed Bug Prevention Checklist | Bed Bugs & Beyond, Baldwin County AL — 3 essential steps: inspect hotel mattresses, keep luggage on racks, wash clothes on high heat. Share this before your next trip! Professional bed bug treatment across Gulf Shores, Foley & Baldwin County. #TravelTips #BedBugs #PestPrevention #SummerTravel #HomeTips",
+    nextdoor:
+      "Summer travel tip for Baldwin County neighbors! 🧳\n\nBed bugs are expert hitchhikers — they latch onto luggage at hotels, rentals, and airports. When you get home:\n\n✅ Check your luggage before bringing it inside\n✅ Wash everything on high heat immediately\n✅ Inspect your bed if you notice any bites within a week\n\nIf you find anything suspicious, I'm your local bed bug specialist at Bed Bugs & Beyond. Same-week inspections across the whole county. Free phone consultation!",
     imageIdea: "Clean infographic: 3-step travel checklist styled with BB&B navy/orange branding, luggage icon with bug warning badge",
     cta:       "Returning from a trip? Schedule an inspection",
   },
@@ -104,6 +139,16 @@ const TEMPLATES: ContentTemplate[] = [
       "Gulf Shores & Orange Beach — we've got you covered 🌊🐛\n\nSpecializing in:\n✅ Vacation rental treatment\n✅ Single-family homes\n✅ Discreet, fast service\n\nBed Bugs & Beyond — Baldwin County, AL\n\n#GulfShores #OrangeBeachAL #VacationRental #BedBugTreatment #BaldwinCountyAL",
     gbp:
       "Serving Gulf Shores and Orange Beach property owners and vacation rental hosts. Fast response, discreet treatment, and guaranteed results. One call covers your whole property. Contact Bed Bugs & Beyond today.",
+    youtube:
+      "🌊 Gulf Shores & Orange Beach Bed Bug Treatment — Bed Bugs & Beyond\n\nBed bug season hits harder on the Gulf Coast. With thousands of vacation rental turnovers every week, the risk for homeowners and property managers in Gulf Shores and Orange Beach is real — and it's growing.\n\nIn this video, we cover why the Gulf Shores area sees elevated bed bug activity, and how Bed Bugs & Beyond protects both homeowners and rental properties fast.\n\n🔍 What we cover:\n00:00 Why coastal vacation rentals are higher risk\n01:30 What our treatment process looks like for rentals\n03:00 Turnaround times and availability for Gulf Shores\n04:15 How to book a same-day inspection\n\n📍 Bed Bugs & Beyond — Baldwin County, AL\n📞 Call for vacation rental inspection pricing!\n\n#GulfShores #OrangeBeach #VacationRental #BedBugs #BaldwinCounty",
+    tiktok:
+      "🌊 Gulf Shores vacation rental owners — this is for YOU 📢\n\nBed bugs are the #1 review killer for Gulf Coast rentals.\n\nBed Bugs & Beyond:\n✅ Fast inspections\n✅ Discreet treatment\n✅ Same-week availability\n\nProtect your property & your 5 stars ⭐\n\n#GulfShores #OrangeBeach #VacationRental #BedBugs #BaldwinCounty #FYP #BeachRental",
+    linkedin:
+      "Gulf Shores and Orange Beach are among the highest-traffic vacation rental markets on the Gulf Coast — which also makes them among the highest bed bug risk areas in Alabama.\n\nFor property management companies operating in Baldwin County: a proactive inspection schedule is the most cost-effective way to protect your portfolio and your reviews.\n\nBed Bugs & Beyond offers standing service contracts for vacation rental management companies. Fast turnaround, discreet service, and results you can document for guest communications.\n\nLet's connect. 📞\n\n#VacationRental #PropertyManagement #GulfShores #OrangeBeach #BaldwinCounty #BedBugs",
+    pinterest:
+      "🌊 Gulf Shores & Orange Beach Vacation Rental Pest Control | Bed Bugs & Beyond — Discreet, fast bed bug treatment for Gulf Coast vacation rentals and homeowners. Protect your property and your reviews. Serving Baldwin County, AL. #GulfShores #VacationRental #BedBugs #BeachRental #PestControl #OrangeBeach",
+    nextdoor:
+      "Gulf Shores & Orange Beach neighbors — a heads up heading into peak season! 🌊\n\nVacation rental turnovers dramatically increase bed bug risk along the coast every summer. If you rent out your property OR you've had guests staying with you, it's worth a quick inspection.\n\nBed Bugs & Beyond serves Gulf Shores, Orange Beach, and all surrounding areas with fast, discreet treatment. I personally handle every job.\n\nFeel free to message me here or call for a free consultation. Protect your home before peak season hits! 📞",
     imageIdea: "Gulf Shores beach scene background with BB&B branded service badge overlay — clean, professional, coastal feel",
     cta:       "Call for vacation rental inspection pricing",
   },
@@ -115,6 +160,16 @@ const TEMPLATES: ContentTemplate[] = [
       "⭐⭐⭐⭐⭐ Another 5-star review!\n\n\"Professional, thorough, and fast.\"\n\nThank you Baldwin County! 🙏\nBed Bugs & Beyond — your trusted local pest control.\n\n#5Stars #BaldwinCountyAL #BedBugsAL #CustomerLove #PestControl #LocalBusiness",
     gbp:
       "Thank you to our latest 5-star reviewer! Bed Bugs & Beyond is proud to serve Baldwin County with professional, thorough pest control. Browse our Google reviews and book your inspection today.",
+    youtube:
+      "⭐ Why Baldwin County Homeowners Trust Bed Bugs & Beyond — Real Reviews\n\nDon't take our word for it. In this video, we share real customer feedback from homeowners and property managers across Baldwin County who trusted Bed Bugs & Beyond to solve their bed bug problem — fast.\n\n🔍 What you'll hear:\n00:00 Introduction — why trust matters in pest control\n01:00 Customer story: Gulf Shores homeowner\n02:30 Customer story: Foley vacation rental host\n04:00 Customer story: Fairhope family\n05:30 How to book your inspection\n\n📍 Serving all of Baldwin County, AL\n📞 Hundreds of satisfied customers — let's add your name to the list!\n\n#CustomerReviews #BaldwinCounty #BedBugs #PestControl #TrustedLocal",
+    tiktok:
+      "⭐⭐⭐⭐⭐ Our latest Baldwin County review just dropped! 🙌\n\n\"Professional, thorough, and fast.\"\n\nThat's the Bed Bugs & Beyond way 🐛✅\nServing Gulf Shores, Foley, Fairhope & all of Baldwin County\n\n#CustomerLove #5Stars #BedBugs #PestControl #BaldwinCounty #FYP #LocalBusiness",
+    linkedin:
+      "\"Professional, thorough, and fast.\" — Baldwin County customer, 5-star review\n\nThat's the standard we hold ourselves to at Bed Bugs & Beyond for every residential, commercial, and vacation rental job across Baldwin County, AL.\n\nIf you manage properties in the Gulf Coast area and need a reliable, discreet pest control partner, I'd love to connect. Our track record speaks for itself.\n\n#PestControl #5Stars #VacationRental #PropertyManagement #BaldwinCounty #GulfCoast",
+    pinterest:
+      "⭐⭐⭐⭐⭐ 5-Star Bed Bug Treatment Reviews | Bed Bugs & Beyond, Baldwin County AL — \"Professional, thorough, and fast.\" Trusted by homeowners and vacation rental hosts across Gulf Shores, Foley & Baldwin County. Read our reviews and book your inspection today! #CustomerReviews #BedBugs #PestControl #5Stars #BaldwinCounty",
+    nextdoor:
+      "Sharing a recent review from a neighbor here in Baldwin County ⭐⭐⭐⭐⭐\n\n\"Professional, thorough, and fast. I'd highly recommend Bed Bugs & Beyond for anyone in Baldwin County dealing with bed bugs.\"\n\nThank you! 🙏 If you or a neighbor ever needs fast, discreet bed bug treatment, don't hesitate to reach out. Serving all of Baldwin County — same-week appointments available.\n\nFree phone consultation! 📞",
     imageIdea: "Review card graphic: 5 orange stars, quote text, BB&B logo on dark navy — screenshot-style social proof format",
     cta:       "Read our reviews — then book your inspection",
   },
@@ -126,27 +181,40 @@ const TEMPLATES: ContentTemplate[] = [
       "☀️ Summer = bed bug season in Baldwin County\n\nMore travel → more risk 🐛\n\nBed Bugs & Beyond is ready:\n✅ Same-week inspections\n✅ All Baldwin County areas\n✅ Fast and discreet\n\n#SummerPests #BaldwinCountyAL #BedBugs #GulfShores #Foley #PestControl",
     gbp:
       "Summer is here — and so is bed bug season in Baldwin County. Bed Bugs & Beyond offers fast inspections and professional treatment from Foley to Gulf Shores. Call today for a same-week appointment.",
+    youtube:
+      "☀️ Summer Bed Bug Season in Baldwin County — What You Need to Know | Bed Bugs & Beyond\n\nSummer is the busiest season for bed bug calls in Baldwin County — and it's not a coincidence. More travel, more vacation rentals, more risk. In this video, we explain exactly why summer spikes bed bug activity and how to protect your home right now.\n\n🔍 What we cover:\n00:00 Why summer is peak bed bug season\n01:15 High-risk activities during summer (travel, guests, rentals)\n02:45 What to do if you think you're exposed\n04:00 Same-week inspection availability — Baldwin County, AL\n\n📍 Serving all of Baldwin County — Foley, Gulf Shores, Fairhope, Daphne, Orange Beach, Spanish Fort\n📞 Don't wait — summer books fast. Call today!\n\n#SummerPests #BedBugs #BaldwinCounty #PestSeason #PestControl",
+    tiktok:
+      "☀️ Summer = PEAK bed bug season 🐛🚨\n\nMore travel = more risk for YOUR home!\n\nBed Bugs & Beyond is ready:\n✅ Same-week inspections\n✅ All of Baldwin County\n✅ Fast & discreet\n\nDon't let pests ruin your summer ☀️📞\n\n#SummerPests #BedBugs #BaldwinCounty #PestAlert #PestControl #FYP #GulfShores",
+    linkedin:
+      "Summer is the most active season for bed bug infestations in Baldwin County, AL — and that directly impacts commercial properties, short-term rentals, and hospitality businesses along the Gulf Coast.\n\nWith peak travel season underway, now is the time to review your inspection protocols and ensure your properties are protected before a guest complaint becomes a public review.\n\nBed Bugs & Beyond offers standing service agreements and priority response for commercial clients throughout the summer season. Reach out to discuss a proactive plan.\n\n#SummerSeason #BedBugs #CommercialPestControl #VacationRental #BaldwinCounty #GulfCoast",
+    pinterest:
+      "☀️ Summer Bed Bug Season Alert — Baldwin County, AL | Bed Bugs & Beyond — Peak season is here! More travel = more risk. Same-week inspections available across Gulf Shores, Foley, Fairhope & all of Baldwin County. Don't wait — call before it spreads! #SummerPests #BedBugs #PestControl #BaldwinCounty #SeasonalPest",
+    nextdoor:
+      "Heads up, Baldwin County neighbors — summer is peak bed bug season! 🌞\n\nMore travel, more vacation rental guests, more risk. I want to make sure our community knows: if you're noticing any suspicious bites or spots on your bedding after travel or having guests, reach out early — the sooner we catch it, the easier and faster the fix.\n\nBed Bugs & Beyond serves all of Baldwin County. Same-week inspections, fast and discreet. Free phone consultation — just message me here or call! 📞",
     imageIdea: "Summer-themed branded graphic: sun icon + bed bug alert badge, BB&B orange/navy colors, text: 'Peak Season — Act Fast'",
     cta:       "Schedule a same-week inspection today",
   },
 ];
 
 // ── Runtime-derived platform sets (canonical registry — no hardcoded arrays) ──
-// Adding a new entry to SOCIAL_PROVIDERS automatically appears here.
+// All providers with queue:true appear here regardless of status.
+// Operational → auto-publishes from queue. Pending/coming_soon → draft saved, manual publish.
 const QUEUEABLE_PROVIDERS: SocialProvider[] = SOCIAL_PROVIDERS.filter(
-  p => p.status === "operational" && p.capabilities.queue,
+  p => p.capabilities.queue,
 );
 
 const INITIAL_STATUS: Partial<Record<SocialProviderId, PlatformStatus>> = Object.fromEntries(
   QUEUEABLE_PROVIDERS.map(p => [p.id, "not-queued" as PlatformStatus]),
 );
 
-// Context-specific display notes for non-queueable platforms (caption info panel).
+// Context-specific display notes shown in the caption panel for pending platforms.
 // These are UX strings — not registry metadata.
 const PLATFORM_NOTE: Partial<Record<SocialProviderId, string>> = {
-  youtube:  "YouTube Short content is generated via Auto Content Engine. Queueing available after channel connection and platform approval.",
-  tiktok:   "TikTok publishing is pending platform approval. Content preview available via Auto Content Engine.",
-  linkedin: "LinkedIn publishing is not yet available. Content generation is available via Auto Content Engine.",
+  youtube:   "Content saved as draft. Auto-publishing activates once YouTube channel is connected and OAuth scope is approved.",
+  tiktok:    "Content saved as draft. Auto-publishing activates once TikTok Business app approval is complete.",
+  linkedin:  "Content saved as draft. LinkedIn auto-publish handler is in progress — copy content to post manually in the meantime.",
+  pinterest: "Content saved as draft. Pinterest API connection coming soon — copy and post manually to your Pinterest Business account.",
+  nextdoor:  "Content saved as draft. Nextdoor API integration coming soon — copy and post manually to your Nextdoor Business page.",
 };
 
 const STATUS_META: Record<PlatformStatus, { dot: string; label: string; color: string }> = {
@@ -172,7 +240,12 @@ function captionFor(t: ContentTemplate, p: SocialProviderId): string {
   if (p === "facebook")        return t.facebook;
   if (p === "instagram")       return t.instagram;
   if (p === "google_business") return t.gbp;
-  return ""; // youtube, tiktok, linkedin: content not available in static templates
+  if (p === "youtube")         return t.youtube;
+  if (p === "tiktok")          return t.tiktok;
+  if (p === "linkedin")        return t.linkedin;
+  if (p === "pinterest")       return t.pinterest;
+  if (p === "nextdoor")        return t.nextdoor;
+  return "";
 }
 
 function nowTs(): string {
@@ -591,12 +664,14 @@ export default function BBBContentAutopilotPage() {
               </div>
 
               <div style={{ fontSize: 10, color: B.dim, marginTop: -8 }}>
-                {activeTab === "facebook"        && "Facebook: ~400–500 chars recommended"}
-                {activeTab === "instagram"       && "Instagram: use all hashtags · tag location if possible"}
-                {activeTab === "google_business" && "GBP: 1,500 char max · include your city/service area"}
-                {activeTab === "youtube"         && "YouTube Short scripts are generated by Auto Content Engine"}
-                {activeTab === "tiktok"          && "TikTok scripts are generated by Auto Content Engine"}
-                {activeTab === "linkedin"        && "LinkedIn posts are generated by Auto Content Engine"}
+                {activeTab === "facebook"        && "Facebook: ~400–500 chars recommended · include a CTA"}
+                {activeTab === "instagram"       && "Instagram: 5–15 hashtags · tag your city · emoji-friendly"}
+                {activeTab === "google_business" && "GBP: 1,500 char max · include your service area cities"}
+                {activeTab === "youtube"         && "YouTube: use as video description · include timestamps & local keywords"}
+                {activeTab === "tiktok"          && "TikTok: short & punchy · use trending hashtags · under 150 chars ideal"}
+                {activeTab === "linkedin"        && "LinkedIn: professional tone · target property managers & rental hosts"}
+                {activeTab === "pinterest"       && "Pinterest: keyword-rich · describe the image · add your location"}
+                {activeTab === "nextdoor"        && "Nextdoor: conversational · use neighbor-to-neighbor tone · no hard sell"}
               </div>
             </div>
 
@@ -899,31 +974,60 @@ export default function BBBContentAutopilotPage() {
         )}
 
         {/* ── Platform posting tips ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
           {([
             {
               platform: "facebook" as SocialProviderId,
-              tips: ["Post 3–5x per week", "Photos outperform text", "Include a direct CTA", "Respond to all comments"],
+              tips: ["Post 3–5x per week", "Photos outperform text-only posts", "Include a direct CTA every time", "Respond to all comments within 24h"],
             },
             {
               platform: "instagram" as SocialProviderId,
-              tips: ["Use 5–15 relevant hashtags", "Before/after photos perform best", "Post Stories for engagement", "Tag your city: #GulfShoresAL"],
+              tips: ["Use 5–15 relevant hashtags", "Before/after photos perform best", "Post Stories daily for reach", "Tag your city: #GulfShoresAL"],
             },
             {
               platform: "google_business" as SocialProviderId,
-              tips: ["Post at least weekly", "Include your service area cities", "Add a photo to every post", "Use keywords: 'bed bug treatment Baldwin County'"],
+              tips: ["Post at least once a week", "Include your service area cities", "Add a photo to every post", "Use keywords: 'bed bug treatment Baldwin County'"],
+            },
+            {
+              platform: "youtube" as SocialProviderId,
+              tips: ["Use this as your video description", "Add timestamps in the description", "Include local keywords for SEO", "End every video with a clear CTA"],
+            },
+            {
+              platform: "tiktok" as SocialProviderId,
+              tips: ["Keep captions under 150 chars", "Add trending + niche hashtags", "Hook viewers in the first second", "Post educational short-form content"],
+            },
+            {
+              platform: "linkedin" as SocialProviderId,
+              tips: ["Target property managers & HOAs", "Post professional, data-driven content", "Connect with vacation rental networks", "Engage with comments to boost reach"],
+            },
+            {
+              platform: "pinterest" as SocialProviderId,
+              tips: ["Keyword-rich pin descriptions rank in search", "Vertical images (2:3 ratio) perform best", "Create a 'Pest Prevention Tips' board", "Link pins back to your website"],
+            },
+            {
+              platform: "nextdoor" as SocialProviderId,
+              tips: ["Use a neighbor-to-neighbor tone", "Avoid hard-sell language", "Share seasonal alerts & local tips", "Respond quickly to neighbor replies"],
             },
           ]).map(({ platform, tips }) => {
-            const prov  = SOCIAL_PROVIDERS.find(p => p.id === platform);
+            const prov   = SOCIAL_PROVIDERS.find(p => p.id === platform);
             const pColor = prov?.color ?? "#64748B";
             const pIcon  = prov?.icon ?? "?";
-            const pAbbr  = prov?.abbreviation ?? platform;
+            const pAbbr  = prov?.shortLabel ?? platform;
+            const isPending = prov && prov.status !== "operational";
             return (
               <div key={platform} style={{
                 background: B.panel, border: `1px solid ${pColor}20`, borderRadius: 14, padding: "16px 18px",
               }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: pColor, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>
-                  {pIcon} {pAbbr} Tips
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
+                  <span style={{ fontSize: 12 }}>{pIcon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: pColor, letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
+                    {pAbbr}
+                  </span>
+                  {isPending && (
+                    <span style={{ fontSize: 8, fontWeight: 700, color: B.gold, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, padding: "1px 5px", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
+                      Draft
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {tips.map(tip => (

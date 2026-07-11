@@ -17,6 +17,9 @@ const EXPECTED_IDS: SocialProviderId[] = [
   "youtube",
   "tiktok",
   "linkedin",
+  "pinterest",
+  "nextdoor",
+  "x_twitter",
 ];
 
 const CAPABILITY_KEYS: (keyof ProviderCapabilities)[] = [
@@ -83,7 +86,8 @@ describe("SOCIAL_PROVIDERS registry", () => {
   it("linkedin is not marked publish-capable (no backend handler exists)", () => {
     const linkedin = getSocialProvider("linkedin");
     expect(linkedin.capabilities.publish).toBe(false);
-    expect(linkedin.capabilities.queue).toBe(false);
+    // queue:true is correct — linkedin drafts are saved for manual posting
+    expect(linkedin.capabilities.queue).toBe(true);
   });
 });
 
@@ -131,8 +135,18 @@ describe("getConnectedAccountProviders", () => {
     }
   });
 
-  it("includes all 6 providers (all have OAuth connect flows)", () => {
-    expect(getConnectedAccountProviders()).toHaveLength(6);
+  it("includes providers with OAuth connect flows (facebook/instagram/gbp/youtube/tiktok/linkedin)", () => {
+    const ids = getConnectedAccountProviders().map(p => p.id);
+    expect(ids).toContain("facebook");
+    expect(ids).toContain("instagram");
+    expect(ids).toContain("google_business");
+    expect(ids).toContain("youtube");
+    expect(ids).toContain("tiktok");
+    expect(ids).toContain("linkedin");
+    // pinterest/nextdoor/x_twitter have connect:false (no OAuth flow yet)
+    expect(ids).not.toContain("pinterest");
+    expect(ids).not.toContain("nextdoor");
+    expect(ids).not.toContain("x_twitter");
   });
 });
 

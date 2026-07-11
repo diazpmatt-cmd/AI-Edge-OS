@@ -5,17 +5,20 @@ import { describe, it, expect } from "vitest";
 import { SOCIAL_PROVIDERS, getSocialProvider } from "../social-providers";
 import { resolvePlatformUIState, type PlatformUIState } from "../../components/PlatformStateChip";
 
-// ── 1. All six providers are present in the canonical registry ─────────────────
-describe("Publishing Center — all 6 providers are registered", () => {
+// ── 1. All providers are present in the canonical registry ─────────────────────
+describe("Publishing Center — all 9 providers are registered", () => {
   const ids = SOCIAL_PROVIDERS.map(p => p.id);
 
-  it("includes facebook", () => { expect(ids).toContain("facebook"); });
-  it("includes instagram", () => { expect(ids).toContain("instagram"); });
+  it("includes facebook",        () => { expect(ids).toContain("facebook"); });
+  it("includes instagram",       () => { expect(ids).toContain("instagram"); });
   it("includes google_business", () => { expect(ids).toContain("google_business"); });
-  it("includes youtube", () => { expect(ids).toContain("youtube"); });
-  it("includes tiktok", () => { expect(ids).toContain("tiktok"); });
-  it("includes linkedin", () => { expect(ids).toContain("linkedin"); });
-  it("has exactly 6 providers", () => { expect(ids).toHaveLength(6); });
+  it("includes youtube",         () => { expect(ids).toContain("youtube"); });
+  it("includes tiktok",          () => { expect(ids).toContain("tiktok"); });
+  it("includes linkedin",        () => { expect(ids).toContain("linkedin"); });
+  it("includes pinterest",       () => { expect(ids).toContain("pinterest"); });
+  it("includes nextdoor",        () => { expect(ids).toContain("nextdoor"); });
+  it("includes x_twitter",       () => { expect(ids).toContain("x_twitter"); });
+  it("has exactly 9 providers",  () => { expect(ids).toHaveLength(9); });
 });
 
 // ── 2. Connected + publish-capable providers resolve to "ready" ────────────────
@@ -86,8 +89,9 @@ describe("LinkedIn safety — coming soon, no publish capability", () => {
     expect(linkedin.capabilities.publish).toBe(false);
   });
 
-  it("linkedin queue capability is false", () => {
-    expect(linkedin.capabilities.queue).toBe(false);
+  it("linkedin queue capability is true (drafts saved for manual posting)", () => {
+    // LinkedIn content can be drafted in the queue even though auto-publish isn't live.
+    expect(linkedin.capabilities.queue).toBe(true);
   });
 });
 

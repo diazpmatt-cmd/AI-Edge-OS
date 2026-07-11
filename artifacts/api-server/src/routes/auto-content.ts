@@ -16,11 +16,25 @@ import {
   createWeeklyPlanId,
   type WeeklyServiceSlot,
 } from "@workspace/db";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
+
+// Constant-time scheduler secret validation — prevents timing oracle attacks.
+// Both buffers must be the same length before comparison.
+function isValidSchedulerSecret(header: string | string[] | undefined): boolean {
+  if (!SCHEDULER_SECRET || !header || Array.isArray(header)) return false;
+  try {
+    const a = Buffer.from(header as string, "utf8");
+    const b = Buffer.from(SCHEDULER_SECRET, "utf8");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 const router = Router();
 
@@ -323,11 +337,33 @@ function buildScheduleSlots(
 // ── POST /auto-content/generate ───────────────────────────────────────────────
 
 router.post("/auto-content/generate", async (req, res) => {
-  // Allow the internal scheduler to call this route using x-scheduler-secret
-  // + x-scheduler-user-id header (same auth pattern as the publish route).
-  const isSchedulerCall = !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;
+  // ── Auth: Clerk (user-triggered) OR scheduler (internal only) ─────────────
+  // SECURITY: Never trust an arbitrary x-scheduler-user-id header — this
+  // creates a user impersonation vector for anyone who obtains the scheduler
+  // secret. Instead, the scheduler passes x-scheduler-settings-id (the UUID
+  // of the auto_content_settings row). We look up the userId from the DB,
+  // verifying that autopilot is actually enabled for that tenant.
+  const isSchedulerCall = isValidSchedulerSecret(req.headers["x-scheduler-secret"]);
   const { userId: clerkUserId } = getAuth(req);
-  const userId = clerkUserId ?? (isSchedulerCall ? (req.headers["x-scheduler-user-id"] as string) : null);
+  let userId: string | null = clerkUserId ?? null;
+
+  if (!userId && isSchedulerCall) {
+    const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
+    if (!settingsId) {
+      res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
+      return;
+    }
+    const [settingsRow] = await db
+      .select({ userId: autoContentSettingsTable.userId, autopilotEnabled: autoContentSettingsTable.autopilotEnabled })
+      .from(autoContentSettingsTable)
+      .where(eq(autoContentSettingsTable.id, settingsId));
+    if (!settingsRow || settingsRow.autopilotEnabled !== "true") {
+      res.status(403).json({ error: "Forbidden: settings not found or autopilot not enabled" });
+      return;
+    }
+    userId = settingsRow.userId;
+  }
+
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const {
@@ -337,6 +373,7 @@ router.post("/auto-content/generate", async (req, res) => {
     approvalMode: bodyApprovalMode, ctaText: bodyCtaText, ctaPreference: bodyCtaPreference,
     toneStyle: bodyToneStyle, postAngles: bodyPostAngles,
     usedCombos: passedUsedCombos, count,
+    schedulerMode: bodySchedulerMode,
   } = req.body;
 
   let serviceAreas = bodyServiceAreas as string[] | undefined;
@@ -424,6 +461,36 @@ router.post("/auto-content/generate", async (req, res) => {
   const weeklyPlanId    = (req.body.weeklyPlanId as string | undefined) ?? createWeeklyPlanId(userId);
   const generationRunId = randomUUID();
 
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // If posts already exist for this weeklyPlanId (same user, same ISO week),
+  // return immediately — do NOT generate duplicates.
+  const existingPlanCheck = await db
+    .select({ id: socialPostsTable.id })
+    .from(socialPostsTable)
+    .where(and(
+      eq(socialPostsTable.userId, userId),
+      eq(socialPostsTable.weeklyPlanId, weeklyPlanId),
+    ))
+    .limit(1);
+
+  if (existingPlanCheck.length > 0) {
+    const [{ count: existingCount }] = await db
+      .select({ count: sql<number>`cast(count(*) as int)` })
+      .from(socialPostsTable)
+      .where(and(
+        eq(socialPostsTable.userId, userId),
+        eq(socialPostsTable.weeklyPlanId, weeklyPlanId),
+      ));
+    res.status(200).json({
+      ok: true,
+      created: 0,
+      skipped: existingCount ?? 0,
+      reason: "weekly_plan_already_exists",
+      weeklyPlanId,
+    });
+    return;
+  }
+
   // 60/25/15 mix position assignments — for count n slots:
   //   first 60% = revenue, next 25% = education, last 15% = trust
   function assignCampaignGoalByPosition(
@@ -453,11 +520,53 @@ router.post("/auto-content/generate", async (req, res) => {
     return { campaignGoal: fallbackGoals[bucket], audienceId: "homeowners" };
   }
 
-  const slots = buildScheduleSlots(
-    serviceAreas as string[], topics as string[], effectiveAngles,
-    frequency ?? "every_other_day", effectiveTimes,
-    typeof count === "number" ? count : undefined,
-  );
+  // ── Slot building: weekly-plan mode uses category-first selectWeeklyServices ─
+  // When the scheduler sends schedulerMode='weekly_plan', apply the 60/25/15
+  // category budget BEFORE service selection — not as a position-based fallback
+  // after the fact. selectWeeklyServices() returns category-aware slots with
+  // pre-assigned goals and audiences; we then layer schedule dates onto them.
+  // User-triggered generation (no schedulerMode) keeps the existing rotation.
+  type EnhancedSlot = ReturnType<typeof buildScheduleSlots>[number] & {
+    precomputedServiceId?: string | null;
+    precomputedCampaignGoal?: string;
+    precomputedAudienceId?: string;
+    precomputedRevenueWeight?: string;
+    precomputedUrgency?: string | null;
+  };
+
+  let slots: EnhancedSlot[];
+  const useWeeklyServiceSelection =
+    bodySchedulerMode === "weekly_plan" && typeof count === "number" && count > 0;
+
+  if (useWeeklyServiceSelection) {
+    const svcSlots = selectWeeklyServices(count as number);
+    const baseDates = buildScheduleSlots(
+      serviceAreas as string[],
+      svcSlots.map(s => s.service.displayName),
+      effectiveAngles,
+      frequency ?? "every_other_day",
+      effectiveTimes,
+      svcSlots.length,
+    );
+    slots = baseDates.map((dateSlot, idx) => {
+      const svc = svcSlots[idx];
+      return {
+        ...dateSlot,
+        topic: svc?.service.displayName ?? dateSlot.topic,
+        precomputedServiceId:     svc?.service.serviceId ?? null,
+        precomputedCampaignGoal:  svc?.campaignGoal,
+        precomputedAudienceId:    svc?.audienceId,
+        precomputedRevenueWeight: svc ? String(svc.service.revenueWeight) : undefined,
+        precomputedUrgency:       svc?.service.urgency ?? null,
+      };
+    });
+  } else {
+    slots = buildScheduleSlots(
+      serviceAreas as string[], topics as string[], effectiveAngles,
+      frequency ?? "every_other_day", effectiveTimes,
+      typeof count === "number" ? count : undefined,
+    ) as EnhancedSlot[];
+  }
 
   const model = getAiModel();
   const system = `You are a local pest control social media copywriter for Bed Bugs & Beyond, serving the Gulf Coast of Alabama (Baldwin County). Write authentic, local posts that feel genuine. Return ONLY valid JSON:
@@ -481,7 +590,11 @@ BUSINESS RULES (MUST FOLLOW):
 - Fumigation content must remain at awareness/educational level only`;
 
   const generated = await Promise.all(
-    slots.map(async ({ date, city, topic, angle }) => {
+    slots.map(async (slot) => {
+      const { date, city, topic, angle,
+        precomputedServiceId, precomputedCampaignGoal, precomputedAudienceId,
+        precomputedRevenueWeight, precomputedUrgency,
+      } = slot as EnhancedSlot;
       const serviceRules = getServicePromptRules(topic);
       const prompt = `Business: ${clientName || "Bed Bugs & Beyond"}
 City: ${city}
@@ -491,16 +604,17 @@ Tone: ${effectiveTone.join(", ")}
 CTA: ${ctaText ?? "Call Now \u2014 (251) 324-9090"}
 ${serviceRules ? `\n${serviceRules}\n` : ""}
 Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
+      const precomputed = { precomputedServiceId, precomputedCampaignGoal, precomputedAudienceId, precomputedRevenueWeight, precomputedUrgency };
       try {
         const { text } = await generateText({ model, system, prompt });
         const cleaned = text.trim().replace(/^```json\s*|\s*```$/g, "").replace(/^```\s*|\s*```$/g, "");
         const parsed = JSON.parse(cleaned) as { caption: string; hashtags: string[]; imagePrompt: string };
-        return { date, city, topic, angle, ...parsed, error: null };
+        return { date, city, topic, angle, ...precomputed, ...parsed, error: null };
       } catch (err: any) {
         const cityShort = city.split(",")[0].replace(/\s+/g, "");
         const topicTag = topic.replace(/\s+/g, "");
         return {
-          date, city, topic, angle,
+          date, city, topic, angle, ...precomputed,
           caption: `${topic} problem in ${city}? ${clientName || "Bed Bugs & Beyond"} is your local expert. ${ctaText ?? "Call Now"}`,
           hashtags: [`#PestControl`, `#${topicTag}`, `#${cityShort}AL`, `#GulfCoastAL`, `#PestFree`],
           imagePrompt: `A professional pest control technician inspecting a home exterior in a sunny suburban neighborhood.`,
@@ -571,15 +685,18 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       bestPlatform: bestPlat,
       imageRecommendation: imgRec,
       duplicateRisk: dupRisk,
-      // V5: Campaign metadata from canonical registry
-      serviceId: matchServiceByTopic(post.topic)?.serviceId ?? null,
+      // V5: Campaign metadata — precomputed from selectWeeklyServices (scheduler
+      // weekly-plan mode) or position-derived from registry (user-triggered mode).
+      serviceId: post.precomputedServiceId ?? matchServiceByTopic(post.topic)?.serviceId ?? null,
       approvalStatus: postApprovalStatus,
       // V5.1: Full campaign tracking — stored at generation time
       weeklyPlanId,
       generationRunId,
-      ...assignCampaignGoalByPosition(insertedIds.length, slots.length, post.topic),
-      revenueWeight: String(matchServiceByTopic(post.topic)?.revenueWeight ?? ""),
-      urgency:       matchServiceByTopic(post.topic)?.urgency ?? null,
+      ...(post.precomputedCampaignGoal
+        ? { campaignGoal: post.precomputedCampaignGoal, audienceId: post.precomputedAudienceId ?? "homeowners" }
+        : assignCampaignGoalByPosition(insertedIds.length, slots.length, post.topic)),
+      revenueWeight: post.precomputedRevenueWeight ?? String(matchServiceByTopic(post.topic)?.revenueWeight ?? ""),
+      urgency:       post.precomputedUrgency !== undefined ? post.precomputedUrgency : (matchServiceByTopic(post.topic)?.urgency ?? null),
     }).returning({ id: socialPostsTable.id });
     insertedIds.push(ins.id);
   }

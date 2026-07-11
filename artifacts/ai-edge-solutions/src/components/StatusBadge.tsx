@@ -65,6 +65,9 @@ export const STATUS_COLORS: Record<string, StatusMeta> = {
   paused:               { label: "Paused",                color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)"  },
   gray:                 { label: "—",                     color: "#6B7280", bg: "rgba(107,114,128,0.12)", border: "rgba(107,114,128,0.25)" },
   draft:                { label: "Draft",                 color: "#C4B5FD", bg: "rgba(196,181,253,0.12)", border: "rgba(196,181,253,0.25)" },
+  pending_review:       { label: "Pending Review",        color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)"  },
+  approved:             { label: "Approved",              color: "#22C55E", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.25)"   },
+  rejected:             { label: "Rejected",              color: "#EF4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.25)"   },
 };
 
 type Variant = "pill" | "dot" | "text";

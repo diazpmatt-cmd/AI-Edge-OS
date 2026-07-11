@@ -1,0 +1,308 @@
+TARGET: Security-audit and dry-run verify the BB&B autonomous Content Autopilot before enabling recurring generation.
+
+IMPORTANT
+
+Do not enable autopilot yet.
+
+Do not publish any posts.
+
+The previous implementation added:
+
+- autonomous scheduler checks
+- weeklyPlanId
+- generationRunId
+- campaign goals
+- revenue weights
+- urgency
+- approval_required defaults
+- a proposed weekly plan
+- status-color corrections
+
+This task must verify the implementation safely and correct only real gaps.
+
+PHASE 1 — AUDIT INTERNAL SCHEDULER AUTHENTICATION
+
+Inspect the generate endpoint and scheduler invocation.
+
+Specifically audit:
+
+- x-scheduler-secret
+- x-scheduler-user-id
+- Clerk authentication
+- tenant resolution
+- user/business ownership
+- scheduler caller identity
+- external route exposure
+
+Requirements:
+
+1. Do not treat scheduler access as a generic auth bypass.
+2. The scheduler secret must be environment-only.
+3. Use constant-time secret comparison where practical.
+4. Reject missing or invalid secrets.
+5. Do not trust an arbitrary x-scheduler-user-id supplied by an external caller.
+6. Derive the tenant/business from the due auto_content_settings record.
+7. The scheduler may act only on that tenant.
+8. Normal user-triggered generation must still require Clerk authorization.
+9. Scheduler-generated posts must carry a system actor or safe internal actor marker.
+10. Add rate limiting or replay/idempotency protection where appropriate.
+
+If x-scheduler-user-id creates an impersonation risk, remove it.
+
+PHASE 2 — VERIFY DURABLE DATABASE MIGRATIONS
+
+The live database was changed using raw SQL.
+
+Confirm that repository-backed migrations exist for:
+
+social_posts:
+- generation_run_id
+- revenue_weight
+- urgency
+- service_id
+- campaign_goal
+- audience_id
+- weekly_plan_id
+- approval_status
+- approved_at
+- approved_by
+
+auto_content_settings:
+- autopilot_enabled
+- generation_day
+- generation_time
+- next_generation_at
+- last_generated_at
+- approval_mode
+
+Requirements:
+
+1. Drizzle schema and actual database must match.
+2. Create a normal checked-in migration if one is missing.
+3. Migration must be safe on existing databases.
+4. Do not rely only on manually executed SQL.
+5. Verify a fresh database would receive the complete schema.
+6. Report any fields listed above that still do not exist.
+
+PHASE 3 — VERIFY THE 60/25/15 MODEL
+
+Audit selectWeeklyServices() and related logic.
+
+The 60/25/15 rule applies to campaign categories:
+
+- 60% revenue/lead
+- 25% education
+- 15% trust/local
+
+For a seven-post plan, expected allocation:
+
+- 4 revenue/lead
+- 2 educational
+- 1 trust/local
+
+Then choose services within each category using:
+
+- revenueWeight
+- contentFrequencyWeight
+- urgency
+- seasonality
+- recent history
+- audience suitability
+- duplicate risk
+
+Do not interpret 60/25/15 as direct service weighting.
+
+Rename misleading helpers if needed.
+
+PHASE 4 — TIMEZONE AND GENERATION SCHEDULE
+
+Verify:
+
+- timezone used for BB&B
+- generationDay semantics
+- generationTime semantics
+- nextGenerationAt calculation
+- ISO week boundaries
+- daylight-saving behavior
+- 30-minute scheduler polling behavior
+
+Requirements:
+
+1. Store nextGenerationAt as an absolute timestamp.
+2. Calculate it using the tenant’s configured timezone.
+3. Do not generate twice around UTC or DST boundaries.
+4. The scheduler should only generate when nextGenerationAt <= now.
+5. After success, calculate the next weekly occurrence deterministically.
+
+Use BB&B’s configured business timezone, not a hard-coded UTC assumption.
+
+PHASE 5 — ONE SAFE DRY RUN
+
+Perform one controlled dry run for Bed Bugs & Beyond.
+
+Do not enable recurring autopilot globally.
+
+Preferred method:
+
+- invoke the same autonomous generation function directly in a test or one-time internal dry-run mode
+- do not add an admin endpoint
+- do not create a standalone production bypass
+- do not schedule or publish posts
+
+The dry run must:
+
+1. Create exactly one weeklyPlanId for the target week.
+2. Create exactly one generationRunId.
+3. Generate seven actual posts.
+4. Store:
+   - serviceId
+   - campaignGoal
+   - audienceId
+   - weeklyPlanId
+   - generationRunId
+   - revenueWeight
+   - urgency
+   - approvalStatus = pending_review
+5. Store each post as:
+   - status = draft
+6. Create:
+   - 4 revenue/lead posts
+   - 2 educational posts
+   - 1 trust/local post
+7. Include no termites.
+8. Include no wildlife removal.
+9. Include no heat-treatment offering.
+10. Allow fumigation only with safe high-level content.
+11. Include strong bed bug and vacation-rental representation.
+12. Include at least one other active pest service.
+13. Mark Google items manual_publish_required.
+14. Mark YouTube items media-required unless an MP4 exists.
+15. Publish nothing.
+
+PHASE 6 — IDEMPOTENCY TEST
+
+Immediately invoke the same autonomous generation logic a second time for the same target week.
+
+Expected result:
+
+- no second weekly plan
+- no duplicate posts
+- no new generationRunId
+- clear idempotent/no-op result
+
+Report exact database counts before and after both runs.
+
+PHASE 7 — REVIEW-QUEUE VERIFICATION
+
+Verify the generated drafts appear in the pending approval workflow.
+
+Confirm:
+
+- all seven are visible
+- campaign category is visible
+- service is visible
+- audience is visible
+- platform is visible
+- media requirement is visible
+- approve/reject actions work
+- no draft becomes scheduled merely from generation
+- Google cannot be accidentally auto-published while quota is zero
+- YouTube cannot be publish-ready without MP4
+
+Do not approve or schedule the full plan yet.
+
+PHASE 8 — STATUS COLOR VERIFICATION
+
+Confirm the service and platform panels use the canonical operational mapping:
+
+- Ready → green
+- Action Required → yellow
+- Blocked / Not Offered → red
+- Coming Soon / Pending → white or neutral
+
+Expected BB&B examples:
+
+- Active services and Fumigation → green
+- Approval Required → yellow
+- Google quota action → yellow
+- Termites Coming Soon → white/neutral
+- Wildlife Removal → red
+- Bed Bug Heat Treatment → red
+- Ready platforms → green
+
+Platform brand colors may remain on logos only.
+
+PHASE 9 — TESTS
+
+Add or update tests for:
+
+1. Scheduler secret rejection.
+2. Scheduler tenant scoping.
+3. Arbitrary user ID cannot be impersonated.
+4. Clerk remains required for user-triggered generation.
+5. Migration schema completeness.
+6. Fresh-database migration.
+7. Seven-post mix equals 4/2/1.
+8. Category mix occurs before weighted service selection.
+9. Tenant timezone next-generation calculation.
+10. DST/ISO-week idempotency.
+11. First dry run creates one plan and seven drafts.
+12. Second dry run creates nothing.
+13. All drafts are pending_review.
+14. No drafts are scheduled.
+15. Termites blocked.
+16. Wildlife blocked.
+17. Heat treatment blocked.
+18. Fumigation safety rules.
+19. Google manual status.
+20. YouTube media-required status.
+21. Status colors remain canonical.
+
+PHASE 10 — REQUIRED REPORT
+
+Return:
+
+1. Scheduler-auth findings.
+2. Any impersonation or tenant-risk found.
+3. Auth corrections made.
+4. Migration files created or verified.
+5. Missing fields found.
+6. Campaign-mix correction.
+7. Timezone behavior.
+8. First dry-run weeklyPlanId.
+9. First dry-run generationRunId.
+10. Seven generated posts in a table showing:
+    - service
+    - category
+    - goal
+    - audience
+    - platform
+    - status
+    - approvalStatus
+    - media requirement
+11. Database counts before/after first run.
+12. Database counts after second run.
+13. Confirmation no posts published.
+14. Pending approval UI verification.
+15. Status-color verification.
+16. Files changed.
+17. Tests and results.
+18. Typecheck result.
+19. Build result.
+20. Manual authenticated-browser verification status.
+21. Remaining limitations.
+22. Exact recommendation on whether autopilot is safe to enable.
+
+DOCUMENTATION
+
+Update:
+
+- AI_EDGE_ENGINEERING_HANDBOOK.md
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+- ARCHITECTURE_DECISIONS.md
+
+Do not enable recurring generation.
+
+Do not mark autonomous Content Autopilot production-ready until the real dry run creates one duplicate-safe seven-post approval plan without any user clicking Generate.

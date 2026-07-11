@@ -11,3 +11,5 @@
 - [useApiFetch stability](useapifetch-stability.md) — Hook now uses useCallback([getToken]); pages must use [apiFetch] deps (not []); useRef workaround pattern is obsolete.
 - [YouTube token refresh guard](youtube-token-refresh.md) — expires_at is NULL in dev DB (dropped by dev-sync); guard must be `refreshToken && (!expiresAt || expired)`, not `expiresAt && expired && refreshToken`.
 - [BBB Autopilot foundation](bbb-autopilot-foundation.md) — Phases 1-12 complete; autonomous scheduler exists but pilot uses autopilot_enabled='false' by default; vitest in artifacts/ai-edge-solutions uses relative paths (not @workspace/db) for bbb-services imports.
+- [BBB Autopilot idempotency guard](bbb-autopilot-idempotency.md) — weeklyPlanId guard must run BEFORE AI generation calls; returns created:0/skipped:N/reason:weekly_plan_already_exists; absence caused duplicate weekly plans.
+- [lib/db TypeScript declarations](lib-db-declarations.md) — lib/db is composite:true + emitDeclarationOnly; run `pnpm --filter @workspace/db exec tsc --build` when new schema columns or bbb-services exports are added, or api-server tsc will see stale types.

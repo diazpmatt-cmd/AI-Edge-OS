@@ -98,6 +98,57 @@ async function publishDuePosts(): Promise<void> {
   }
 }
 
+// ── Timezone-aware next-generation timestamp ──────────────────────────────────
+// Calculates the next scheduled run for a tenant using their configured
+// generationDay (e.g. 'monday') and generationTime ('HH:MM') in America/Chicago.
+// Accounts for DST by computing the UTC offset from the Intl API at generation time.
+// Falls back to now + 7 days if the tenant has no day/time configured.
+function calculateNextGenerationAt(
+  settings: { generationDay?: string | null; generationTime?: string | null },
+  from: Date,
+): Date {
+  const TZ = "America/Chicago";
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const DAY_MAP: Record<string, number> = {
+    sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+  };
+
+  const targetDayNum = settings.generationDay
+    ? (DAY_MAP[settings.generationDay.toLowerCase()] ?? null)
+    : null;
+  const [targetH, targetM] = settings.generationTime?.split(":").map(Number) ?? [8, 0];
+
+  if (targetDayNum === null) {
+    // No specific day configured — advance by 7 wall-clock days.
+    return new Date(from.getTime() + 7 * DAY_MS);
+  }
+
+  // Get the current weekday in Chicago
+  const currentDowName = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, weekday: "long",
+  }).format(from).toLowerCase();
+  const currentDayNum = DAY_MAP[currentDowName] ?? 0;
+
+  let daysAhead = (targetDayNum - currentDayNum + 7) % 7;
+  if (daysAhead === 0) daysAhead = 7; // always at least one full cycle ahead
+
+  // Build the candidate date (target calendar day in Chicago)
+  const candidate = new Date(from.getTime() + daysAhead * DAY_MS);
+
+  // Determine the UTC offset in Chicago on that future date (handles DST correctly)
+  const hourFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, hour: "numeric", hour12: false,
+  });
+  const candidateUtcH = candidate.getUTCHours();
+  const candidateChicagoH = parseInt(hourFmt.format(candidate), 10);
+  const offsetHrs = candidateChicagoH - candidateUtcH; // e.g. -5 (CDT) or -6 (CST)
+
+  // Compute UTC time for targetH:targetM Chicago wall clock on that date
+  const utcTargetH = targetH - offsetHrs;
+  candidate.setUTCHours(utcTargetH, targetM, 0, 0);
+  return candidate;
+}
+
 // ── Autonomous Content Generation ─────────────────────────────────────────────
 // Runs on its own tick (every 30min). Finds tenants where:
 //   - autopilot_enabled = 'true'
@@ -111,8 +162,9 @@ async function publishDuePosts(): Promise<void> {
 //   4. Advances nextGenerationAt by 7 days.
 //
 // BB&B PILOT DEFAULT: autopilot_enabled = 'false' for all settings rows.
-// This function will find zero due tenants during the pilot and do nothing.
-// Enable by flipping autopilot_enabled = 'true' AFTER Matthew approves the first plan.
+// This function will find zero due tenants during the pilot and does nothing.
+// Enable by setting autopilot_enabled = 'true' in the tenant's settings row after
+// the first manually-reviewed weekly plan is approved by the client.
 
 async function runAutonomousContentGeneration(): Promise<void> {
   const now = new Date();
@@ -152,7 +204,7 @@ async function runAutonomousContentGeneration(): Promise<void> {
         "[autopilot] weekly plan already exists — skipping (idempotent)",
       );
       // Advance nextGenerationAt if it's still stuck in the past after an earlier partial run
-      const nextAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const nextAt = calculateNextGenerationAt(settings, now);
       await db.update(autoContentSettingsTable)
         .set({ nextGenerationAt: nextAt, updatedAt: new Date() })
         .where(eq(autoContentSettingsTable.userId, settings.userId));
@@ -167,21 +219,24 @@ async function runAutonomousContentGeneration(): Promise<void> {
     const platforms    = parseJson<string[]>(settings.platforms, ["facebook", "google"]);
 
     try {
+      // SECURITY: Pass the settings row ID (not userId) so the generate route
+      // can derive the tenant identity from the DB-verified settings record.
+      // Never pass x-scheduler-user-id — that header is an impersonation vector.
       const res = await fetch(`${base}/api/auto-content/generate`, {
         method:  "POST",
         headers: {
-          "Content-Type":         "application/json",
-          "x-scheduler-secret":   SCHEDULER_SECRET,
-          "x-scheduler-user-id":  settings.userId,
+          "Content-Type":             "application/json",
+          "x-scheduler-secret":       SCHEDULER_SECRET,
+          "x-scheduler-settings-id":  settings.id,
         },
         body: JSON.stringify({
           count:        7,            // 7-day weekly plan
           weeklyPlanId,               // idempotency key passed through to inserts
-          approvalMode: settings.approvalMode ?? "approval_required",
+          schedulerMode: "weekly_plan", // signals the route to use selectWeeklyServices
           serviceAreas,
           topics,
           platforms,
-          ctaText:  settings.ctaText  ?? "Call Now — (251) 324-9090",
+          ctaText:    settings.ctaText    ?? "Call Now — (251) 324-9090",
           clientName: settings.clientName ?? "Bed Bugs & Beyond",
         }),
       });
@@ -193,7 +248,7 @@ async function runAutonomousContentGeneration(): Promise<void> {
           { userId: settings.userId, weeklyPlanId, created: body.created },
           "[autopilot] weekly plan generated successfully",
         );
-        const nextAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const nextAt = calculateNextGenerationAt(settings, now);
         await db.update(autoContentSettingsTable)
           .set({ lastGeneratedAt: now, nextGenerationAt: nextAt, updatedAt: new Date() })
           .where(eq(autoContentSettingsTable.userId, settings.userId));

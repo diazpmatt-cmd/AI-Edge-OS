@@ -7,3 +7,4 @@
 - [Call Intelligence DB schema](call-intelligence-schema.md) — calls + sms_conversations tables created via raw SQL (drizzle push blocked by pre-existing review_platform_stats unique constraint conflict); API at /api/call-intelligence sources BOTH tables for full historical coverage.
 - [Social Posts API shape](social-posts-api-shape.md) — API returns `platforms: string[]` (plural array), never `platform: string`; use `p.platforms?.[0] ?? ""` for primary platform display.
 - [useApiFetch stability](useapifetch-stability.md) — Hook now uses useCallback([getToken]); pages must use [apiFetch] deps (not []); useRef workaround pattern is obsolete.
+- [YouTube token refresh guard](youtube-token-refresh.md) — expires_at is NULL in dev DB (dropped by dev-sync); guard must be `refreshToken && (!expiresAt || expired)`, not `expiresAt && expired && refreshToken`.

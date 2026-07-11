@@ -127,6 +127,7 @@ router.get("/social-connections/dev-export", async (req, res) => {
     accountId: row.accountId,
     accessToken: row.accessToken,
     refreshToken: row.refreshToken ?? null,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
     metadata: row.metadata ?? null,
   });
 });
@@ -185,6 +186,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
       return;
     }
 
+    const pulledExpiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
     await db.insert(socialConnectionsTable).values({
       userId,
       provider: data.provider ?? provider,
@@ -192,7 +194,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
       accountId: data.accountId ?? null,
       accessToken: data.accessToken,
       refreshToken: data.refreshToken ?? null,
-      expiresAt: null,
+      expiresAt: pulledExpiresAt,
       metadata: data.metadata ?? null,
     }).onConflictDoUpdate({
       target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
@@ -201,6 +203,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
         accountId: data.accountId ?? null,
         accessToken: data.accessToken,
         refreshToken: data.refreshToken ?? null,
+        ...(pulledExpiresAt ? { expiresAt: pulledExpiresAt } : {}),
         metadata: data.metadata ?? null,
         updatedAt: new Date(),
       },
@@ -215,7 +218,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
 });
 
 router.post("/social-connections/oauth-sync", async (req, res) => {
-  const { provider, userId, accountName, accountId, accessToken, metadata, sig } = req.body ?? {};
+  const { provider, userId, accountName, accountId, accessToken, metadata, sig, refreshToken: syncedRefreshToken, expiresAt: syncedExpiresAt } = req.body ?? {};
   console.log(`[OAUTH-SYNC] received: provider=${provider} userId=${userId ?? "NULL"} hasAccessToken=${!!accessToken} hasSig=${!!sig} NODE_ENV=${process.env.NODE_ENV}`);
 
   if (!provider || !userId || !accessToken || !sig) {
@@ -241,14 +244,16 @@ router.post("/social-connections/oauth-sync", async (req, res) => {
   }
   console.log(`[OAUTH-SYNC] ✓ signature OK, saving to DB (DATABASE_URL_set=${!!process.env.DATABASE_URL})`);
 
+  const parsedExpiresAt = syncedExpiresAt ? new Date(syncedExpiresAt) : null;
+
   try {
     await db.insert(socialConnectionsTable).values({
       userId, provider,
       accountName: accountName ?? null,
       accountId: accountId ?? null,
       accessToken,
-      refreshToken: null,
-      expiresAt: null,
+      refreshToken: syncedRefreshToken ?? null,
+      expiresAt: parsedExpiresAt,
       metadata: metadata ?? null,
     }).onConflictDoUpdate({
       target: [socialConnectionsTable.userId, socialConnectionsTable.provider],
@@ -256,6 +261,8 @@ router.post("/social-connections/oauth-sync", async (req, res) => {
         accountName: accountName ?? null,
         accountId: accountId ?? null,
         accessToken,
+        ...(syncedRefreshToken ? { refreshToken: syncedRefreshToken } : {}),
+        ...(parsedExpiresAt   ? { expiresAt: parsedExpiresAt }       : {}),
         metadata: metadata ?? null,
         updatedAt: new Date(),
       },
@@ -1585,7 +1592,10 @@ router.post("/social-connections/youtube/test-upload", async (req, res) => {
 
   let accessToken = conn.accessToken;
 
-  if (conn.expiresAt && conn.expiresAt < new Date() && conn.refreshToken) {
+  // Refresh if: we have a refresh token AND (expiresAt is unknown/null OR token is confirmed expired).
+  // expiresAt is NULL when the token was synced via dev-sync (expiry is lost in transit), so we
+  // must not gate the refresh on expiresAt being non-null.
+  if (conn.refreshToken && (!conn.expiresAt || conn.expiresAt < new Date())) {
     try {
       const r = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -1604,8 +1614,12 @@ router.post("/social-connections/youtube/test-upload", async (req, res) => {
         await db.update(socialConnectionsTable)
           .set({ accessToken, expiresAt, updatedAt: new Date() })
           .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+        console.log("[YOUTUBE-TEST-UPLOAD] token refreshed via refresh_token, expiresAt:", expiresAt);
+      } else {
+        const errBody = await r.text().catch(() => "");
+        console.warn("[YOUTUBE-TEST-UPLOAD] token refresh failed:", r.status, errBody.slice(0, 200));
       }
-    } catch { /* use stored token */ }
+    } catch (e: any) { console.warn("[YOUTUBE-TEST-UPLOAD] refresh attempt error:", e?.message); }
   }
 
   const result: {
@@ -1758,7 +1772,8 @@ router.get("/social-connections/youtube/channel-info", async (req, res) => {
 
   let accessToken = conn.accessToken;
 
-  if (conn.expiresAt && conn.expiresAt < new Date() && conn.refreshToken) {
+  // Refresh if: refresh token present AND (expiresAt unknown/null OR confirmed expired).
+  if (conn.refreshToken && (!conn.expiresAt || conn.expiresAt < new Date())) {
     try {
       const r = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -1780,8 +1795,12 @@ router.get("/social-connections/youtube/channel-info", async (req, res) => {
             eq(socialConnectionsTable.userId, userId),
             eq(socialConnectionsTable.provider, "youtube"),
           ));
+        console.log("[YOUTUBE-CHANNEL-INFO] token refreshed via refresh_token, expiresAt:", expiresAt);
+      } else {
+        const errBody = await r.text().catch(() => "");
+        console.warn("[YOUTUBE-CHANNEL-INFO] token refresh failed:", r.status, errBody.slice(0, 200));
       }
-    } catch { /* continue with existing token */ }
+    } catch (e: any) { console.warn("[YOUTUBE-CHANNEL-INFO] refresh attempt error:", e?.message); }
   }
 
   try {

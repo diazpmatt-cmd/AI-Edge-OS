@@ -13,10 +13,16 @@ import { logger } from "../lib/logger";
 // the dev frontend sees the token without requiring Facebook app-settings changes.
 async function syncToDevServer(devOrigin: string, payload: {
   provider: string; userId: string; accountName: string; accountId: string;
-  accessToken: string; metadata: string | null;
+  accessToken: string; refreshToken?: string | null; expiresAt?: string | null; metadata: string | null;
 }) {
   const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
-  const sig = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+  // HMAC covers only the core fields — must match what oauth-sync validates on the other end.
+  const corePayload = {
+    provider: payload.provider, userId: payload.userId,
+    accountName: payload.accountName, accountId: payload.accountId,
+    accessToken: payload.accessToken, metadata: payload.metadata ?? null,
+  };
+  const sig = createHmac("sha256", secret).update(JSON.stringify(corePayload)).digest("hex");
   const syncUrl = `${devOrigin}/api/social-connections/oauth-sync`;
 
   console.log("[DEV-SYNC ATTEMPT]", {
@@ -31,6 +37,8 @@ async function syncToDevServer(devOrigin: string, payload: {
     r = await fetch(syncUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // Extra fields (refreshToken, expiresAt) are passed alongside the signed core — oauth-sync
+      // stores them but does not include them in the signature check.
       body: JSON.stringify({ ...payload, sig }),
       signal: AbortSignal.timeout(8000),
     });
@@ -243,6 +251,8 @@ router.get("/oauth/google/callback", async (req, res) => {
           accountName: userInfo.name ?? userInfo.email,
           accountId: userInfo.id,
           accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token ?? null,
+          expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null,
           metadata: null,
         });
         console.log(`[GOOGLE-CALLBACK] ✓ dev-sync OK`);

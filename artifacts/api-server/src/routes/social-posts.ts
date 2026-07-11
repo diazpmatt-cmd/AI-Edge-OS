@@ -476,7 +476,9 @@ router.post("/social-posts/:id/publish", async (req, res) => {
         try {
           let accessToken = ytConn.accessToken;
 
-          if (ytConn.expiresAt && ytConn.expiresAt < new Date() && ytConn.refreshToken) {
+          // Refresh if: refresh token present AND (expiresAt unknown/null OR confirmed expired).
+          // expiresAt is NULL when synced via dev-sync — must not gate refresh on it being set.
+          if (ytConn.refreshToken && (!ytConn.expiresAt || ytConn.expiresAt < new Date())) {
             const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },

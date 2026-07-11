@@ -7,36 +7,38 @@ All notable changes to the AI Edge Solutions platform.
 ## [Unreleased]
 
 ### Fixed
-- **Command Center tile drag-and-drop** (`/admin/dashboard`): tiles can now be
-  grabbed by the ⠿ grip handle, dragged to a new position, and released. The
-  new order persists across page refreshes via localStorage.
-- **Root cause**: `Reorder.Group axis="y"` inside a CSS 2-column grid caused
-  Framer Motion's 1-D reorder algorithm to fail silently — items in the same
-  grid row share identical y-coordinates, so the insertion-point comparison
-  always returned the same result. Fix: edit mode uses `flex-direction: column`
-  so every item has a unique y-offset.
-- **Sidebar nav reorder** (`app-shell.tsx`): same grid/axis bug patched.
+- **Content Autopilot YouTube status** (`/admin/bbb-autopilot`): YouTube was
+  previously described as "Pending approval" in the platform note. The note now
+  accurately reflects the actual requirement: video file upload in Publishing
+  Center. Registry status was already `operational`; no canonical change needed.
+- **Root cause**: `PLATFORM_NOTE.youtube` described an OAuth scope-approval gate
+  that did not exist. The real limitation is YouTube's resumable-upload protocol
+  (needs a video file to publish), not a provider-approval gate.
 
 ### Changed
-- `DashboardPage.tsx` `DraggableActionTile`: renders as `div` (not `li`),
-  `touchAction: none` on item, auto-saves on every reorder event (not only on
-  "Done").
-- `app-shell.tsx` `DraggableTile`: renders as `div`, horizontal list-row layout
-  in edit mode matches the new flex-column container.
-- `dashboard-order.ts` storage key: `ai-edge-dash-actions-v1` →
-  `ai-edge:command-center-layout:v1` (versioned colon-separated scheme).
-- `saveDashOrder` and `clearDashOrder` now wrapped in try/catch for
-  private-browsing / quota safety.
+- `BBBContentAutopilotPage.tsx` Generate button: now shows a `{N} platforms` badge
+  (live count of selected queueable providers) for immediate user visibility.
 
 ### Added
-- `src/lib/__tests__/dash-order.test.ts`: 9 describe blocks (25+ assertions)
-  covering default order, round-trip persistence, corrupt JSON fallback,
-  unknown-ID stripping, duplicate-ID collapsing, new-tile appending, and key
-  stability.
+- `src/lib/__tests__/autopilot-selection.test.ts`: 3 new describe blocks
+  (13 additional tests, 230 total):
+  - YouTube canonical audit (registry `operational`, resolves to `ready` when
+    connected, `disconnected` when not, publish handler exists, generation
+    and queue capabilities are independent from publish)
+  - TikTok canonical audit (remains `pending_approval`, resolves to `pending`)
+  - Media profile informational-only invariant (no width/height/aspectRatio
+    fields in `CONTENT_PROFILES`, no image generation API called from page)
 
 ---
 
 ## Previous sessions (summary)
+
+### Command Center drag-and-drop
+`DashboardPage.tsx` + `app-shell.tsx`: Framer Motion Reorder `axis="y"` failed
+inside CSS 2-column grid because items in the same row share identical
+y-coordinates. Fix: edit mode switches to `flex-direction: column` for unique
+y-offsets. Auto-saves on every reorder event. Sidebar nav edit mode fixed with
+same pattern. Storage key renamed to `ai-edge:command-center-layout:v1`.
 
 ### Content Autopilot registry refactor
 `BBBContentAutopilotPage.tsx` now derives all platform metadata from

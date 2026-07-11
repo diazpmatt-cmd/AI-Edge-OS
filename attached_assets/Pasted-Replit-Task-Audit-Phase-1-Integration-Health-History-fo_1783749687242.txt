@@ -1,0 +1,223 @@
+Replit Task: Audit Phase 1 Integration Health History for Scale and Architecture
+
+This is an AUDIT-ONLY task.
+
+Do not modify code.
+Do not create migrations.
+Do not run code generation.
+Do not create a checkpoint unless automatically required.
+
+Background:
+
+Phase 1 added:
+
+- integration_health_history PostgreSQL table
+- persistence after GET /diagnostics/health
+- GET /diagnostics/health-history
+- a developer-only history panel in System Diagnostics
+- 90-day pruning
+
+Potential concern:
+
+System Diagnostics polls /diagnostics/health every 30 seconds.
+
+Each health response currently persists one row for each of seven providers. If the page remains open, this may create approximately:
+
+7 providers × 2 checks per minute × 60 minutes × 24 hours
+= 20,160 rows per day per active user
+
+Goal:
+
+Determine whether the implementation is safe, efficient, and aligned with the project architecture before Phase 2 begins.
+
+Audit the following:
+
+1. Persistence frequency
+
+Confirm exactly when persistHealthSnapshot() runs.
+
+Report whether it runs:
+
+- on every 30-second frontend poll
+- only on forced health scans
+- on server-side cache refreshes
+- on every request regardless of whether health values changed
+
+Calculate the realistic daily record volume for:
+
+- one continuously active administrator
+- five active administrators
+- ten client accounts
+
+2. Duplicate data
+
+Determine whether consecutive identical provider statuses create duplicate rows.
+
+Check whether any deduplication currently exists based on:
+
+- provider
+- status
+- error message
+- metadata
+- time window
+- last successful timestamp
+
+3. Recommended persistence strategy
+
+Without modifying code, recommend the lowest-cost safe approach from options such as:
+
+- persist only when status changes
+- persist only when error/detail changes
+- persist once every 5–15 minutes
+- persist only on an explicit force-health-check
+- store current state separately from historical transitions
+- combine status-change persistence with periodic heartbeat records
+
+Recommend one approach that supports future:
+
+- Morning Brief summaries
+- uptime charts
+- alerts
+- Apollos trend analysis
+
+4. Database indexes and query efficiency
+
+Inspect the actual table and queries.
+
+Verify whether indexes support:
+
+- filtering by user and provider
+- newest records first
+- querying records within a date range
+- finding the most recent status for each provider
+
+Report any missing or redundant indexes.
+
+5. Pruning behavior
+
+Confirm whether pruning runs:
+
+- once per provider row
+- once per health snapshot
+- once per request
+- asynchronously or synchronously
+
+Determine whether DELETE operations on every write could become expensive.
+
+Recommend whether pruning should instead run:
+
+- once per day
+- once per server startup
+- through an existing scheduled job
+- after a threshold is reached
+
+Do not implement the recommendation yet.
+
+6. OpenAPI compliance
+
+Verify whether these were added to /lib/api-spec:
+
+- GET /diagnostics/health-history
+- query parameters: provider and limit
+- history response schema
+- normalized provider/status fields
+
+Verify whether generated Zod schemas and React client types were regenerated.
+
+Report any manually duplicated frontend/backend interfaces.
+
+7. Database bootstrap placement
+
+Inspect where other raw-SQL tables are initialized.
+
+Determine whether creating integration_health_history inside diagnostics.ts is consistent with the established project pattern or whether it belongs in:
+
+- a shared database bootstrap module
+- API server startup
+- an existing raw-SQL initialization file
+
+Do not relocate it during this audit.
+
+8. Authentication and tenant isolation
+
+Verify that:
+
+- records always include the authenticated Clerk user ID
+- history queries cannot return another user's records
+- provider filters are parameterized safely
+- limit values are validated and bounded
+- unauthenticated access is rejected
+
+9. Secret sanitization
+
+Inspect sanitizeDetail() and persistence metadata.
+
+Verify it protects against storing:
+
+- access tokens
+- refresh tokens
+- Authorization headers
+- API keys
+- client secrets
+- bearer strings
+- nested secret fields in metadata
+- full provider responses containing credentials
+
+Report any values that could still leak.
+
+10. Fire-and-forget reliability
+
+Confirm what happens when persistence fails after the health response is sent.
+
+Check whether failures:
+
+- are logged safely
+- generate unhandled promise rejections
+- affect the API process
+- are silently lost
+
+11. Existing test coverage
+
+Identify whether tests currently cover:
+
+- history persistence
+- tenant isolation
+- sanitization
+- duplicate prevention
+- pruning
+- query limits
+- database failures
+
+Do not add tests yet.
+
+Deliverables:
+
+A. Current implementation summary
+
+B. Estimated record volume
+
+C. Duplicate-write risk
+
+D. OpenAPI compliance result
+
+E. Authentication and security result
+
+F. Database/index result
+
+G. Pruning efficiency result
+
+H. Fire-and-forget reliability result
+
+I. Test coverage gaps
+
+J. Recommended smallest corrective task before Phase 2
+
+Classify the implementation as:
+
+1. Safe to proceed unchanged
+2. Safe with a small optimization
+3. Needs correction before Phase 2
+4. Requires architectural redesign
+
+Keep the investigation focused and credit-efficient.
+Stop after reporting findings.

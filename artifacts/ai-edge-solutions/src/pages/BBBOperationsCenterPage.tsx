@@ -204,10 +204,11 @@ export default function BBBOperationsCenterPage() {
     saveMetrics(next);
   };
 
-  const { data: leads = [] } = useQuery<Lead[]>({
+  const { data: leadsData } = useQuery<{ leads: Lead[]; stats: { total: number; active: number; thisMonth: number; withMessages: number } }>({
     queryKey: ["leads"],
-    queryFn: () => apiFetch<Lead[]>("/leads"),
+    queryFn: () => apiFetch("/leads"),
   });
+  const leads = leadsData?.leads ?? [];
 
   const { data: posts = [] } = useQuery<SocialPost[]>({
     queryKey: ["social-posts"],

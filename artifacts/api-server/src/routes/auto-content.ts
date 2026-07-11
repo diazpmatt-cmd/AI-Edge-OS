@@ -473,6 +473,8 @@ router.post("/auto-content/generate", async (req, res) => {
   // Applies to both Clerk-authenticated users and the internal scheduler path
   // (the scheduler's userId is already resolved from the settings row above).
   let resolvedRegistry: import("@workspace/db").ServiceRegistryProvider | undefined;
+  let resolvedClientName: string | undefined;
+  let resolvedIndustry: string | undefined;
   {
     const clientResult = await resolveClientContentContextFromDb(userId);
     if (!clientResult.found) {
@@ -480,7 +482,7 @@ router.post("/auto-content/generate", async (req, res) => {
       if (r === "inactive") {
         res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
       } else if (r === "not_found") {
-        res.status(403).json({ error: "no_client_configured", message: "No client record found for this account. Contact support to set up your account." });
+        res.status(404).json({ error: "no_client_configured", message: "No client record found for this account. Contact support to set up your account." });
       } else if (r === "registry_unavailable") {
         res.status(503).json({ error: "registry_unavailable", message: "Service registry temporarily unavailable. Please try again shortly." });
       } else {
@@ -489,7 +491,9 @@ router.post("/auto-content/generate", async (req, res) => {
       }
       return;
     }
-    resolvedRegistry = clientResult.context.registry;
+    resolvedRegistry  = clientResult.context.registry;
+    resolvedClientName = clientResult.context.clientName;
+    resolvedIndustry   = clientResult.context.industry;
   }
 
   const {
@@ -518,29 +522,43 @@ router.post("/auto-content/generate", async (req, res) => {
   if (!serviceAreas?.length || !topics?.length) {
     const [dbRow] = await db.select().from(autoContentSettingsTable)
       .where(eq(autoContentSettingsTable.userId, userId));
-    if (dbRow) {
-      const dbAreas = parseJson<string[]>(dbRow.serviceAreas, []);
-      const dbTopics = parseJson<string[]>(dbRow.topics, []);
-      if (!serviceAreas?.length) serviceAreas = dbAreas.length ? dbAreas : DEFAULT_SERVICE_AREAS;
-      if (!topics?.length) topics = dbTopics.length ? dbTopics : DEFAULT_TOPICS;
-      if (!clientName) clientName = dbRow.clientName;
-      if (!industry) industry = dbRow.industry ?? "pest_control";
-      if (!frequency) frequency = dbRow.frequency;
-      if (!postingTimes?.length) postingTimes = parseJson<string[]>(dbRow.postingTimes, ["08:00", "12:00", "17:00"]);
-      if (!platforms?.length) platforms = parseJson<string[]>(dbRow.platforms, ["facebook"]);
-      if (!approvalMode) approvalMode = dbRow.approvalMode;
-      if (!ctaText) ctaText = dbRow.ctaText;
-      if (!ctaPreference) ctaPreference = dbRow.ctaPreference ?? "call_now";
-      if (!toneStyle?.length) toneStyle = parseJson<string[]>(dbRow.toneStyle, DEFAULT_TONE);
-      if (!postAngles?.length) postAngles = parseJson<string[]>(dbRow.postAngles, DEFAULT_ANGLES);
-    } else {
-      if (!serviceAreas?.length) serviceAreas = DEFAULT_SERVICE_AREAS;
-      if (!topics?.length) topics = DEFAULT_TOPICS;
+    if (!dbRow) {
+      // No settings row — cannot infer content context; require explicit configuration.
+      // An authenticated client with no settings row is a misconfiguration: they must
+      // call PUT /auto-content/settings first to establish their content context.
+      res.status(404).json({ error: "settings_not_found", message: "No content settings found. Configure your settings before generating content." });
+      return;
     }
+    const dbAreas  = parseJson<string[]>(dbRow.serviceAreas, []);
+    const dbTopics = parseJson<string[]>(dbRow.topics, []);
+    if (!serviceAreas?.length) {
+      serviceAreas = dbAreas;
+      if (!serviceAreas.length) {
+        res.status(422).json({ error: "service_areas_required", message: "Service areas are required. Add at least one service area in settings." });
+        return;
+      }
+    }
+    if (!topics?.length) {
+      topics = dbTopics;
+      if (!topics.length) {
+        res.status(422).json({ error: "topics_required", message: "Topics are required. Add at least one topic in settings." });
+        return;
+      }
+    }
+    if (!clientName) clientName = dbRow.clientName;
+    if (!industry) industry = dbRow.industry ?? "pest_control";
+    if (!frequency) frequency = dbRow.frequency;
+    if (!postingTimes?.length) postingTimes = parseJson<string[]>(dbRow.postingTimes, ["08:00", "12:00", "17:00"]);
+    if (!platforms?.length) platforms = parseJson<string[]>(dbRow.platforms, ["facebook"]);
+    if (!approvalMode) approvalMode = dbRow.approvalMode;
+    if (!ctaText) ctaText = dbRow.ctaText;
+    if (!ctaPreference) ctaPreference = dbRow.ctaPreference ?? "call_now";
+    if (!toneStyle?.length) toneStyle = parseJson<string[]>(dbRow.toneStyle, DEFAULT_TONE);
+    if (!postAngles?.length) postAngles = parseJson<string[]>(dbRow.postAngles, DEFAULT_ANGLES);
   }
 
   if (!serviceAreas?.length || !topics?.length) {
-    res.status(400).json({ error: "At least one service area and one topic required." });
+    res.status(422).json({ error: "service_areas_or_topics_required", message: "At least one service area and one topic required." });
     return;
   }
 
@@ -878,18 +896,21 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
   const newKeys = slots.map(s => `${s.city}:${s.topic}`);
   const allUsed = Array.from(new Set([...prevUsed, ...newKeys]));
 
+  // Use the canonical client identity from the resolver (not body/fallback values).
+  // resolvedClientName and resolvedIndustry come from the DB-backed clients table
+  // via resolveClientContentContextFromDb — they are always the correct tenant identity.
   await db.insert(autoContentSettingsTable).values({
     userId,
-    clientName: clientName ?? "Bed Bugs & Beyond",
-    industry: industry ?? "pest_control",
+    clientName: resolvedClientName ?? context.clientName,
+    industry:   resolvedIndustry   ?? context.industry,
     serviceAreas: JSON.stringify(serviceAreas),
     topics: JSON.stringify(topics),
     frequency: frequency ?? "every_other_day",
     postingTimes: JSON.stringify(effectiveTimes),
     platforms: JSON.stringify(Array.isArray(platforms) ? platforms : ["facebook"]),
-    approvalMode: approvalMode ?? BBB_DEFAULT_APPROVAL_MODE,
-    ctaText: ctaText ?? "Call Now \u2014 (251) 324-9090",
-    ctaPreference: ctaPreference ?? "call_now",
+    approvalMode: context.approvalMode,
+    ctaText:      context.ctaText,
+    ctaPreference: context.ctaPreference,
     toneStyle: JSON.stringify(effectiveTone),
     postAngles: JSON.stringify(effectiveAngles),
     autoGenerateEnabled: "true",
@@ -1333,8 +1354,8 @@ router.get("/auto-content/recommendations", async (req, res) => {
   const recs: Rec[] = [];
 
   if (!hasData) {
-    const areas      = settingsRow ? parseJson<string[]>(settingsRow.serviceAreas, DEFAULT_SERVICE_AREAS) : DEFAULT_SERVICE_AREAS;
-    const topics     = settingsRow ? parseJson<string[]>(settingsRow.topics, DEFAULT_TOPICS) : DEFAULT_TOPICS;
+    const areas      = settingsRow ? parseJson<string[]>(settingsRow.serviceAreas, []) : [];
+    const topics     = settingsRow ? parseJson<string[]>(settingsRow.topics, []) : [];
     const usedCombos = settingsRow ? parseJson<string[]>(settingsRow.usedCombos, []) : [];
     const unused = areas
       .flatMap(c => topics.map(t => ({ city: c, topic: t, key: `${c}:${t}` })))

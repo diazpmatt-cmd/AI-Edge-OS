@@ -1,0 +1,383 @@
+Proceed with Phase B4 — Tenant-Aware Scheduler and Generate-Path Hardening.
+
+Phases A1, A2, B1, B2, B2.1, and B3 are complete.
+
+Current verified state:
+
+- Canonical clients table exists
+- Canonical DB-backed service registries exist
+- BB&B uses the DB-backed registry
+- Client context resolution is tenant-aware
+- GET settings and GET suggestions no longer leak BB&B defaults on resolution failures
+- PUT settings, pause, and resume are tenant-aware
+- Pause/resume toggle enginePaused, not autopilotEnabled
+- Unknown and inactive tenants are blocked
+- Registry failures return typed errors
+- Autopilot remains disabled for BB&B
+- Nothing was generated or published during B3 validation
+- 788/788 tests pass
+- TypeScript checks are clean
+
+Objective:
+
+Make autonomous scheduling and the complete POST generate path safely multi-tenant.
+
+The scheduler must stop assuming a single BB&B tenant and instead evaluate eligible clients independently.
+
+This phase must not add client provisioning, onboarding UI, client switching, or Growth Engine features.
+
+AUDIT FIRST
+
+Before editing, inspect:
+
+- All scheduler entry points
+- All cron jobs and interval jobs
+- All references to the BB&B Clerk user ID
+- All references to a single default tenant
+- All calls to POST generate
+- All scheduler authentication behavior
+- All generate-route context construction
+- All uses of:
+  - buildClientContentContext
+  - resolveClientContentContextFromDb
+  - DEFAULT_SERVICE_AREAS
+  - DEFAULT_TOPICS
+  - BBB_DEFAULT_SERVICE_AREAS
+  - BBB client identity
+- auto_content_settings fields:
+  - autopilotEnabled
+  - enginePaused
+  - approvalMode
+  - postingDays
+  - postingTimes
+  - timezone
+  - postsPerWeek
+- Existing idempotency behavior
+- Existing weeklyPlanId behavior
+- Existing scheduler tests
+- Existing locking or concurrency controls
+- Existing retry behavior
+- Existing audit logs
+
+Produce a short audit stating:
+
+1. Every current single-tenant scheduler assumption
+2. Every BB&B hardcoded identifier in scheduler or generate paths
+3. Current eligibility rules for an automated run
+4. Current distinction between autopilotEnabled and enginePaused
+5. Current scheduler-to-generate authentication flow
+6. Current idempotency and duplicate-run protections
+7. Whether scheduler failures for one tenant can block others
+8. Whether any generate path still falls back to BB&B defaults
+9. Exact changes required for safe tenant iteration
+
+Do not implement until the audit is complete.
+
+REQUIRED BEHAVIOR
+
+1. Tenant-aware scheduler eligibility query
+
+Create the smallest reusable query or repository function that returns scheduler-eligible clients.
+
+A client is eligible only when:
+
+- clients.is_active = true
+- auto_content_settings.autopilot_enabled = true
+- auto_content_settings.engine_paused = false
+- Required scheduling configuration exists
+- Client registry is configured and valid
+- The tenant is due for a scheduled run
+
+Do not include clients with:
+
+- Missing settings
+- Inactive client records
+- autopilotEnabled=false
+- enginePaused=true
+- Missing or invalid registries
+- Invalid timezone
+- Invalid posting schedule
+
+Do not hardcode BB&B or any single user ID.
+
+2. Per-client isolated execution
+
+The scheduler must process eligible tenants independently.
+
+Requirements:
+
+- One client failure must not stop other clients
+- Each client gets its own context
+- Each client gets its own registry
+- Each client gets its own weeklyPlanId or equivalent idempotency key
+- Each client writes only its own posts and plans
+- Logs identify the client safely
+- No cross-tenant arrays, caches, or mutable context reuse
+
+Use bounded sequential processing or conservative concurrency.
+
+Do not create uncontrolled parallel AI calls.
+
+3. Scheduler authentication
+
+Preserve scheduler authentication.
+
+Do not weaken SCHEDULER_SECRET handling.
+
+Ensure the scheduler can invoke generation for a specific tenant without trusting a request-body user ID from an external caller.
+
+Prefer one of these patterns:
+
+- Internal function call with an explicit already-resolved tenant context
+- Internal authenticated request carrying a server-generated tenant identifier
+- A dedicated internal route that accepts tenant identity only after scheduler-secret authentication
+
+Do not expose a public route where arbitrary callers can select another tenant.
+
+Document the selected trust boundary.
+
+4. Generate-path hardening
+
+Audit every branch of POST generate.
+
+Remove any remaining fallback to:
+
+- BB&B client identity
+- BB&B geography
+- BB&B topics
+- BB&B services
+- BB&B registry
+- DEFAULT_SERVICE_AREAS
+- DEFAULT_TOPICS
+
+For an authenticated tenant:
+
+- Missing client → 404
+- Inactive client → 403
+- Missing registry → 422
+- Invalid registry → 422
+- Registry unavailable → 503
+- Missing settings → explicit typed error
+- Invalid scheduling configuration → 422
+
+The generate route must build its context from the canonical DB-backed resolver.
+
+Do not call buildClientContentContext(null) for a normal authenticated tenant.
+
+Any remaining null fallback must be restricted to a clearly documented legacy internal test path and must be unreachable from production requests.
+
+5. Scheduler and generate eligibility rules
+
+Define and test the exact relationship:
+
+- autopilotEnabled=false → scheduler must skip
+- enginePaused=true → scheduler must skip
+- approvalMode=approval_required → generation may create pending_review content but must not publish
+- approvalMode=draft_only → generation may create drafts but must not publish
+- approvalMode=auto_schedule → preserve existing behavior, but do not enable it for BB&B during validation
+- Missing topics → skip or typed configuration error
+- Missing service areas → skip or typed configuration error
+- Invalid registry → skip and log safely
+
+Do not let scheduler execution modify autopilotEnabled or enginePaused automatically.
+
+6. Idempotency per tenant
+
+Preserve and strengthen the existing weekly plan guard.
+
+Verify:
+
+- The same tenant + same weeklyPlanId creates no duplicates
+- Two different tenants may use structurally similar plan IDs without collision
+- A failure after partial work cannot produce duplicate posts on retry
+- Idempotency queries include tenant ownership
+- Existing BB&B idempotency behavior remains unchanged
+
+If weeklyPlanId is globally unique today, document whether tenant scoping is still explicit in queries.
+
+Only add a migration if a real constraint problem exists.
+
+7. Failure isolation and logging
+
+For each scheduler run, record or log:
+
+- Eligible tenants found
+- Tenant skipped and reason
+- Tenant run started
+- Tenant run completed
+- Posts created
+- Posts skipped
+- Tenant run failed
+
+Do not log:
+
+- Scheduler secrets
+- Full prompts
+- Tokens
+- Sensitive authentication data
+
+At the end of the scheduler cycle, return a summary such as:
+
+- clientsEvaluated
+- clientsEligible
+- clientsSucceeded
+- clientsSkipped
+- clientsFailed
+- postsCreated
+- postsSkipped
+
+Follow existing logging conventions.
+
+8. Tests — scheduler eligibility
+
+Add tests proving:
+
+- Active + enabled + unpaused client is eligible
+- autopilotEnabled=false is skipped
+- enginePaused=true is skipped
+- inactive client is skipped
+- missing settings is skipped
+- missing registry is skipped
+- invalid registry is skipped
+- registry unavailable does not crash the whole cycle
+- invalid timezone is skipped
+- missing topics is skipped
+- missing service areas is skipped
+
+9. Tests — tenant isolation
+
+Using BB&B and Lakeside Plumbing fixtures, prove:
+
+- Each tenant uses only its own registry
+- Each tenant uses only its own service areas
+- Each tenant uses only its own topics
+- Each tenant writes only its own posts
+- A BB&B service cannot appear in Lakeside output
+- A Lakeside service cannot appear in BB&B output
+- One tenant failure does not block the other
+- Mutable arrays and providers are not shared
+
+10. Tests — generate hardening
+
+Prove:
+
+- POST generate never falls back to BB&B for an unknown tenant
+- Missing settings returns an explicit error
+- Missing registry returns 422
+- Invalid registry returns 422
+- Registry DB failure returns 503
+- Inactive tenant returns 403
+- No AI call occurs after a resolution failure
+- No post write occurs after a resolution failure
+- Valid BB&B generation preserves existing output behavior
+- Valid Lakeside test generation uses plumbing-only context
+
+11. Tests — idempotency
+
+Prove:
+
+- Repeat BB&B plan creates zero new posts
+- Repeat Lakeside plan creates zero new posts
+- BB&B and Lakeside cannot collide with each other
+- Post counts remain tenant-scoped
+- Retry after a simulated failure does not duplicate completed records
+
+12. Read-path cleanup verification
+
+Search all auto-content, analytics, recommendations, insights, scheduler, and generate paths for:
+
+- DEFAULT_SERVICE_AREAS
+- DEFAULT_TOPICS
+- Bed Bugs & Beyond
+- BBB user ID
+- buildClientContentContext(null)
+
+Classify every remaining use as:
+
+- Valid BB&B seed/parity/test use
+- Intentionally deferred
+- Unsafe production fallback to remove now
+
+Remove only unsafe scheduler/generate/read-path fallbacks in B4.
+
+Do not perform unrelated broad refactors.
+
+13. Safe validation
+
+For live verification:
+
+- Keep BB&B autopilotEnabled=false
+- Keep enginePaused in its existing final state
+- Do not enable auto_schedule
+- Do not publish
+- Do not run a real multi-tenant production generation
+- Use tests or a dry-run mode for fictional tenants
+- If a BB&B dry run is necessary, create only draft/pending_review records
+- Restore any changed DB values afterward
+
+RESTRICTIONS
+
+- Do not build client provisioning
+- Do not create a real Lakeside production client
+- Do not build onboarding UI
+- Do not build a client switcher
+- Do not build service-registry UI
+- Do not add Growth Engine dashboards
+- Do not add Authority Engine features
+- Do not add outreach features
+- Do not modify social provider behavior
+- Do not enable BB&B autopilot
+- Do not publish content
+- Do not weaken scheduler authentication
+- Do not silently fall back to BB&B
+- Do not begin Phase B5 automatically
+
+VALIDATION
+
+Run:
+
+1. lib/db TypeScript build
+2. API-server TypeScript check
+3. New B4 scheduler tests
+4. New generate-hardening tests
+5. New tenant-isolation tests
+6. New idempotency tests
+7. Phase B3 write-path tests
+8. Phase B2.1 registry tests
+9. Phase B2 parity tests
+10. Phase B1 tenant-isolation tests
+11. Phase A2 context tests
+12. API-server tests
+13. Full relevant web tests
+14. Scheduler startup verification
+15. Safe dry-run verification, only if necessary
+
+DELIVERABLES
+
+Provide:
+
+1. Pre-implementation audit findings
+2. Files created or modified
+3. Scheduler eligibility query
+4. Per-client processing architecture
+5. Scheduler authentication trust boundary
+6. Generate-path hardening changes
+7. Eligibility and skip-reason behavior
+8. Tenant-scoped idempotency behavior
+9. Failure-isolation behavior
+10. Scheduler summary output
+11. Scheduler test results
+12. Generate-hardening test results
+13. Tenant-isolation test results
+14. Idempotency test results
+15. Remaining hardcoded BB&B consumer audit
+16. Exact full test counts
+17. TypeScript results
+18. Live startup verification
+19. Confirmation BB&B autopilot remains disabled
+20. Confirmation nothing was published
+21. Recommended Phase B5 scope
+
+Stop after Phase B4 validation.
+
+Do not begin Phase B5.

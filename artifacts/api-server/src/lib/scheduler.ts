@@ -1,18 +1,16 @@
 import { db } from "@workspace/db";
-import { socialPostsTable, leadsTable, autoContentSettingsTable } from "@workspace/db/schema";
-import { createWeeklyPlanId, getDefaultTopics } from "@workspace/db";
+import { socialPostsTable, leadsTable, autoContentSettingsTable, clientsTable } from "@workspace/db/schema";
+import { createWeeklyPlanId, evaluateClientEligibility, isValidIanaTimezone } from "@workspace/db";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
 
+export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
+export type { SchedulerCycleSummary };
+
 const POLL_INTERVAL_MS      = 60_000;      // post-publish tick: every 60s
 const AUTOPILOT_INTERVAL_MS = 30 * 60_000; // autonomous generation check: every 30min
-
-const DEFAULT_SERVICE_AREAS = [
-  "Foley, AL", "Daphne, AL", "Loxley, AL", "Fairhope, AL", "Gulf Shores, AL",
-  "Orange Beach, AL", "Summerdale, AL", "Spanish Fort, AL",
-];
 
 // Tracks posts currently being published — prevents duplicate publishes if a
 // tick fires while a previous publish is still in flight (e.g. slow GBP upload).
@@ -21,6 +19,20 @@ const inFlight = new Set<string>();
 function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
 }
+
+// ── Scheduler cycle summary ────────────────────────────────────────────────────
+
+interface SchedulerCycleSummary {
+  clientsEvaluated: number;
+  clientsEligible:  number;
+  clientsSucceeded: number;
+  clientsSkipped:   number;
+  clientsFailed:    number;
+  postsCreated:     number;
+  postsSkipped:     number;
+}
+
+// ── Post publishing ───────────────────────────────────────────────────────────
 
 async function publishDuePosts(): Promise<void> {
   // Query for posts whose scheduled time has passed and are still "scheduled"
@@ -98,16 +110,19 @@ async function publishDuePosts(): Promise<void> {
   }
 }
 
-// ── Timezone-aware next-generation timestamp ──────────────────────────────────
+// ── Timezone-aware next-generation timestamp ───────────────────────────────────
 // Calculates the next scheduled run for a tenant using their configured
-// generationDay (e.g. 'monday') and generationTime ('HH:MM') in America/Chicago.
+// generationDay (e.g. 'monday') and generationTime ('HH:MM') in the client's
+// own timezone (from clients.timezone). Defaults to America/Chicago if the
+// client timezone is absent or invalid (validated upstream by eligibility check).
 // Accounts for DST by computing the UTC offset from the Intl API at generation time.
 // Falls back to now + 7 days if the tenant has no day/time configured.
-function calculateNextGenerationAt(
+export function calculateNextGenerationAt(
   settings: { generationDay?: string | null; generationTime?: string | null },
   from: Date,
+  timezone?: string | null,
 ): Date {
-  const TZ = "America/Chicago";
+  const TZ = (timezone && isValidIanaTimezone(timezone)) ? timezone : "America/Chicago";
   const DAY_MS = 24 * 60 * 60 * 1000;
   const DAY_MAP: Record<string, number> = {
     sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
@@ -123,7 +138,7 @@ function calculateNextGenerationAt(
     return new Date(from.getTime() + 7 * DAY_MS);
   }
 
-  // Get the current weekday in Chicago
+  // Get the current weekday in the tenant's timezone
   const currentDowName = new Intl.DateTimeFormat("en-US", {
     timeZone: TZ, weekday: "long",
   }).format(from).toLowerCase();
@@ -132,137 +147,209 @@ function calculateNextGenerationAt(
   let daysAhead = (targetDayNum - currentDayNum + 7) % 7;
   if (daysAhead === 0) daysAhead = 7; // always at least one full cycle ahead
 
-  // Build the candidate date (target calendar day in Chicago)
+  // Build the candidate date (target calendar day in the tenant's timezone)
   const candidate = new Date(from.getTime() + daysAhead * DAY_MS);
 
-  // Determine the UTC offset in Chicago on that future date (handles DST correctly)
+  // Determine the UTC offset in the tenant's timezone on that future date (handles DST)
   const hourFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: TZ, hour: "numeric", hour12: false,
   });
   const candidateUtcH = candidate.getUTCHours();
-  const candidateChicagoH = parseInt(hourFmt.format(candidate), 10);
-  const offsetHrs = candidateChicagoH - candidateUtcH; // e.g. -5 (CDT) or -6 (CST)
+  const candidateLocalH = parseInt(hourFmt.format(candidate), 10);
+  const offsetHrs = candidateLocalH - candidateUtcH;
 
-  // Compute UTC time for targetH:targetM Chicago wall clock on that date
+  // Compute UTC time for targetH:targetM local wall clock on that date
   const utcTargetH = targetH - offsetHrs;
   candidate.setUTCHours(utcTargetH, targetM, 0, 0);
   return candidate;
 }
 
 // ── Autonomous Content Generation ─────────────────────────────────────────────
-// Runs on its own tick (every 30min). Finds tenants where:
+// Runs on its own tick (every 30min). Finds clients where ALL of:
+//   - clients.is_active = true
 //   - autopilot_enabled = 'true'
 //   - engine_paused IS DISTINCT FROM 'true'
 //   - next_generation_at IS NOT NULL AND <= now()
 //
-// For each due tenant:
-//   1. Computes the deterministic weeklyPlanId for the current ISO week.
-//   2. Checks idempotency — if posts with that weeklyPlanId already exist, skips.
-//   3. Calls POST /api/auto-content/generate via internal HTTP (scheduler auth bypass).
-//   4. Advances nextGenerationAt by 7 days.
+// Per-client pre-flight validates:
+//   - clients.timezone is a valid IANA identifier
+//   - service_areas parses to a non-empty array
+//   - topics parses to a non-empty array
+//
+// For each eligible tenant:
+//   1. Creates a deterministic weeklyPlanId (userId + ISO week).
+//   2. Checks idempotency — if posts with that planId exist for this user, skips.
+//   3. Calls POST /api/auto-content/generate via internal HTTP (scheduler auth).
+//   4. Advances nextGenerationAt by one cycle.
+//
+// Context (clientName, serviceAreas, topics, ctaText) is NOT sent in the body —
+// the generate route derives all context from the canonical DB-backed resolver.
+// This prevents stale scheduler-side data from overriding the tenant's current config.
+//
+// Trust boundary: the scheduler passes x-scheduler-settings-id (the UUID of the
+// settings row), NOT a userId. The generate route looks up the userId from the DB
+// after verifying autopilotEnabled='true', preventing user-ID impersonation attacks.
+//
+// Failure isolation: a try/catch wraps each tenant's generate call. One client
+// failure never blocks other clients in the same cycle.
 //
 // BB&B PILOT DEFAULT: autopilot_enabled = 'false' for all settings rows.
-// This function will find zero due tenants during the pilot and does nothing.
-// Enable by setting autopilot_enabled = 'true' in the tenant's settings row after
-// the first manually-reviewed weekly plan is approved by the client.
+// This function finds zero eligible tenants during the pilot and does nothing.
+// Enable per-tenant by setting autopilot_enabled = 'true' and nextGenerationAt.
 
-async function runAutonomousContentGeneration(): Promise<void> {
-  const now = new Date();
-
-  // Find tenants whose autonomous generation is enabled and due
-  const dueTenants = await db
-    .select()
+async function getEligibleClients(now: Date) {
+  return db
+    .select({
+      settings: autoContentSettingsTable,
+      client: {
+        id:         clientsTable.id,
+        userId:     clientsTable.userId,
+        clientName: clientsTable.clientName,
+        slug:       clientsTable.slug,
+        timezone:   clientsTable.timezone,
+        isActive:   clientsTable.isActive,
+      },
+    })
     .from(autoContentSettingsTable)
+    .innerJoin(clientsTable, eq(autoContentSettingsTable.userId, clientsTable.userId))
     .where(
       and(
+        eq(clientsTable.isActive, true),
         eq(autoContentSettingsTable.autopilotEnabled, "true"),
         sql`(${autoContentSettingsTable.enginePaused} IS NULL OR ${autoContentSettingsTable.enginePaused} != 'true')`,
         sql`${autoContentSettingsTable.nextGenerationAt} IS NOT NULL AND ${autoContentSettingsTable.nextGenerationAt} <= ${now}`,
       )
     );
+}
 
-  if (!dueTenants.length) return;
+async function runAutonomousContentGeneration(): Promise<SchedulerCycleSummary> {
+  const now = new Date();
 
-  logger.info({ count: dueTenants.length }, "[autopilot] autonomous generation tenants found");
+  const eligible = await getEligibleClients(now);
+
+  const summary: SchedulerCycleSummary = {
+    clientsEvaluated: eligible.length,
+    clientsEligible:  0,
+    clientsSucceeded: 0,
+    clientsSkipped:   0,
+    clientsFailed:    0,
+    postsCreated:     0,
+    postsSkipped:     0,
+  };
+
+  if (!eligible.length) return summary;
+
+  logger.info({ count: eligible.length }, "[autopilot] autonomous generation tenants found");
 
   const port = parseInt(process.env.PORT ?? "8080", 10);
   const base  = `http://127.0.0.1:${port}`;
 
-  for (const settings of dueTenants) {
-    const weeklyPlanId = createWeeklyPlanId(settings.userId, now);
+  for (const { settings, client } of eligible) {
+    // Use only the first 8 chars of userId in logs — never log the full Clerk user ID.
+    const logCtx = {
+      userId:     settings.userId.slice(0, 8),
+      clientName: client.clientName,
+      slug:       client.slug,
+    };
 
-    // ── Idempotency check ────────────────────────────────────────────────────
-    // Repeated scheduler ticks must not create a second plan for the same week.
-    const [existing] = await db
-      .select({ cnt: sql<number>`count(*)::int` })
-      .from(socialPostsTable)
-      .where(eq(socialPostsTable.weeklyPlanId, weeklyPlanId));
-
-    if ((existing?.cnt ?? 0) > 0) {
-      logger.info(
-        { userId: settings.userId, weeklyPlanId, cnt: existing?.cnt },
-        "[autopilot] weekly plan already exists — skipping (idempotent)",
+    // ── Per-client eligibility pre-flight ──────────────────────────────────
+    // The DB query already filtered is_active, autopilot_enabled, engine_paused,
+    // and next_generation_at. Remaining checks: timezone validity and non-empty
+    // content config (service_areas and topics).
+    const eligibilityResult = evaluateClientEligibility({ settings, client, now });
+    if (!eligibilityResult.eligible) {
+      logger.warn(
+        { ...logCtx, skipReason: eligibilityResult.skipReason },
+        "[autopilot] tenant skipped",
       );
-      // Advance nextGenerationAt if it's still stuck in the past after an earlier partial run
-      const nextAt = calculateNextGenerationAt(settings, now);
-      await db.update(autoContentSettingsTable)
-        .set({ nextGenerationAt: nextAt, updatedAt: new Date() })
-        .where(eq(autoContentSettingsTable.userId, settings.userId));
+      summary.clientsSkipped++;
       continue;
     }
 
-    // ── Generate weekly plan via internal HTTP call ──────────────────────────
-    logger.info({ userId: settings.userId, weeklyPlanId }, "[autopilot] generating weekly plan");
+    const weeklyPlanId = createWeeklyPlanId(settings.userId, now);
+    const runCtx = { ...logCtx, weeklyPlanId };
 
-    const serviceAreas = parseJson<string[]>(settings.serviceAreas, DEFAULT_SERVICE_AREAS);
-    const topics       = parseJson<string[]>(settings.topics, getDefaultTopics());
-    const platforms    = parseJson<string[]>(settings.platforms, ["facebook", "google"]);
+    // ── Idempotency check — userId-scoped ─────────────────────────────────
+    // Guards against repeated scheduler ticks within the same ISO week.
+    // The query is scoped by BOTH userId and weeklyPlanId for explicit isolation.
+    const [existing] = await db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(socialPostsTable)
+      .where(and(
+        eq(socialPostsTable.userId, settings.userId),
+        eq(socialPostsTable.weeklyPlanId, weeklyPlanId),
+      ));
+
+    if ((existing?.cnt ?? 0) > 0) {
+      logger.info(
+        { ...runCtx, cnt: existing?.cnt },
+        "[autopilot] weekly plan already exists — skipping (idempotent)",
+      );
+      // Advance nextGenerationAt so the tenant doesn't stay stuck in the past.
+      const nextAt = calculateNextGenerationAt(settings, now, client.timezone);
+      await db.update(autoContentSettingsTable)
+        .set({ nextGenerationAt: nextAt, updatedAt: new Date() })
+        .where(eq(autoContentSettingsTable.userId, settings.userId));
+      summary.clientsSkipped++;
+      summary.postsSkipped += existing?.cnt ?? 0;
+      continue;
+    }
+
+    summary.clientsEligible++;
+    logger.info(runCtx, "[autopilot] tenant run started");
 
     try {
-      // SECURITY: Pass the settings row ID (not userId) so the generate route
-      // can derive the tenant identity from the DB-verified settings record.
-      // Never pass x-scheduler-user-id — that header is an impersonation vector.
+      // SECURITY — scheduler trust boundary:
+      //   x-scheduler-settings-id: UUID of the settings row (DB-verified identity).
+      //   x-scheduler-secret: constant-time compared on the generate route.
+      // The generate route derives ALL tenant context (clientName, serviceAreas,
+      // topics, ctaText, approvalMode, etc.) from its own DB-backed resolver.
+      // We do NOT send these in the body — avoids stale-data contamination and
+      // ensures the generate route's canonical resolver is always authoritative.
       const res = await fetch(`${base}/api/auto-content/generate`, {
         method:  "POST",
         headers: {
-          "Content-Type":             "application/json",
-          "x-scheduler-secret":       SCHEDULER_SECRET,
-          "x-scheduler-settings-id":  settings.id,
+          "Content-Type":            "application/json",
+          "x-scheduler-secret":      SCHEDULER_SECRET,
+          "x-scheduler-settings-id": settings.id,
         },
         body: JSON.stringify({
-          count:        7,            // 7-day weekly plan
-          weeklyPlanId,               // idempotency key passed through to inserts
-          schedulerMode: "weekly_plan", // signals the route to use selectWeeklyServices
-          serviceAreas,
-          topics,
-          platforms,
-          ctaText:    settings.ctaText    ?? "Call Now — (251) 324-9090",
-          clientName: settings.clientName ?? "Bed Bugs & Beyond",
+          count:         7,            // 7-post weekly plan
+          weeklyPlanId,                // idempotency key — passed through to inserts
+          schedulerMode: "weekly_plan", // triggers category-aware selectWeeklySlots()
         }),
       });
 
       const body = await res.json() as Record<string, unknown>;
 
       if (res.ok) {
-        logger.info(
-          { userId: settings.userId, weeklyPlanId, created: body.created },
-          "[autopilot] weekly plan generated successfully",
-        );
-        const nextAt = calculateNextGenerationAt(settings, now);
+        const created = typeof body.created === "number" ? body.created : 0;
+        logger.info({ ...runCtx, created }, "[autopilot] tenant run completed");
+        summary.clientsSucceeded++;
+        summary.postsCreated += created;
+        const nextAt = calculateNextGenerationAt(settings, now, client.timezone);
         await db.update(autoContentSettingsTable)
           .set({ lastGeneratedAt: now, nextGenerationAt: nextAt, updatedAt: new Date() })
           .where(eq(autoContentSettingsTable.userId, settings.userId));
       } else {
         logger.error(
-          { userId: settings.userId, weeklyPlanId, httpStatus: res.status, body },
-          "[autopilot] weekly plan generation failed",
+          { ...runCtx, httpStatus: res.status, body },
+          "[autopilot] tenant run failed",
         );
+        summary.clientsFailed++;
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error({ userId: settings.userId, weeklyPlanId, err: msg }, "[autopilot] generation request error");
+      logger.error({ ...runCtx, err: msg }, "[autopilot] tenant run error");
+      summary.clientsFailed++;
     }
   }
+
+  if (summary.clientsEvaluated > 0 || summary.clientsEligible > 0) {
+    logger.info(summary, "[autopilot] cycle complete");
+  }
+
+  return summary;
 }
 
 // ── Missed-call recovery ──────────────────────────────────────────────────────
@@ -327,7 +414,9 @@ async function recoverMissedCalls(): Promise<void> {
   }
 }
 
-// ── Exports ────────────────────────────────────────────────────────────────────
+// ── Re-exports for test access ─────────────────────────────────────────────────
+
+export { evaluateClientEligibility } from "@workspace/db";
 
 export function startScheduler(): void {
   logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m");

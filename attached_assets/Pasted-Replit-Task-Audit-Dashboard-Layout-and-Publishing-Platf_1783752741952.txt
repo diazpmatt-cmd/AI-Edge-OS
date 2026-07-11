@@ -1,0 +1,125 @@
+Replit Task: Audit Dashboard Layout and Publishing Platform Architecture
+
+Goal:
+
+Determine the smallest implementation needed to support:
+
+1. Always-visible publishing platforms
+2. User-customizable dashboard tile ordering
+
+This is an AUDIT-ONLY task.
+
+Do not modify code.
+Do not install packages.
+Do not create components.
+Do not change routes.
+Do not create database tables.
+Do not create checkpoints unless automatically required.
+
+Keep the audit focused and credit-efficient.
+
+Inspect:
+
+PART A — Publishing Platform Architecture
+
+1. Publishing Center
+
+Determine:
+
+- how supported platforms are currently defined
+- whether platforms are hardcoded or data-driven
+- where queue buttons are generated
+- how connected vs disconnected providers are filtered
+- whether YouTube already exists but is simply excluded
+- whether TikTok, LinkedIn and future providers can be rendered without code duplication
+
+2. Content Autopilot
+
+Determine:
+
+- how platform tabs are built
+- whether they are generated from configuration or hardcoded
+- whether the UI can naturally support additional platforms
+
+3. Connected Accounts
+
+Determine whether a reusable platform-definition model already exists.
+
+Examples:
+
+- platform registry
+- provider configuration
+- provider metadata
+- supported platform list
+
+If one exists, recommend using it everywhere instead of duplicating platform lists.
+
+PART B — Dashboard Layout
+
+Inspect:
+
+- Command Center tile rendering
+- Sidebar navigation
+- Tile definitions
+- Navigation configuration
+- Whether tiles already come from an array
+- Whether ordering is already configurable
+
+Determine whether:
+
+- drag-and-drop can be added by reordering an existing array
+- tile order is currently hardcoded
+- user preferences already exist
+- layout persistence already exists
+- a settings/profile table already stores dashboard preferences
+
+PART C — Existing Libraries
+
+Determine whether the project already includes a drag-and-drop library.
+
+Examples:
+
+- dnd-kit
+- react-beautiful-dnd
+- sortablejs
+- other maintained alternatives
+
+Do not install anything.
+
+PART D — Persistence
+
+Determine the best existing place to save tile order.
+
+Examples:
+
+- user settings
+- profile table
+- JSON preferences
+- local storage
+- Clerk metadata
+
+Recommend the smallest change consistent with the existing architecture.
+
+Deliverables:
+
+A. Publishing platform audit
+
+B. Dashboard layout audit
+
+C. Existing reusable platform model
+
+D. Existing drag-and-drop capability
+
+E. Recommended persistence location
+
+F. Lowest-credit implementation plan
+
+Classify implementation effort:
+
+1. Very small
+2. Small
+3. Medium
+4. Large
+
+Do not make code changes.
+Stop after producing the audit.

@@ -1,0 +1,239 @@
+Replit Task: Audit Existing Platform Publishing UI and Command Center Tile Reordering
+
+Goal:
+
+Determine what already exists and identify the smallest implementation required for:
+
+1. Showing every supported social platform in Publishing Center and Content Autopilot, including platforms that are disconnected, pending approval, or coming soon.
+
+2. Allowing the user to drag and reorder Command Center tiles and persist the preferred order.
+
+This is an AUDIT-ONLY task.
+
+Do not modify code.
+Do not install packages.
+Do not create components.
+Do not create routes.
+Do not add database tables.
+Do not change styling.
+Do not run code generation.
+Do not create a checkpoint unless automatically required.
+
+Keep this investigation targeted and credit-efficient.
+
+PART A — Publishing Center
+
+Inspect the actual Publishing Center page and report:
+
+1. File path and route.
+
+2. How platform buttons/cards are currently defined.
+
+3. Whether the platform list is:
+   - hardcoded
+   - derived from connected accounts
+   - filtered to connected providers only
+   - generated from a shared provider configuration
+
+4. Why the following platforms are not currently shown:
+   - YouTube
+   - TikTok
+   - LinkedIn
+   - Apple Business, if publishing support is planned
+   - any other supported provider
+
+5. Whether YouTube publishing or queue logic already exists anywhere in the codebase.
+
+6. Whether TikTok publishing or queue logic already exists but is disabled pending approval.
+
+7. Whether disconnected platforms can safely be displayed without enabling publishing actions.
+
+8. Existing social-post data model fields used to represent platforms.
+
+Confirm whether the canonical field is:
+
+platforms: string[]
+
+9. Existing queue and publish endpoints for every provider.
+
+Create a provider matrix containing:
+
+- provider
+- UI currently visible
+- connection status available
+- content generation available
+- queue endpoint available
+- publishing endpoint available
+- production-ready
+- pending approval
+- coming soon
+- missing entirely
+
+PART B — Content Autopilot
+
+Inspect the Content Autopilot page and report:
+
+1. File path and route.
+
+2. How the platform tabs and queue buttons are defined.
+
+3. Whether Facebook, Instagram, and Google Business Profile are hardcoded.
+
+4. Whether the current weekly-content API generates:
+   - Facebook content
+   - Instagram content
+   - Google Business Profile content
+   - YouTube descriptions, titles, or Shorts concepts
+   - TikTok captions or video concepts
+   - LinkedIn content
+
+5. Whether content for additional platforms already exists in the backend response but is not displayed.
+
+6. Whether queue actions for YouTube and TikTok already exist elsewhere and could be reused.
+
+7. Whether a shared platform selector/card component already exists.
+
+PART C — Shared Platform Registry
+
+Search for any existing centralized provider definition or registry, such as:
+
+- social platform configuration
+- provider metadata
+- integration registry
+- connection card definitions
+- publishing platform list
+- platform icons
+- provider colors
+- provider display names
+- capability flags
+
+Report:
+
+- file paths
+- fields available
+- pages currently using it
+- whether it can become the canonical registry for:
+  - Connected Accounts
+  - Publishing Center
+  - Content Autopilot
+  - System Diagnostics
+
+Do not create a new registry during this audit.
+
+PART D — Command Center Tile Layout
+
+Inspect the Command Center sidebar/control panel shown in the screenshots.
+
+Report:
+
+1. Exact file path and component.
+
+2. How tiles are currently defined.
+
+3. Whether the tile list is:
+   - an array
+   - hardcoded JSX
+   - generated from route configuration
+   - shared with another navigation component
+
+4. Whether changing array order would safely change the visible tile order.
+
+5. Whether the current active tile state depends on array position.
+
+6. Whether hidden, coming-soon, or role-based tiles exist.
+
+7. Whether desktop and mobile navigation use the same tile definitions.
+
+8. Whether drag handles, edit mode, or layout controls already exist.
+
+PART E — Existing Drag-and-Drop Libraries
+
+Inspect package.json and lockfiles.
+
+Report whether any of these or equivalent libraries are already installed:
+
+- @dnd-kit/core
+- @dnd-kit/sortable
+- react-beautiful-dnd
+- @hello-pangea/dnd
+- sortablejs
+- react-grid-layout
+- framer-motion reorder utilities
+
+Do not install anything.
+
+Recommend the safest existing option.
+
+PART F — Existing Preference Storage
+
+Inspect existing user, profile, settings, preferences, and Clerk metadata patterns.
+
+Determine whether tile order could be persisted in:
+
+- an existing user preferences table
+- an existing JSON settings column
+- Clerk public/private metadata
+- browser localStorage
+- another existing settings service
+
+Report the best choice for:
+
+1. Immediate lowest-cost implementation.
+2. Long-term cross-device persistence.
+
+Do not create storage during this audit.
+
+PART G — Consolidation Opportunities
+
+Determine whether the same platform definitions are independently duplicated across:
+
+- Connected Accounts
+- Publishing Center
+- Content Autopilot
+- System Diagnostics
+- Morning Brief
+
+Report which implementation should be the canonical source.
+
+Do not merge anything yet.
+
+Deliverables:
+
+A. Publishing Center findings
+
+B. Content Autopilot findings
+
+C. Provider capability matrix
+
+D. Existing shared platform registry
+
+E. Command Center tile architecture
+
+F. Installed drag-and-drop capability
+
+G. Existing preference-storage options
+
+H. Redundancy findings
+
+I. Lowest-credit implementation recommendation
+
+Classify each request separately:
+
+Always-visible platform controls:
+1. Already supported but hidden
+2. Very small extension
+3. Moderate extension
+4. Requires new publishing infrastructure
+
+Drag-and-drop tile ordering:
+1. Already supported
+2. Very small extension
+3. Moderate extension
+4. Requires new persistence architecture
+
+J. Exact files likely to change
+
+K. Recommended implementation phases
+
+Stop after reporting findings.
+Do not make any code changes.

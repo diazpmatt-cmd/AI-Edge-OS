@@ -5,3 +5,4 @@
 - [Object Storage wildcard routes](object-storage-wildcard-routes.md) — Express with newer path-to-regexp requires named wildcards: use `/*paramName` not `/*`.
 - [GorillaDesk API](gorilladesk-api.md) — Public API limited to /company, /users, /customers only; no jobs/invoices/payments endpoints exist.
 - [Call Intelligence DB schema](call-intelligence-schema.md) — calls + sms_conversations tables created via raw SQL (drizzle push blocked by pre-existing review_platform_stats unique constraint conflict); API at /api/call-intelligence sources BOTH tables for full historical coverage.
+- [Social Posts API shape](social-posts-api-shape.md) — API returns `platforms: string[]` (plural array), never `platform: string`; use `p.platforms?.[0] ?? ""` for primary platform display.

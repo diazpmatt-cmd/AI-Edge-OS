@@ -114,7 +114,7 @@ interface TodayCalls {
   metrics: { total_calls: number; missed_calls: number; recovery_rate: number | null };
 }
 interface LeadsResp   { stats: { total: number; active: number; thisMonth: number } }
-interface SocialPost  { id: string; platform: string; status: string; content: string; publishedAt: string | null; createdAt: string }
+interface SocialPost  { id: string; platforms: string[]; status: string; content: string; publishedAt: string | null; createdAt: string }
 interface ReviewsResp { requests: Array<{ id: string; status: string | null; sentAt: string | null }> }
 interface SyncResp    { realtimeStats: { revenueMatched: number; totalLeads: number; wonLeads: number } }
 
@@ -804,7 +804,7 @@ export default function BBBExecutionPage() {
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${weekPosts.length}, 1fr)`, gap: 10 }}>
               {weekPosts.map(p => {
                 const ss   = postStatusStyle(p.status);
-                const icon = platformIcon(p.platform);
+                const icon = platformIcon(p.platforms?.[0] ?? "");
                 const date = new Date(p.publishedAt ?? p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
                 const preview = (p.content ?? "").slice(0, 80) + ((p.content?.length ?? 0) > 80 ? "…" : "");
                 return (
@@ -814,7 +814,7 @@ export default function BBBExecutionPage() {
                   }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 4 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: B.silver, textTransform: "capitalize" as const, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                        {p.platform.replace(/_/g, " ")}
+                        {(p.platforms?.[0] ?? "").replace(/_/g, " ")}
                       </span>
                       <span style={{ fontSize: 7.5, fontWeight: 800, color: ss.color, background: ss.bg, border: `1px solid ${ss.color}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>
                         {ss.label}

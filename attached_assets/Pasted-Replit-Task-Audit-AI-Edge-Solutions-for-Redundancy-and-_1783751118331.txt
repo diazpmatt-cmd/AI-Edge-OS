@@ -1,0 +1,319 @@
+Replit Task: Audit AI Edge Solutions for Redundancy and Consolidation Opportunities
+
+Goal:
+Identify duplicated, overlapping, outdated, or fragmented functionality across AI Edge Solutions so we can consolidate the platform safely.
+
+This is an AUDIT-ONLY task.
+
+Do not modify code.
+Do not delete files.
+Do not move routes.
+Do not rename pages.
+Do not run code generation.
+Do not change the database.
+Do not create new components.
+Do not create a checkpoint unless automatically required.
+
+Keep the audit focused and credit-efficient.
+
+Primary areas to inspect:
+
+1. Connected Accounts
+2. System Diagnostics
+3. Morning Brief
+4. Mission Control
+5. Command Center
+6. Growth Execution
+7. BB&B Ops Center
+8. Publishing Center
+9. Content Autopilot
+10. Media Engine
+11. Reviews Engine
+12. Lead Recovery AI
+13. AI Receptionist
+14. Apollos
+15. Asset Library
+16. Backend API routes
+17. Shared frontend components
+18. Shared hooks and utilities
+19. OpenAPI schemas and generated clients
+20. Database tables and duplicated stored data
+
+Audit categories:
+
+A. Duplicate UI
+
+Find pages or components that show substantially the same information, such as:
+
+- integration connection status
+- provider health
+- OAuth status
+- publishing readiness
+- recent errors
+- lead statistics
+- call statistics
+- review statistics
+- business health scores
+- quick actions
+- system logs
+
+For each overlap, identify:
+
+- file paths
+- pages involved
+- whether the UI is duplicated or merely reused
+- which implementation appears to be the strongest source of truth
+- whether the overlap is intentional
+
+B. Duplicate backend logic
+
+Search for repeated logic involving:
+
+- provider token validation
+- OAuth scope checks
+- Google cooldown handling
+- health checks
+- Telnyx status checks
+- YouTube permission checks
+- social connection status
+- error sanitization
+- user authentication
+- API response normalization
+- pagination
+- retry logic
+- health score calculations
+
+Identify where similar logic exists in multiple route or service files.
+
+C. Duplicate API endpoints
+
+Find endpoints that return similar or overlapping data.
+
+For each potential duplicate, report:
+
+- route
+- response purpose
+- callers
+- differences
+- whether one could become the canonical endpoint
+- migration risk
+
+Do not recommend removal unless callers are fully identified.
+
+D. Duplicate frontend data fetching
+
+Find pages that request the same endpoints independently or repeatedly.
+
+Check for:
+
+- multiple 30-second polling loops
+- duplicate TanStack Query keys
+- multiple custom fetch implementations
+- repeated provider requests
+- identical dashboard statistics fetched separately
+- pages that could consume a shared query or summary endpoint
+
+E. Duplicate types and schemas
+
+Find manual TypeScript interfaces that duplicate:
+
+- OpenAPI schemas
+- generated API types
+- Drizzle models
+- Zod schemas
+- shared provider status types
+- health status types
+- lead, social post, review, call, and integration response shapes
+
+Report drift risks such as singular/plural mismatches or wrapped-response mismatches.
+
+F. Duplicate status systems
+
+Identify all status vocabularies and badge systems.
+
+Examples:
+
+- healthy
+- connected
+- ready
+- operational
+- warning
+- failed
+- error
+- disconnected
+- not configured
+- coming soon
+- pending review
+
+Determine whether the platform has multiple incompatible status models.
+
+Recommend a canonical normalized status layer if needed, but do not implement it.
+
+G. Navigation overlap
+
+Identify pages or tiles whose responsibilities are unclear or overlapping.
+
+Examples to inspect closely:
+
+- Mission Control vs Command Center
+- Morning Brief vs Mission Control
+- Connected Accounts vs System Diagnostics
+- Growth Execution vs BB&B Ops Center
+- Content Autopilot vs Publishing Center
+- Media Engine vs Asset Library
+- Reviews Engine vs Growth Execution
+- Lead Recovery AI vs AI Receptionist
+
+For each pair, explain:
+
+- current responsibility
+- overlap
+- whether both should remain
+- whether one should become a subview, tab, or drill-down of the other
+
+H. Duplicate database storage
+
+Inspect schema and raw SQL tables for overlapping data, including:
+
+- social connection metadata
+- diagnostics history
+- calls
+- SMS conversations
+- leads
+- review stats
+- publishing status
+- provider errors
+- integration health
+- cached provider metadata
+
+Identify cases where the same state is stored in multiple places.
+
+Do not propose deleting data without a migration plan.
+
+I. Dead or obsolete code
+
+Identify:
+
+- unused pages
+- unused routes
+- unused components
+- old debug panels
+- deprecated endpoints
+- duplicate experimental implementations
+- stale feature flags
+- old model references
+- outdated OAuth flows
+- abandoned mobile or sandbox code accidentally included in production
+
+Only report items with evidence of no active callers or imports.
+
+J. Debug and production separation
+
+Inspect whether development-only tools are mixed into production UI, including:
+
+- OAuth debug panels
+- simulator controls
+- raw logs
+- test upload buttons
+- callback debug logs
+- provider credential setup panels
+- diagnostic developer views
+
+Recommend whether these should remain visible, be admin-only, be development-only, or move into a dedicated Developer Tools section.
+
+Deliverables:
+
+1. Executive summary
+
+Classify the current platform as:
+
+- Low redundancy
+- Moderate redundancy
+- High redundancy
+- Fragmented and needs architectural consolidation
+
+2. Redundancy inventory
+
+For each finding, include:
+
+- category
+- files or routes involved
+- description
+- severity
+- confidence level
+- risk of consolidation
+
+3. Consolidation matrix
+
+Use classifications:
+
+- Keep as-is
+- Reuse shared component
+- Merge
+- Make one canonical source
+- Convert to subview/tab
+- Move to developer tools
+- Deprecate later
+- Safe to remove
+- Needs more investigation
+
+4. Canonical ownership recommendations
+
+Recommend which page, service, endpoint, type, or component should own each major function.
+
+Examples:
+
+- integration connection management
+- integration health
+- business summary metrics
+- publishing readiness
+- provider errors
+- diagnostics history
+- lead statistics
+- call intelligence
+- review performance
+
+5. Highest-value low-risk opportunities
+
+List the five best consolidation opportunities that:
+
+- reduce maintenance
+- reduce API calls
+- reduce user confusion
+- reduce Replit credit usage
+- have low regression risk
+
+6. High-risk areas to leave alone
+
+Identify systems that may look duplicated but should not be merged yet.
+
+7. Recommended phased plan
+
+Phase 1:
+Small, low-risk cleanup only.
+
+Phase 2:
+Shared types, hooks, status models, and API consolidation.
+
+Phase 3:
+Navigation and page-level consolidation.
+
+Phase 4:
+Deprecation and removal of obsolete code after caller verification.
+
+8. Estimated scope for each phase:
+
+- very small
+- small
+- medium
+- large
+
+Important rules:
+
+- Search with targeted grep and import tracing first.
+- Read only relevant files.
+- Do not run the entire application unless necessary.
+- Do not make any code changes.
+- Do not assume two features are redundant simply because they look similar.
+- Distinguish between intentional summary views and true duplication.
+- Stop after producing the audit report.

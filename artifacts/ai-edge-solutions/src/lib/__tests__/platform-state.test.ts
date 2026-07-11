@@ -69,6 +69,23 @@ describe("TikTok safety — pending approval regardless of connection state", ()
   });
 });
 
+// ── 4b. YouTube resolves to ready/disconnected (operational, not pending) ─────────
+describe("YouTube — operational, gated by connection (not app approval)", () => {
+  const youtube = getSocialProvider("youtube");
+
+  it("youtube registry status is operational", () => {
+    expect(youtube.status).toBe("operational");
+  });
+
+  it("youtube resolves to 'ready' when connected", () => {
+    expect(resolvePlatformUIState(youtube, true)).toBe<PlatformUIState>("ready");
+  });
+
+  it("youtube resolves to 'disconnected' when not connected", () => {
+    expect(resolvePlatformUIState(youtube, false)).toBe<PlatformUIState>("disconnected");
+  });
+});
+
 // ── 5. LinkedIn shows Coming Soon and is not publish-capable ──────────────────
 describe("LinkedIn safety — coming soon, no publish capability", () => {
   const linkedin = getSocialProvider("linkedin");
@@ -95,31 +112,25 @@ describe("LinkedIn safety — coming soon, no publish capability", () => {
   });
 });
 
-// ── 6. YouTube is visible with Pending Approval (platform review in progress) ──
-// YouTube backend pipeline is implemented and publish=true, but the registry
-// status is pending_approval because platform app review is not yet complete.
-// It is visible in the UI but shows "Pending Approval" — not selectable for live publishing.
-describe("YouTube — visible with Pending Approval state", () => {
+// ── 6. YouTube is operational (OAuth + publish handler fully implemented) ─────
+// Connection state (not app review) gates publishing. Resolves to ready when connected.
+describe("YouTube — operational, gated by connection", () => {
   const youtube = getSocialProvider("youtube");
 
-  it("youtube registry status is pending_approval", () => {
-    expect(youtube.status).toBe("pending_approval");
+  it("youtube registry status is operational", () => {
+    expect(youtube.status).toBe("operational");
   });
 
   it("youtube publish capability flag is true (backend handler exists)", () => {
     expect(youtube.capabilities.publish).toBe(true);
   });
 
-  it("youtube resolves to 'pending' even when connection is present", () => {
-    expect(resolvePlatformUIState(youtube, true)).toBe<PlatformUIState>("pending");
+  it("youtube resolves to 'ready' when connected", () => {
+    expect(resolvePlatformUIState(youtube, true)).toBe<PlatformUIState>("ready");
   });
 
-  it("youtube resolves to 'pending' when not connected", () => {
-    expect(resolvePlatformUIState(youtube, false)).toBe<PlatformUIState>("pending");
-  });
-
-  it("youtube is not operational (app review gate prevents publishing)", () => {
-    expect(youtube.status).not.toBe("operational");
+  it("youtube resolves to 'disconnected' when not connected", () => {
+    expect(resolvePlatformUIState(youtube, false)).toBe<PlatformUIState>("disconnected");
   });
 });
 

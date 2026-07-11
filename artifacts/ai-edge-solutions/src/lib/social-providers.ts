@@ -110,8 +110,8 @@ export const SOCIAL_PROVIDERS: SocialProvider[] = [
     color: "#FF0000",
     gradient: "linear-gradient(135deg, #FF0000, #CC0000)",
     connectionPath: "/admin/connections",
-    // publish handler exists; google.com sensitive scope requires app verification
-    status: "pending_approval",
+    // OAuth + publish handler fully implemented; connection gate controls publish
+    status: "operational",
     capabilities: {
       connect: true, generateText: true, generateImage: false, generateVideo: false,
       queue: true,   // content drafts are queued; auto-publish pending scope approval
@@ -225,3 +225,10 @@ export function getConnectedAccountProviders(): SocialProvider[] {
 export function providerSupports(id: SocialProviderId, capability: keyof ProviderCapabilities): boolean {
   return getSocialProvider(id).capabilities[capability];
 }
+
+// ── Runtime-derived platform sets ─────────────────────────────────────────────────────────────────────────────────
+// All providers with queue:true appear here regardless of status.
+// Operational → auto-publishes from queue. Pending/coming_soon → draft saved, manual publish.
+export const QUEUEABLE_PROVIDERS: SocialProvider[] = SOCIAL_PROVIDERS.filter(
+  p => p.capabilities.queue,
+);

@@ -2,12 +2,12 @@
 // V2: queue posts as real backend drafts via POST /api/social-posts.
 // WorkflowNav connects this page into the full BB&B Growth OS workflow.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
 import { WorkflowNav } from "@/components/WorkflowNav";
 import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
-import { SOCIAL_PROVIDERS, type SocialProviderId, type SocialProvider } from "@/lib/social-providers";
+import { SOCIAL_PROVIDERS, QUEUEABLE_PROVIDERS, type SocialProviderId } from "@/lib/social-providers";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -46,6 +46,18 @@ interface ContentTemplate {
   nextdoor:  string;
   imageIdea: string;
   cta:       string;
+}
+
+type MediaType = "image" | "video" | "carousel" | "text" | "pin" | "article";
+
+interface ContentProfile {
+  mediaType:    MediaType;
+  maxLength:    string;
+  bestFormat:   string;
+  frequency:    string;
+  ctaTip:       string;
+  hashtagCount: string;
+  note:         string;
 }
 
 interface QueuedPost {
@@ -196,13 +208,6 @@ const TEMPLATES: ContentTemplate[] = [
   },
 ];
 
-// ── Runtime-derived platform sets (canonical registry — no hardcoded arrays) ──
-// All providers with queue:true appear here regardless of status.
-// Operational → auto-publishes from queue. Pending/coming_soon → draft saved, manual publish.
-const QUEUEABLE_PROVIDERS: SocialProvider[] = SOCIAL_PROVIDERS.filter(
-  p => p.capabilities.queue,
-);
-
 const INITIAL_STATUS: Partial<Record<SocialProviderId, PlatformStatus>> = Object.fromEntries(
   QUEUEABLE_PROVIDERS.map(p => [p.id, "not-queued" as PlatformStatus]),
 );
@@ -216,6 +221,56 @@ const PLATFORM_NOTE: Partial<Record<SocialProviderId, string>> = {
   pinterest: "Content saved as draft. Pinterest API connection coming soon — copy and post manually to your Pinterest Business account.",
   nextdoor:  "Content saved as draft. Nextdoor API integration coming soon — copy and post manually to your Nextdoor Business page.",
 };
+
+// ── Content Profiles — per-platform media + format guidance ────────────────────────────────────────────
+const CONTENT_PROFILES: Record<SocialProviderId, ContentProfile> = {
+  facebook: {
+    mediaType: "image", maxLength: "400–500 chars", bestFormat: "Photo + text post",
+    frequency: "3–5x/week", ctaTip: "Include a direct phone number or link every time",
+    hashtagCount: "3–5", note: "Photos outperform text-only. Respond to comments within 24h.",
+  },
+  instagram: {
+    mediaType: "image", maxLength: "125–220 chars", bestFormat: "Square photo + caption",
+    frequency: "3–5x/week", ctaTip: "Use 5–15 local hashtags and tag your city",
+    hashtagCount: "5–15", note: "Before/after photos perform best. Post Stories daily for reach.",
+  },
+  google_business: {
+    mediaType: "image", maxLength: "1,500 chars", bestFormat: "Photo + update post",
+    frequency: "1–2x/week", ctaTip: "Include service-area cities in every post",
+    hashtagCount: "0–2", note: "Add a photo to every post. Use keywords like 'bed bug treatment Baldwin County'.",
+  },
+  youtube: {
+    mediaType: "video", maxLength: "4,000 chars", bestFormat: "Video + description",
+    frequency: "1–2x/month", ctaTip: "End every video with a clear phone number CTA",
+    hashtagCount: "5–8", note: "Use as full video description. Add timestamps and local keywords for SEO.",
+  },
+  tiktok: {
+    mediaType: "video", maxLength: "100–150 chars", bestFormat: "Short-form video + caption",
+    frequency: "3–7x/week", ctaTip: "Hook viewers in the first second; keep CTAs short",
+    hashtagCount: "3–5 trending", note: "Keep captions punchy. Use trending + niche hashtags.",
+  },
+  linkedin: {
+    mediaType: "article", maxLength: "1,500 chars", bestFormat: "Text post or article",
+    frequency: "2–3x/week", ctaTip: "Target property managers and vacation rental hosts",
+    hashtagCount: "3–5", note: "Professional tone. Data-driven content performs best. Connect with rental networks.",
+  },
+  pinterest: {
+    mediaType: "pin", maxLength: "500 chars", bestFormat: "Vertical image (2:3) + description",
+    frequency: "5–10 pins/week", ctaTip: "Keyword-rich descriptions; link pins to your website",
+    hashtagCount: "3–5", note: "Vertical images (2:3 ratio) perform best. Create a 'Pest Prevention Tips' board.",
+  },
+  nextdoor: {
+    mediaType: "text", maxLength: "300 chars", bestFormat: "Conversational update",
+    frequency: "1–2x/week", ctaTip: "Neighbor-to-neighbor tone; no hard sell",
+    hashtagCount: "0", note: "Avoid hard-sell language. Share seasonal alerts & local tips. Respond quickly.",
+  },
+};
+
+const MEDIA_ICON: Record<MediaType, string> = {
+  image: "🖼️", video: "🎬", carousel: "🖼️", text: "📝", pin: "📌", article: "📄",
+};
+
+const SELECTION_STORAGE_KEY = "ai-edge:autopilot-selection:v1";
 
 const STATUS_META: Record<PlatformStatus, { dot: string; label: string; color: string }> = {
   "not-queued": { dot: "#475569", label: "Not queued",        color: "#64748B" },
@@ -263,6 +318,21 @@ export default function BBBContentAutopilotPage() {
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
 
+  // Platform selection — persisted in localStorage
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<SocialProviderId>>(() => {
+    try {
+      const raw = localStorage.getItem(SELECTION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        const valid = parsed.filter((id): id is SocialProviderId =>
+          QUEUEABLE_PROVIDERS.some(p => p.id === id),
+        );
+        if (valid.length > 0) return new Set(valid);
+      }
+    } catch { /* ignore corrupt storage */ }
+    return new Set(QUEUEABLE_PROVIDERS.map(p => p.id));
+  });
+
   // V2: real backend draft creation
   const authFetch   = useApiFetch();
   const createDraft = useMutation({
@@ -280,11 +350,30 @@ export default function BBBContentAutopilotPage() {
 
   const generated = templateIdx !== null ? TEMPLATES[templateIdx] : null;
 
-  // ── Derived status values (queueable platforms only) ──
-  const anyReady   = QUEUEABLE_PROVIDERS.some(p => platformStatus[p.id] === "ready");
-  const anyFailed  = QUEUEABLE_PROVIDERS.some(p => platformStatus[p.id] === "failed");
-  const allReady   = QUEUEABLE_PROVIDERS.every(p => platformStatus[p.id] === "ready");
-  const noneQueued = QUEUEABLE_PROVIDERS.every(p => platformStatus[p.id] === "not-queued");
+  // ── Selection helpers ──────────────────────────────────────────────────────────────────────────────
+  const isSelected = (id: SocialProviderId) => selectedPlatforms.has(id);
+  const togglePlatform = (id: SocialProviderId) => {
+    setSelectedPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => setSelectedPlatforms(new Set(QUEUEABLE_PROVIDERS.map(p => p.id)));
+  const deselectAll = () => setSelectedPlatforms(new Set());
+
+  // Persist selection changes to localStorage
+  useEffect(() => {
+    localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify([...selectedPlatforms]));
+  }, [selectedPlatforms]);
+
+  // ── Derived status values (SELECTED platforms only) ──
+  const selectedQueueable = QUEUEABLE_PROVIDERS.filter(p => selectedPlatforms.has(p.id));
+  const anyReady   = selectedQueueable.some(p => platformStatus[p.id] === "ready");
+  const anyFailed  = selectedQueueable.some(p => platformStatus[p.id] === "failed");
+  const allReady   = selectedQueueable.length > 0 && selectedQueueable.every(p => platformStatus[p.id] === "ready");
+  const noneQueued = selectedQueueable.every(p => platformStatus[p.id] === "not-queued");
 
   const banner = anyFailed
     ? { color: B.red,    bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.3)",   icon: "🔴", text: "Some platforms need attention"   }
@@ -296,13 +385,16 @@ export default function BBBContentAutopilotPage() {
 
   function handleGenerate() {
     setTemplateIdx(prev => prev === null ? 0 : (prev + 1) % TEMPLATES.length);
-    setActiveTab("facebook");
+    // Default active tab to the first selected platform
+    const firstSelected = QUEUEABLE_PROVIDERS.find(p => selectedPlatforms.has(p.id));
+    setActiveTab(firstSelected?.id ?? "facebook");
     setJustQueued([]);
     setPlatformStatus({ ...INITIAL_STATUS });
   }
 
   function queuePost(platform: SocialProviderId) {
     if (!generated) return;
+    if (!selectedPlatforms.has(platform)) return; // skip unselected
     const post: QueuedPost = {
       id:        uid(),
       platform,
@@ -339,7 +431,7 @@ export default function BBBContentAutopilotPage() {
 
   function queueAll() {
     if (!generated) return;
-    QUEUEABLE_PROVIDERS.forEach(p => { if (!justQueued.includes(p.id)) queuePost(p.id); });
+    selectedQueueable.forEach(p => { if (!justQueued.includes(p.id)) queuePost(p.id); });
   }
 
   function removeFromQueue(id: string) {
@@ -375,7 +467,7 @@ export default function BBBContentAutopilotPage() {
   const currentCaption = generated ? captionFor(generated, activeTab) : "";
   const isInfoTab      = !QUEUEABLE_PROVIDERS.some(p => p.id === activeTab);
   const activeProvider = SOCIAL_PROVIDERS.find(p => p.id === activeTab) ?? SOCIAL_PROVIDERS[0];
-  const allQueued      = QUEUEABLE_PROVIDERS.every(p => justQueued.includes(p.id));
+  const allQueued      = selectedQueueable.length > 0 && selectedQueueable.every(p => justQueued.includes(p.id));
 
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -717,43 +809,69 @@ export default function BBBContentAutopilotPage() {
 
               {/* Queue buttons */}
               <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "18px 20px", flex: 1 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: B.sky, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 14 }}>
-                  📤 Queue Posts
+                <div style={{ fontSize: 10, fontWeight: 800, color: B.sky, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>✅ Select Platforms ({selectedQueueable.length}/{QUEUEABLE_PROVIDERS.length})</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={selectAll}
+                      style={{ fontSize: 9, padding: "3px 8px", borderRadius: 6, border: `1px solid ${B.border}`, background: "transparent", color: B.silver, cursor: "pointer" }}
+                    >All</button>
+                    <button
+                      onClick={deselectAll}
+                      style={{ fontSize: 9, padding: "3px 8px", borderRadius: 6, border: `1px solid ${B.border}`, background: "transparent", color: B.silver, cursor: "pointer" }}
+                    >None</button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {/* Queueable platforms — from registry: operational + queue capable */}
+                  {/* Platform selection cards — one per queueable platform */}
                   {QUEUEABLE_PROVIDERS.map(p => {
-                    const sState = platformStatus[p.id] ?? "not-queued";
-                    const sMeta  = STATUS_META[sState];
-                    const isQ    = justQueued.includes(p.id);
+                    const sel    = selectedPlatforms.has(p.id);
+                    const prof   = CONTENT_PROFILES[p.id];
+                    const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
                     return (
-                      <button
+                      <div
                         key={p.id}
-                        onClick={() => queuePost(p.id)}
-                        disabled={isQ}
+                        onClick={() => togglePlatform(p.id)}
                         style={{
-                          background: isQ ? `${p.color}15` : `${p.color}0C`,
-                          border: `1px solid ${isQ ? `${p.color}50` : `${p.color}25`}`,
+                          background: sel ? `${p.color}10` : "transparent",
+                          border: `1.5px solid ${sel ? `${p.color}55` : `${p.color}18`}`,
                           borderRadius: 10, padding: "10px 14px",
-                          fontSize: 12, fontWeight: 700,
-                          color: isQ ? p.color : B.silver,
-                          cursor: isQ ? "default" : "pointer",
+                          cursor: "pointer",
                           transition: "all 0.15s",
-                          display: "flex", alignItems: "center", justifyContent: "space-between",
-                          opacity: isQ ? 0.85 : 1,
+                          display: "flex", alignItems: "center", gap: 10,
+                          opacity: sel ? 1 : 0.55,
                         }}
                       >
-                        <span>{p.icon} Queue {p.abbreviation} Post</span>
-                        {isQ && (
-                          <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: sMeta.color, fontWeight: 800 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: sMeta.dot, display: "inline-block" }} />
-                            {sMeta.label}
-                          </span>
-                        )}
-                      </button>
+                        {/* Checkbox */}
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 5,
+                          border: `1.5px solid ${sel ? p.color : "#475569"}`,
+                          background: sel ? p.color : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          flexShrink: 0,
+                        }}>
+                          {sel && <span style={{ color: B.navy, fontSize: 10, fontWeight: 800 }}>✓</span>}
+                        </div>
+                        {/* Icon + label */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? p.color : B.silver }}>
+                            <span>{p.icon}</span> {p.label}
+                          </div>
+                          <div style={{ fontSize: 9, color: B.dim, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
+                            <span>• {prof.maxLength}</span>
+                            <span>• {prof.frequency}</span>
+                          </div>
+                        </div>
+                        {/* Status chip */}
+                        <div style={{ flexShrink: 0 }}>
+                          <PlatformStateChip state={uiState} />
+                        </div>
+                      </div>
                     );
                   })}
-                  {/* Non-queueable platforms — from registry: shown with live state chip */}
+
+                  {/* Non-queueable platforms — from registry: shown with live state chip (at bottom of selection list) */}
                   {SOCIAL_PROVIDERS.filter(p => !QUEUEABLE_PROVIDERS.some(q => q.id === p.id)).map(p => {
                     const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
                     return (
@@ -779,7 +897,7 @@ export default function BBBContentAutopilotPage() {
 
                   <button
                     onClick={queueAll}
-                    disabled={allQueued}
+                    disabled={allQueued || selectedQueueable.length === 0}
                     style={{
                       marginTop: 4,
                       background: allQueued
@@ -794,9 +912,11 @@ export default function BBBContentAutopilotPage() {
                     onMouseEnter={e => { if (!allQueued) (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.30) 0%, rgba(0,174,239,0.20) 100%)"; }}
                     onMouseLeave={e => { if (!allQueued) (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, rgba(242,108,33,0.18) 0%, rgba(0,174,239,0.12) 100%)"; }}
                   >
-                    {allQueued
-                      ? `🟢 All ${QUEUEABLE_PROVIDERS.length} Platforms Ready for Review`
-                      : `⚡ Queue All ${QUEUEABLE_PROVIDERS.length} Platforms`}
+                    {selectedQueueable.length === 0
+                      ? "❌ No Platforms Selected"
+                      : allQueued
+                        ? `🟢 All ${selectedQueueable.length} Selected Platforms Ready`
+                        : `⚡ Queue All ${selectedQueueable.length} Selected Platforms`}
                   </button>
                 </div>
               </div>
@@ -973,75 +1093,44 @@ export default function BBBContentAutopilotPage() {
           </div>
         )}
 
-        {/* ── Platform posting tips ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-          {([
-            {
-              platform: "facebook" as SocialProviderId,
-              tips: ["Post 3–5x per week", "Photos outperform text-only posts", "Include a direct CTA every time", "Respond to all comments within 24h"],
-            },
-            {
-              platform: "instagram" as SocialProviderId,
-              tips: ["Use 5–15 relevant hashtags", "Before/after photos perform best", "Post Stories daily for reach", "Tag your city: #GulfShoresAL"],
-            },
-            {
-              platform: "google_business" as SocialProviderId,
-              tips: ["Post at least once a week", "Include your service area cities", "Add a photo to every post", "Use keywords: 'bed bug treatment Baldwin County'"],
-            },
-            {
-              platform: "youtube" as SocialProviderId,
-              tips: ["Use this as your video description", "Add timestamps in the description", "Include local keywords for SEO", "End every video with a clear CTA"],
-            },
-            {
-              platform: "tiktok" as SocialProviderId,
-              tips: ["Keep captions under 150 chars", "Add trending + niche hashtags", "Hook viewers in the first second", "Post educational short-form content"],
-            },
-            {
-              platform: "linkedin" as SocialProviderId,
-              tips: ["Target property managers & HOAs", "Post professional, data-driven content", "Connect with vacation rental networks", "Engage with comments to boost reach"],
-            },
-            {
-              platform: "pinterest" as SocialProviderId,
-              tips: ["Keyword-rich pin descriptions rank in search", "Vertical images (2:3 ratio) perform best", "Create a 'Pest Prevention Tips' board", "Link pins back to your website"],
-            },
-            {
-              platform: "nextdoor" as SocialProviderId,
-              tips: ["Use a neighbor-to-neighbor tone", "Avoid hard-sell language", "Share seasonal alerts & local tips", "Respond quickly to neighbor replies"],
-            },
-          ]).map(({ platform, tips }) => {
-            const prov   = SOCIAL_PROVIDERS.find(p => p.id === platform);
-            const pColor = prov?.color ?? "#64748B";
-            const pIcon  = prov?.icon ?? "?";
-            const pAbbr  = prov?.shortLabel ?? platform;
-            const isPending = prov && prov.status !== "operational";
+        {/* ── Platform posting tips — dynamically sourced from CONTENT_PROFILES ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+          {QUEUEABLE_PROVIDERS.map(p => {
+            const prof = CONTENT_PROFILES[p.id];
+            const tips = [prof.note, prof.ctaTip, `${prof.frequency} recommended`, `${prof.hashtagCount} hashtags`];
+            const isSelected = selectedPlatforms.has(p.id);
+            const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
             return (
-              <div key={platform} style={{
-                background: B.panel, border: `1px solid ${pColor}20`, borderRadius: 14, padding: "16px 18px",
+              <div key={p.id} style={{
+                background: isSelected ? `${p.color}08` : B.panel,
+                border: `1.5px solid ${isSelected ? `${p.color}40` : `${p.color}20`}`,
+                borderRadius: 14, padding: "16px 18px",
+                opacity: isSelected ? 1 : 0.6,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12 }}>{pIcon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: pColor, letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
-                    {pAbbr}
+                  <span style={{ fontSize: 12 }}>{p.icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: p.color, letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
+                    {p.shortLabel}
                   </span>
-                  {isPending && (
-                    <span style={{ fontSize: 8, fontWeight: 700, color: B.gold, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, padding: "1px 5px", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
-                      Draft
-                    </span>
-                  )}
+                  <PlatformStateChip state={uiState} />
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {tips.map(tip => (
-                    <div key={tip} style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
-                      <span style={{ color: pColor, fontSize: 11, flexShrink: 0, marginTop: 1 }}>→</span>
-                      <span style={{ fontSize: 11, color: B.silver, lineHeight: 1.5 }}>{tip}</span>
-                    </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
+                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.maxLength}</span>
+                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.bestFormat}</span>
+                </div>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {tips.map((tip, i) => (
+                    <li key={i} style={{ fontSize: 10, color: B.dim, display: "flex", alignItems: "flex-start", gap: 6 }}>
+                      <span style={{ color: p.color, flexShrink: 0, fontSize: 8 }}>●</span>
+                      {tip}
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             );
           })}
         </div>
-
       </div>
     </div>
   );

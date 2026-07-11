@@ -1,0 +1,105 @@
+TARGET: Audit and correct YouTube status in the canonical social provider registry.
+
+IMPORTANT:
+Do not make assumptions from the current registry label.
+Verify the actual YouTube connection, approval, generation, queue, and publishing behavior before changing status.
+
+CURRENT PROBLEM
+
+Content Autopilot now displays YouTube as “Pending approval,” but YouTube should already be connected and ready for content.
+
+This suggests the registry may be incorrectly collapsing provider approval, account connection, content-generation capability, queue capability, and publishing capability into one status.
+
+PHASE 1 — AUDIT THE ACTUAL YOUTUBE STATE
+
+1. Locate the canonical YouTube entry in social-providers.ts or the canonical provider registry.
+2. Trace all code that derives YouTube status in:
+   - Connected Accounts
+   - Publishing Center
+   - Content Autopilot
+   - queue logic
+   - publish logic
+3. Locate the actual YouTube connection record and normalized connection-state handling.
+4. Confirm whether YouTube currently has:
+   - a connected account
+   - valid OAuth credentials
+   - required scopes
+   - healthy token state
+   - content-generation support
+   - queue support
+   - direct-publish support
+5. Identify exactly why YouTube was changed to pending_approval.
+6. Confirm whether that change came from:
+   - a registry edit
+   - an old test invariant
+   - missing backend publish support
+   - an approval flag copied from TikTok
+   - incorrect shared-state derivation
+   - or another source
+
+PHASE 2 — CORRECT THE STATE MODEL
+
+Do not use one status field to represent every concern.
+
+For YouTube, model or derive these independently where existing architecture permits:
+
+- product support
+- tenant connection state
+- provider approval state
+- token/scope health
+- generation capability
+- queue capability
+- direct-publish capability
+- analytics capability
+
+Expected behavior if the audit confirms YouTube is fully connected and approved:
+
+- YouTube should not display “Pending approval.”
+- Content Autopilot should show YouTube as available for generation.
+- Queue behavior should remain enabled if implemented.
+- Direct publishing should only be shown as available if the backend supports it.
+- If publishing is draft-only, label it “Draft only” or “Manual publish,” not “Pending approval.”
+- If direct publishing is live, show “Ready” or “Connected.”
+
+PHASE 3 — REGISTRY FIX
+
+1. Correct the canonical YouTube provider entry.
+2. Do not hard-code a page-specific override.
+3. Ensure Publishing Center and Content Autopilot derive the same truthful state.
+4. Preserve canonical provider IDs and capabilities.
+5. Do not alter TikTok, LinkedIn, Pinterest, or Nextdoor unless the audit finds the same modeling bug there.
+6. Do not mark a platform pending solely because a publish handler is absent.
+
+PHASE 4 — TESTS
+
+Update or add tests that verify:
+
+1. YouTube is not pending approval when connection and approval are valid.
+2. Generation support is independent from publish support.
+3. Queue support is independent from direct publishing support.
+4. Draft-only platforms do not appear as pending approval unless actual provider approval is pending.
+5. Publishing Center and Content Autopilot produce the same normalized YouTube state.
+6. Registry invariants do not force misleading status labels.
+
+PHASE 5 — REQUIRED REPORT
+
+Return:
+
+1. Root cause of the incorrect YouTube pending-approval label.
+2. Actual current YouTube connection state.
+3. Actual approval state.
+4. Actual generation capability.
+5. Actual queue capability.
+6. Actual direct-publish capability.
+7. Files changed.
+8. Tests changed.
+9. Typecheck result.
+10. Build result.
+11. Final YouTube status shown in:
+    - Connected Accounts
+    - Publishing Center
+    - Content Autopilot
+12. Any remaining limitation.
+
+Do not mark complete merely by changing the label.
+The final status must reflect the actual YouTube connection and capabilities.

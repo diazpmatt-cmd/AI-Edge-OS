@@ -167,8 +167,11 @@ describe("providerSupports", () => {
 });
 
 describe("pending_approval vs coming_soon distinction", () => {
-  it("youtube and tiktok are pending_approval (backend exists, awaiting platform review)", () => {
-    expect(getSocialProvider("youtube").status).toBe("pending_approval");
+  it("youtube is operational (backend + OAuth fully implemented; connection gate only)", () => {
+    expect(getSocialProvider("youtube").status).toBe("operational");
+  });
+
+  it("tiktok is pending_approval (backend exists, awaiting TikTok app review)", () => {
     expect(getSocialProvider("tiktok").status).toBe("pending_approval");
   });
 

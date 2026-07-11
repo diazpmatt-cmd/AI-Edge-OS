@@ -1,0 +1,192 @@
+Proceed with Phase A2 — Client Context Contract and Multi-Tenant Readiness Tests.
+
+Phase A1 is complete. Do not redesign or replace the new abstraction.
+
+Current canonical file:
+lib/db/src/client-context.ts
+
+Current verified state:
+- ServiceRegistryProvider exists
+- bbbRegistryProvider delegates to existing BB&B service functions
+- ClientContentContext exists
+- buildClientContentContext(config | null) preserves existing BB&B behavior
+- buildSystemPrompt(context) preserves the existing BB&B system prompt
+- The auto-content generate route now uses context and context.registry
+- TypeScript is clean
+- 425/425 tests pass
+
+Objective:
+
+Prove through automated tests that the Phase A1 abstraction preserves BB&B behavior while supporting a future non-BB&B client without leaking BB&B-specific values.
+
+Audit first. Before editing, inspect:
+- Existing test organization and conventions
+- Existing auto-content tests
+- Existing BB&B service registry tests
+- Existing prompt snapshot or characterization tests
+- Existing shared database-library test setup
+
+Reuse the existing test framework and helpers. Do not introduce a new testing system.
+
+Required tests:
+
+1. BB&B Null-Config Parity
+
+Verify that:
+
+buildClientContentContext(null)
+
+returns the exact BB&B defaults expected before Phase A1, including:
+
+- Client name
+- Industry
+- Industry label
+- Service areas
+- Region
+- Registry provider
+- Scheduling defaults
+- Approval defaults
+- Content defaults
+
+Where practical, compare against the existing canonical values rather than duplicating literals inside tests.
+
+2. BB&B System Prompt Parity
+
+Add a strict characterization test proving:
+
+buildSystemPrompt(buildClientContentContext(null))
+
+produces the exact expected BB&B system prompt.
+
+The test must protect:
+
+- Client name
+- Industry wording
+- Service areas
+- Region
+- Business rules
+- Prohibited services
+- Bed bug positioning
+- Fumigation availability
+- Termite restrictions
+
+Do not weaken this to a few loose substring checks if an exact snapshot or exact string comparison is practical.
+
+3. Registry Provider Delegation
+
+Verify that bbbRegistryProvider correctly delegates:
+
+- matchByTopic
+- validateTopic
+- selectWeeklySlots
+- getPromptRules
+- normalizeTopics
+- getDefaultTopics
+- getSystemBusinessRules
+
+Do not duplicate the BB&B registry implementation. Test delegation and returned behavior.
+
+4. Generic Client Context
+
+Create a test-only fake ServiceRegistryProvider and a fictional non-pest-control client configuration.
+
+For example:
+
+- Client: Lakeside Plumbing
+- Industry: plumbing
+- Region: Dallas–Fort Worth
+- Custom service areas
+- Custom services
+- Custom business rules
+
+Verify that ClientContentContext and buildSystemPrompt use only the supplied client configuration and provider values.
+
+5. BB&B Leakage Test
+
+For the fictional client context, assert that generated context and system prompt contain none of the following unless explicitly supplied:
+
+- Bed Bugs & Beyond
+- Bed bugs
+- Pest control
+- Fumigation
+- Termites
+- Existing BB&B cities
+- Existing BB&B region language
+
+This is a critical multi-tenant isolation test.
+
+6. Context Immutability and Isolation
+
+Verify that:
+
+- Building one client context does not mutate another
+- Service areas are not shared by mutable reference
+- Topic normalization for one provider does not affect another provider
+- Repeated builds produce isolated context objects
+
+7. Auto-Content Generate Route Characterization
+
+Add or extend route-level tests proving the generate handler:
+
+- Uses context.clientName
+- Uses context.registry
+- Uses context service areas and region
+- Does not directly call BB&B registry functions
+- Preserves the current BB&B output when no client configuration is supplied
+
+Prefer behavior tests over tests that depend on source-code text.
+
+8. Canonical Geography Protection
+
+Verify that:
+
+BBB_DEFAULT_SERVICE_AREAS
+BBB_REGION
+
+are the canonical values used by buildClientContentContext(null).
+
+Search for remaining duplicated BB&B geography inside the auto-content generation path.
+
+Only replace duplicates if they are clearly part of the Phase A1 generation path and the change is behavior-preserving.
+
+Do not broaden this into unrelated routes or modules.
+
+Restrictions:
+
+- Do not create database migrations
+- Do not create a clients table
+- Do not implement a DB-backed registry
+- Do not modify GET, PUT, pause, or resume handlers
+- Do not build UI
+- Do not add new API routes
+- Do not change BB&B behavior
+- Do not rename the Phase A1 public interfaces
+- Do not refactor unrelated code
+- Do not reduce existing test coverage
+- Keep the implementation small and reusable
+
+Validation:
+
+Run:
+
+1. pnpm --filter @workspace/db exec tsc --build
+2. The relevant new Phase A2 tests
+3. The complete test suite
+4. The API server TypeScript check
+
+All existing tests must continue to pass.
+
+Deliverables:
+
+1. List of files created or modified
+2. Tests added, grouped by requirement
+3. Any remaining BB&B hardcoding discovered
+4. Any hardcoding intentionally deferred to Phase B
+5. TypeScript results
+6. Full test-suite results
+7. Confirmation that no migrations, routes, or UI were added
+8. Recommended Phase B entry point
+
+Stop after Phase A2 validation.
+
+Do not begin Phase B automatically.

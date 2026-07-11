@@ -263,28 +263,30 @@ export function buildClientContentContext(
   const ctaPreference = config?.ctaPreference || "call_now";
   const frequency     = config?.frequency     || "every_other_day";
 
+  // Every array field is spread-copied so that mutating one context's fields
+  // cannot affect another context or the exported constant arrays.
   const serviceAreas = (config?.serviceAreas?.length)
-    ? config.serviceAreas
-    : BBB_DEFAULT_SERVICE_AREAS;
+    ? [...config.serviceAreas]
+    : [...BBB_DEFAULT_SERVICE_AREAS];
 
   const topics = (config?.topics?.length)
-    ? config.topics
+    ? [...config.topics]
     : registry.getDefaultTopics();
 
   const toneStyle = (config?.toneStyle?.length)
-    ? config.toneStyle
+    ? [...config.toneStyle]
     : [...DEFAULT_TONE_STYLE];
 
   const postAngles = (config?.postAngles?.length)
-    ? config.postAngles
+    ? [...config.postAngles]
     : [...DEFAULT_POST_ANGLES];
 
   const postingTimes = (config?.postingTimes?.length)
-    ? config.postingTimes
+    ? [...config.postingTimes]
     : ["08:00", "12:00", "17:00"];
 
   const platforms = (config?.platforms?.length)
-    ? config.platforms
+    ? [...config.platforms]
     : ["facebook"];
 
   const region = deriveRegion(serviceAreas);

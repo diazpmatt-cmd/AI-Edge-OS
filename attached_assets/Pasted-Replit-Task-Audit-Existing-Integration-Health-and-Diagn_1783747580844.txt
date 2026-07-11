@@ -1,0 +1,146 @@
+Replit Task: Audit Existing Integration Health and Diagnostics Capabilities
+
+Goal:
+Determine whether AI Edge Solutions already has an Integration Health Dashboard, integration diagnostics framework, provider health endpoints, reusable health components, or related infrastructure.
+
+This is an AUDIT-ONLY task.
+
+Do not build anything.
+Do not modify code.
+Do not run code generation.
+Do not add routes.
+Do not add database tables.
+Do not change environment variables.
+Do not perform provider API calls unless absolutely necessary to identify an existing implementation.
+Do not create a checkpoint unless Replit requires one automatically.
+
+Keep this investigation focused and credit-efficient.
+
+Please inspect the existing codebase for the following:
+
+1. Existing dashboard or page names related to:
+   - Integration Health
+   - System Diagnostics
+   - Connected Accounts
+   - Platform Health
+   - Service Health
+   - Provider Status
+   - API Health
+   - Integration Status
+   - Connection Diagnostics
+
+2. Existing frontend components that show:
+   - connected/disconnected status
+   - token validity
+   - OAuth scope status
+   - last successful sync
+   - last error
+   - provider response time
+   - health score
+   - warning/error/healthy badges
+   - test connection buttons
+
+3. Existing backend endpoints under paths such as:
+   - /api/diagnostics/*
+   - /api/health/*
+   - /api/integrations/*
+   - /api/social-connections/*
+   - /api/connected-accounts/*
+   - provider-specific test or status endpoints
+
+4. Existing OpenAPI schemas or generated types for:
+   - integration health
+   - diagnostics results
+   - connection status
+   - provider status
+   - token validation
+   - test connection responses
+
+5. Existing shared types or status models such as:
+   - healthy
+   - warning
+   - error
+   - disconnected
+   - not_configured
+   - unknown
+
+6. Existing provider-specific diagnostics for:
+   - YouTube
+   - Google Business Profile
+   - Facebook
+   - Instagram
+   - TikTok
+   - LinkedIn
+   - Telnyx
+   - GorillaDesk
+   - OpenAI
+   - Clerk
+   - PostgreSQL
+   - Replit Object Storage
+
+7. Existing storage or database tables for:
+   - integration status
+   - diagnostics history
+   - connection health
+   - sync status
+   - last successful operation
+   - last error
+   - token expiry
+   - provider metadata
+
+8. Existing System Diagnostics pages and what they already support.
+
+9. Existing Connected Accounts pages and whether their provider cards already contain reusable health-check logic.
+
+10. Existing code that could be reused to assemble an Integration Health Dashboard without duplicating functionality.
+
+Search efficiently:
+- Use targeted file search and grep first.
+- Read only the most relevant files.
+- Avoid opening large unrelated files.
+- Do not run the full app unless necessary.
+- Do not run tests or TypeScript unless needed to understand an existing implementation.
+
+Deliverables:
+
+A. Existing capability summary
+For each relevant feature found, list:
+- feature name
+- file path
+- frontend or backend
+- what it currently does
+- whether it is reusable
+
+B. Provider coverage matrix
+For each provider, report:
+- connection status available
+- token/auth validation available
+- scope validation available
+- safe test endpoint available
+- last success available
+- last error available
+- response time available
+
+C. Gap analysis
+Classify the situation as one of these:
+
+1. Already exists and only needs to be exposed in the UI
+2. Partially exists and should be consolidated
+3. Mostly missing and requires new implementation
+4. Existing implementation is outdated or duplicated
+
+D. Recommended lowest-credit next step
+Recommend the smallest next task that delivers visible value without rebuilding existing functionality.
+
+E. Estimated implementation scope
+Provide a rough estimate:
+- very small
+- small
+- medium
+- large
+
+Also estimate which phase should be done first.
+
+Important:
+Do not make any code changes during this audit.
+Stop after reporting findings.

@@ -42,6 +42,9 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     platforms:       JSON.parse(r.platforms || "[]") as string[],
     imageUrl:        r.imageData,
     videoUrl:        r.videoUrl ?? null,
+    youtubeTitle:    r.youtubeTitle   ?? null,
+    youtubePrivacy:  r.youtubePrivacy ?? null,
+    youtubeVideoId:  r.youtubeVideoId ?? null,
     caption:         r.caption,
     captionFacebook: r.captionFacebook ?? null,
     captionGoogle:   r.captionGoogle ?? null,
@@ -110,7 +113,9 @@ router.post("/social-posts", async (req, res) => {
     clientName:  b.clientName  ?? "Bed Bugs & Beyond",
     platforms:   JSON.stringify(b.platforms ?? []),
     imageData:   b.imageUrl    ?? null,
-    videoUrl:    b.videoUrl    ?? null,
+    videoUrl:       b.videoUrl       ?? null,
+    youtubeTitle:   b.youtubeTitle   ?? null,
+    youtubePrivacy: b.youtubePrivacy ?? null,
     caption:     b.caption     ?? "",
     ctaType:     b.ctaType     ?? "none",
     ctaValue:    b.ctaValue    ?? null,
@@ -129,6 +134,8 @@ router.patch("/social-posts/:id", async (req, res) => {
     ...(b.platforms       !== undefined && { platforms:       JSON.stringify(b.platforms) }),
     ...(b.imageUrl        !== undefined && { imageData:       b.imageUrl }),
     ...(b.videoUrl        !== undefined && { videoUrl:        b.videoUrl }),
+    ...(b.youtubeTitle    !== undefined && { youtubeTitle:    b.youtubeTitle }),
+    ...(b.youtubePrivacy  !== undefined && { youtubePrivacy:  b.youtubePrivacy }),
     ...(b.caption         !== undefined && { caption:         b.caption }),
     ...(b.captionFacebook !== undefined && { captionFacebook: b.captionFacebook }),
     ...(b.captionGoogle   !== undefined && { captionGoogle:   b.captionGoogle }),
@@ -455,6 +462,9 @@ router.post("/social-posts/:id/publish", async (req, res) => {
   // ── YouTube ────────────────────────────────────────────────────────────────
   // YouTube Data API v3 requires video content — image posts are skipped.
   // When a videoUrl is present the upload uses the resumable upload protocol.
+  // Capture provider video ID for persistence after the platforms block
+  let capturedYoutubeVideoId: string | null = null;
+
   if (platforms.includes("youtube")) {
     const ytConn = await getConnection("youtube");
     console.log("[YOUTUBE-PUBLISH]", JSON.stringify({
@@ -505,11 +515,16 @@ router.post("/social-posts/:id/publish", async (req, res) => {
             }
           }
 
-          const title   = (post.caption ?? "").slice(0, 100).replace(/\n/g, " ").trim() || "New video";
+          const title   = (post.youtubeTitle?.trim()) ||
+                          (post.caption ?? "").slice(0, 100).replace(/\n/g, " ").trim() ||
+                          "New video";
           const desc    = post.caption ?? "";
+          const privacy = post.youtubePrivacy === "private" || post.youtubePrivacy === "unlisted"
+                          ? post.youtubePrivacy : "public";
+          console.log("[YOUTUBE-PUBLISH] metadata", JSON.stringify({ title, privacy, descLen: desc.length }));
           const metaBody = {
             snippet: { title, description: desc, categoryId: "22" },
-            status:  { privacyStatus: "public" },
+            status:  { privacyStatus: privacy },
           };
 
           // Step 1: Initiate resumable upload session
@@ -563,7 +578,9 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 
           const uploadData = await uploadRes.json() as { id?: string };
           const videoId = uploadData.id ?? null;
-          console.log("[YOUTUBE-PUBLISH] ✓ uploaded:", { videoId, title });
+          console.log("[YOUTUBE-PUBLISH] ✓ uploaded:", JSON.stringify({ videoId, title, privacy }));
+          // Store provider video ID for immediate retrieval — persisted to DB below
+          capturedYoutubeVideoId = videoId;
           results.youtube = { ok: true, postId: videoId ?? undefined };
         } catch (e: any) {
           console.error("[YOUTUBE-PUBLISH] Error:", e.message);
@@ -582,6 +599,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     status:       newStatus,
     publishedAt:  anyOk ? new Date() : null,
     errorMessage: errors.length ? errors.join("; ") : null,
+    ...(capturedYoutubeVideoId ? { youtubeVideoId: capturedYoutubeVideoId } : {}),
     updatedAt:    new Date(),
   }).where(eq(socialPostsTable.id, post.id)).returning();
 

@@ -6,6 +6,24 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Added (2026-07-11 — YouTube Live Pilot — Phases 1–6)
+- **`social_posts` DB columns** — `youtube_title TEXT`, `youtube_privacy TEXT`, `youtube_video_id TEXT`
+  added via raw SQL migration; Drizzle schema updated to match
+- **`youtubeTitle` / `youtubePrivacy` / `youtubeVideoId` fields** throughout the backend stack:
+  - `rowToDto` maps all three to the API response
+  - `POST /social-posts` and `PATCH /social-posts/:id` accept and persist new fields
+  - YouTube publish handler reads `post.youtubeTitle` (falls back to `caption[0..100]`) and
+    `post.youtubePrivacy` (falls back to `"public"`) instead of hardcoded values
+  - `capturedYoutubeVideoId` variable captures provider video ID and persists it to DB in
+    the final `UPDATE` after a successful upload
+- **Publishing Center YouTube UI** — three new fields appear when YouTube is toggled:
+  Video URL (existing, restructured), YouTube Title (max 100, with character counter),
+  Privacy selector (`private` / `unlisted` / `public`) with guidance; form defaults to `private`
+- **`artifacts/api-server/src/__tests__/youtube.test.ts`** — 30 tests covering: canonical
+  provider ID, title derivation, privacy resolution, URL validation, video ID persistence,
+  token refresh gate, draft-to-queue state machine, duplicate-upload prevention, Shorts vs
+  standard classification, no-provider-call-before-approval
+
 ### Added (2026-07-11 — GBP Pilot Audit & Cleanup)
 - **`artifacts/api-server/src/lib/gbp-cooldown.ts`** — pure, exportable GBP cooldown
   helpers (no DB dependency, fully testable):

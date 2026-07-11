@@ -1,0 +1,311 @@
+TARGET: Establish the Bed Bugs & Beyond YouTube live pilot through the normal AI Edge production workflow.
+
+IMPORTANT
+
+Follow the AI Edge audit-first workflow:
+
+1. Audit
+2. Consolidate
+3. Prepare
+4. Require approval
+5. Publish
+6. Verify
+
+This task focuses only on YouTube.
+
+Do not:
+
+- modify Google Business Profile quota handling
+- add TikTok, LinkedIn, Pinterest, or Nextdoor work
+- create temporary admin endpoints
+- create standalone publishing scripts
+- bypass Clerk or scheduler authentication
+- claim AI-generated video exists
+- publish a video without Matthew approving the exact title, description, thumbnail, file, and privacy setting
+- modify unrelated mobile code
+
+CURRENT VERIFIED STATE
+
+YouTube is:
+
+- represented by the canonical provider registry
+- operational
+- connected to Matthew Diaz’s account
+- authorized with YouTube upload/read scopes
+- capable of internal draft queueing
+- capable of direct video upload when a valid video file is supplied
+- not pending provider approval
+
+Current limitation:
+
+AI Edge does not yet generate the finished video file. A valid MP4 must be uploaded or selected for this pilot.
+
+PHASE 1 — AUDIT THE PRODUCTION YOUTUBE PATH
+
+Trace the exact production workflow for:
+
+1. Content Autopilot
+2. YouTube-specific title and description creation
+3. Media/file upload
+4. Draft creation
+5. Queue creation
+6. Publishing Center
+7. YouTube provider handler
+8. OAuth token lookup and refresh
+9. Resumable upload
+10. Thumbnail handling
+11. Success/failure persistence
+12. Diagnostics
+13. Public video verification
+
+Report:
+
+- exact routes
+- components
+- API endpoints
+- backend handlers
+- database tables
+- storage system
+- canonical provider ID
+- accepted media types
+- maximum supported file size
+- whether Shorts and standard videos are distinguished
+- required OAuth scopes
+- token refresh behavior
+
+Do not expose secrets or access tokens.
+
+PHASE 2 — VERIFY THE CORRECT YOUTUBE CHANNEL
+
+Confirm that the stored YouTube connection belongs to the intended BB&B pilot channel.
+
+Verify where available:
+
+- connected Google account
+- YouTube channel ID
+- channel display name
+- channel ownership
+- token health
+- upload permission
+- last successful provider check
+
+Do not upload if the channel cannot be confidently identified.
+
+If the connection belongs to Matthew personally but no dedicated BB&B YouTube channel exists, report that clearly before publishing.
+
+PHASE 3 — AUDIT OR CREATE THE VIDEO UPLOAD WORKFLOW
+
+Determine whether AI Edge already has a production media-upload workflow that can accept a YouTube video.
+
+Search for:
+
+- video upload
+- MP4
+- resumable upload
+- object storage
+- media assets
+- image assets
+- asset library
+- YouTube upload
+- thumbnail upload
+- signed upload
+- multipart upload
+- Replit Object Storage
+
+Requirements:
+
+1. Reuse an existing upload or asset system if one exists.
+2. Do not create a separate YouTube-only storage system unnecessarily.
+3. The user must be able to upload or select a valid MP4.
+4. Validate:
+   - MIME type
+   - file extension
+   - file size
+   - non-empty file
+5. Store the media asset safely.
+6. Associate the media asset with the queued social post.
+7. Do not store large video binaries in PostgreSQL.
+8. Do not fabricate a file path or video asset.
+
+If no suitable upload workflow exists, implement the smallest reusable media-upload foundation needed for this pilot.
+
+PHASE 4 — YOUTUBE CONTENT FIELDS
+
+The YouTube draft must support:
+
+- title
+- description
+- privacy status
+- video file or media asset ID
+- optional thumbnail
+- optional tags or keywords
+- optional category if already supported
+- Shorts or standard-video classification where appropriate
+
+Requirements:
+
+1. Use canonical YouTube platform ID.
+2. Do not squeeze YouTube content into a caption-only model if a richer existing social-post metadata field can be used.
+3. Preserve backward compatibility.
+4. Update OpenAPI first if request or response contracts change.
+5. Regenerate Zod schemas and clients when required.
+
+PHASE 5 — PREPARE ONE SAFE BB&B TEST VIDEO DRAFT
+
+Prepare one YouTube test draft for Bed Bugs & Beyond.
+
+Suggested topic:
+
+“3 Early Signs of Bed Bugs in a Vacation Rental”
+
+Draft requirements:
+
+- accurate and educational
+- useful for Baldwin County homeowners, property managers, and vacation-rental operators
+- no unsupported guarantee
+- no fabricated discount
+- clear call to action
+- correct BB&B public phone number from canonical business configuration
+- relevant local wording without keyword stuffing
+
+Prepare:
+
+1. Exact title.
+2. Exact description.
+3. Suggested tags.
+4. Privacy setting.
+5. Whether it will be classified as a Short or standard video.
+6. Thumbnail plan.
+7. Required video dimensions and duration guidance.
+8. Exact uploaded media asset that will be used.
+
+Do not publish yet.
+
+PHASE 6 — STOP FOR MATTHEW’S APPROVAL
+
+Before any live upload, return:
+
+1. Confirmed channel.
+2. Exact video filename and file size.
+3. Exact title.
+4. Exact description.
+5. Exact tags.
+6. Privacy setting:
+   - private
+   - unlisted
+   - public
+7. Short or standard-video classification.
+8. Thumbnail status.
+9. Expected upload and queue behavior.
+10. Any risk or limitation.
+
+End with:
+
+“Awaiting Matthew’s approval to upload this exact YouTube video.”
+
+Do not make the provider upload request until Matthew explicitly approves.
+
+PHASE 7 — LIVE UPLOAD AFTER APPROVAL
+
+After explicit approval:
+
+1. Use the normal authenticated draft, queue, and publishing workflow.
+2. Refresh the OAuth token if necessary.
+3. Use YouTube’s normal resumable upload handler.
+4. Upload exactly one video.
+5. Stop after the first provider failure.
+6. Do not add an administrative bypass.
+7. Store:
+   - provider video ID
+   - upload status
+   - publication status
+   - published timestamp
+   - provider response summary
+   - diagnostics
+8. If a thumbnail is available and supported, apply it through the existing handler.
+9. Do not mark published unless YouTube confirms the result.
+
+PHASE 8 — VERIFY THE RESULT
+
+After upload:
+
+1. Confirm the YouTube API response succeeded.
+2. Confirm provider video ID is stored.
+3. Confirm the AI Edge queue item shows the correct final state.
+4. Confirm Publishing Center reflects the result.
+5. Confirm diagnostics contain the upload attempt.
+6. Confirm the video appears on the intended channel.
+7. Provide the safe YouTube verification path or stored display URL.
+8. Confirm the privacy state is correct.
+9. Confirm title and description match the approved content.
+
+Do not claim public visibility if the video is private or unlisted.
+
+PHASE 9 — FAILURE HANDLING
+
+If the upload fails:
+
+1. Stop after one provider attempt.
+2. Capture the sanitized error body.
+3. Determine whether the cause is:
+   - expired token
+   - missing scope
+   - wrong channel
+   - invalid file
+   - unsupported MIME type
+   - file too large
+   - resumable-upload failure
+   - quota issue
+   - thumbnail issue
+   - malformed metadata
+4. Correct only the smallest necessary issue.
+5. Preserve the draft and diagnostic record.
+6. Do not create duplicate video uploads.
+
+PHASE 10 — TESTS
+
+Add or update tests for:
+
+1. Canonical YouTube provider ID.
+2. Valid MP4 upload acceptance.
+3. Invalid file-type rejection.
+4. Missing-video rejection.
+5. Title and description validation.
+6. Privacy-status validation.
+7. Draft-to-queue-to-upload transition.
+8. Provider video ID persistence.
+9. Failed upload remains unpublished.
+10. Duplicate upload prevention.
+11. Token refresh behavior.
+12. Thumbnail handling if supported.
+13. Shorts versus standard classification if implemented.
+14. No provider call occurs before explicit approval.
+
+PHASE 11 — REQUIRED REPORT
+
+Return:
+
+1. Exact production route and component hierarchy.
+2. Confirmed YouTube account and channel.
+3. Upload workflow reused or created.
+4. Video file requirements.
+5. Draft metadata fields.
+6. Exact prepared pilot content.
+7. Approval status.
+8. Files inspected.
+9. Files changed.
+10. OpenAPI or database changes.
+11. Tests and results.
+12. Typecheck result.
+13. Build result.
+14. Remaining limitations.
+
+DOCUMENTATION
+
+Update:
+
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+
+Do not mark YouTube live-pilot success until one real video is uploaded through the normal AI Edge workflow and verified on the intended YouTube channel.

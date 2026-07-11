@@ -17,6 +17,9 @@ type SocialPost = {
   platforms: Platform[];
   imageUrl: string | null;
   videoUrl: string | null;
+  youtubeTitle:   string | null;
+  youtubePrivacy: string | null;
+  youtubeVideoId: string | null;
   caption: string;
   captionFacebook: string | null;
   captionGoogle: string | null;
@@ -115,6 +118,8 @@ const EMPTY_FORM = {
   platforms:    ["facebook"] as Platform[],
   imageUrl:     null as string | null,
   videoUrl:     "" as string,
+  youtubeTitle:   "" as string,
+  youtubePrivacy: "private" as string,
   caption:      "",
   ctaType:      "call_now",
   ctaValue:     "(251) 324-9090",
@@ -256,6 +261,8 @@ export default function SocialPublishingPage() {
       platforms:    post.platforms,
       imageUrl:     post.imageUrl,
       videoUrl:     post.videoUrl ?? "",
+      youtubeTitle:   post.youtubeTitle   ?? "",
+      youtubePrivacy: post.youtubePrivacy ?? "private",
       caption:      post.caption,
       ctaType:      post.ctaType,
       ctaValue:     post.ctaValue ?? "",
@@ -317,7 +324,9 @@ export default function SocialPublishingPage() {
     clientName:  form.clientName,
     platforms:   form.platforms,
     imageUrl:    form.imageUrl,
-    videoUrl:    form.videoUrl.trim() || null,
+    videoUrl:       form.videoUrl.trim() || null,
+    youtubeTitle:   form.platforms.includes("youtube") ? form.youtubeTitle.trim() || null : null,
+    youtubePrivacy: form.platforms.includes("youtube") ? form.youtubePrivacy || "private" : null,
     caption:     form.caption,
     ctaType:     form.ctaType,
     ctaValue:    form.ctaValue || null,
@@ -673,21 +682,60 @@ export default function SocialPublishingPage() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
                 />
 
-                {/* Video URL — required for YouTube publishing */}
+                {/* YouTube-specific fields */}
                 {form.platforms.includes("youtube") && (
-                  <div style={{ marginTop: 16 }}>
-                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 15 }}>▶</span> YouTube Video URL
-                    </label>
-                    <input
-                      type="url"
-                      value={form.videoUrl}
-                      onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
-                      placeholder="https://storage.googleapis.com/… or direct .mp4 URL"
-                      style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
-                    />
-                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-                      Direct link to an .mp4 file. YouTube requires video — image-only posts will be skipped.
+                  <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Video URL */}
+                    <div>
+                      <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 15 }}>▶</span> YouTube Video URL
+                      </label>
+                      <input
+                        type="url"
+                        value={form.videoUrl}
+                        onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
+                        placeholder="https://storage.googleapis.com/… or direct .mp4 URL"
+                        style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
+                      />
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                        Direct link to an .mp4 file. YouTube requires video — image-only posts will be skipped.
+                      </div>
+                    </div>
+
+                    {/* YouTube Title */}
+                    <div>
+                      <label style={labelStyle}>YouTube Title</label>
+                      <input
+                        type="text"
+                        value={form.youtubeTitle}
+                        onChange={e => setForm(f => ({ ...f, youtubeTitle: e.target.value }))}
+                        placeholder="Video title (max 100 chars) — defaults to first line of caption"
+                        maxLength={100}
+                        style={inputStyle}
+                      />
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                        <span>Set an explicit title, or leave blank to use the first 100 chars of your caption.</span>
+                        <span style={{ color: form.youtubeTitle.length > 90 ? "#F59E0B" : "#475569" }}>
+                          {form.youtubeTitle.length}/100
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Privacy */}
+                    <div>
+                      <label style={labelStyle}>Privacy</label>
+                      <select
+                        value={form.youtubePrivacy}
+                        onChange={e => setForm(f => ({ ...f, youtubePrivacy: e.target.value }))}
+                        style={{ ...inputStyle, cursor: "pointer" }}
+                      >
+                        <option value="private">🔒 Private — only you can see it</option>
+                        <option value="unlisted">🔗 Unlisted — anyone with the link</option>
+                        <option value="public">🌐 Public — visible to everyone</option>
+                      </select>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                        Use <strong>Private</strong> or <strong>Unlisted</strong> for test uploads before going public.
+                      </div>
                     </div>
                   </div>
                 )}

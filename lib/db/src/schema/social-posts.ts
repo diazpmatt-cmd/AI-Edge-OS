@@ -25,7 +25,10 @@ export const socialPostsTable = pgTable("social_posts", {
   imageRecommendation: text("image_recommendation"),
   duplicateRisk:       text("duplicate_risk"),
   // YouTube / video publishing
-  videoUrl: text("video_url"),
+  videoUrl:       text("video_url"),
+  youtubeTitle:   text("youtube_title"),    // explicit video title; falls back to caption[0..100]
+  youtubePrivacy: text("youtube_privacy"),  // 'public' | 'unlisted' | 'private'; defaults to 'public'
+  youtubeVideoId: text("youtube_video_id"), // provider video ID stored after a successful upload
   // V4: Auto Image Attachment
   matchedImageId:    text("matched_image_id"),
   matchedImageUrl:   text("matched_image_url"),

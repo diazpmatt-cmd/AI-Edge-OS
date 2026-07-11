@@ -1,6 +1,47 @@
 # Session Handoff
 
-## Last session completed: GBP Pilot Audit & Cleanup (TARGET phases 1–11)
+## Last session completed: YouTube Live Pilot — Phases 1–6 (2026-07-11)
+
+### What was done
+
+YouTube audit (phases 1–3), content field upgrades (phase 4), BB&B test draft prepared
+(phase 5), and Phase 6 approval stop delivered. **No video has been uploaded.** Awaiting
+Matthew's explicit approval with confirmed channel, approved content, and MP4 URL.
+
+See the full Phase 1–11 report below.
+
+---
+
+### YouTube Pilot — Phase Results
+
+**Phase 1 — Audit complete.** Full production route hierarchy documented. See report below.
+
+**Phase 2 — Channel verification.** Token expired (2026-07-11T13:39Z) but refresh token
+present — auto-refreshes on publish. Channel ID not cached in metadata. Matthew must
+confirm the correct YouTube channel via Connected Accounts → YouTube → channel-info.
+
+**Phase 3 — Video upload workflow.** Existing `videoUrl` URL-pull mechanism reused. No
+new storage system created. MP4 URL must be publicly accessible.
+
+**Phase 4 — Content fields added.** DB migrated: `youtube_title`, `youtube_privacy`,
+`youtube_video_id` columns live. Backend, DTO, and Publishing Center UI updated.
+
+**Phase 5 — BB&B test draft prepared.** Content ready — see report.
+
+**Phase 6 — STOPPED FOR APPROVAL.** Awaiting Matthew's sign-off. See report below.
+
+**Phases 7–11 — PENDING.** Will execute after Matthew approves.
+
+---
+
+### Remaining blocker (GBP, unchanged)
+
+**GBP is still blocked** by `quota_limit_value: "0"` on project `474786012895`.
+Matthew must enable both GBP APIs and request non-zero quota in GCP Console.
+
+---
+
+## Previous session: GBP Pilot Audit & Cleanup (TARGET phases 1–11)
 
 ### What was done
 

@@ -1,0 +1,364 @@
+TARGET: Make Content Autopilot platform selection control the complete content and media workflow for the Bed Bugs & Beyond pilot.
+
+PRIMARY GOAL
+
+The platform buttons in Content Autopilot must become the single control point for deciding which platform-specific content packages are created.
+
+Current active BB&B pilot platforms:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+
+When Matthew selects any combination of those platforms and presses Generate, AI Edge must create content only for the selected platforms.
+
+Do not build separate disconnected generators for each page.
+
+IMPORTANT ENGINEERING RULES
+
+Follow:
+
+1. Audit
+2. Consolidate
+3. Verify
+4. Expand
+
+Do not:
+
+- create another provider registry
+- create another platform selection system
+- hard-code a second pilot platform list
+- rebuild Content Autopilot
+- add TikTok, LinkedIn, Pinterest, or Nextdoor to this phase
+- claim finished video generation exists unless a real video file is created
+- weaken authentication
+- modify unrelated mobile code
+
+PHASE 1 — AUDIT THE CURRENT SELECTION FLOW
+
+Trace the selected platform IDs from:
+
+1. Content Autopilot platform cards
+2. localStorage restoration
+3. Generate Weekly Content action
+4. template/content creation
+5. draft creation
+6. media requirement creation
+7. queue creation
+8. Publishing Center
+9. provider-specific publish handlers
+
+Confirm:
+
+- exact canonical IDs used
+- whether Generate currently creates only selected platform drafts
+- whether image ideas are shared or platform-specific
+- whether YouTube receives title and description fields or only a caption
+- whether media assets are currently generated, uploaded, or only suggested
+- whether queueing and generation use the same selected platform set
+
+Report the exact gaps before implementation.
+
+PHASE 2 — DEFINE ONE PLATFORM CONTENT PACKAGE MODEL
+
+Create or reuse a shared content-package model keyed by canonical platform ID.
+
+Each generated platform package should support:
+
+- platformId
+- campaignId
+- title where applicable
+- caption or description
+- CTA
+- hashtags or tags
+- content status
+- required media type
+- required placement
+- width
+- height
+- aspect ratio
+- media asset ID when available
+- thumbnail asset ID when applicable
+- publish capability
+- manual action required
+- queue status
+
+Do not force every platform into identical caption-only fields.
+
+Preserve backward compatibility with existing social post records.
+
+If API or schema changes are needed:
+
+- update OpenAPI first
+- update Zod schemas
+- regenerate clients
+- update all consumers
+
+PHASE 3 — SELECTED PLATFORM GENERATION
+
+When Generate is pressed:
+
+1. Read the current selected pilot platform IDs.
+2. Reject generation if none are selected.
+3. Create one platform-specific package for every selected platform.
+4. Create no package for an unselected platform.
+5. Use the canonical provider registry and content profiles.
+6. Persist packages under one campaign or generation run.
+7. Show a clear generated summary by platform.
+8. Preserve the user’s selected platform set.
+
+Example:
+
+If Facebook and YouTube are selected:
+
+- create Facebook package
+- create YouTube package
+- do not create Instagram package
+- do not create Google package
+
+PHASE 4 — FACEBOOK PACKAGE
+
+For Facebook, create:
+
+- Facebook-specific caption
+- CTA
+- hashtag strategy
+- image requirement
+- recommended placement:
+  - 1:1 square
+  - or 4:5 portrait where appropriate
+- image dimensions
+- draft/queue state
+- direct-publish readiness state
+
+Do not reuse the exact Instagram caption unless the content profile intentionally allows it.
+
+PHASE 5 — INSTAGRAM PACKAGE
+
+For Instagram, create:
+
+- Instagram-specific caption
+- hashtags
+- CTA
+- image requirement
+- feed placement:
+  - 4:5 preferred
+  - 1:1 fallback
+- optional 9:16 Story/Reel concept
+- image dimensions
+- draft/queue state
+- direct-publish readiness state
+
+Do not claim Reel creation unless a real vertical video asset exists.
+
+PHASE 6 — GOOGLE BUSINESS PROFILE PACKAGE
+
+For Google Business Profile, create:
+
+- concise local-business post
+- Baldwin County local relevance
+- CTA
+- image requirement or optional-image state
+- recommended placement:
+  - 1:1
+  - or 4:3 if supported by the existing media system
+- manual-publish status while Google API quota remains zero
+- copy-ready content
+- clear “Manual publish required” label
+
+Google must remain usable manually even while automated publishing is blocked.
+
+PHASE 7 — YOUTUBE PACKAGE
+
+For YouTube, create a richer package:
+
+- title
+- description
+- tags
+- CTA
+- thumbnail requirement
+- thumbnail dimensions:
+  - 1280 x 720
+  - 16:9
+- video requirement
+- video type:
+  - Short
+  - or standard video
+- recommended video dimensions:
+  - 1080 x 1920 for Shorts
+  - 1920 x 1080 for standard video
+- script or outline
+- publish-readiness state
+- “Video file required” status until an MP4 exists
+
+Do not pretend the written package is a finished video.
+
+PHASE 8 — MEDIA REQUIREMENTS AND VARIANTS
+
+Add or reuse canonical media placement profiles for the four pilot platforms.
+
+At minimum support:
+
+- Facebook square: 1080 x 1080
+- Facebook portrait: 1080 x 1350
+- Instagram portrait: 1080 x 1350
+- Instagram square: 1080 x 1080
+- Instagram vertical: 1080 x 1920
+- Google square: 1080 x 1080
+- YouTube thumbnail: 1280 x 720
+- YouTube Short: 1080 x 1920
+- YouTube standard video: 1920 x 1080
+
+Each placement profile should define:
+
+- placement ID
+- platform ID
+- width
+- height
+- aspect ratio
+- label
+- safe-zone guidance
+- whether image, thumbnail, or video is required
+
+Do not scatter these values across page JSX.
+
+PHASE 9 — CURRENT MEDIA REALITY
+
+Implement truthful states:
+
+- Copy ready
+- Image required
+- Image ready
+- Thumbnail required
+- Thumbnail ready
+- Video required
+- Video ready
+- Manual publish required
+- Ready to queue
+- Ready to publish
+
+If no image-generation API currently exists:
+
+- create media requirements and placeholders
+- do not fabricate finished files
+- provide upload/select-asset actions using the existing media library if available
+
+If image generation already exists:
+
+- reuse it
+- generate platform-specific variants only for selected platforms
+
+Do not create a full video generator in this task unless an existing system can be safely reused.
+
+PHASE 10 — RESULTS UI
+
+After generation, show one section or tab per selected platform.
+
+Each selected platform should display:
+
+- content preview
+- platform-specific fields
+- required media format
+- actual preview ratio
+- current media readiness
+- queue/publish readiness
+- manual action required
+- edit capability
+- approval state
+
+Unselected platforms should not appear in the generated results.
+
+The platform selection cards remain the source of truth.
+
+PHASE 11 — QUEUE BEHAVIOR
+
+Queue All must operate only on selected generated packages.
+
+Requirements:
+
+- Facebook queues only when selected
+- Instagram queues only when selected
+- Google creates a manual-ready draft while API quota is blocked
+- YouTube queues only when required metadata exists
+- YouTube cannot be marked publish-ready without a real video asset
+- no unselected platform can be queued
+- no duplicate package is created on repeated clicks without explicit regeneration
+
+PHASE 12 — TESTS
+
+Add or update tests for:
+
+1. Selection controls generation.
+2. Unselected platforms produce no package.
+3. Facebook-only generation.
+4. Facebook + Instagram generation.
+5. Google-only generation.
+6. YouTube-only generation.
+7. Four-platform generation.
+8. Zero selection is blocked.
+9. Platform-specific fields differ correctly.
+10. YouTube requires a video asset before publish-ready.
+11. Google shows manual-publish state while quota is blocked.
+12. Media dimensions resolve from shared placement profiles.
+13. Queue All includes only selected generated packages.
+14. Unknown canonical IDs fail safely.
+15. Repeated generation does not silently duplicate packages.
+
+PHASE 13 — MANUAL ACCEPTANCE TEST
+
+While signed in, verify:
+
+1. Select only Facebook.
+2. Generate.
+3. Confirm only a Facebook package appears.
+
+4. Select Facebook and Instagram.
+5. Generate.
+6. Confirm exactly two packages appear.
+
+7. Select Google only.
+8. Generate.
+9. Confirm a copy-ready manual Google package appears.
+
+10. Select YouTube only.
+11. Generate.
+12. Confirm title, description, tags, thumbnail requirement, script, and video requirement appear.
+13. Confirm YouTube is not marked publish-ready without an MP4.
+
+14. Select all four.
+15. Generate.
+16. Confirm exactly four platform packages appear.
+
+PHASE 14 — REQUIRED REPORT
+
+Return:
+
+1. Production route and component hierarchy.
+2. Existing systems reused.
+3. Current selection-flow gap.
+4. Shared content-package model.
+5. Shared media placement profiles.
+6. Exact fields created for each platform.
+7. Whether OpenAPI changed.
+8. Whether database changed.
+9. Whether real image generation exists.
+10. Whether real video generation exists.
+11. Files changed.
+12. Tests and results.
+13. Typecheck result.
+14. Build result.
+15. Manual acceptance results.
+16. Remaining limitations.
+17. Recommended next phase.
+
+DOCUMENTATION
+
+Update:
+
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+- ARCHITECTURE_DECISIONS.md if the platform-package model is a durable decision
+
+Do not mark this complete unless the selected platform buttons directly determine which platform-specific content packages are created.

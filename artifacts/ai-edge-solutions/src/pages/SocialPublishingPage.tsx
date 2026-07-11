@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
+import { getSocialProvider } from "@/lib/social-providers";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube";
 
@@ -59,11 +60,13 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   failed:    { bg: "rgba(239,68,68,0.12)",   color: "#EF4444" },
 };
 
+// "google" is a page-local alias for the canonical "google_business" provider ID.
+// bg and color are display-optimized dark-background variants; icon and label from registry.
 const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; label: string }> = {
-  facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "f", label: "Facebook" },
-  instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: "✦", label: "Instagram" },
-  google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: "G", label: "Google Business" },
-  youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: "▶", label: "YouTube" },
+  facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: getSocialProvider("facebook").icon,        label: getSocialProvider("facebook").shortLabel },
+  instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: getSocialProvider("instagram").icon,       label: getSocialProvider("instagram").shortLabel },
+  google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: getSocialProvider("google_business").icon, label: "Google Business" },
+  youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: getSocialProvider("youtube").icon,         label: getSocialProvider("youtube").shortLabel },
 };
 
 function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | null; error?: string }> {
@@ -88,7 +91,7 @@ function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | 
 }
 
 const COMING_SOON_PLATFORMS = [
-  { key: "tiktok",  label: "TikTok",         icon: "♪", color: "#69C9D0", note: "Video + creator integration" },
+  { key: "tiktok" as const, label: getSocialProvider("tiktok").shortLabel, icon: getSocialProvider("tiktok").icon, color: getSocialProvider("tiktok").color, note: "Video + creator integration" },
 ];
 
 function timeAgo(iso: string) {

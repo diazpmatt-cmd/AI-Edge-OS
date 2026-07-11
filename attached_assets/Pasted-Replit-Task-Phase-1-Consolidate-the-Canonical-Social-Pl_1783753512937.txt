@@ -1,0 +1,213 @@
+Replit Task: Phase 1 — Consolidate the Canonical Social Platform Registry
+
+Background:
+
+The audit found that social platform definitions are duplicated across:
+
+- src/lib/social-providers.ts
+- ConnectionsPage.tsx
+- SocialPublishingPage.tsx
+- BBBContentAutopilotPage.tsx
+- AutoContentEnginePage.tsx
+- DashboardPage.tsx
+
+The existing src/lib/social-providers.ts file should become the canonical source of truth.
+
+Goal:
+
+Consolidate provider metadata into one shared registry without changing current user-facing behavior.
+
+This is Phase 1 only.
+
+Do not add drag-and-drop yet.
+Do not change publishing behavior.
+Do not enable disconnected platforms yet.
+Do not add LinkedIn publishing.
+Do not modify backend provider integrations.
+Do not redesign any pages.
+
+Before changing code:
+
+1. Reconfirm every current platform definition and caller.
+
+2. Record the provider metadata currently duplicated in each file, including:
+   - id
+   - display label
+   - description
+   - abbreviation
+   - icon
+   - color
+   - gradient/background
+   - connection route
+   - approval status
+   - coming-soon status
+   - publishing capability
+
+3. Confirm the exact provider IDs currently used by APIs and database records.
+
+Do not rename provider IDs during this phase.
+
+Canonical registry:
+
+Extend:
+
+src/lib/social-providers.ts
+
+Create a typed provider model that supports:
+
+- id
+- label
+- shortLabel
+- description
+- abbreviation
+- icon or iconKey
+- color
+- background or gradient
+- connectionPath
+- status
+- capabilities
+
+Use normalized statuses such as:
+
+- operational
+- connected
+- disconnected
+- pending_approval
+- coming_soon
+- unsupported
+
+Add capability flags such as:
+
+- connect
+- generateText
+- generateImage
+- generateVideo
+- queue
+- publish
+- schedule
+- analytics
+
+Important:
+
+Capabilities describe what AI Edge currently supports in code.
+Do not mark a capability true merely because the external platform supports it.
+
+Expected provider coverage:
+
+- facebook
+- instagram
+- google_business
+- youtube
+- tiktok
+- linkedin
+
+Apple Business may be included only if it already belongs in the product registry, but it must not be marked as a social publishing provider unless publishing support truly exists.
+
+Migration:
+
+1. Update ConnectionsPage.tsx to import provider display metadata from the canonical registry.
+
+2. Remove its duplicated inline PLATFORMS metadata only after confirming all fields are represented in the registry.
+
+3. Update SystemDiagnosticsPage.tsx to continue using the same registry without behavior changes.
+
+4. Update SocialPublishingPage.tsx to use canonical labels, icons, colors, and capability metadata where possible.
+
+Keep its current visible platform set and publishing behavior unchanged during this phase.
+
+5. Update BBBContentAutopilotPage.tsx to use canonical provider identifiers and display metadata where possible.
+
+Keep its current three-platform visible behavior unchanged during this phase.
+
+6. Update AutoContentEnginePage.tsx to use canonical provider metadata where possible.
+
+Do not add new platform tabs yet.
+
+7. Update any dashboard KPI or platform-count constants that can safely derive from the registry.
+
+Do not change displayed counts unless the existing count is objectively stale or incorrect.
+
+Type safety:
+
+1. Export a canonical SocialProviderId type from the registry.
+
+2. Replace local provider unions only where their values exactly match the canonical IDs.
+
+3. Preserve page-specific unions if they intentionally represent a smaller supported subset.
+
+4. Do not use:
+   - as any
+   - @ts-ignore
+   - unsafe casts
+
+5. Add helper functions if useful, such as:
+
+- getSocialProvider(id)
+- getPublishingProviders()
+- getConnectedAccountProviders()
+- providerSupports(id, capability)
+
+Keep helpers small and predictable.
+
+Testing:
+
+Add focused tests for:
+
+1. Provider IDs are unique.
+2. Every provider has required display metadata.
+3. Every provider has a complete capability object.
+4. Registry lookup returns the correct provider.
+5. Publishing providers are filtered correctly.
+6. Pending-approval providers are distinguishable from coming-soon providers.
+7. No provider is marked publish-capable without an existing backend implementation.
+
+Verification:
+
+Run:
+
+- focused registry tests
+- relevant frontend tests
+- TypeScript typecheck
+- frontend build
+- browser verification of:
+  - Connected Accounts
+  - System Diagnostics
+  - Publishing Center
+  - Content Autopilot
+  - Auto Content Engine
+
+Confirm:
+
+- no visual regressions
+- no missing icons or labels
+- no route changes
+- no publishing behavior changes
+- no provider IDs changed
+- no runtime errors
+
+Deliverables:
+
+- Canonical provider model
+- Registry fields added
+- Files migrated
+- Duplicate definitions removed
+- Local definitions intentionally retained and why
+- Capability matrix implemented
+- Tests added
+- TypeScript result
+- Build result
+- Browser verification result
+- Remaining duplication for Phase 2
+- Checkpoint or commit created
+
+Constraints:
+
+- Do not add drag-and-drop.
+- Do not add layout persistence.
+- Do not expose disconnected platforms yet.
+- Do not enable TikTok publishing.
+- Do not add LinkedIn publishing.
+- Do not modify OAuth flows.
+- Do not modify backend routes.
+- Do not change database schemas.
+- Do not redesign pages.

@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/StatusBadge";
+import { getSocialProvider } from "@/lib/social-providers";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,14 +92,16 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   failed:    { bg: "rgba(239,68,68,0.1)",   color: "#EF4444" },
 };
 
+// Social provider icons and labels from canonical registry.
+// Colors are display-tuned for dark background (not registry brand colors).
 const PLATFORM_DISPLAY: Record<string, { label: string; icon: string; color: string }> = {
-  facebook:       { label: "Facebook",        icon: "f",  color: "#6B9EFF" },
-  instagram:      { label: "Instagram",       icon: "✦",  color: "#FF6B9D" },
-  google_business:{ label: "Google Business", icon: "G",  color: "#EA4335" },
-  tiktok:         { label: "TikTok",          icon: "♪",  color: "#69C9D0" },
-  youtube:        { label: "YouTube",         icon: "▶",  color: "#FF0000" },
-  openai:         { label: "OpenAI / AI",     icon: "✦",  color: "#10A37F" },
-  telnyx:         { label: "Telnyx",          icon: "☎",  color: "#00A699" },
+  facebook:       { label: "Facebook",        icon: getSocialProvider("facebook").icon,        color: "#6B9EFF" },
+  instagram:      { label: "Instagram",       icon: getSocialProvider("instagram").icon,       color: "#FF6B9D" },
+  google_business:{ label: "Google Business", icon: getSocialProvider("google_business").icon, color: "#EA4335" },
+  tiktok:         { label: "TikTok",          icon: getSocialProvider("tiktok").icon,          color: "#69C9D0" },
+  youtube:        { label: "YouTube",         icon: getSocialProvider("youtube").icon,          color: "#FF0000" },
+  openai:         { label: "OpenAI / AI",     icon: "✦",                                      color: "#10A37F" },
+  telnyx:         { label: "Telnyx",          icon: "☎",                                      color: "#00A699" },
 };
 
 const LOG_TABS = [

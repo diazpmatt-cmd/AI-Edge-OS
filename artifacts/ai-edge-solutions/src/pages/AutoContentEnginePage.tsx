@@ -6,6 +6,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/StatusBadge";
+import { getSocialProvider } from "@/lib/social-providers";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -72,10 +73,12 @@ const FREQUENCY_OPTIONS = [
   { value: "3x_week",         label: "3× per week",      desc: "6 posts over 14 days"  },
 ];
 
+// "google" is a page-local alias for the canonical "google_business" provider ID.
+// Colors are display-tuned dark-background variants; icons from canonical registry.
 const PLATFORM_OPTIONS = [
-  { value: "facebook",         label: "Facebook",  icon: "f", color: "#6B9EFF" },
-  { value: "instagram",        label: "Instagram", icon: "✦", color: "#FF6B9D" },
-  { value: "google",           label: "Google",    icon: "G", color: "#EA4335" },
+  { value: "facebook", label: "Facebook",  icon: getSocialProvider("facebook").icon,        color: "#6B9EFF" },
+  { value: "instagram", label: "Instagram", icon: getSocialProvider("instagram").icon,       color: "#FF6B9D" },
+  { value: "google",   label: "Google",    icon: getSocialProvider("google_business").icon,  color: "#EA4335" },
 ];
 
 const APPROVAL_OPTIONS = [

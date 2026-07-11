@@ -179,3 +179,31 @@ export async function resolveClientContentContextFromDb(
   );
   return buildContextFromRecords(clientRow, snapshot, provider);
 }
+
+// ── Lightweight active-check resolver ─────────────────────────────────────────
+
+/**
+ * Checks only that the clients row exists and is_active = true.
+ * Does NOT load the service registry. Use this for write paths that need
+ * tenant verification without registry-dependent validation (e.g. pause).
+ *
+ * Returns ok: true with client identity, or ok: false with reason.
+ */
+export async function resolveClientActiveCheck(userId: string): Promise<
+  | { ok: true;  clientName: string; slug: string; clientId: string }
+  | { ok: false; reason: "not_found" | "inactive" }
+> {
+  const [row] = await db
+    .select({
+      id:         clientsTable.id,
+      slug:       clientsTable.slug,
+      clientName: clientsTable.clientName,
+      isActive:   clientsTable.isActive,
+    })
+    .from(clientsTable)
+    .where(eq(clientsTable.userId, userId));
+
+  if (!row) return { ok: false, reason: "not_found" };
+  if (!row.isActive) return { ok: false, reason: "inactive" };
+  return { ok: true, clientName: row.clientName, slug: row.slug, clientId: row.id };
+}

@@ -24,7 +24,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
-import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
+import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -185,10 +185,10 @@ router.get("/auto-content/settings", async (req, res) => {
   }
 
   // Settings row exists — use it, falling back to resolved client context for
-  // empty service area / topic arrays rather than hardcoded BB&B values.
+  // empty service area / topic arrays. Never supply BB&B defaults to another tenant.
   const resolved = await resolveClientContentContextFromDb(userId);
-  const fallbackAreas  = resolved.found ? resolved.context.serviceAreas : DEFAULT_SERVICE_AREAS;
-  const fallbackTopics = resolved.found ? resolved.context.topics        : DEFAULT_TOPICS;
+  const fallbackAreas  = resolved.found ? resolved.context.serviceAreas : [];
+  const fallbackTopics = resolved.found ? resolved.context.topics        : [];
 
   const parsedAreas  = parseJson<string[]>(row.serviceAreas, []);
   const parsedTopics = parseJson<string[]>(row.topics, []);
@@ -219,55 +219,128 @@ router.put("/auto-content/settings", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
+  // Resolve tenant — required for client identity (clientName, industry) and
+  // topic validation. Registry must be available so we can validate any topics
+  // in the request body against the canonical service registry.
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const r = resolved.reason;
+    if (r === "registry_unavailable") {
+      res.status(503).json({ error: "registry_unavailable", message: "Service registry temporarily unavailable. Please try again shortly." });
+    } else if (r === "inactive") {
+      res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
+    } else if (r === "not_found") {
+      res.status(404).json({ error: "no_client_configured", message: "No client record found for this account." });
+    } else {
+      res.status(422).json({ error: r, message: "Service registry is not properly configured for this client." });
+    }
+    return;
+  }
+
+  const ctx = resolved.context;
+
   const {
-    clientName, industry, serviceAreas, topics, frequency, postingTimes, platforms,
+    serviceAreas, topics, frequency, postingTimes, platforms,
     approvalMode, ctaText, ctaPreference, toneStyle, postAngles,
     autoGenerateEnabled, enginePaused, usedCombos,
   } = req.body;
 
+  // Validate and normalize topics when provided in the request body.
+  // Rejects prohibited, coming-soon, disabled, and non-generatable services.
+  let normalizedTopics: string[] | null = null;
+  if (Array.isArray(topics) && topics.length > 0) {
+    for (const topic of topics as string[]) {
+      const errorCode = ctx.registry.validateTopic(topic);
+      if (errorCode === "SERVICE_COMING_SOON") {
+        res.status(422).json({ error: errorCode, message: `"${topic}" is a coming-soon service and cannot be configured.` });
+        return;
+      }
+      if (errorCode === "SERVICE_DISABLED") {
+        res.status(422).json({ error: errorCode, message: `"${topic}" is not an offered service and cannot be configured.` });
+        return;
+      }
+      if (errorCode === "SERVICE_NOT_GENERATABLE") {
+        res.status(422).json({ error: errorCode, message: `"${topic}" is not eligible for content generation.` });
+        return;
+      }
+    }
+    normalizedTopics = ctx.registry.normalizeTopics(topics as string[]);
+    if (!normalizedTopics.length) {
+      res.status(422).json({ error: "SERVICE_NOT_GENERATABLE", message: "None of the provided topics are eligible for content generation." });
+      return;
+    }
+  }
+
+  // Read the existing row so we can preserve fields not included in this request.
+  const [existingRow] = await db.select().from(autoContentSettingsTable)
+    .where(eq(autoContentSettingsTable.userId, userId));
+
+  // clientName and industry are authoritative from the canonical client record —
+  // never from the request body. This prevents a tenant from impersonating another.
   const values = {
     userId,
-    clientName: clientName ?? "Bed Bugs & Beyond",
-    industry: industry ?? "pest_control",
-    serviceAreas: JSON.stringify(serviceAreas ?? []),
-    topics: JSON.stringify(topics ?? []),
-    frequency: frequency ?? "every_other_day",
-    postingTimes: JSON.stringify(postingTimes ?? ["08:00", "12:00", "17:00"]),
-    platforms: JSON.stringify(platforms ?? ["facebook"]),
-    approvalMode: approvalMode ?? BBB_DEFAULT_APPROVAL_MODE,
-    ctaText: ctaText ?? "Call Now \u2014 (251) 324-9090",
-    ctaPreference: ctaPreference ?? "call_now",
-    toneStyle: JSON.stringify(Array.isArray(toneStyle) ? toneStyle : DEFAULT_TONE),
-    postAngles: JSON.stringify(Array.isArray(postAngles) ? postAngles : DEFAULT_ANGLES),
+    clientName: ctx.clientName,
+    industry:   ctx.industry,
+    serviceAreas: JSON.stringify(
+      Array.isArray(serviceAreas) ? serviceAreas
+        : parseJson<string[]>(existingRow?.serviceAreas, ctx.serviceAreas),
+    ),
+    topics: JSON.stringify(
+      normalizedTopics ?? parseJson<string[]>(existingRow?.topics, ctx.topics),
+    ),
+    frequency:    frequency    ?? existingRow?.frequency    ?? "every_other_day",
+    postingTimes: JSON.stringify(
+      Array.isArray(postingTimes) ? postingTimes
+        : parseJson<string[]>(existingRow?.postingTimes, ["08:00", "12:00", "17:00"]),
+    ),
+    platforms: JSON.stringify(
+      Array.isArray(platforms) ? platforms
+        : parseJson<string[]>(existingRow?.platforms, ["facebook"]),
+    ),
+    approvalMode:  approvalMode  ?? existingRow?.approvalMode  ?? "approval_required",
+    ctaText:       ctaText       ?? existingRow?.ctaText       ?? "",
+    ctaPreference: ctaPreference ?? existingRow?.ctaPreference ?? "call_now",
+    toneStyle: JSON.stringify(
+      Array.isArray(toneStyle) ? toneStyle
+        : parseJson<string[]>(existingRow?.toneStyle, DEFAULT_TONE),
+    ),
+    postAngles: JSON.stringify(
+      Array.isArray(postAngles) ? postAngles
+        : parseJson<string[]>(existingRow?.postAngles, DEFAULT_ANGLES),
+    ),
     autoGenerateEnabled: String(autoGenerateEnabled !== false),
-    enginePaused: String(enginePaused === true),
-    usedCombos: JSON.stringify(usedCombos ?? []),
+    enginePaused:        String(enginePaused === true),
+    usedCombos: JSON.stringify(
+      Array.isArray(usedCombos) ? usedCombos
+        : parseJson<string[]>(existingRow?.usedCombos, []),
+    ),
   };
 
   await db.insert(autoContentSettingsTable).values(values)
     .onConflictDoUpdate({
       target: [autoContentSettingsTable.userId],
       set: {
-        clientName: values.clientName,
-        industry: values.industry,
-        serviceAreas: values.serviceAreas,
-        topics: values.topics,
-        frequency: values.frequency,
-        postingTimes: values.postingTimes,
-        platforms: values.platforms,
-        approvalMode: values.approvalMode,
-        ctaText: values.ctaText,
-        ctaPreference: values.ctaPreference,
-        toneStyle: values.toneStyle,
-        postAngles: values.postAngles,
+        clientName:          values.clientName,
+        industry:            values.industry,
+        serviceAreas:        values.serviceAreas,
+        topics:              values.topics,
+        frequency:           values.frequency,
+        postingTimes:        values.postingTimes,
+        platforms:           values.platforms,
+        approvalMode:        values.approvalMode,
+        ctaText:             values.ctaText,
+        ctaPreference:       values.ctaPreference,
+        toneStyle:           values.toneStyle,
+        postAngles:          values.postAngles,
         autoGenerateEnabled: values.autoGenerateEnabled,
-        enginePaused: values.enginePaused,
-        usedCombos: values.usedCombos,
-        updatedAt: new Date(),
+        enginePaused:        values.enginePaused,
+        usedCombos:          values.usedCombos,
+        updatedAt:           new Date(),
       },
     });
 
-  res.json({ ok: true });
+  console.log(`[auto-content] settings updated for ${ctx.clientName} (${userId.slice(0, 8)}…)`);
+  res.json({ ok: true, clientName: ctx.clientName, industry: ctx.industry });
 });
 
 // ── Timezone utility ──────────────────────────────────────────────────────────
@@ -916,18 +989,32 @@ router.post("/auto-content/pause", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  await db.insert(autoContentSettingsTable).values({
-    userId, clientName: "Bed Bugs & Beyond",
-    serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
-    topics: JSON.stringify(DEFAULT_TOPICS),
-    frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook","google"]', approvalMode: BBB_DEFAULT_APPROVAL_MODE,
-    ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "true",
-  }).onConflictDoUpdate({
-    target: [autoContentSettingsTable.userId],
-    set: { enginePaused: "true", updatedAt: new Date() },
-  });
+  // Lightweight client check — pause does not require registry validation.
+  // It is a safety operation: any active client with settings can pause.
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    if (clientCheck.reason === "not_found") {
+      res.status(404).json({ error: "no_client_configured", message: "No client record found for this account." });
+    } else {
+      res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
+    }
+    return;
+  }
 
+  // UPDATE only — do not create a settings row for tenants that have none.
+  // Prefer explicit configuration over implicit row creation.
+  const updated = await db
+    .update(autoContentSettingsTable)
+    .set({ enginePaused: "true", updatedAt: new Date() })
+    .where(eq(autoContentSettingsTable.userId, userId))
+    .returning({ userId: autoContentSettingsTable.userId });
+
+  if (!updated.length) {
+    res.status(404).json({ error: "settings_not_found", message: "No auto-content settings exist for this account. Configure settings before pausing." });
+    return;
+  }
+
+  console.log(`[auto-content] autopilot paused for ${clientCheck.clientName} (${userId.slice(0, 8)}…)`);
   res.json({ ok: true, enginePaused: true });
 });
 
@@ -937,19 +1024,63 @@ router.post("/auto-content/resume", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  await db.insert(autoContentSettingsTable).values({
-    userId, clientName: "Bed Bugs & Beyond",
-    serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
-    topics: JSON.stringify(DEFAULT_TOPICS),
-    frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook","google"]', approvalMode: BBB_DEFAULT_APPROVAL_MODE,
-    ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "false",
-  }).onConflictDoUpdate({
-    target: [autoContentSettingsTable.userId],
-    set: { enginePaused: "false", updatedAt: new Date() },
-  });
+  // Full resolution — registry must be valid before enabling the autopilot engine.
+  // A broken or unconfigured registry must not gate new content generation.
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const r = resolved.reason;
+    if (r === "registry_unavailable") {
+      res.status(503).json({ error: "registry_unavailable", message: "Service registry temporarily unavailable. Cannot resume autopilot." });
+    } else if (r === "inactive") {
+      res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
+    } else if (r === "not_found") {
+      res.status(404).json({ error: "no_client_configured", message: "No client record found for this account." });
+    } else {
+      res.status(422).json({ error: r, message: "Service registry is not properly configured. Cannot resume autopilot." });
+    }
+    return;
+  }
 
-  res.json({ ok: true, enginePaused: false });
+  // Validate that a settings row exists — do not create one implicitly.
+  const [settingsRow] = await db.select().from(autoContentSettingsTable)
+    .where(eq(autoContentSettingsTable.userId, userId));
+  if (!settingsRow) {
+    res.status(404).json({ error: "settings_not_found", message: "No auto-content settings exist. Configure settings before resuming." });
+    return;
+  }
+
+  // Validate required scheduling configuration.
+  const configuredAreas  = parseJson<string[]>(settingsRow.serviceAreas, []);
+  const configuredTopics = parseJson<string[]>(settingsRow.topics, []);
+  if (!configuredAreas.length || !configuredTopics.length) {
+    const reason = !configuredAreas.length ? "service_areas_required" : "topics_required";
+    console.warn(`[auto-content] resume rejected for ${resolved.context.clientName}: ${reason}`);
+    res.status(422).json({ error: reason, message: "Service areas and topics must be configured before resuming autopilot." });
+    return;
+  }
+
+  // Validate approval mode — only known modes are allowed.
+  const approvalMode = settingsRow.approvalMode;
+  if (!["approval_required", "draft_only", "auto_schedule"].includes(approvalMode)) {
+    console.warn(`[auto-content] resume rejected for ${resolved.context.clientName}: invalid approval_mode "${approvalMode}"`);
+    res.status(422).json({ error: "invalid_approval_mode", message: "A valid approval mode must be configured before resuming autopilot." });
+    return;
+  }
+
+  // UPDATE only — do not create a settings row for tenants that have none.
+  const updated = await db
+    .update(autoContentSettingsTable)
+    .set({ enginePaused: "false", updatedAt: new Date() })
+    .where(eq(autoContentSettingsTable.userId, userId))
+    .returning({ userId: autoContentSettingsTable.userId });
+
+  if (!updated.length) {
+    res.status(404).json({ error: "settings_not_found", message: "No auto-content settings exist for this account." });
+    return;
+  }
+
+  console.log(`[auto-content] autopilot resumed for ${resolved.context.clientName} (${userId.slice(0, 8)}…)`);
+  res.json({ ok: true, enginePaused: false, clientName: resolved.context.clientName, approvalMode });
 });
 
 // ── GET /auto-content/suggestions ────────────────────────────────────────────
@@ -966,10 +1097,10 @@ router.get("/auto-content/suggestions", async (req, res) => {
     inArray(socialPostsTable.status, ["scheduled", "draft"]),
   )).orderBy(socialPostsTable.scheduledAt).limit(50);
 
-  // Resolve client context for fallback values — replaces hardcoded BB&B defaults.
+  // Resolve client context for fallback values — never supply BB&B defaults to another tenant.
   const suggestResolved = await resolveClientContentContextFromDb(userId);
-  const sgFallbackTopics = suggestResolved.found ? suggestResolved.context.topics       : DEFAULT_TOPICS;
-  const sgFallbackAreas  = suggestResolved.found ? suggestResolved.context.serviceAreas : DEFAULT_SERVICE_AREAS;
+  const sgFallbackTopics = suggestResolved.found ? suggestResolved.context.topics       : [];
+  const sgFallbackAreas  = suggestResolved.found ? suggestResolved.context.serviceAreas : [];
 
   const suggestions: string[] = [];
 

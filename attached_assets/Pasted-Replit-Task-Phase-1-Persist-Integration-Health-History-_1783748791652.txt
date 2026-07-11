@@ -1,0 +1,112 @@
+Replit Task: Phase 1 - Persist Integration Health History
+
+Project:
+AI Edge Solutions / IA Edge OS
+
+Objective:
+Build the foundation for long-term Integration Health monitoring by persisting health check results into PostgreSQL.
+
+This is Phase 1 only.
+
+Do NOT build Morning Brief widgets, charts, alerts, or Apollos features yet.
+
+Before writing any code:
+
+1. Audit the existing diagnostics implementation.
+2. Reuse as much existing functionality as possible.
+3. Do not duplicate provider health logic.
+4. Follow the existing architecture:
+   - OpenAPI spec is the source of truth
+   - Generated API types
+   - Drizzle ORM
+   - Clerk auth
+   - useApiFetch()
+   - Existing diagnostics routes
+
+Implementation Goals
+
+Create persistent storage for integration health history.
+
+Each health check should be able to record:
+
+- integration id
+- provider
+- normalized status
+- checkedAt timestamp
+- lastSuccessAt (when applicable)
+- responseTimeMs (if available)
+- sanitized error code
+- sanitized error message
+- health score contribution
+- metadata (non-sensitive only)
+
+Requirements
+
+1. Reuse existing diagnostics endpoints.
+2. Do not change existing provider logic.
+3. Store results after a successful health scan.
+4. Never store:
+   - OAuth tokens
+   - refresh tokens
+   - API keys
+   - secrets
+   - authorization headers
+5. Sanitize provider errors before persistence.
+
+Database
+
+Determine whether an existing diagnostics/history table can be reused.
+
+If not:
+
+Create the smallest possible table following existing Drizzle conventions.
+
+If raw SQL is required because of known migration limitations,
+follow the project's existing migration strategy.
+
+API
+
+If useful, expose a read-only endpoint for historical records.
+
+Only add this if it naturally fits the current diagnostics architecture.
+
+Frontend
+
+No major UI work yet.
+
+If appropriate, add a developer-only view inside System Diagnostics showing the most recent persisted health records.
+
+Testing
+
+Run:
+
+- TypeScript typecheck
+- Relevant tests
+- Browser verification
+- Verify records persist after server restart
+- Verify health history survives application restart
+
+Deliverables
+
+- Architecture summary
+- Existing code reused
+- Files modified
+- Database changes
+- API changes
+- TypeScript results
+- Browser verification
+- Example persisted record
+- Security review confirming no secrets are stored
+- Checkpoint/commit
+
+Constraints
+
+Do not modify:
+- Morning Brief
+- Apollos
+- Connected Accounts
+- Existing provider diagnostics
+- Existing health checks
+- Styling
+
+This phase is only about creating a reliable historical foundation for future features.

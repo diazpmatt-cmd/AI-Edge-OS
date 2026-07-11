@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
-import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable } from "@workspace/db/schema";
+import { db, pool } from "@workspace/db";
+import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable, integrationHealthHistoryTable } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
@@ -9,6 +9,102 @@ import path from "path";
 const BACKUP_DIR = path.resolve(process.cwd(), "backups");
 
 const router = Router();
+
+// ── Integration Health History — raw-SQL table bootstrap ─────────────────────
+// (drizzle push is blocked by a pre-existing constraint conflict in the DB;
+//  we create the table directly via pool.query on startup instead.)
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS integration_health_history (
+        id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id         TEXT        NOT NULL,
+        provider        TEXT        NOT NULL,
+        status          TEXT        NOT NULL,
+        checked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_success_at TIMESTAMPTZ,
+        response_time_ms INTEGER,
+        error_code      TEXT,
+        error_message   TEXT,
+        health_score    INTEGER,
+        metadata        JSONB,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ihh_user_provider
+        ON integration_health_history(user_id, provider);
+      CREATE INDEX IF NOT EXISTS idx_ihh_checked_at
+        ON integration_health_history(checked_at DESC);
+    `);
+    console.log("[HEALTH-HISTORY] Table ready");
+  } catch (err) {
+    console.error("[HEALTH-HISTORY] Table init failed:", err);
+  }
+})();
+
+// ── Health-history helpers ─────────────────────────────────────────────────────
+
+// Strip anything resembling an OAuth token or secret from free-text detail strings.
+// Truncates to 300 chars so long error messages don't bloat the table.
+function sanitizeDetail(raw: string): string {
+  return raw
+    .replace(/ya29\.[A-Za-z0-9_\-\.]{10,}/g, "[redacted]")
+    .replace(/1\/\/[A-Za-z0-9_\-\.]{10,}/g, "[redacted]")
+    .replace(/Bearer\s+\S{8,}/gi, "Bearer [redacted]")
+    .replace(/(?:access|refresh)_token[=:\s]+\S{8,}/gi, "[redacted]")
+    .slice(0, 300);
+}
+
+function healthScore(status: string): number {
+  if (status === "healthy") return 100;
+  if (status === "warning") return 50;
+  return 0;
+}
+
+// Extract only non-sensitive fields from a platform health object for the
+// metadata JSONB column.  Never includes tokens, secrets, IDs, or keys.
+function safeMeta(provider: string, ph: Record<string, any>): Record<string, any> {
+  const m: Record<string, any> = {};
+  if (provider === "google_business") {
+    if (ph.locationTitle)  m.locationTitle  = String(ph.locationTitle).slice(0, 100);
+    if (ph.cooldownUntil)  m.cooldownUntil  = ph.cooldownUntil;
+  }
+  if (provider === "youtube") {
+    if (ph.uploadScopeGranted      !== undefined) m.uploadScopeGranted      = ph.uploadScopeGranted;
+    if (ph.uploadPermissionVerified !== undefined) m.uploadPermissionVerified = ph.uploadPermissionVerified;
+    if (ph.channelName) m.channelName = String(ph.channelName).slice(0, 100);
+  }
+  if (provider === "tiktok") {
+    if (ph.publishReady !== undefined) m.publishReady = ph.publishReady;
+  }
+  return m;
+}
+
+// Fire-and-forget: persist one row per provider, then prune records > 90 days old.
+async function persistHealthSnapshot(
+  userId: string,
+  platforms: Record<string, any>,
+  checkedAt: Date,
+): Promise<void> {
+  const rows = Object.entries(platforms).map(([provider, ph]: [string, any]) => ({
+    userId,
+    provider,
+    status: String(ph.status),
+    checkedAt,
+    lastSuccessAt:  ph.status === "healthy" ? checkedAt : null,
+    errorMessage:   ph.status !== "healthy" ? sanitizeDetail(String(ph.detail ?? "")) : null,
+    healthScore:    healthScore(ph.status),
+    metadata:       safeMeta(provider, ph),
+  }));
+
+  if (rows.length === 0) return;
+  await db.insert(integrationHealthHistoryTable).values(rows);
+
+  const cutoff = new Date(checkedAt.getTime() - 90 * 24 * 60 * 60 * 1000);
+  await pool.query(
+    "DELETE FROM integration_health_history WHERE checked_at < $1",
+    [cutoff],
+  );
+}
 
 // ── In-memory log buffer (populated by console interception) ─────────────────
 
@@ -304,7 +400,7 @@ router.get("/diagnostics/health", async (req, res) => {
     .filter(p => p.scheduledAt && new Date(p.scheduledAt) > now)
     .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime())[0];
 
-  res.json({
+  const healthPayload = {
     platforms,
     postCounts,
     recentPosts: posts.slice(0, 50).map(p => {
@@ -340,7 +436,46 @@ router.get("/diagnostics/health", async (req, res) => {
       lastUpdated: acRow?.updatedAt?.toISOString() ?? null,
     },
     checkedAt: now.toISOString(),
-  });
+  };
+  res.json(healthPayload);
+
+  // Persist health snapshot in the background — must not block the response.
+  persistHealthSnapshot(userId, platforms, now).catch(err =>
+    console.error("[HEALTH-PERSIST] failed:", err),
+  );
+});
+
+// ── GET /diagnostics/health-history ─────────────────────────────────────────
+router.get("/diagnostics/health-history", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const provider = typeof req.query.provider === "string" && req.query.provider
+    ? req.query.provider
+    : null;
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+
+  try {
+    const params: any[] = [userId];
+    let query = `
+      SELECT provider, status, checked_at, last_success_at,
+             error_message, health_score, metadata
+      FROM integration_health_history
+      WHERE user_id = $1
+    `;
+    if (provider) {
+      params.push(provider);
+      query += ` AND provider = $${params.length}`;
+    }
+    params.push(limit);
+    query += ` ORDER BY checked_at DESC LIMIT $${params.length}`;
+
+    const { rows } = await pool.query(query, params);
+    res.json({ history: rows });
+  } catch (err) {
+    console.error("[HEALTH-HISTORY] Read failed:", err);
+    res.status(500).json({ error: "Failed to load health history" });
+  }
 });
 
 // ── GET /diagnostics/logs ────────────────────────────────────────────────────

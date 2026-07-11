@@ -62,6 +62,18 @@ type LogEntry = {
 
 type LogsData = { logs: LogEntry[]; total: number };
 
+type HealthHistoryItem = {
+  provider: string;
+  status: string;
+  checked_at: string;
+  last_success_at: string | null;
+  error_message: string | null;
+  health_score: number | null;
+  metadata: Record<string, any> | null;
+};
+
+type HealthHistoryData = { history: HealthHistoryItem[] };
+
 type BkStatus = "healthy" | "warning" | "never";
 type BkTypeStatus = { status: BkStatus; lastBackupAt: string | null; sizeBytes: number; filename: string | null };
 type BkStatusData = { status: Record<string, BkTypeStatus>; history: BkHistoryItem[] };
@@ -194,6 +206,21 @@ export default function SystemDiagnosticsPage() {
       setNewestLogId(logsData.logs[0].id);
     }
   }, [logsData]);
+
+  // ── Health history query (60s poll) ──
+  const [historyProvider, setHistoryProvider] = useState<string>("all");
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const { data: historyData } = useQuery<HealthHistoryData>({
+    queryKey: ["diagnostics_health_history", historyProvider],
+    queryFn: () => {
+      const qs = historyProvider !== "all" ? `?provider=${historyProvider}&limit=100` : "?limit=100";
+      return authFetch<HealthHistoryData>(`/diagnostics/health-history${qs}`);
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    enabled: historyOpen,
+  });
 
   // ── Action mutations ──
   const retryFailed = useMutation({
@@ -1605,6 +1632,107 @@ export default function SystemDiagnosticsPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── DEV ONLY: Integration Health History ─────────────────────────── */}
+      <div style={{ padding: "0 24px 32px" }}>
+        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, overflow: "hidden" }}>
+          {/* Header / toggle */}
+          <button
+            onClick={() => setHistoryOpen(o => !o)}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", background: "none", border: "none", cursor: "pointer", color: "#94A3B8" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#64748B", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                🕓 Integration Health History
+              </span>
+              <span style={{ fontSize: 11, background: "rgba(100,116,139,0.15)", color: "#64748B", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
+                DEV
+              </span>
+            </div>
+            <span style={{ fontSize: 13, color: "#475569" }}>{historyOpen ? "▲" : "▼"}</span>
+          </button>
+
+          {historyOpen && (
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 18px" }}>
+              {/* Provider filter */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "#64748B", fontWeight: 600 }}>Filter:</span>
+                {["all", "facebook", "instagram", "google_business", "tiktok", "youtube", "openai", "telnyx"].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setHistoryProvider(p)}
+                    style={{
+                      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid",
+                      background: historyProvider === p ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.03)",
+                      borderColor: historyProvider === p ? "rgba(0,174,239,0.4)" : "rgba(255,255,255,0.08)",
+                      color: historyProvider === p ? "#00AEEF" : "#64748B",
+                    }}
+                  >
+                    {p === "all" ? "All" : PLATFORM_DISPLAY[p]?.label ?? p}
+                  </button>
+                ))}
+              </div>
+
+              {/* Table */}
+              {!historyData ? (
+                <div style={{ color: "#475569", fontSize: 13, padding: "8px 0" }}>Loading…</div>
+              ) : historyData.history.length === 0 ? (
+                <div style={{ color: "#475569", fontSize: 13, padding: "8px 0" }}>
+                  No records yet — records appear after the first health check poll.
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                        {["Provider", "Status", "Score", "Detail / Error", "Checked At", "Last OK"].map(h => (
+                          <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: "#475569", fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyData.history.map((row, i) => {
+                        const hc = HEALTH_COLOR[row.status as HealthStatus] ?? HEALTH_COLOR.failed;
+                        const pd = PLATFORM_DISPLAY[row.provider];
+                        return (
+                          <tr
+                            key={i}
+                            style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
+                          >
+                            <td style={{ padding: "7px 10px", color: pd?.color ?? "#94A3B8", fontWeight: 600, whiteSpace: "nowrap" }}>
+                              {pd ? `${pd.icon} ${pd.label}` : row.provider}
+                            </td>
+                            <td style={{ padding: "7px 10px", whiteSpace: "nowrap" }}>
+                              <span style={{ display: "inline-block", background: hc.bg, color: hc.dot, border: `1px solid ${hc.border}`, borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 11 }}>
+                                {hc.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: "7px 10px", color: hc.dot, fontWeight: 700, fontFamily: "monospace" }}>
+                              {row.health_score ?? "—"}
+                            </td>
+                            <td style={{ padding: "7px 10px", color: "#94A3B8", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.error_message ?? <span style={{ color: "#475569" }}>—</span>}
+                            </td>
+                            <td style={{ padding: "7px 10px", color: "#64748B", whiteSpace: "nowrap", fontFamily: "monospace", fontSize: 11 }}>
+                              {fmtDate(row.checked_at)}
+                            </td>
+                            <td style={{ padding: "7px 10px", color: "#64748B", whiteSpace: "nowrap", fontFamily: "monospace", fontSize: 11 }}>
+                              {row.last_success_at ? fmtDate(row.last_success_at) : <span style={{ color: "#334155" }}>—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ fontSize: 11, color: "#334155", marginTop: 10, textAlign: "right" }}>
+                    {historyData.history.length} record{historyData.history.length !== 1 ? "s" : ""} · retained 90 days · polled every 60s
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

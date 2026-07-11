@@ -25,6 +25,10 @@ import {
   type SettingsSnapshot,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import {
+  loadClientServiceRegistry,
+  createDbServiceRegistryProvider,
+} from "./service-registry-loader.js";
 
 export type { ClientResolveResult };
 
@@ -122,5 +126,24 @@ export async function resolveClientContentContextFromDb(
     .where(eq(autoContentSettingsTable.userId, userId));
 
   const snapshot: SettingsSnapshot | null = settingsRow ?? null;
+
+  // ── Phase B2: Load DB-backed service registry ──────────────────────────────
+  // Try the DB-backed registry first (normal path after bootstrap seed).
+  // Falls back to resolveServiceRegistryProvider for supported clients when the
+  // registry hasn't been seeded yet (first-time setup / bootstrap lag).
+  const registryLoad = await loadClientServiceRegistry(clientRow.id);
+  if (registryLoad.ok && registryLoad.services.length > 0) {
+    const provider = createDbServiceRegistryProvider(
+      registryLoad.services,
+      registryLoad.systemBusinessRules,
+    );
+    return buildContextFromRecords(clientRow, snapshot, provider);
+  }
+
+  if (!registryLoad.ok && registryLoad.reason === "db_error") {
+    console.error("[CLIENT-RESOLVER] DB error loading service registry for", clientRow.slug, ":", registryLoad.error);
+  } else {
+    console.warn("[CLIENT-RESOLVER] Service registry not yet seeded for", clientRow.slug, "— falling back to static provider");
+  }
   return buildContextFromRecords(clientRow, snapshot);
 }

@@ -384,6 +384,29 @@ router.post("/auto-content/generate", async (req, res) => {
 
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
+  // ── Phase B2: Resolve client registry from DB (tenant isolation) ───────────
+  // Loads the client record and its DB-backed service registry. This enforces
+  // that unknown tenants cannot generate content using BB&B services, and that
+  // inactive clients are blocked before any AI generation or DB writes begin.
+  // Applies to both Clerk-authenticated users and the internal scheduler path
+  // (the scheduler's userId is already resolved from the settings row above).
+  let resolvedRegistry: import("@workspace/db").ServiceRegistryProvider | undefined;
+  {
+    const clientResult = await resolveClientContentContextFromDb(userId);
+    if (!clientResult.found) {
+      const r = (clientResult as { found: false; reason: string }).reason;
+      if (r === "inactive") {
+        res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
+      } else if (r === "not_found") {
+        res.status(403).json({ error: "no_client_configured", message: "No client record found for this account. Contact support to set up your account." });
+      } else {
+        res.status(422).json({ error: "registry_not_configured", message: "No service registry is configured for this client." });
+      }
+      return;
+    }
+    resolvedRegistry = clientResult.context.registry;
+  }
+
   const {
     clientName: bodyClientName, industry: bodyIndustry,
     serviceAreas: bodyServiceAreas, topics: bodyTopics,
@@ -452,7 +475,7 @@ router.post("/auto-content/generate", async (req, res) => {
     ctaText:       ctaText       ?? null,
     ctaPreference: ctaPreference ?? null,
     frequency:     frequency     ?? null,
-  });
+  }, resolvedRegistry);
 
   // ── Registry enforcement — hard block prohibited services ──────────────────
   // Check each topic against the client's service registry.

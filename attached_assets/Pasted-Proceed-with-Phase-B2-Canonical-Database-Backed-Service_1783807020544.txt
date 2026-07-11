@@ -1,0 +1,463 @@
+Proceed with Phase B2 — Canonical Database-Backed Service Registry Provider.
+
+Phases A1, A2, and B1 are complete and committed.
+
+Current verified foundation:
+
+- Canonical clients table exists
+- Clerk user_id is the current tenant identifier
+- BB&B client backfill is confirmed
+- ClientContentContext exists
+- ServiceRegistryProvider is the canonical service abstraction
+- bbbRegistryProvider preserves current BB&B behavior
+- resolveServiceRegistryProvider(client) is the centralized provider boundary
+- resolveClientContentContextFromDb(userId) returns typed results
+- Unknown tenants never fall back to BB&B
+- GET settings and GET suggestions are tenant-aware
+- Generate, PUT, pause, and resume remain unchanged
+- Autopilot remains disabled
+- 749/749 tests pass
+
+Objective:
+
+Create the canonical database-backed service registry used by all future clients.
+
+BB&B must become the first database-seeded implementation, but its existing behavior must remain exactly unchanged.
+
+This phase is data-layer and provider-layer only.
+
+Do not build onboarding UI, service-management UI, client switching, or new Growth Engine features.
+
+AUDIT FIRST
+
+Before editing any code, inspect:
+
+- lib/db/src/bbb-services.ts
+- ServiceRegistryProvider
+- bbbRegistryProvider
+- Existing service-related database tables
+- Existing service registry or onboarding schemas
+- Current BB&B service definitions
+- Topic aliases and matching rules
+- Prompt rules
+- Default topics
+- Weekly slot-selection behavior
+- System business rules
+- Service availability states
+- Booking, publishing, AI-generation, and CTA restrictions
+- Existing migrations and raw SQL bootstrap patterns
+- Every current consumer of bbb-services.ts
+
+Produce a short pre-implementation audit stating:
+
+1. Whether an existing service table can be extended
+2. Why new tables are or are not required
+3. Which BB&B service attributes must be preserved
+4. Which current functions contain behavior rather than data
+5. Which logic should remain shared code
+6. Which values should move into canonical database records
+7. Any compatibility or migration risks
+8. The exact plan for character-for-character BB&B parity
+
+Do not implement until the audit is complete.
+
+CANONICAL MODEL
+
+Design the smallest reusable model that supports service registries for any industry.
+
+Prefer normalized typed tables over one large unstructured JSON blob.
+
+At minimum, support the following concepts.
+
+Client service record:
+
+- id
+- client_id
+- stable service key
+- display name
+- short name if currently required
+- category
+- description
+- active status
+- availability status
+- sort order
+- created_at
+- updated_at
+
+Availability must support at least:
+
+- active
+- coming_soon
+- unavailable
+
+Service capability flags must support at least:
+
+- allow_ai_generation
+- allow_booking
+- allow_cta
+- allow_publishing
+- allow_recommendation
+
+Service topic and matching data:
+
+- canonical topic
+- aliases
+- normalized aliases
+- prompt rules
+- prohibited wording if needed
+- preferred wording if needed
+- weekly planning eligibility
+- default-topic eligibility
+
+Client-level registry rules:
+
+- system business rules
+- global prohibited topics or claims
+- global preferred positioning
+- registry version or updated timestamp if useful
+
+Do not add industry-specific columns such as:
+
+- termite
+- fumigation
+- bed_bug
+- plumbing
+- roofing
+
+Industry-specific values belong in service records and rules, not the schema.
+
+BB&B BUSINESS RULES TO PRESERVE
+
+The seeded database registry must preserve the current BB&B rules exactly.
+
+Active services include:
+
+- Bed Bug Inspection
+- Bed Bug Treatment
+- Residential Pest Control
+- Commercial Pest Control
+- Vacation Rental Services
+- Property Manager Programs
+- Roaches
+- Rodents
+- Ants
+- Fleas
+- Ticks
+- Spiders
+- Wasps/Hornets
+- Mosquitoes
+- Moles
+- Fumigation
+
+Not offered:
+
+- Whole-home bed bug heat treatment
+- Wildlife removal
+
+Coming soon:
+
+- Termites
+
+Termites must remain blocked from:
+
+- AI generation
+- booking
+- CTAs
+- publishing
+- active recommendations
+
+BB&B positioning must continue to state that the company treats furniture and individual items rather than offering expensive whole-home bed bug heat treatment.
+
+Fumigation must remain an active offered service.
+
+Do not accidentally convert unavailable or coming-soon services into active services.
+
+REQUIRED IMPLEMENTATION
+
+1. Canonical Service Registry Schema
+
+Create or extend the minimum tables needed for:
+
+- Client services
+- Service aliases/topics
+- Service prompt rules
+- Client-level business rules
+
+Use existing Drizzle and migration conventions.
+
+Add:
+
+- Foreign keys where supported by current conventions
+- Unique constraints preventing duplicate service keys per client
+- Indexes for client lookup
+- Stable deterministic ordering
+- Idempotent migration or bootstrap behavior
+
+Do not make service identity depend on display-name text.
+
+Use a stable service key.
+
+2. BB&B Registry Backfill
+
+Seed the canonical BB&B registry from the existing source of truth.
+
+The backfill must be idempotent.
+
+Running it repeatedly must not:
+
+- Duplicate services
+- Duplicate aliases
+- Duplicate rules
+- Change service availability incorrectly
+- Enable termites
+- Remove fumigation
+- Enable autopilot
+
+Preserve the existing service ordering where behavior depends on it.
+
+3. Database-Backed Provider
+
+Implement a reusable provider that satisfies ServiceRegistryProvider.
+
+Use an appropriate name such as:
+
+createDbServiceRegistryProvider(...)
+or
+DbServiceRegistryProvider
+
+Follow existing project conventions.
+
+It must support:
+
+- matchByTopic
+- validateTopic
+- selectWeeklySlots
+- getPromptRules
+- normalizeTopics
+- getDefaultTopics
+- getSystemBusinessRules
+
+Do not copy and paste BB&B-specific algorithms into the provider.
+
+Separate:
+
+- Generic matching and selection logic
+- Database-supplied client service data
+- Client-specific rules
+
+The provider must not query the database separately for every method invocation during one request.
+
+Load the registry once, build an in-memory provider, and reuse it for the resolved context.
+
+4. Provider Resolution
+
+Update the centralized registry-resolution flow so:
+
+- BB&B resolves to its database-backed registry
+- Future clients can resolve through the same generic mechanism
+- Registry resolution is based on client identity and stored registry data, not an expanding hardcoded slug switch
+- Missing registries return a typed result
+- Empty or corrupt registries return a typed error
+- Unknown clients never receive BB&B services
+
+The legacy bbbRegistryProvider may remain temporarily as:
+
+- A parity oracle
+- A fallback only for an explicitly documented internal legacy path
+- A test fixture
+
+It must not remain the primary provider for a successfully seeded DB-backed BB&B client.
+
+5. Resolver Integration
+
+Update resolveClientContentContextFromDb(userId) to:
+
+- Load the client
+- Load auto-content settings
+- Load the client’s service registry
+- Build one database-backed provider
+- Build ClientContentContext with that provider
+- Return typed failure reasons when needed
+
+Possible typed reasons include:
+
+- not_found
+- inactive
+- registry_not_configured
+- registry_invalid
+
+Use existing naming conventions if different.
+
+6. Generation-Path Integration
+
+The auto-content generate route already consumes context.registry.
+
+Integrate the DB-backed resolver into the generate path only if it can be done without changing generation behavior.
+
+Requirements:
+
+- BB&B output remains equivalent
+- Unknown tenants cannot generate using BB&B services
+- Inactive clients cannot generate
+- Missing registries cannot generate
+- Autopilot safety gate remains enforced
+- Existing scheduler authentication remains unchanged
+- No posts are published during validation
+
+Do not modify PUT, pause, or resume yet unless compilation requires a minimal change.
+
+7. Exact Parity Tests
+
+Create automated parity tests comparing the existing bbbRegistryProvider against the new DB-backed BB&B provider.
+
+Test all supported operations:
+
+- matchByTopic
+- validateTopic
+- selectWeeklySlots
+- getPromptRules
+- normalizeTopics
+- getDefaultTopics
+- getSystemBusinessRules
+
+Use representative inputs covering:
+
+- Every active service
+- Aliases
+- Case differences
+- Punctuation differences
+- Unknown topics
+- Whole-home heat treatment
+- Wildlife removal
+- Termites
+- Fumigation
+- Empty input
+- Duplicate topics
+
+Where deterministic selection depends on ordering, verify exact ordered parity.
+
+8. Tenant Isolation Tests
+
+Add tests proving:
+
+- BB&B receives only BB&B services
+- A fictional second client receives only its own services
+- Identical service keys may exist for different clients without collision
+- Service aliases do not leak between clients
+- Prompt rules do not leak between clients
+- Business rules do not leak between clients
+- Mutating one in-memory provider does not mutate another
+- Unknown client IDs do not resolve any registry
+- Inactive clients cannot resolve a usable registry
+- Missing registry returns an explicit typed failure
+
+Use a fictional non-pest-control client such as Lakeside Plumbing.
+
+Do not add production onboarding for that fictional client unless a test fixture is sufficient.
+
+9. Safety Tests
+
+Explicitly verify:
+
+- Termites remain coming_soon
+- Termites cannot be generated
+- Termites cannot be booked
+- Termites cannot receive CTAs
+- Termites cannot be published
+- Whole-home bed bug heat treatment remains unavailable
+- Wildlife removal remains unavailable
+- Fumigation remains active
+- Autopilot remains disabled
+- No test publishes content
+
+10. Consumer Audit
+
+Search all imports and calls to bbb-services.ts.
+
+Classify each consumer as:
+
+- Migrated in Phase B2
+- Intentionally retained as parity/legacy logic
+- Deferred to Phase B3
+
+Do not perform unrelated broad refactors.
+
+MIGRATION HARDENING
+
+Review the Phase B1 clients-table startup bootstrap.
+
+Do not remove a working fallback blindly.
+
+Document:
+
+- Whether the migration runner now reliably applies the clients and registry migrations
+- Why runtime CREATE TABLE IF NOT EXISTS is still required or no longer required
+- Whether schema creation at module-import time creates startup or test risks
+
+Only make a narrowly scoped hardening change if clearly safe and covered by tests.
+
+RESTRICTIONS
+
+- Do not build service registry UI
+- Do not build onboarding UI
+- Do not build a client switcher
+- Do not create Growth Engine dashboards
+- Do not add Authority Engine features
+- Do not add outreach features
+- Do not add backlink tables
+- Do not enable autopilot
+- Do not publish content
+- Do not modify social provider behavior
+- Do not redesign Content Autopilot
+- Do not duplicate bbb-services.ts into a second BB&B-specific implementation
+- Do not silently fall back to BB&B
+- Do not begin Phase B3 automatically
+
+VALIDATION
+
+Run:
+
+1. Database schema TypeScript build
+2. Migration/bootstrap validation
+3. Phase B2 provider tests
+4. Exact BB&B parity tests
+5. Phase B1 tenant-isolation tests
+6. Phase A2 context tests
+7. API-server tests
+8. Full relevant web tests
+9. API-server TypeScript check
+10. A safe dry run with publishing disabled, if generation integration changed
+
+For any dry run:
+
+- Keep autopilot_enabled=false
+- Do not publish
+- Confirm all generated records remain draft/pending_review
+- Confirm repeat execution remains idempotent
+
+DELIVERABLES
+
+Provide:
+
+1. Pre-implementation audit findings
+2. Files created or modified
+3. Canonical service-registry schema
+4. BB&B backfill summary
+5. Database-backed provider API
+6. Provider loading and caching behavior
+7. Resolver integration summary
+8. Generation-path integration summary
+9. Exact BB&B parity results
+10. Tenant-isolation results
+11. Safety-rule results
+12. Consumer audit of bbb-services.ts
+13. Migration/bootstrap hardening findings
+14. Remaining legacy BB&B dependencies
+15. Confirmation that autopilot remains disabled
+16. Confirmation that nothing was published
+17. Complete TypeScript and test results
+18. Recommended Phase B3 scope
+
+Stop after Phase B2 validation.
+
+Do not begin Phase B3.

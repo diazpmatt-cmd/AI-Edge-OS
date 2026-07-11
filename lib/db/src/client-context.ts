@@ -399,23 +399,33 @@ export function resolveServiceRegistryProvider(
  * No DB access. Callers must fetch the records from the DB first.
  * The DB-side wrapper is resolveClientContentContextFromDb in api-server.
  *
- * Phase B1 contract:
+ * Phase B2: accepts an optional providerOverride. When provided, skips the
+ * resolveServiceRegistryProvider lookup and uses the given provider directly —
+ * this is the entry point for DB-backed providers loaded in client-resolver.ts.
+ *
+ * Contract:
  * - Inactive clients → { found: false, reason: "inactive" }
- * - Unsupported registry → { found: false, reason: "unsupported_registry" }
- *   (non-BB&B tenants MUST NOT receive BB&B context)
- * - Active BB&B client → { found: true, context: ... }
+ * - Unsupported registry (no override, no static match) → { found: false, reason: "unsupported_registry" }
+ * - Active client with known provider → { found: true, context: ... }
  */
 export function buildContextFromRecords(
   client: ClientRecord,
   settings: SettingsSnapshot | null,
+  providerOverride?: ServiceRegistryProvider,
 ): ClientResolveResult {
   if (!client.isActive) {
     return { found: false, reason: "inactive" };
   }
 
-  const registryResult = resolveServiceRegistryProvider(client);
-  if (!registryResult.supported) {
-    return { found: false, reason: "unsupported_registry" };
+  let provider: ServiceRegistryProvider;
+  if (providerOverride) {
+    provider = providerOverride;
+  } else {
+    const registryResult = resolveServiceRegistryProvider(client);
+    if (!registryResult.supported) {
+      return { found: false, reason: "unsupported_registry" };
+    }
+    provider = registryResult.provider;
   }
 
   const config: PartialClientConfig = {
@@ -435,7 +445,7 @@ export function buildContextFromRecords(
 
   return {
     found:   true,
-    context: buildClientContentContext(config, registryResult.provider),
+    context: buildClientContentContext(config, provider),
     client,
   };
 }

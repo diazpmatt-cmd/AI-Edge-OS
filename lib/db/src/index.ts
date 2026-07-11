@@ -16,4 +16,5 @@ export const db = drizzle(pool, { schema });
 export * from "./schema";
 export * from "./bbb-services";
 export * from "./client-context";
+export * from "./db-service-registry-provider";
 export { eq, and, or, sql } from "drizzle-orm";

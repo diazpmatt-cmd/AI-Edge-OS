@@ -470,39 +470,47 @@ export function getDisabledServices(): BBBService[] {
   return BBB_SERVICES.filter(s => s.status === "disabled");
 }
 
-/** Canonical topic display names for generatable services, sorted by priority then revenue. */
-export function getDefaultTopics(): string[] {
-  return getGeneratableServices()
+/** Generic: canonical topic display names from any services array, sorted by priority then revenue. */
+export function getDefaultTopicsFrom(services: readonly BBBService[]): string[] {
+  return services
+    .filter(s => s.generationAllowed)
     .sort((a, b) => a.priority - b.priority || b.revenueWeight - a.revenueWeight)
     .map(s => s.displayName);
 }
 
+/** Canonical topic display names for generatable BB&B services, sorted by priority then revenue. */
+export function getDefaultTopics(): string[] {
+  return getDefaultTopicsFrom(BBB_SERVICES);
+}
+
 /**
- * Validate that a topic string refers to a service that can be generated.
- * Returns an error code string if invalid, or null if valid.
+ * Hard-coded keyword blocks — absolute defense-in-depth safety rails.
+ * These are intentional code-level constants that MUST NOT be moved to the DB
+ * or made configurable at runtime. Exported so the DB-backed provider can use
+ * the same constants (no duplication, no possibility of overriding them).
  */
-export function validateTopicForGeneration(topic: string): string | null {
+export const TOPIC_COMING_SOON_KEYWORDS = ["termite"] as const;
+export const TOPIC_DISABLED_KEYWORDS    = ["wildlife", "wildlife removal"] as const;
+export const TOPIC_NOT_GENERATABLE_KEYWORDS = [
+  "heat treatment", "whole-home heat treatment", "bed bug heat treatment",
+] as const;
+
+/**
+ * Generic: validate a topic against a caller-supplied services array.
+ * Applies hard-coded keyword blocks first, then checks service capability flags.
+ * Returns an error code string if invalid, or null if the topic is safe to generate.
+ */
+export function validateTopicForGenerationWith(
+  services: readonly BBBService[],
+  topic: string,
+): string | null {
   const normalized = topic.trim().toLowerCase();
 
-  // Hard-coded blocked keyword groups with explicit error codes.
-  // These must never slip through regardless of registry state.
-  const COMING_SOON_KEYWORDS = ["termite"];
-  const DISABLED_KEYWORDS    = ["wildlife", "wildlife removal"];
-  const NOT_GENERATABLE_KEYWORDS = [
-    "heat treatment", "whole-home heat treatment", "bed bug heat treatment",
-  ];
+  if (TOPIC_COMING_SOON_KEYWORDS.some(t => normalized.includes(t)))    return "SERVICE_COMING_SOON";
+  if (TOPIC_DISABLED_KEYWORDS.some(t => normalized.includes(t)))        return "SERVICE_DISABLED";
+  if (TOPIC_NOT_GENERATABLE_KEYWORDS.some(t => normalized.includes(t))) return "SERVICE_NOT_GENERATABLE";
 
-  if (COMING_SOON_KEYWORDS.some(t => normalized.includes(t))) return "SERVICE_COMING_SOON";
-  if (DISABLED_KEYWORDS.some(t => normalized.includes(t)))     return "SERVICE_DISABLED";
-  if (NOT_GENERATABLE_KEYWORDS.some(t => normalized.includes(t))) return "SERVICE_NOT_GENERATABLE";
-
-  // Find matching service by displayName or serviceId (partial match OK for topic strings)
-  const match = BBB_SERVICES.find(s =>
-    normalized.includes(s.serviceId.replace(/_/g, " ")) ||
-    normalized.includes(s.displayName.toLowerCase()) ||
-    s.displayName.toLowerCase().includes(normalized)
-  );
-
+  const match = matchServiceByTopicIn(services, topic);
   if (!match) return null; // Unknown topic — allow (may be a valid pest not in registry yet)
   if (!match.generationAllowed) {
     if (match.status === "coming_soon") return "SERVICE_COMING_SOON";
@@ -513,24 +521,51 @@ export function validateTopicForGeneration(topic: string): string | null {
 }
 
 /**
+ * Validate that a topic string refers to a BB&B service that can be generated.
+ * Returns an error code string if invalid, or null if valid.
+ * Delegates to validateTopicForGenerationWith(BBB_SERVICES, topic).
+ */
+export function validateTopicForGeneration(topic: string): string | null {
+  return validateTopicForGenerationWith(BBB_SERVICES, topic);
+}
+
+/**
  * Normalize a list of topic strings against the registry.
  * - Removes hard-blocked topics (termites, wildlife, heat treatment)
  * - Returns a cleaned list safe for AI generation
  */
+/** Generic: filter out blocked topics using a caller-supplied services array. */
+export function normalizeTopicsIn(services: readonly BBBService[], topics: string[]): string[] {
+  return topics.filter(t => validateTopicForGenerationWith(services, t) === null);
+}
+
+/** Filter out blocked BB&B topics from a list. */
 export function normalizeTopics(topics: string[]): string[] {
-  return topics.filter(t => validateTopicForGeneration(t) === null);
+  return normalizeTopicsIn(BBB_SERVICES, topics);
 }
 
 /**
  * Find the matching BBBService for a topic display name (best effort).
  */
-export function matchServiceByTopic(topic: string): BBBService | undefined {
+/**
+ * Generic: match a topic string against any services array.
+ * Uses bidirectional partial matching on serviceId and displayName.
+ */
+export function matchServiceByTopicIn(
+  services: readonly BBBService[],
+  topic: string,
+): BBBService | undefined {
   const normalized = topic.trim().toLowerCase();
-  return BBB_SERVICES.find(s =>
+  return services.find(s =>
     normalized.includes(s.serviceId.replace(/_/g, " ")) ||
     normalized.includes(s.displayName.toLowerCase()) ||
     s.displayName.toLowerCase().includes(normalized)
   );
+}
+
+/** Match a topic string against the BB&B service registry. */
+export function matchServiceByTopic(topic: string): BBBService | undefined {
+  return matchServiceByTopicIn(BBB_SERVICES, topic);
 }
 
 // ── Service-specific prompt rules (for AI generation) ─────────────────────────
@@ -560,6 +595,59 @@ export function getServicePromptRules(topic: string): string {
       "  exact preparation steps, specific pricing, or guarantees.",
       "- ALLOWED: service awareness, general educational content, inspection/consultation CTA.",
     );
+  }
+
+  if (service.prohibitedClaims.length) {
+    lines.push("PROHIBITED CLAIMS — never include:");
+    service.prohibitedClaims.forEach(c => lines.push(`- ${c}`));
+  }
+
+  if (service.differentiators.length) {
+    lines.push("COMPANY DIFFERENTIATORS you may reference:");
+    service.differentiators.forEach(d => lines.push(`- ${d}`));
+  }
+
+  return lines.length ? lines.join("\n") : "";
+}
+
+/**
+ * Generic: build prompt rules for a pre-fetched service record.
+ * Used by the DB-backed provider's getPromptRules() method.
+ *
+ * When the record has a promptRulePrefix (set at seed time from the service-specific
+ * special-case blocks in service-registry-loader.ts), it is used verbatim.
+ * When absent, falls back to serviceId-based special-casing for backward compatibility.
+ *
+ * Output format is character-for-character identical to getServicePromptRules()
+ * when the record's promptRulePrefix matches the hardcoded prefix strings.
+ */
+export function getServicePromptRulesFor(
+  service: BBBService & { promptRulePrefix?: string | null },
+): string {
+  const lines: string[] = [];
+
+  if (service.promptRulePrefix) {
+    lines.push(...service.promptRulePrefix.split("\n"));
+  } else {
+    if (service.serviceId === "bed_bug_treatment" || service.serviceId === "bed_bug_inspection") {
+      lines.push(
+        "BED BUG TREATMENT POSITIONING:",
+        "- BB&B uses targeted treatment of affected furniture and specific areas.",
+        "- This approach is often more affordable than whole-home heat treatment.",
+        "- DO NOT claim BB&B offers heat treatment.",
+        "- DO NOT claim guaranteed elimination or exact cost savings.",
+        "- ALLOWED: professional inspection, targeted treatment, often more affordable than whole-home heat.",
+      );
+    }
+    if (service.serviceId === "fumigation") {
+      lines.push(
+        "FUMIGATION RULES:",
+        "- Keep content at awareness/educational level.",
+        "- DO NOT generate: chemical dosages, DIY instructions, regulatory compliance claims,",
+        "  exact preparation steps, specific pricing, or guarantees.",
+        "- ALLOWED: service awareness, general educational content, inspection/consultation CTA.",
+      );
+    }
   }
 
   if (service.prohibitedClaims.length) {
@@ -760,27 +848,25 @@ export interface WeeklyServiceSlot {
 }
 
 /**
- * Select `count` weekly service slots using the 60/25/15 revenue/education/trust mix.
- * - Respects service weights (revenueWeight × contentFrequencyWeight)
- * - Excludes coming_soon and disabled services
- * - Moles appear rarely (contentFrequencyWeight=1)
- * - Returns slots in a shuffled order suitable for day assignment
- *
- * Example for count=7: 4 revenue, 2 education, 1 trust
+ * Generic weekly slot selector — operates on a caller-supplied services array.
+ * The 60/25/15 revenue/education/trust algorithm is identical to the original
+ * selectWeeklyServices implementation. Used by both the static bbbRegistryProvider
+ * (via delegation) and the DB-backed ServiceRegistryProvider.
  */
-export function selectWeeklyServices(
+export function selectWeeklyServicesFrom(
+  services: readonly BBBService[],
   count: number,
   recentTopics: string[] = [],
 ): WeeklyServiceSlot[] {
-  const generatable = getGeneratableServices();
+  const generatable = services.filter(s => s.generationAllowed);
 
   // Compute bucket sizes using floor + remainder
-  const revCount  = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.revenue   / 100);
-  const eduCount  = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.education / 100);
+  const revCount   = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.revenue   / 100);
+  const eduCount   = Math.round(count * BBB_DEFAULT_CAMPAIGN_MIX.education / 100);
   const trustCount = count - revCount - eduCount; // absorb rounding remainder
 
   function pickService(pool: BBBService[], usedIds: Set<string>): BBBService | undefined {
-    const available = pool.filter(s => !usedIds.has(s.serviceId));
+    const available  = pool.filter(s => !usedIds.has(s.serviceId));
     const candidates = available.length ? available : pool; // allow repeats when pool is small
     return weightedRandom(candidates, s => s.revenueWeight * s.contentFrequencyWeight);
   }
@@ -789,8 +875,8 @@ export function selectWeeklyServices(
     service: BBBService,
     bucket: "revenue" | "education" | "trust",
   ): CampaignGoal {
-    const goalSet = bucket === "revenue"    ? REVENUE_GOALS
-                  : bucket === "education"  ? EDUCATION_GOALS
+    const goalSet = bucket === "revenue"   ? REVENUE_GOALS
+                  : bucket === "education" ? EDUCATION_GOALS
                   : TRUST_GOALS;
 
     // Prefer goals the service explicitly supports, filtered by bucket
@@ -811,7 +897,7 @@ export function selectWeeklyServices(
 
   const usedServiceIds = new Set<string>(
     recentTopics.flatMap(t => {
-      const s = matchServiceByTopic(t);
+      const s = matchServiceByTopicIn(services, t);
       return s ? [s.serviceId] : [];
     })
   );
@@ -846,4 +932,16 @@ export function selectWeeklyServices(
   }
 
   return slots;
+}
+
+/**
+ * Select `count` weekly service slots using the 60/25/15 revenue/education/trust mix.
+ * Delegates to selectWeeklyServicesFrom(BBB_SERVICES, count, recentTopics).
+ * Example for count=7: 4 revenue, 2 education, 1 trust.
+ */
+export function selectWeeklyServices(
+  count: number,
+  recentTopics: string[] = [],
+): WeeklyServiceSlot[] {
+  return selectWeeklyServicesFrom(BBB_SERVICES, count, recentTopics);
 }

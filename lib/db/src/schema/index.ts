@@ -20,3 +20,4 @@ export * from "./local-presence";
 export * from "./asset-library";
 export * from "./integration-health";
 export * from "./clients";
+export * from "./service-registry";

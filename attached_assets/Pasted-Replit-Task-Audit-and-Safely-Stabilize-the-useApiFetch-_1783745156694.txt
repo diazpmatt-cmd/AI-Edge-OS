@@ -1,0 +1,84 @@
+Replit Task: Audit and Safely Stabilize the useApiFetch Hook
+
+Background:
+ReviewsEnginePage recently entered an infinite request loop because useApiFetch() returned a new function reference on every render.
+
+The page was repaired with a local useRef workaround, but this may affect other pages that place apiFetch inside useEffect or useCallback dependency arrays.
+
+Goal:
+Fix the instability at the useApiFetch hook level if it can be done safely without breaking Clerk authentication or existing API requests.
+
+Tasks:
+
+1. Locate the implementation of useApiFetch().
+
+2. Determine why the returned apiFetch function receives a new identity on every render.
+
+3. Inspect how Clerk authentication is obtained, including:
+   - getToken()
+   - user/session state
+   - Bearer token attachment
+   - error handling
+   - JSON and non-JSON responses
+
+4. If safe, wrap the returned fetch function in React useCallback so its identity remains stable across renders.
+
+5. Ensure the stabilized callback still retrieves a fresh Clerk token when each API request is made.
+   Do not capture and reuse a stale JWT.
+
+6. Do not remove or weaken:
+   - Authorization headers
+   - Clerk token retrieval
+   - existing API base URL behavior
+   - content-type handling
+   - error parsing
+   - generic TypeScript return typing
+
+7. Search the codebase for every useApiFetch() usage.
+
+8. Identify pages where apiFetch appears in:
+   - useEffect dependency arrays
+   - useCallback dependency arrays
+   - useMemo dependency arrays
+   - custom hooks that may trigger repeated requests
+
+9. Verify that stabilizing the hook does not change behavior for existing callers.
+
+10. Keep the current ReviewsEnginePage useRef workaround temporarily during validation.
+
+11. Run:
+   - TypeScript typecheck
+   - existing relevant tests
+   - authenticated API requests where possible
+   - browser console inspection
+   - server log inspection for repeated requests
+
+12. After the centralized hook is proven stable:
+   - determine whether the ReviewsEnginePage useRef workaround is now redundant
+   - remove it only if the page remains stable without it
+   - verify the Reviews Engine loads exactly once per intended refresh
+
+13. If stabilizing useApiFetch centrally is unsafe because of Clerk or changing dependencies:
+   - do not force the change
+   - explain the risk
+   - leave the existing local fix intact
+   - identify other pages that need the same local stabilization pattern
+
+Deliverables:
+- Root cause inside useApiFetch
+- Whether the hook was changed
+- Exact code changes
+- All files modified
+- Number of useApiFetch usages audited
+- Any risky dependency patterns found
+- Reviews Engine request count after the fix
+- TypeScript result
+- Browser console result
+- Authentication verification result
+- Checkpoint or commit created
+
+Constraints:
+- Do not use as any, @ts-ignore, or unsafe casts.
+- Do not modify unrelated page styling or features.
+- Do not alter API endpoint contracts.
+- Do not remove the Reviews Engine workaround until the centralized fix is verified.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useApiFetch } from "./api";
 
 export type InsightSeverity = "critical" | "warning" | "opportunity" | "info";
@@ -22,9 +22,7 @@ export type InsightsResult = {
 };
 
 export function useInsights() {
-  const apiFetch    = useApiFetch();
-  const fetchRef    = useRef(apiFetch);
-  fetchRef.current  = apiFetch;
+  const apiFetch = useApiFetch();
 
   const [insights,     setInsights]     = useState<Insight[]>([]);
   const [generatedAt,  setGeneratedAt]  = useState<string | null>(null);
@@ -37,7 +35,7 @@ export function useInsights() {
     setLoading(true);
     setError(null);
 
-    fetchRef.current<InsightsResult>("/analytics/insights")
+    apiFetch<InsightsResult>("/analytics/insights")
       .then(result => {
         if (cancelled) return;
         setInsights(result.insights ?? []);
@@ -52,7 +50,7 @@ export function useInsights() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [apiFetch]);
 
   return { insights, generatedAt, dataSources, loading, error };
 }

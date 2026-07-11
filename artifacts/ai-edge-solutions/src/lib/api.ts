@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useAuth } from "@clerk/react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -23,8 +24,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit, token?: stri
 
 export function useApiFetch() {
   const { getToken } = useAuth();
-  return async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return useCallback(async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const token = await getToken().catch(() => null);
     return apiFetch<T>(path, init, token);
-  };
+  }, [getToken]);
 }

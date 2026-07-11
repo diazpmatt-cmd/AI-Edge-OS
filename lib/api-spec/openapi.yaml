@@ -9,6 +9,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: diagnostics
+    description: System diagnostics and integration health
   - name: keywords
     description: Keyword management
   - name: articles
@@ -20,6 +22,42 @@ tags:
   - name: content-assets
     description: Content asset management
 paths:
+  /diagnostics/health-history:
+    get:
+      operationId: getDiagnosticsHealthHistory
+      tags: [diagnostics]
+      summary: Integration health check history
+      description: >
+        Returns persisted health-check records for the authenticated user.
+        Records are written on every provider status change and at most once
+        every 15 minutes as a heartbeat when state is unchanged.
+        Results are ordered newest-first.
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          description: Filter to a single provider name (e.g. facebook, youtube)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of records to return (1–500, default 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Health history records newest-first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationHealthHistoryResponse"
+        "401":
+          description: Unauthorized
+
   /healthz:
     get:
       operationId: healthCheck
@@ -572,3 +610,41 @@ components:
               channel: { type: string }
               label: { type: string }
               body: { type: string }
+
+    IntegrationHealthHistoryItem:
+      type: object
+      required: [provider, status, checked_at, health_score]
+      properties:
+        provider:
+          type: string
+          description: Provider identifier (facebook, youtube, google_business, etc.)
+        status:
+          type: string
+          description: "Health status: healthy | warning | failed"
+        checked_at:
+          type: string
+          format: date-time
+          description: When this record was captured
+        last_success_at:
+          type: ["string", "null"]
+          format: date-time
+          description: Timestamp of the last known-healthy check, or null
+        error_message:
+          type: ["string", "null"]
+          description: Sanitized error detail when status is not healthy, or null
+        health_score:
+          type: integer
+          description: "Numeric score: 100=healthy, 50=warning, 0=failed"
+        metadata:
+          type: ["object", "null"]
+          additionalProperties: true
+          description: Non-sensitive provider-specific context (no tokens or secrets)
+
+    IntegrationHealthHistoryResponse:
+      type: object
+      required: [history]
+      properties:
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationHealthHistoryItem"

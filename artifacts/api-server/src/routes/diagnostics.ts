@@ -5,14 +5,24 @@ import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable, int
 import { eq, and, desc, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+import {
+  HEARTBEAT_INTERVAL_MS,
+  sanitizeDetail,
+  healthScore,
+  safeMeta,
+  decideInsert,
+  parseLimit,
+} from "../lib/health-history-utils.js";
 
 const BACKUP_DIR = path.resolve(process.cwd(), "backups");
 
 const router = Router();
 
-// ── Integration Health History — raw-SQL table bootstrap ─────────────────────
-// (drizzle push is blocked by a pre-existing constraint conflict in the DB;
-//  we create the table directly via pool.query on startup instead.)
+// ── Integration Health History — raw-SQL table + index bootstrap ─────────────
+// drizzle-kit push is blocked by a pre-existing constraint conflict in the DB,
+// so we manage the table and indexes directly via pool.query on startup.
+// Composite indexes replace the original separate ones; all statements are
+// idempotent (CREATE/DROP IF EXISTS).
 (async () => {
   try {
     await pool.query(`
@@ -30,79 +40,107 @@ const router = Router();
         metadata        JSONB,
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_ihh_user_provider
-        ON integration_health_history(user_id, provider);
-      CREATE INDEX IF NOT EXISTS idx_ihh_checked_at
-        ON integration_health_history(checked_at DESC);
+
+      -- Replace old separate indexes with composite indexes aligned to
+      -- actual query patterns (user+provider newest-first, user newest-first).
+      DROP INDEX IF EXISTS idx_ihh_user_provider;
+      DROP INDEX IF EXISTS idx_ihh_checked_at;
+      CREATE INDEX IF NOT EXISTS idx_ihh_user_provider_time
+        ON integration_health_history(user_id, provider, checked_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ihh_user_time
+        ON integration_health_history(user_id, checked_at DESC);
     `);
-    console.log("[HEALTH-HISTORY] Table ready");
+    console.log("[HEALTH-HISTORY] Table and indexes ready");
   } catch (err) {
-    console.error("[HEALTH-HISTORY] Table init failed:", err);
+    console.error("[HEALTH-HISTORY] Bootstrap failed:", err);
   }
 })();
 
-// ── Health-history helpers ─────────────────────────────────────────────────────
+// ── Prune guard — runs at most once per 24 h per server process ───────────────
 
-// Strip anything resembling an OAuth token or secret from free-text detail strings.
-// Truncates to 300 chars so long error messages don't bloat the table.
-function sanitizeDetail(raw: string): string {
-  return raw
-    .replace(/ya29\.[A-Za-z0-9_\-\.]{10,}/g, "[redacted]")
-    .replace(/1\/\/[A-Za-z0-9_\-\.]{10,}/g, "[redacted]")
-    .replace(/Bearer\s+\S{8,}/gi, "Bearer [redacted]")
-    .replace(/(?:access|refresh)_token[=:\s]+\S{8,}/gi, "[redacted]")
-    .slice(0, 300);
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+let lastPruneAt: Date | null = null;
+
+async function maybePrune(now: Date): Promise<void> {
+  if (lastPruneAt && now.getTime() - lastPruneAt.getTime() < PRUNE_INTERVAL_MS) return;
+  lastPruneAt = now;
+  try {
+    const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      "DELETE FROM integration_health_history WHERE checked_at < $1",
+      [cutoff],
+    );
+    console.log("[HEALTH-HISTORY] Pruned records older than 90 days");
+  } catch (err) {
+    // Reset so the next request retries instead of silently skipping.
+    lastPruneAt = null;
+    console.error("[HEALTH-HISTORY] Prune failed:", err);
+  }
 }
 
-function healthScore(status: string): number {
-  if (status === "healthy") return 100;
-  if (status === "warning") return 50;
-  return 0;
-}
+// ── Deduplication + heartbeat persistence ────────────────────────────────────
 
-// Extract only non-sensitive fields from a platform health object for the
-// metadata JSONB column.  Never includes tokens, secrets, IDs, or keys.
-function safeMeta(provider: string, ph: Record<string, any>): Record<string, any> {
-  const m: Record<string, any> = {};
-  if (provider === "google_business") {
-    if (ph.locationTitle)  m.locationTitle  = String(ph.locationTitle).slice(0, 100);
-    if (ph.cooldownUntil)  m.cooldownUntil  = ph.cooldownUntil;
-  }
-  if (provider === "youtube") {
-    if (ph.uploadScopeGranted      !== undefined) m.uploadScopeGranted      = ph.uploadScopeGranted;
-    if (ph.uploadPermissionVerified !== undefined) m.uploadPermissionVerified = ph.uploadPermissionVerified;
-    if (ph.channelName) m.channelName = String(ph.channelName).slice(0, 100);
-  }
-  if (provider === "tiktok") {
-    if (ph.publishReady !== undefined) m.publishReady = ph.publishReady;
-  }
-  return m;
-}
-
-// Fire-and-forget: persist one row per provider, then prune records > 90 days old.
 async function persistHealthSnapshot(
   userId: string,
-  platforms: Record<string, any>,
+  platforms: Record<string, unknown>,
   checkedAt: Date,
 ): Promise<void> {
-  const rows = Object.entries(platforms).map(([provider, ph]: [string, any]) => ({
-    userId,
-    provider,
-    status: String(ph.status),
-    checkedAt,
-    lastSuccessAt:  ph.status === "healthy" ? checkedAt : null,
-    errorMessage:   ph.status !== "healthy" ? sanitizeDetail(String(ph.detail ?? "")) : null,
-    healthScore:    healthScore(ph.status),
-    metadata:       safeMeta(provider, ph),
-  }));
+  // Fetch the most recent stored record for each provider in one query.
+  // DISTINCT ON (provider) with ORDER BY provider, checked_at DESC returns the
+  // newest row per provider — efficient with the idx_ihh_user_provider_time index.
+  const { rows: latestRows } = await pool.query<{
+    provider: string;
+    status: string;
+    error_message: string | null;
+    health_score: number | null;
+    checked_at: Date;
+    metadata: Record<string, unknown> | null;
+  }>(
+    `SELECT DISTINCT ON (provider)
+       provider, status, error_message, health_score, checked_at, metadata
+     FROM integration_health_history
+     WHERE user_id = $1
+     ORDER BY provider, checked_at DESC`,
+    [userId],
+  );
 
-  if (rows.length === 0) return;
-  await db.insert(integrationHealthHistoryTable).values(rows);
+  const latestByProvider = new Map(latestRows.map(r => [r.provider, r]));
 
-  const cutoff = new Date(checkedAt.getTime() - 90 * 24 * 60 * 60 * 1000);
-  await pool.query(
-    "DELETE FROM integration_health_history WHERE checked_at < $1",
-    [cutoff],
+  const toInsert: Array<{
+    userId: string;
+    provider: string;
+    status: string;
+    checkedAt: Date;
+    lastSuccessAt: Date | null;
+    errorMessage: string | null;
+    healthScore: number;
+    metadata: Record<string, unknown>;
+  }> = [];
+
+  for (const [provider, ph] of Object.entries(platforms)) {
+    const ph_ = ph as Record<string, unknown>;
+    const decision = decideInsert(provider, ph_, latestByProvider.get(provider), checkedAt);
+    if (!decision) continue;
+
+    toInsert.push({
+      userId,
+      provider: decision.provider,
+      status: decision.status,
+      checkedAt: decision.checkedAt,
+      lastSuccessAt: decision.lastSuccessAt,
+      errorMessage: decision.errorMessage,
+      healthScore: decision.healthScore,
+      metadata: decision.metadata,
+    });
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(integrationHealthHistoryTable).values(toInsert);
+  }
+
+  // Pruning is best-effort and must not block the health response.
+  maybePrune(checkedAt).catch(err =>
+    console.error("[HEALTH-HISTORY] Prune error:", err),
   );
 }
 
@@ -450,10 +488,11 @@ router.get("/diagnostics/health-history", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const provider = typeof req.query.provider === "string" && req.query.provider
-    ? req.query.provider
-    : null;
-  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const provider =
+    typeof req.query.provider === "string" && req.query.provider
+      ? req.query.provider
+      : null;
+  const limit = parseLimit(req.query.limit);
 
   try {
     const params: any[] = [userId];

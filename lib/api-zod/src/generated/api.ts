@@ -9,6 +9,34 @@ import * as zod from 'zod';
 
 
 /**
+ * Returns persisted health-check records for the authenticated user. Records are written on every provider status change and at most once every 15 minutes as a heartbeat when state is unchanged. Results are ordered newest-first.
+
+ * @summary Integration health check history
+ */
+export const getDiagnosticsHealthHistoryQueryLimitDefault = 100;
+export const getDiagnosticsHealthHistoryQueryLimitMax = 500;
+
+
+
+export const GetDiagnosticsHealthHistoryQueryParams = zod.object({
+  "provider": zod.coerce.string().optional().describe('Filter to a single provider name (e.g. facebook, youtube)'),
+  "limit": zod.coerce.number().min(1).max(getDiagnosticsHealthHistoryQueryLimitMax).default(getDiagnosticsHealthHistoryQueryLimitDefault).describe('Maximum number of records to return (1–500, default 100)')
+})
+
+export const GetDiagnosticsHealthHistoryResponse = zod.object({
+  "history": zod.array(zod.object({
+  "provider": zod.string().describe('Provider identifier (facebook, youtube, google_business, etc.)'),
+  "status": zod.string().describe('Health status: healthy | warning | failed'),
+  "checked_at": zod.coerce.date().describe('When this record was captured'),
+  "last_success_at": zod.coerce.date().nullish().describe('Timestamp of the last known-healthy check, or null'),
+  "error_message": zod.string().nullish().describe('Sanitized error detail when status is not healthy, or null'),
+  "health_score": zod.number().describe('Numeric score: 100=healthy, 50=warning, 0=failed'),
+  "metadata": zod.record(zod.string(), zod.unknown()).nullish().describe('Non-sensitive provider-specific context (no tokens or secrets)')
+}))
+})
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import type { IntegrationHealthHistoryItem, IntegrationHealthHistoryResponse } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
@@ -61,18 +62,6 @@ type LogEntry = {
 };
 
 type LogsData = { logs: LogEntry[]; total: number };
-
-type HealthHistoryItem = {
-  provider: string;
-  status: string;
-  checked_at: string;
-  last_success_at: string | null;
-  error_message: string | null;
-  health_score: number | null;
-  metadata: Record<string, any> | null;
-};
-
-type HealthHistoryData = { history: HealthHistoryItem[] };
 
 type BkStatus = "healthy" | "warning" | "never";
 type BkTypeStatus = { status: BkStatus; lastBackupAt: string | null; sizeBytes: number; filename: string | null };
@@ -211,11 +200,11 @@ export default function SystemDiagnosticsPage() {
   const [historyProvider, setHistoryProvider] = useState<string>("all");
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const { data: historyData } = useQuery<HealthHistoryData>({
+  const { data: historyData } = useQuery<IntegrationHealthHistoryResponse>({
     queryKey: ["diagnostics_health_history", historyProvider],
     queryFn: () => {
       const qs = historyProvider !== "all" ? `?provider=${historyProvider}&limit=100` : "?limit=100";
-      return authFetch<HealthHistoryData>(`/diagnostics/health-history${qs}`);
+      return authFetch<IntegrationHealthHistoryResponse>(`/diagnostics/health-history${qs}`);
     },
     refetchInterval: 60_000,
     staleTime: 30_000,

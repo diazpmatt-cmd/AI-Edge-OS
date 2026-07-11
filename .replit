@@ -47,7 +47,6 @@ TELNYX_CLIENT_NAME = "Bed Bugs & Beyond"
 TELNYX_TEXML_APP_ID = "2996119742579737617"
 CUSTOM_BBB_GREETING_URL = "https://aiedgesolutions.online/api/audio/bbb-greeting.mp3"
 GOOGLE_REVIEW_LINK = "https://g.page/r/CalILM7QsCzSEBM/review"
-SCHEDULER_SECRET = "88adb2b363ff073c27fe53ba7a415fb00fe52bf0d4a39f4fdb46d8e54515f6c8"
 
 [userenv.development]
 PUBLIC_APP_URL = "https://replit-exportzip-diazpmatt.replit.app"

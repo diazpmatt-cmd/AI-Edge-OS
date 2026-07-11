@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
 import { WorkflowNav } from "@/components/WorkflowNav";
+import { PlatformStateChip } from "@/components/PlatformStateChip";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -30,7 +31,10 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Platform = "Facebook" | "Instagram" | "Google Business Profile";
+// Queueable platforms: operational + generate + queue capable (canonical registry IDs)
+type QueueablePlatform = "facebook" | "instagram" | "google_business";
+// All platform tab IDs shown in the UI (queueable + informational)
+type AllPlatformId = QueueablePlatform | "youtube" | "tiktok" | "linkedin";
 type PlatformStatus = "not-queued" | "ready" | "success" | "failed";
 
 interface ContentTemplate {
@@ -44,7 +48,7 @@ interface ContentTemplate {
 
 interface QueuedPost {
   id:        string;
-  platform:  Platform;
+  platform:  QueueablePlatform;
   caption:   string;
   imageIdea: string;
   cta:       string;
@@ -55,7 +59,7 @@ interface QueuedPost {
 interface ActivityEntry {
   id:       string;
   ts:       string;
-  platform: Platform;
+  platform: QueueablePlatform;
   action:   string;
   status:   PlatformStatus;
 }
@@ -130,18 +134,38 @@ const TEMPLATES: ContentTemplate[] = [
   },
 ];
 
-const PLATFORM_META: Record<Platform, { icon: string; color: string; short: string }> = {
-  "Facebook":                { icon: "📘", color: "#1877F2", short: "FB"  },
-  "Instagram":               { icon: "📸", color: "#E1306C", short: "IG"  },
-  "Google Business Profile": { icon: "📍", color: "#34A853", short: "GBP" },
+// Display metadata for the 3 queueable platforms (dark-bg palette, not brand colors)
+const QUEUE_PLATFORM_META: Record<QueueablePlatform, { icon: string; color: string; short: string }> = {
+  facebook:        { icon: "📘", color: "#1877F2", short: "FB"  },
+  instagram:       { icon: "📸", color: "#E1306C", short: "IG"  },
+  google_business: { icon: "📍", color: "#34A853", short: "GBP" },
 };
 
-const PLATFORMS: Platform[] = ["Facebook", "Instagram", "Google Business Profile"];
+// Informational platforms: visible in tab UI but not queueable in this page
+const INFO_PLATFORMS: Array<{
+  id: AllPlatformId; icon: string; color: string; short: string;
+  state: "pending" | "coming_soon"; stateLabel: string; note: string;
+}> = [
+  { id: "youtube",  icon: "▶",  color: "#FF0000", short: "YT", state: "pending",    stateLabel: "Pending Approval", note: "YouTube Short content is generated via Auto Content Engine. Queueing available after channel connection and platform approval." },
+  { id: "tiktok",   icon: "♪",  color: "#00F2EA", short: "TT", state: "pending",    stateLabel: "Pending Approval", note: "TikTok publishing is pending platform approval. Content preview available via Auto Content Engine." },
+  { id: "linkedin", icon: "in", color: "#0A66C2", short: "LI", state: "coming_soon",stateLabel: "Coming Soon",      note: "LinkedIn publishing is not yet available. Content generation is available via Auto Content Engine." },
+];
 
-const INITIAL_STATUS: Record<Platform, PlatformStatus> = {
-  "Facebook":                "not-queued",
-  "Instagram":               "not-queued",
-  "Google Business Profile": "not-queued",
+// All platform tab definitions used for UI rendering
+const ALL_PLATFORM_TABS: Array<{
+  id: AllPlatformId; icon: string; color: string; short: string; isQueueable: boolean;
+  state?: "pending" | "coming_soon"; stateLabel?: string; note?: string;
+}> = [
+  ...Object.entries(QUEUE_PLATFORM_META).map(([id, m]) => ({ id: id as AllPlatformId, ...m, isQueueable: true })),
+  ...INFO_PLATFORMS.map(p => ({ ...p, isQueueable: false })),
+];
+
+const QUEUEABLE_PLATFORMS: QueueablePlatform[] = ["facebook", "instagram", "google_business"];
+
+const INITIAL_STATUS: Record<QueueablePlatform, PlatformStatus> = {
+  facebook:        "not-queued",
+  instagram:       "not-queued",
+  google_business: "not-queued",
 };
 
 const STATUS_META: Record<PlatformStatus, { dot: string; label: string; color: string }> = {
@@ -163,11 +187,11 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 9);
 }
 
-function captionFor(t: ContentTemplate, p: Platform): string {
-  if (p === "Facebook")                return t.facebook;
-  if (p === "Instagram")               return t.instagram;
-  if (p === "Google Business Profile") return t.gbp;
-  return "";
+function captionFor(t: ContentTemplate, p: AllPlatformId): string {
+  if (p === "facebook")        return t.facebook;
+  if (p === "instagram")       return t.instagram;
+  if (p === "google_business") return t.gbp;
+  return ""; // youtube, tiktok, linkedin: content not available in static templates
 }
 
 function nowTs(): string {
@@ -177,11 +201,11 @@ function nowTs(): string {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function BBBContentAutopilotPage() {
   const [templateIdx,     setTemplateIdx]     = useState<number | null>(null);
-  const [activeTab,       setActiveTab]       = useState<Platform>("Facebook");
+  const [activeTab,       setActiveTab]       = useState<AllPlatformId>("facebook");
   const [queue,           setQueue]           = useState<QueuedPost[]>([]);
   const [copiedKey,       setCopiedKey]       = useState<string | null>(null);
   const [justQueued,      setJustQueued]      = useState<string[]>([]);
-  const [platformStatus,  setPlatformStatus]  = useState<Record<Platform, PlatformStatus>>({ ...INITIAL_STATUS });
+  const [platformStatus,  setPlatformStatus]  = useState<Record<QueueablePlatform, PlatformStatus>>({ ...INITIAL_STATUS });
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
 
@@ -194,11 +218,11 @@ export default function BBBContentAutopilotPage() {
 
   const generated = templateIdx !== null ? TEMPLATES[templateIdx] : null;
 
-  // ── Derived status values ──
-  const anyReady   = PLATFORMS.some(p => platformStatus[p] === "ready");
-  const anyFailed  = PLATFORMS.some(p => platformStatus[p] === "failed");
-  const allReady   = PLATFORMS.every(p => platformStatus[p] === "ready");
-  const noneQueued = PLATFORMS.every(p => platformStatus[p] === "not-queued");
+  // ── Derived status values (queueable platforms only) ──
+  const anyReady   = QUEUEABLE_PLATFORMS.some(p => platformStatus[p] === "ready");
+  const anyFailed  = QUEUEABLE_PLATFORMS.some(p => platformStatus[p] === "failed");
+  const allReady   = QUEUEABLE_PLATFORMS.every(p => platformStatus[p] === "ready");
+  const noneQueued = QUEUEABLE_PLATFORMS.every(p => platformStatus[p] === "not-queued");
 
   const banner = anyFailed
     ? { color: B.red,    bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.3)",   icon: "🔴", text: "Some platforms need attention"   }
@@ -210,12 +234,12 @@ export default function BBBContentAutopilotPage() {
 
   function handleGenerate() {
     setTemplateIdx(prev => prev === null ? 0 : (prev + 1) % TEMPLATES.length);
-    setActiveTab("Facebook");
+    setActiveTab("facebook");
     setJustQueued([]);
     setPlatformStatus({ ...INITIAL_STATUS });
   }
 
-  function queuePost(platform: Platform) {
+  function queuePost(platform: QueueablePlatform) {
     if (!generated) return;
     const post: QueuedPost = {
       id:        uid(),
@@ -238,13 +262,12 @@ export default function BBBContentAutopilotPage() {
     }, ...prev]);
 
     // V2: save to backend as a real draft in the Publishing Center
-    const platformKey = platform === "Facebook" ? "facebook"
-      : platform === "Instagram" ? "instagram"
-      : "google";
+    // Backend expects "google" (page-local alias), not "google_business" (registry ID)
+    const platformKey = platform === "google_business" ? "google" : platform;
     createDraft.mutate({
-      caption:         captionFor(generated, "Instagram"),
-      captionFacebook: captionFor(generated, "Facebook"),
-      captionGoogle:   captionFor(generated, "Google Business Profile"),
+      caption:         captionFor(generated, "instagram"),
+      captionFacebook: captionFor(generated, "facebook"),
+      captionGoogle:   captionFor(generated, "google_business"),
       platforms:       [platformKey],
       status:          "draft",
     }, {
@@ -254,7 +277,7 @@ export default function BBBContentAutopilotPage() {
 
   function queueAll() {
     if (!generated) return;
-    PLATFORMS.forEach(p => { if (!justQueued.includes(p)) queuePost(p); });
+    QUEUEABLE_PLATFORMS.forEach(p => { if (!justQueued.includes(p)) queuePost(p); });
   }
 
   function removeFromQueue(id: string) {
@@ -288,7 +311,9 @@ export default function BBBContentAutopilotPage() {
   }
 
   const currentCaption = generated ? captionFor(generated, activeTab) : "";
-  const allQueued = PLATFORMS.every(p => justQueued.includes(p));
+  const isInfoTab = !QUEUEABLE_PLATFORMS.includes(activeTab as QueueablePlatform);
+  const activeTabMeta = ALL_PLATFORM_TABS.find(t => t.id === activeTab)!;
+  const allQueued = QUEUEABLE_PLATFORMS.every(p => justQueued.includes(p));
 
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -403,10 +428,10 @@ export default function BBBContentAutopilotPage() {
             </div>
           </div>
 
-          {/* Traffic lights */}
-          <div style={{ display: "flex", gap: 10 }}>
-            {PLATFORMS.map(p => {
-              const meta   = PLATFORM_META[p];
+          {/* Traffic lights — queueable platforms only */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" as const }}>
+            {QUEUEABLE_PLATFORMS.map(p => {
+              const meta   = QUEUE_PLATFORM_META[p];
               const sState = platformStatus[p];
               const sMeta  = STATUS_META[sState];
               return (
@@ -417,7 +442,6 @@ export default function BBBContentAutopilotPage() {
                   borderRadius: 10, padding: "8px 14px", minWidth: 130,
                   transition: "all 0.3s",
                 }}>
-                  {/* Traffic light dot */}
                   <div style={{ position: "relative" as const, flexShrink: 0 }}>
                     <div style={{
                       width: 12, height: 12, borderRadius: "50%",
@@ -450,34 +474,45 @@ export default function BBBContentAutopilotPage() {
                 📝 Platform Captions
               </div>
 
-              {/* Platform tabs */}
-              <div style={{ display: "flex", gap: 6 }}>
-                {PLATFORMS.map(p => {
-                  const meta     = PLATFORM_META[p];
-                  const isActive = activeTab === p;
-                  const sState   = platformStatus[p];
-                  const sMeta    = STATUS_META[sState];
+              {/* Platform tabs — all 6 providers */}
+              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5 }}>
+                {ALL_PLATFORM_TABS.map(tab => {
+                  const isActive   = activeTab === tab.id;
+                  const sState     = tab.isQueueable ? platformStatus[tab.id as QueueablePlatform] : null;
+                  const sMeta      = sState ? STATUS_META[sState] : null;
                   return (
                     <button
-                      key={p}
-                      onClick={() => setActiveTab(p)}
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      title={!tab.isQueueable && tab.note ? tab.note : undefined}
                       style={{
-                        flex: 1,
-                        background: isActive ? `${meta.color}20` : "rgba(255,255,255,0.03)",
-                        border: `1px solid ${isActive ? `${meta.color}55` : "rgba(255,255,255,0.07)"}`,
+                        flex: "1 1 auto",
+                        background: isActive ? `${tab.color}20` : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${isActive ? `${tab.color}55` : "rgba(255,255,255,0.07)"}`,
                         borderRadius: 8, padding: "7px 4px",
                         fontSize: 10, fontWeight: 700,
-                        color: isActive ? meta.color : B.dim,
+                        color: isActive ? tab.color : tab.isQueueable ? B.dim : "#374151",
                         cursor: "pointer", transition: "all 0.15s",
                         position: "relative" as const,
+                        opacity: tab.isQueueable ? 1 : 0.65,
                       }}
                     >
-                      {meta.icon} {meta.short}
-                      {sState !== "not-queued" && (
+                      {tab.icon} {tab.short}
+                      {/* Queue status dot for queueable platforms */}
+                      {sState && sState !== "not-queued" && sMeta && (
                         <span style={{
                           position: "absolute" as const, top: -5, right: -5,
                           width: 10, height: 10, borderRadius: "50%",
                           background: sMeta.dot, border: `2px solid ${B.panel}`,
+                        }} />
+                      )}
+                      {/* State badge for informational platforms */}
+                      {!tab.isQueueable && (
+                        <span style={{
+                          position: "absolute" as const, top: -5, right: -5,
+                          width: 10, height: 10, borderRadius: "50%",
+                          background: tab.state === "coming_soon" ? "#475569" : "#F59E0B",
+                          border: `2px solid ${B.panel}`,
                         }} />
                       )}
                     </button>
@@ -487,39 +522,70 @@ export default function BBBContentAutopilotPage() {
 
               {/* Caption */}
               <div style={{ position: "relative" as const, flex: 1 }}>
-                <textarea
-                  readOnly
-                  value={currentCaption}
-                  rows={9}
-                  style={{
+                {isInfoTab ? (
+                  /* Informational platform — no static template content */
+                  <div style={{
                     width: "100%", boxSizing: "border-box" as const,
                     background: "rgba(255,255,255,0.02)",
-                    border: `1px solid ${PLATFORM_META[activeTab].color}30`,
-                    borderRadius: 10, padding: "12px 14px",
-                    fontSize: 12, color: B.white, lineHeight: 1.7,
-                    fontFamily: "inherit", resize: "none", outline: "none",
-                  }}
-                />
-                <button
-                  onClick={() => copyText(currentCaption, `caption-${activeTab}`)}
-                  style={{
-                    position: "absolute" as const, top: 8, right: 8,
-                    background: copiedKey === `caption-${activeTab}` ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)",
-                    border: `1px solid ${copiedKey === `caption-${activeTab}` ? "rgba(16,185,129,0.4)" : B.border}`,
-                    borderRadius: 6, padding: "3px 10px",
-                    fontSize: 10, fontWeight: 700,
-                    color: copiedKey === `caption-${activeTab}` ? B.emerald : B.silver,
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}
-                >
-                  {copiedKey === `caption-${activeTab}` ? "✓ Copied" : "📋 Copy"}
-                </button>
+                    border: `1px solid ${activeTabMeta.color}30`,
+                    borderRadius: 10, padding: "20px 16px",
+                    fontSize: 12, color: B.dim, lineHeight: 1.7,
+                    textAlign: "center" as const, minHeight: 148,
+                    display: "flex", flexDirection: "column" as const,
+                    alignItems: "center", justifyContent: "center", gap: 8,
+                  }}>
+                    <span style={{ fontSize: 22, opacity: 0.4 }}>{activeTabMeta.icon}</span>
+                    <div style={{ fontWeight: 700, color: B.silver, fontSize: 12 }}>
+                      {activeTabMeta.stateLabel}
+                    </div>
+                    <div style={{ fontSize: 11, color: B.dim, maxWidth: 280 }}>
+                      {activeTabMeta.note}
+                    </div>
+                    <PlatformStateChip
+                      state={activeTabMeta.state === "coming_soon" ? "coming_soon" : "pending"}
+                      size="sm"
+                    />
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly
+                    value={currentCaption}
+                    rows={9}
+                    style={{
+                      width: "100%", boxSizing: "border-box" as const,
+                      background: "rgba(255,255,255,0.02)",
+                      border: `1px solid ${activeTabMeta.color}30`,
+                      borderRadius: 10, padding: "12px 14px",
+                      fontSize: 12, color: B.white, lineHeight: 1.7,
+                      fontFamily: "inherit", resize: "none", outline: "none",
+                    }}
+                  />
+                )}
+                {!isInfoTab && (
+                  <button
+                    onClick={() => copyText(currentCaption, `caption-${activeTab}`)}
+                    style={{
+                      position: "absolute" as const, top: 8, right: 8,
+                      background: copiedKey === `caption-${activeTab}` ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.06)",
+                      border: `1px solid ${copiedKey === `caption-${activeTab}` ? "rgba(16,185,129,0.4)" : B.border}`,
+                      borderRadius: 6, padding: "3px 10px",
+                      fontSize: 10, fontWeight: 700,
+                      color: copiedKey === `caption-${activeTab}` ? B.emerald : B.silver,
+                      cursor: "pointer", transition: "all 0.15s",
+                    }}
+                  >
+                    {copiedKey === `caption-${activeTab}` ? "✓ Copied" : "📋 Copy"}
+                  </button>
+                )}
               </div>
 
               <div style={{ fontSize: 10, color: B.dim, marginTop: -8 }}>
-                {activeTab === "Facebook" && "Facebook: ~400–500 chars recommended"}
-                {activeTab === "Instagram" && "Instagram: use all hashtags · tag location if possible"}
-                {activeTab === "Google Business Profile" && "GBP: 1,500 char max · include your city/service area"}
+                {activeTab === "facebook"        && "Facebook: ~400–500 chars recommended"}
+                {activeTab === "instagram"       && "Instagram: use all hashtags · tag location if possible"}
+                {activeTab === "google_business" && "GBP: 1,500 char max · include your city/service area"}
+                {activeTab === "youtube"         && "YouTube Short scripts are generated by Auto Content Engine"}
+                {activeTab === "tiktok"          && "TikTok scripts are generated by Auto Content Engine"}
+                {activeTab === "linkedin"        && "LinkedIn posts are generated by Auto Content Engine"}
               </div>
             </div>
 
@@ -569,8 +635,9 @@ export default function BBBContentAutopilotPage() {
                   📤 Queue Posts
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {PLATFORMS.map(p => {
-                    const meta   = PLATFORM_META[p];
+                  {/* Queueable platforms — operational + generate + queue capable */}
+                  {QUEUEABLE_PLATFORMS.map(p => {
+                    const meta   = QUEUE_PLATFORM_META[p];
                     const sState = platformStatus[p];
                     const sMeta  = STATUS_META[sState];
                     const isQ    = justQueued.includes(p);
@@ -591,7 +658,7 @@ export default function BBBContentAutopilotPage() {
                           opacity: isQ ? 0.85 : 1,
                         }}
                       >
-                        <span>{meta.icon} Queue {p === "Google Business Profile" ? "GBP" : p} Post</span>
+                        <span>{meta.icon} Queue {meta.short} Post</span>
                         {isQ && (
                           <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: sMeta.color, fontWeight: 800 }}>
                             <span style={{ width: 8, height: 8, borderRadius: "50%", background: sMeta.dot, display: "inline-block" }} />
@@ -601,6 +668,26 @@ export default function BBBContentAutopilotPage() {
                       </button>
                     );
                   })}
+                  {/* Informational platforms — visible with state, not queueable here */}
+                  {INFO_PLATFORMS.map(p => (
+                    <div
+                      key={p.id}
+                      title={p.note}
+                      style={{
+                        background: `${p.color}06`,
+                        border: `1px dashed ${p.color}20`,
+                        borderRadius: 10, padding: "8px 14px",
+                        fontSize: 11, fontWeight: 700,
+                        color: "#374151",
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        cursor: "default",
+                      }}
+                    >
+                      <span style={{ color: p.color, opacity: 0.4 }}>{p.icon}</span>
+                      <span style={{ flex: 1, marginLeft: 8 }}>{p.short} — Not available in Autopilot</span>
+                      <PlatformStateChip state={p.state === "coming_soon" ? "coming_soon" : "pending"} />
+                    </div>
+                  ))}
 
                   <button
                     onClick={queueAll}
@@ -664,7 +751,7 @@ export default function BBBContentAutopilotPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {queue.map(post => {
-                const meta  = PLATFORM_META[post.platform];
+                const meta  = QUEUE_PLATFORM_META[post.platform];
                 const sState = platformStatus[post.platform];
                 const sMeta  = STATUS_META[sState];
                 return (
@@ -682,7 +769,7 @@ export default function BBBContentAutopilotPage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>{post.platform}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>{meta.short}</span>
                         <span style={{
                           fontSize: 9, fontWeight: 800, color: sMeta.color,
                           background: `${sMeta.dot}18`, border: `1px solid ${sMeta.dot}40`,
@@ -757,7 +844,7 @@ export default function BBBContentAutopilotPage() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {activityLog.slice(0, 12).map(entry => {
-                const meta  = PLATFORM_META[entry.platform];
+                const meta  = QUEUE_PLATFORM_META[entry.platform];
                 const sMeta = STATUS_META[entry.status];
                 return (
                   <div key={entry.id} style={{
@@ -794,25 +881,25 @@ export default function BBBContentAutopilotPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
           {([
             {
-              platform: "Facebook" as Platform,
+              platform: "facebook" as QueueablePlatform,
               tips: ["Post 3–5x per week", "Photos outperform text", "Include a direct CTA", "Respond to all comments"],
             },
             {
-              platform: "Instagram" as Platform,
+              platform: "instagram" as QueueablePlatform,
               tips: ["Use 5–15 relevant hashtags", "Before/after photos perform best", "Post Stories for engagement", "Tag your city: #GulfShoresAL"],
             },
             {
-              platform: "Google Business Profile" as Platform,
+              platform: "google_business" as QueueablePlatform,
               tips: ["Post at least weekly", "Include your service area cities", "Add a photo to every post", "Use keywords: 'bed bug treatment Baldwin County'"],
             },
           ]).map(({ platform, tips }) => {
-            const meta = PLATFORM_META[platform];
+            const meta = QUEUE_PLATFORM_META[platform];
             return (
               <div key={platform} style={{
                 background: B.panel, border: `1px solid ${meta.color}20`, borderRadius: 14, padding: "16px 18px",
               }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: meta.color, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>
-                  {meta.icon} {platform === "Google Business Profile" ? "GBP Tips" : `${platform} Tips`}
+                  {meta.icon} {meta.short} Tips
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {tips.map(tip => (

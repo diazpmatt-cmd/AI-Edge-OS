@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
-import { getSocialProvider } from "@/lib/social-providers";
+import { SOCIAL_PROVIDERS, getSocialProvider, type SocialProviderId } from "@/lib/social-providers";
+import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube";
 
@@ -89,10 +90,6 @@ function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | 
     errs[p] ? { ok: false, error: errs[p] } : { ok: status === "partial" },
   ]));
 }
-
-const COMING_SOON_PLATFORMS = [
-  { key: "tiktok" as const, label: getSocialProvider("tiktok").shortLabel, icon: getSocialProvider("tiktok").icon, color: getSocialProvider("tiktok").color, note: "Video + creator integration" },
-];
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -222,6 +219,15 @@ export default function SocialPublishingPage() {
     staleTime: 60 * 1000,
     retry: 1,
   });
+
+  // Social connections — shared cache key with ConnectionsPage
+  const { data: connections = [] } = useQuery<Array<{ id: string; provider: string; accountName: string | null }>>({
+    queryKey: ["social_connections"],
+    queryFn: () => authFetch<Array<{ id: string; provider: string; accountName: string | null }>>("/social-connections"),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+  const connectedProviders = new Set(connections.map(c => c.provider));
 
   // Handle ?connected=facebook&status=success redirect from OAuth upgrade flow
   useEffect(() => {
@@ -503,32 +509,56 @@ export default function SocialPublishingPage() {
                 <div style={sectionStyle}>
                   <label style={labelStyle}>Platforms</label>
 
-                  {/* Active platforms */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {/* Platform selector — all 6 providers from canonical registry */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+
+                    {/* ── Selectable: operational providers ── */}
                     {(["facebook", "instagram", "google", "youtube"] as Platform[]).map(p => {
                       const s = PLATFORM_STYLE[p];
                       const checked = form.platforms.includes(p);
+                      const registryId: SocialProviderId = p === "google" ? "google_business" : p as SocialProviderId;
+                      const provider = getSocialProvider(registryId);
+                      const isConnected = connectedProviders.has(registryId);
+                      const uiState = resolvePlatformUIState(provider, isConnected);
                       return (
-                        <button key={p} onClick={() => togglePlatform(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}>
-                          <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
-                          {s.label}
-                        </button>
+                        <div key={p} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                          <button
+                            onClick={() => togglePlatform(p)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}
+                          >
+                            <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
+                            {s.label}
+                          </button>
+                          <PlatformStateChip state={uiState} showConnectLink={uiState === "disconnected"} />
+                        </div>
                       );
                     })}
 
-                    {/* Coming soon platforms */}
-                    {COMING_SOON_PLATFORMS.map(p => (
-                      <div key={p.key} title={p.note} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 8, cursor: "not-allowed", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 12.5, userSelect: "none" }}>
-                        <span style={{ fontFamily: "monospace", fontWeight: 900, color: p.color, opacity: 0.35 }}>{p.icon}</span>
-                        <span style={{ color: "#374151" }}>{p.label}</span>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: "#4B5563", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "1px 6px", letterSpacing: "0.4px", textTransform: "uppercase", marginLeft: 2 }}>Soon</span>
-                      </div>
-                    ))}
+                    {/* ── Non-selectable: pending approval / coming soon ── */}
+                    {SOCIAL_PROVIDERS
+                      .filter(p => !["facebook", "instagram", "google_business", "youtube"].includes(p.id))
+                      .map(provider => {
+                        const uiState = resolvePlatformUIState(provider, connectedProviders.has(provider.id));
+                        return (
+                          <div key={provider.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                            <div
+                              title={provider.status === "pending_approval"
+                                ? "Pending platform approval — publishing not yet available"
+                                : "Publishing support coming soon"}
+                              style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 8, cursor: "not-allowed", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 12.5, userSelect: "none" }}
+                            >
+                              <span style={{ fontFamily: "monospace", fontWeight: 900, color: provider.color, opacity: 0.35 }}>{provider.icon}</span>
+                              <span style={{ color: "#374151" }}>{provider.shortLabel}</span>
+                            </div>
+                            <PlatformStateChip state={uiState} />
+                          </div>
+                        );
+                    })}
                   </div>
 
                   {/* Helper text */}
                   <p style={{ margin: 0, fontSize: 11.5, color: "#4B5563", lineHeight: 1.6 }}>
-                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok coming next.
+                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok and LinkedIn are visible but not yet available for publishing.
                     {form.platforms.includes("google") && (
                       <span style={{ display: "block", marginTop: 4, color: "#EA4335", opacity: 0.8 }}>
                         Google Business: posts go to your first verified location. Connect your account in <strong>Connected Accounts</strong> if not done yet.

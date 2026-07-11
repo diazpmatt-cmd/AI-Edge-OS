@@ -1,0 +1,227 @@
+Replit Task: Add Drag-and-Drop Tile Reordering to the Command Center
+
+Goal:
+
+Allow the user to grab, drag, and reorder the Command Center navigation tiles.
+
+The custom order must persist in the browser after refresh.
+
+Use the existing Framer Motion dependency.
+Do not install a new drag-and-drop package.
+Do not modify backend routes or database schemas.
+
+Primary file:
+
+src/components/app-shell.tsx
+
+Known architecture:
+
+- PRIMARY_NAV is a plain array.
+- SECONDARY_NAV is a plain array.
+- NavGrid renders the tile arrays.
+- Active route detection uses location.startsWith(item.to), so it does not depend on array position.
+- Framer Motion is already installed.
+- Mobile and desktop navigation use the same navigation definitions.
+
+Implementation requirements:
+
+1. Add an Edit Order control near the Command Center heading.
+
+User-facing states:
+
+- Edit Order
+- Done
+
+2. Normal mode:
+
+- Tiles behave exactly as they do now.
+- Clicking a tile navigates normally.
+- No drag handles are shown.
+- Existing styling and active-state behavior remain unchanged.
+
+3. Edit mode:
+
+- Show a visible drag handle on each movable tile.
+- Allow the user to press, hold, and drag a tile into a new position.
+- Use Framer Motion:
+  - Reorder.Group
+  - Reorder.Item
+- Add a subtle lifted or highlighted state while dragging.
+- Do not add distracting animation or excessive movement.
+
+4. Persistence:
+
+Store the reordered tile IDs in localStorage.
+
+Use a stable key such as:
+
+ai-edge-command-center-order-v1
+
+Persist only stable tile identifiers, preferably each tile's route value.
+
+Do not store the full tile object.
+
+5. Loading saved order:
+
+On initialization:
+
+- read the saved route order from localStorage
+- validate it against the current navigation definitions
+- ignore unknown or removed routes
+- append newly added routes that are not present in the saved order
+- fall back safely to the default order if stored JSON is invalid
+
+6. Reset option:
+
+In edit mode, provide a small Reset Order action.
+
+When selected:
+
+- restore the original default order
+- update localStorage
+- keep the user in edit mode until Done is selected
+
+Do not require a confirmation modal unless the project already has a lightweight confirmation pattern.
+
+7. Navigation safety:
+
+While edit mode is active:
+
+- dragging must not accidentally navigate
+- clicking the drag handle must not activate the route
+- keyboard users must still be able to access the controls
+- the active route highlight must remain correct
+
+When edit mode is off:
+
+- route navigation must work exactly as before
+
+8. Scope:
+
+Apply reordering to the main Command Center tiles shown in the left panel.
+
+Confirm whether these are PRIMARY_NAV only or PRIMARY_NAV plus the visible secondary tiles.
+
+Use the exact currently visible tile collection.
+
+Do not reorder:
+
+- Sign out
+- theme toggle
+- Command Center heading
+- floating action button shortcuts
+- hidden routes
+- unrelated top navigation
+
+9. Mobile behavior:
+
+Verify the interaction works on narrow screens.
+
+Support touch dragging.
+
+Do not break sidebar scrolling.
+
+If drag gestures conflict with scrolling:
+
+- use a dedicated drag handle
+- initiate drag only from the handle
+- allow normal vertical scrolling outside the handle
+
+10. Styling:
+
+Preserve:
+
+- tile colors
+- icons
+- labels
+- active borders
+- dark theme
+- light theme
+- two-column layout
+
+Add only:
+
+- Edit Order button
+- Done button state
+- Reset Order action
+- drag handle
+- subtle drag feedback
+
+11. Avoid hydration or startup issues:
+
+Do not read localStorage at module scope.
+
+Read it safely inside a state initializer or effect that only runs in the browser.
+
+Do not allow saved preferences to crash the app.
+
+12. Testing:
+
+Add focused tests for:
+
+- default order renders when no preference exists
+- saved order is restored
+- invalid JSON falls back safely
+- unknown routes are ignored
+- newly added routes are appended
+- resetting restores default order
+- reordering updates localStorage
+- navigation still works outside edit mode
+- drag controls do not navigate while editing
+
+13. Verification:
+
+Run:
+
+- focused tests
+- relevant frontend tests
+- TypeScript typecheck
+- production frontend build
+- browser verification
+- mobile-width verification
+- browser console inspection
+
+Manually verify:
+
+A. Enter Edit Order mode.
+
+B. Drag Content Autopilot above Growth Execution.
+
+C. Select Done.
+
+D. Refresh the browser.
+
+E. Confirm the new order remains.
+
+F. Reset the order.
+
+G. Confirm the default order returns and survives refresh.
+
+H. Confirm normal tile navigation still works after editing.
+
+Deliverables:
+
+- Files modified
+- How tile IDs are stored
+- localStorage key used
+- validation strategy for saved order
+- reset behavior
+- drag-and-drop implementation details
+- mobile/touch behavior
+- tests added
+- TypeScript result
+- build result
+- browser verification result
+- screenshot of edit mode
+- screenshot showing reordered tiles
+- checkpoint or commit created
+
+Constraints:
+
+- Do not install new packages.
+- Do not modify backend code.
+- Do not modify the database.
+- Do not change routes.
+- Do not reorder the floating action menu.
+- Do not redesign the sidebar.
+- Do not use as any, @ts-ignore, or unsafe casts.

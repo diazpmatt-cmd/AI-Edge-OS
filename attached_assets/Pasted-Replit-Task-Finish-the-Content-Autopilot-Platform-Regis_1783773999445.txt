@@ -1,0 +1,173 @@
+Replit Task: Finish the Content Autopilot Platform Registry Migration
+
+Background:
+
+Publishing Center now uses the canonical platform registry and displays every supported platform.
+
+Content Autopilot is still partially using its old hard-coded platform list.
+
+The screenshot confirms only these platforms are displayed:
+
+- Facebook
+- Instagram
+- Google Business Profile
+
+This page should now be migrated completely to the canonical provider registry.
+
+Goal:
+
+Replace the remaining hard-coded platform list with the canonical provider registry so Content Autopilot automatically displays every supported platform.
+
+Do not duplicate provider definitions.
+
+Before making changes:
+
+1. Confirm whether BBBContentAutopilotPage still contains:
+   - local platform arrays
+   - hard-coded tabs
+   - hard-coded queue buttons
+   - hard-coded status cards
+
+2. Confirm Publishing Center is already using the canonical registry.
+
+Reuse that implementation whenever possible.
+
+Implementation:
+
+Content Autopilot should display ALL supported providers:
+
+✓ Facebook
+✓ Instagram
+✓ Google Business Profile
+✓ YouTube
+✓ TikTok
+✓ LinkedIn
+
+Each platform should derive from the canonical registry.
+
+Do not create another local array.
+
+Platform behavior:
+
+Facebook
+- Fully enabled
+
+Instagram
+- Fully enabled
+
+Google Business Profile
+- Fully enabled
+
+YouTube
+- Visible
+- Show Connected / Ready if connected
+- Allow queue only if current capabilities permit
+- Preserve existing upload workflow
+
+TikTok
+- Always visible
+- If approval is pending:
+  - show Pending Approval
+  - disable Queue
+  - disable Publish
+
+LinkedIn
+- Always visible
+- Show Coming Soon (or Publishing Unavailable)
+- Disable Queue
+- Disable Publish
+
+Queue section:
+
+Replace the existing three queue buttons with registry-driven buttons.
+
+Instead of:
+
+Queue Facebook
+Queue Instagram
+Queue GBP
+
+Generate them dynamically from the registry.
+
+Only enable buttons for platforms that are both:
+
+- connected
+- queue capable
+
+Status strip:
+
+The status strip that currently shows:
+
+FB
+IG
+GBP
+
+should also become registry-driven and display:
+
+Facebook
+Instagram
+Google Business
+YouTube
+TikTok
+LinkedIn
+
+using each platform's live connection state.
+
+Generation:
+
+Do NOT invent YouTube, TikTok, or LinkedIn content if the backend generator does not currently return it.
+
+If only Facebook / Instagram / GBP captions are returned:
+
+Display those normally.
+
+For platforms without generated content:
+
+Show a friendly placeholder such as:
+
+"No generated content for this platform yet."
+
+Do not fabricate captions.
+
+UI consistency:
+
+Reuse:
+
+- PlatformStateChip
+- canonical provider icons
+- canonical colors
+- canonical labels
+
+Do not duplicate styles.
+
+Verification:
+
+Run:
+
+- TypeScript
+- frontend tests
+- production build
+
+Verify:
+
+✓ All six platforms appear
+✓ No duplicated platform arrays remain
+✓ Queue buttons are registry-driven
+✓ Connected platforms enable correctly
+✓ TikTok remains disabled while pending approval
+✓ LinkedIn remains disabled
+✓ Existing Facebook/Instagram/GBP workflow is unchanged
+✓ Browser console clean
+✓ No runtime errors
+
+Deliverables:
+
+- Files modified
+- Remaining hard-coded platform references (if any)
+- Registry fields reused
+- Queue section migration
+- Status strip migration
+- Browser verification
+- TypeScript result
+- Build result
+- Checkpoint created

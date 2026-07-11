@@ -29,6 +29,7 @@ export const socialPostsTable = pgTable("social_posts", {
   youtubeTitle:   text("youtube_title"),    // explicit video title; falls back to caption[0..100]
   youtubePrivacy: text("youtube_privacy"),  // 'public' | 'unlisted' | 'private'; defaults to 'public'
   youtubeVideoId: text("youtube_video_id"), // provider video ID stored after a successful upload
+  youtubeTags:    text("youtube_tags"),     // JSON array of tag strings e.g. '["bed bugs","Baldwin County"]'
   // V4: Auto Image Attachment
   matchedImageId:    text("matched_image_id"),
   matchedImageUrl:   text("matched_image_url"),

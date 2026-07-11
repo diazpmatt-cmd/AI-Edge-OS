@@ -45,6 +45,7 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     youtubeTitle:    r.youtubeTitle   ?? null,
     youtubePrivacy:  r.youtubePrivacy ?? null,
     youtubeVideoId:  r.youtubeVideoId ?? null,
+    youtubeTags:     r.youtubeTags    ? (JSON.parse(r.youtubeTags) as string[]) : null,
     caption:         r.caption,
     captionFacebook: r.captionFacebook ?? null,
     captionGoogle:   r.captionGoogle ?? null,
@@ -116,6 +117,7 @@ router.post("/social-posts", async (req, res) => {
     videoUrl:       b.videoUrl       ?? null,
     youtubeTitle:   b.youtubeTitle   ?? null,
     youtubePrivacy: b.youtubePrivacy ?? null,
+    youtubeTags:    Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : (b.youtubeTags ?? null),
     caption:     b.caption     ?? "",
     ctaType:     b.ctaType     ?? "none",
     ctaValue:    b.ctaValue    ?? null,
@@ -136,6 +138,7 @@ router.patch("/social-posts/:id", async (req, res) => {
     ...(b.videoUrl        !== undefined && { videoUrl:        b.videoUrl }),
     ...(b.youtubeTitle    !== undefined && { youtubeTitle:    b.youtubeTitle }),
     ...(b.youtubePrivacy  !== undefined && { youtubePrivacy:  b.youtubePrivacy }),
+    ...(b.youtubeTags     !== undefined && { youtubeTags:     Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : b.youtubeTags }),
     ...(b.caption         !== undefined && { caption:         b.caption }),
     ...(b.captionFacebook !== undefined && { captionFacebook: b.captionFacebook }),
     ...(b.captionGoogle   !== undefined && { captionGoogle:   b.captionGoogle }),
@@ -522,8 +525,12 @@ router.post("/social-posts/:id/publish", async (req, res) => {
           const privacy = post.youtubePrivacy === "private" || post.youtubePrivacy === "unlisted"
                           ? post.youtubePrivacy : "public";
           console.log("[YOUTUBE-PUBLISH] metadata", JSON.stringify({ title, privacy, descLen: desc.length }));
+          const rawTags: string[] = (() => {
+            try { return JSON.parse(post.youtubeTags ?? "[]") as string[]; } catch { return []; }
+          })();
+          const tags = rawTags.length ? rawTags : undefined;
           const metaBody = {
-            snippet: { title, description: desc, categoryId: "22" },
+            snippet: { title, description: desc, categoryId: "22", ...(tags ? { tags } : {}) },
             status:  { privacyStatus: privacy },
           };
 

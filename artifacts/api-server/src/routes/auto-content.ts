@@ -15,6 +15,9 @@ import {
   selectWeeklyServices,
   createWeeklyPlanId,
   type WeeklyServiceSlot,
+  type ServiceRegistryProvider,
+  buildClientContentContext,
+  buildSystemPrompt,
 } from "@workspace/db";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { eq, and, inArray, sql } from "drizzle-orm";
@@ -418,10 +421,28 @@ router.post("/auto-content/generate", async (req, res) => {
     return;
   }
 
+  // ── Client context — canonical configuration carrier for this generation run ─
+  // Builds from the already-resolved param values (body overrides merged with DB
+  // row above). For BB&B, all defaults reproduce pre-Phase-A1 behavior exactly.
+  const context = buildClientContentContext({
+    clientName:    clientName     ?? null,
+    industry:      industry       ?? null,
+    serviceAreas:  serviceAreas   as string[],
+    topics:        topics         as string[],
+    toneStyle:     Array.isArray(toneStyle)     ? toneStyle     as string[] : null,
+    postAngles:    Array.isArray(postAngles)    ? postAngles    as string[] : null,
+    postingTimes:  Array.isArray(postingTimes)  ? postingTimes  as string[] : null,
+    platforms:     Array.isArray(platforms)     ? platforms     as string[] : null,
+    approvalMode:  approvalMode  ?? null,
+    ctaText:       ctaText       ?? null,
+    ctaPreference: ctaPreference ?? null,
+    frequency:     frequency     ?? null,
+  });
+
   // ── Registry enforcement — hard block prohibited services ──────────────────
-  // Check each topic against the canonical BB&B service registry.
+  // Check each topic against the client's service registry.
   for (const topic of topics as string[]) {
-    const errorCode = validateTopicForGeneration(topic);
+    const errorCode = context.registry.validateTopic(topic);
     if (errorCode === "SERVICE_COMING_SOON") {
       res.status(422).json({
         error: errorCode,
@@ -445,7 +466,7 @@ router.post("/auto-content/generate", async (req, res) => {
     }
   }
   // Normalize: silently strip any remaining blocked entries (defence in depth)
-  topics = normalizeTopics(topics as string[]);
+  topics = context.registry.normalizeTopics(topics as string[]);
   if (!topics.length) {
     res.status(422).json({ error: "SERVICE_NOT_GENERATABLE", message: "None of the requested topics are eligible for content generation." });
     return;
@@ -495,8 +516,9 @@ router.post("/auto-content/generate", async (req, res) => {
   //   first 60% = revenue, next 25% = education, last 15% = trust
   function assignCampaignGoalByPosition(
     idx: number, total: number, topic: string,
+    registry: ServiceRegistryProvider,
   ): { campaignGoal: string; audienceId: string } {
-    const svc = matchServiceByTopic(topic);
+    const svc = registry.matchByTopic(topic);
     const revEnd = Math.round(total * 0.60);
     const eduEnd = Math.round(total * 0.85);
     let bucket: "revenue" | "education" | "trust" =
@@ -539,7 +561,7 @@ router.post("/auto-content/generate", async (req, res) => {
     bodySchedulerMode === "weekly_plan" && typeof count === "number" && count > 0;
 
   if (useWeeklyServiceSelection) {
-    const svcSlots = selectWeeklyServices(count as number);
+    const svcSlots = context.registry.selectWeeklySlots(count as number);
     const baseDates = buildScheduleSlots(
       serviceAreas as string[],
       svcSlots.map(s => s.service.displayName),
@@ -569,25 +591,7 @@ router.post("/auto-content/generate", async (req, res) => {
   }
 
   const model = getAiModel();
-  const system = `You are a local pest control social media copywriter for Bed Bugs & Beyond, serving the Gulf Coast of Alabama (Baldwin County). Write authentic, local posts that feel genuine. Return ONLY valid JSON:
-{"caption":string,"hashtags":string[],"imagePrompt":string}
-
-CORE RULES:
-- caption is 2-3 sentences, mentions the specific city by name, names the pest/service naturally
-- matches the post angle (educational=informative, warning=urgent risk, promotional=offer/deal, seasonal=time-relevant, faq=question+answer, testimonial=social proof voice, prevention=tips, emergency=urgent call)
-- ends with the CTA
-- No markdown, no code fences
-- hashtags: 5-8 tags mixing local and service tags
-- imagePrompt: 1 sentence describing a realistic professional photo
-- JSON only
-
-BUSINESS RULES (MUST FOLLOW):
-- BB&B uses targeted treatment of affected furniture and specific areas — NOT whole-home heat treatment
-- Do NOT claim BB&B offers heat treatment or whole-home heat treatment
-- Do NOT claim guaranteed elimination or specific savings without verified data
-- Do NOT generate termite content, wildlife removal content, or heat treatment content
-- Do NOT generate chemical dosages, DIY fumigation instructions, or regulatory compliance claims
-- Fumigation content must remain at awareness/educational level only`;
+  const system = buildSystemPrompt(context);
 
   const generated = await Promise.all(
     slots.map(async (slot) => {
@@ -595,8 +599,8 @@ BUSINESS RULES (MUST FOLLOW):
         precomputedServiceId, precomputedCampaignGoal, precomputedAudienceId,
         precomputedRevenueWeight, precomputedUrgency,
       } = slot as EnhancedSlot;
-      const serviceRules = getServicePromptRules(topic);
-      const prompt = `Business: ${clientName || "Bed Bugs & Beyond"}
+      const serviceRules = context.registry.getPromptRules(topic);
+      const prompt = `Business: ${context.clientName}
 City: ${city}
 Pest/Service: ${topic}
 Post Angle: ${angle}
@@ -615,7 +619,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
         const topicTag = topic.replace(/\s+/g, "");
         return {
           date, city, topic, angle, ...precomputed,
-          caption: `${topic} problem in ${city}? ${clientName || "Bed Bugs & Beyond"} is your local expert. ${ctaText ?? "Call Now"}`,
+          caption: `${topic} problem in ${city}? ${context.clientName} is your local expert. ${context.ctaText}`,
           hashtags: [`#PestControl`, `#${topicTag}`, `#${cityShort}AL`, `#GulfCoastAL`, `#PestFree`],
           imagePrompt: `A professional pest control technician inspecting a home exterior in a sunny suburban neighborhood.`,
           error: err?.message as string,
@@ -642,7 +646,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
   // approval_required marks posts as pending review; other modes leave approvalStatus null.
   const postApprovalStatus = approvalMode === "approval_required" ? "pending_review" : null;
   const insertedIds: string[] = [];
-  const effectiveClient = clientName || "Bed Bugs & Beyond";
+  const effectiveClient = context.clientName;
 
   for (const post of generated) {
     const captionFull = post.hashtags?.length
@@ -687,16 +691,16 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       duplicateRisk: dupRisk,
       // V5: Campaign metadata — precomputed from selectWeeklyServices (scheduler
       // weekly-plan mode) or position-derived from registry (user-triggered mode).
-      serviceId: post.precomputedServiceId ?? matchServiceByTopic(post.topic)?.serviceId ?? null,
+      serviceId: post.precomputedServiceId ?? context.registry.matchByTopic(post.topic)?.serviceId ?? null,
       approvalStatus: postApprovalStatus,
       // V5.1: Full campaign tracking — stored at generation time
       weeklyPlanId,
       generationRunId,
       ...(post.precomputedCampaignGoal
         ? { campaignGoal: post.precomputedCampaignGoal, audienceId: post.precomputedAudienceId ?? "homeowners" }
-        : assignCampaignGoalByPosition(insertedIds.length, slots.length, post.topic)),
-      revenueWeight: post.precomputedRevenueWeight ?? String(matchServiceByTopic(post.topic)?.revenueWeight ?? ""),
-      urgency:       post.precomputedUrgency !== undefined ? post.precomputedUrgency : (matchServiceByTopic(post.topic)?.urgency ?? null),
+        : assignCampaignGoalByPosition(insertedIds.length, slots.length, post.topic, context.registry)),
+      revenueWeight: post.precomputedRevenueWeight ?? String(context.registry.matchByTopic(post.topic)?.revenueWeight ?? ""),
+      urgency:       post.precomputedUrgency !== undefined ? post.precomputedUrgency : (context.registry.matchByTopic(post.topic)?.urgency ?? null),
     }).returning({ id: socialPostsTable.id });
     insertedIds.push(ins.id);
   }

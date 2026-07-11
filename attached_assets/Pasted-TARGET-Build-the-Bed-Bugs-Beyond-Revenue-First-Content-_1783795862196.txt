@@ -1,0 +1,430 @@
+TARGET: Build the Bed Bugs & Beyond Revenue-First Content Autopilot scheduler.
+
+PRIMARY GOAL
+
+Convert the current template-driven Content Autopilot into a scheduled, continuously operating content engine for Bed Bugs & Beyond.
+
+The engine must generate fresh content across all currently active pest-control services while explicitly excluding termites from active promotion.
+
+IMPORTANT BUSINESS RULE
+
+Bed Bugs & Beyond does NOT currently offer termite service.
+
+Termites must be modeled as:
+
+status: coming_soon
+
+The system must not:
+
+- generate termite service offers
+- claim BB&B treats termites
+- recommend termite booking
+- publish termite-related calls to action
+- let the AI receptionist imply termite service is available
+
+Termite content may only say the service is coming soon if Matthew explicitly enables that type of announcement later.
+
+ENGINEERING RULES
+
+Follow:
+
+1. Audit
+2. Consolidate
+3. Verify
+4. Expand
+
+Do not:
+
+- create a second scheduler
+- create a second service registry
+- duplicate provider logic
+- hard-code pest names throughout page JSX
+- publish automatically before the scheduling and approval model is defined
+- modify unrelated mobile code
+
+PHASE 1 — AUDIT EXISTING AUTOMATION
+
+Locate and report all current systems related to:
+
+- Content Autopilot
+- scheduled social posts
+- recurring jobs
+- cron or scheduler
+- content templates
+- campaign generation
+- service lists
+- pest types
+- seasonal content
+- AI generation
+- duplicate detection
+- publishing queue
+- approval workflows
+- image/media generation
+- lead attribution
+- analytics
+
+Determine:
+
+1. Whether a recurring scheduler already exists.
+2. Whether content generation is template-based or AI-generated.
+3. Whether service names are hard-coded.
+4. Whether there is already a canonical BB&B services source.
+5. Whether posts can currently be generated without a user click.
+6. Whether publishing can occur automatically or only through queue actions.
+7. Whether duplicate topic prevention exists.
+8. Whether campaign outcomes are tracked.
+
+Report findings before implementation.
+
+PHASE 2 — CANONICAL BB&B SERVICE REGISTRY
+
+Create or reuse one canonical service registry for Bed Bugs & Beyond.
+
+Each service should support:
+
+- serviceId
+- displayName
+- status:
+  - active
+  - seasonal
+  - limited
+  - coming_soon
+  - disabled
+- priority
+- revenueWeight
+- seasonality
+- supportedServiceAreas
+- allowedContentAngles
+- prohibitedClaims
+- CTA type
+- landingPage or contact action
+- notes
+
+Initial rule:
+
+termite:
+- status: coming_soon
+- generationAllowed: false
+- salesCTAAllowed: false
+- bookingAllowed: false
+
+Do not duplicate this list in Content Autopilot.
+
+PHASE 3 — ACTIVE PEST AUDIT
+
+Audit the actual BB&B website, configuration, onboarding data, services pages, and existing content to identify every pest/service currently offered.
+
+Do not guess.
+
+Return the proposed active service list for Matthew’s confirmation before enabling full automation.
+
+Explicitly identify:
+
+- active services
+- seasonal services
+- coming-soon services
+- services not offered
+- unclear services needing confirmation
+
+Termites must remain coming_soon regardless of other source text unless Matthew explicitly changes that rule.
+
+PHASE 4 — CONTENT CALENDAR ENGINE
+
+Create a reusable weekly content-plan generator.
+
+It should schedule content across:
+
+- active services
+- selected pilot platforms
+- service areas
+- content angles
+- campaign goals
+
+Support configurable posting frequency by platform.
+
+For the current BB&B pilot, use:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+
+Google Business Profile remains manual-publish while Google quota is blocked.
+
+The engine must avoid:
+
+- repeating the same pest too frequently
+- repeating the same hook
+- repeating the same CTA
+- repeating nearly identical captions
+- publishing the same topic across every platform without adaptation
+
+PHASE 5 — REVENUE-FIRST CAMPAIGN MIX
+
+Add campaign goals such as:
+
+- call_generation
+- inspection_booking
+- treatment_booking
+- vacation_rental_outreach
+- property_manager_outreach
+- homeowner_education
+- seasonal_alert
+- review_trust
+- local_visibility
+
+Default weekly mix:
+
+- 50% lead/revenue focused
+- 30% educational
+- 20% trust/local authority
+
+Make these percentages configurable.
+
+Every generated campaign should identify:
+
+- target customer
+- service
+- content angle
+- intended business outcome
+- CTA
+- platform
+- media requirement
+
+PHASE 6 — FRESH AI CONTENT GENERATION
+
+Replace or extend the template-only behavior with fresh AI-assisted generation.
+
+Use:
+
+- canonical service data
+- BB&B brand voice
+- recent post history
+- platform content profile
+- service area
+- seasonality
+- selected campaign goal
+- prohibited claims
+- duplicate-content safeguards
+
+Generate platform-specific copy for each selected platform.
+
+Do not generate unsupported claims, guarantees, fake discounts, or false urgency.
+
+Do not generate termite service content.
+
+PHASE 7 — CONTENT SAFETY AND EXCLUSIONS
+
+Implement hard business-rule filtering.
+
+The engine must block:
+
+- termites as an active service
+- unsupported guarantees
+- fabricated customer reviews
+- fake pricing
+- fake discounts
+- misleading health claims
+- false availability
+- services outside the approved registry
+- unsupported service areas
+
+Add tests proving termite content cannot be generated or queued.
+
+PHASE 8 — MEDIA GENERATION WORKFLOW
+
+Use the shared media uploader and media compatibility system.
+
+For each generated campaign, create or request:
+
+- image concept
+- image asset
+- MP4 concept or script where relevant
+- MP3 narration source where relevant
+- platform-specific placement requirements
+
+Do not falsely mark mediaReady unless a real asset exists.
+
+For the first autopilot version:
+
+- automatically generate written content
+- automatically generate media instructions
+- attach real generated media only where an existing generator is available
+- otherwise mark media action required
+
+PHASE 9 — APPROVAL MODES
+
+Support three modes:
+
+1. Draft Only
+   - generate content
+   - never queue automatically
+
+2. Approval Required
+   - generate and queue for review
+   - publish only after approval
+
+3. Full Autopilot
+   - generate, queue, and publish automatically on eligible connected platforms
+   - manual-publish platforms remain manual
+
+Default BB&B pilot mode:
+
+Approval Required
+
+Do not enable Full Autopilot by default.
+
+PHASE 10 — SCHEDULER
+
+Use or extend the existing recurring scheduler.
+
+Requirements:
+
+- generate the next weekly plan automatically
+- configurable generation day and time
+- configurable publish schedule
+- idempotency protection
+- duplicate-run protection
+- retry policy
+- failure diagnostics
+- pause/resume control
+- emergency stop
+- tenant scoping
+- no generation when autopilot is paused
+
+Do not create parallel cron systems.
+
+PHASE 11 — AUTOPILOT CONTROL PANEL
+
+Add or extend the existing Content Autopilot UI with:
+
+- Autopilot on/off
+- Mode:
+  - Draft Only
+  - Approval Required
+  - Full Autopilot
+- Active services
+- Excluded services
+- Posting frequency
+- Selected platforms
+- Weekly campaign mix
+- Next generation date
+- Next scheduled publish
+- Pending approvals
+- Recent failures
+- Pause all
+- Generate now
+
+Show Termites as:
+
+Coming Soon
+Not eligible for generation
+
+PHASE 12 — REVENUE TRACKING
+
+For each generated campaign, store:
+
+- campaignId
+- serviceId
+- goal
+- platform
+- CTA
+- publish status
+- click data if available
+- call attribution if available
+- lead attribution if available
+- booking result if available
+- revenue value if available
+
+Start with the data already available.
+
+Do not fabricate revenue attribution.
+
+PHASE 13 — FIRST BB&B PILOT SCHEDULE
+
+Prepare a one-week draft plan for Matthew’s approval.
+
+Use only confirmed active services.
+
+Include:
+
+- day
+- platform
+- service/pest
+- campaign goal
+- hook
+- CTA
+- required media
+- publish mode
+- local service area
+
+Do not include termites.
+
+Stop and show Matthew the entire first weekly plan before enabling recurring automation.
+
+PHASE 14 — TESTS
+
+Add tests for:
+
+1. Termites are coming_soon.
+2. Termites cannot generate active promotional content.
+3. Termites cannot be queued for booking CTAs.
+4. Active services can generate content.
+5. Seasonal services follow season rules.
+6. Disabled services are excluded.
+7. Weekly plan avoids duplicates.
+8. Revenue/education/trust mix is respected.
+9. Selected platforms control output.
+10. Google remains manual-publish while quota is blocked.
+11. Approval Required is the default.
+12. Paused autopilot generates nothing.
+13. Duplicate scheduler runs are idempotent.
+14. Unknown services fail safely.
+15. Prohibited claims are blocked.
+16. Recent topics are not repeated too quickly.
+17. Campaign metadata is persisted.
+18. Full Autopilot cannot publish to incompatible platforms.
+
+PHASE 15 — REQUIRED REPORT
+
+Return:
+
+1. Existing systems audited.
+2. Canonical service registry location.
+3. Confirmed active BB&B services.
+4. Seasonal services.
+5. Coming-soon services.
+6. Explicit termite exclusion implementation.
+7. Scheduler reused or extended.
+8. AI generation implementation.
+9. Approval modes.
+10. Autopilot control panel.
+11. First one-week draft plan.
+12. Files changed.
+13. API/database changes.
+14. Tests and results.
+15. Typecheck result.
+16. Build result.
+17. Manual acceptance results.
+18. Remaining limitations.
+19. Recommended next phase.
+
+DOCUMENTATION
+
+Update:
+
+- AI_EDGE_ENGINEERING_HANDBOOK.md
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+- ARCHITECTURE_DECISIONS.md
+
+Do not mark autopilot complete until:
+
+- active services come from one canonical registry
+- termites are technically excluded
+- fresh content is generated automatically
+- weekly scheduling works
+- approval controls work
+- duplicate generation is prevented
+- the first BB&B weekly plan is reviewed by Matthew

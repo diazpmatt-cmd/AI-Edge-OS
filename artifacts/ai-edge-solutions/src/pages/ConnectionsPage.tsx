@@ -833,7 +833,7 @@ export default function ConnectionsPage() {
                     background: platform.bg,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 16, fontWeight: 900, color: "#FFFFFF",
-                    boxShadow: `0 0 16px ${platform.color}33`,
+                    boxShadow: "0 0 16px rgba(255,255,255,0.08)",
                   }}>
                     {platform.abbrev}
                   </div>

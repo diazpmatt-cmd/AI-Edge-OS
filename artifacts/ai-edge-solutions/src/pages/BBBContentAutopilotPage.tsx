@@ -646,8 +646,8 @@ export default function BBBContentAutopilotPage() {
                 return (
                   <div key={p.id} style={{
                     display: "flex", alignItems: "center", gap: 8,
-                    background: `${p.color}08`,
-                    border: `1px solid ${sState !== "not-queued" ? `${sMeta.dot}40` : `${p.color}20`}`,
+                    background: "rgba(255,255,255,0.02)",
+                    border: `1px solid ${sState !== "not-queued" ? `${sMeta.dot}30` : "rgba(255,255,255,0.07)"}`,
                     borderRadius: 10, padding: "8px 12px", minWidth: 110,
                     transition: "all 0.3s",
                   }}>
@@ -672,8 +672,8 @@ export default function BBBContentAutopilotPage() {
                 return (
                   <div key={p.id} style={{
                     display: "flex", alignItems: "center", gap: 7,
-                    background: `${p.color}04`,
-                    border: `1px solid ${p.color}15`,
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.05)",
                     borderRadius: 10, padding: "8px 12px", minWidth: 110,
                     opacity: 0.6,
                   }}>
@@ -716,11 +716,11 @@ export default function BBBContentAutopilotPage() {
                       title={!isQueueable && PLATFORM_NOTE[provider.id] ? PLATFORM_NOTE[provider.id] : undefined}
                       style={{
                         flex: "1 1 auto",
-                        background: isActive ? `${provider.color}20` : "rgba(255,255,255,0.03)",
-                        border: `1px solid ${isActive ? `${provider.color}55` : "rgba(255,255,255,0.07)"}`,
+                        background: isActive ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${isActive ? "rgba(0,174,239,0.45)" : "rgba(255,255,255,0.07)"}`,
                         borderRadius: 8, padding: "7px 4px",
                         fontSize: 10, fontWeight: 700,
-                        color: isActive ? provider.color : isQueueable ? B.dim : "#374151",
+                        color: isActive ? "#00AEEF" : isQueueable ? B.dim : "#374151",
                         cursor: "pointer", transition: "all 0.15s",
                         position: "relative" as const,
                         opacity: isQueueable ? 1 : 0.65,
@@ -887,8 +887,8 @@ export default function BBBContentAutopilotPage() {
                         key={p.id}
                         onClick={() => togglePlatform(p.id)}
                         style={{
-                          background: sel ? `${p.color}10` : "transparent",
-                          border: `1.5px solid ${sel ? `${p.color}55` : `${p.color}18`}`,
+                          background: sel ? "rgba(0,174,239,0.07)" : "transparent",
+                          border: `1.5px solid ${sel ? "rgba(0,174,239,0.4)" : "rgba(255,255,255,0.1)"}`,
                           borderRadius: 10, padding: "10px 14px",
                           cursor: "pointer",
                           transition: "all 0.15s",
@@ -899,8 +899,8 @@ export default function BBBContentAutopilotPage() {
                         {/* Checkbox */}
                         <div style={{
                           width: 18, height: 18, borderRadius: 5,
-                          border: `1.5px solid ${sel ? p.color : "#475569"}`,
-                          background: sel ? p.color : "transparent",
+                          border: `1.5px solid ${sel ? "#00AEEF" : "#475569"}`,
+                          background: sel ? "#00AEEF" : "transparent",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           flexShrink: 0,
                         }}>
@@ -908,7 +908,7 @@ export default function BBBContentAutopilotPage() {
                         </div>
                         {/* Icon + label */}
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? p.color : B.silver }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? "#E2E8F0" : B.silver }}>
                             <span>{p.icon}</span> {p.label}
                           </div>
                           <div style={{ fontSize: 9, color: B.dim, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -940,8 +940,8 @@ export default function BBBContentAutopilotPage() {
                         key={p.id}
                         onClick={() => togglePlatform(p.id)}
                         style={{
-                          background: sel ? `${p.color}08` : "transparent",
-                          border: `1px dashed ${sel ? `${p.color}40` : `${p.color}15`}`,
+                          background: sel ? "rgba(0,174,239,0.06)" : "transparent",
+                          border: `1px dashed ${sel ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.08)"}`,
                           borderRadius: 10, padding: "10px 14px",
                           cursor: "pointer",
                           transition: "all 0.15s",
@@ -951,15 +951,15 @@ export default function BBBContentAutopilotPage() {
                       >
                         <div style={{
                           width: 18, height: 18, borderRadius: 5,
-                          border: `1.5px solid ${sel ? p.color : "#475569"}`,
-                          background: sel ? p.color : "transparent",
+                          border: `1.5px solid ${sel ? "#00AEEF" : "#475569"}`,
+                          background: sel ? "#00AEEF" : "transparent",
                           display: "flex", alignItems: "center", justifyContent: "center",
                           flexShrink: 0,
                         }}>
                           {sel && <span style={{ color: B.navy, fontSize: 10, fontWeight: 800 }}>✓</span>}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? p.color : B.dim }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? "#E2E8F0" : B.dim }}>
                             <span>{p.icon}</span> {p.label}
                           </div>
                           <div style={{ fontSize: 9, color: B.dim, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -982,8 +982,8 @@ export default function BBBContentAutopilotPage() {
                         key={p.id}
                         title={PLATFORM_NOTE[p.id]}
                         style={{
-                          background: `${p.color}06`,
-                          border: `1px dashed ${p.color}20`,
+                          background: "transparent",
+                          border: "1px dashed rgba(255,255,255,0.06)",
                           borderRadius: 10, padding: "8px 14px",
                           fontSize: 11, fontWeight: 700,
                           color: "#374151",
@@ -1176,7 +1176,7 @@ export default function BBBContentAutopilotPage() {
                       {entry.ts}
                     </span>
                     <span style={{ fontSize: 13, flexShrink: 0 }}>{pIcon}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: pColor, flexShrink: 0, minWidth: 64 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#94A3B8", flexShrink: 0, minWidth: 64 }}>
                       {pAbbr}
                     </span>
                     <span style={{ fontSize: 11, color: B.silver, flex: 1 }}>{entry.action}</span>
@@ -1205,27 +1205,27 @@ export default function BBBContentAutopilotPage() {
             const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
             return (
               <div key={p.id} style={{
-                background: isSelected ? `${p.color}08` : B.panel,
-                border: `1.5px solid ${isSelected ? `${p.color}40` : `${p.color}20`}`,
+                background: isSelected ? "rgba(0,174,239,0.05)" : B.panel,
+                border: `1.5px solid ${isSelected ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.07)"}`,
                 borderRadius: 14, padding: "16px 18px",
                 opacity: isSelected ? 1 : 0.6,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
                   <span style={{ fontSize: 12 }}>{p.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: p.color, letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: "#94A3B8", letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
                     {p.shortLabel}
                   </span>
                   <PlatformStateChip state={uiState} />
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
-                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.maxLength}</span>
-                  <span style={{ fontSize: 9, background: `${p.color}12`, color: p.color, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.bestFormat}</span>
+                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
+                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.maxLength}</span>
+                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.bestFormat}</span>
                 </div>
                 <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                   {tips.map((tip, i) => (
                     <li key={i} style={{ fontSize: 10, color: B.dim, display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span style={{ color: p.color, flexShrink: 0, fontSize: 8 }}>●</span>
+                      <span style={{ color: "#475569", flexShrink: 0, fontSize: 8 }}>●</span>
                       {tip}
                     </li>
                   ))}

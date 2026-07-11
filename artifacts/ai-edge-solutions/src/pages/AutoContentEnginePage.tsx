@@ -788,12 +788,12 @@ export default function AutoContentEnginePage() {
                     return (
                       <button key={p.value} onClick={() => toggleArr("platforms", p.value)} style={{
                         display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
-                        background: active ? `${p.color}20` : "rgba(255,255,255,0.04)",
-                        border: `1px solid ${active ? p.color : "rgba(255,255,255,0.08)"}`,
+                        background: active ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${active ? "rgba(0,174,239,0.45)" : "rgba(255,255,255,0.08)"}`,
                         borderRadius: 10, cursor: "pointer",
-                        color: active ? p.color : "#64748B", fontSize: 13.5, fontWeight: 600,
+                        color: active ? "#E2E8F0" : "#64748B", fontSize: 13.5, fontWeight: 600,
                       }}>
-                        <span style={{ width: 22, height: 22, borderRadius: "50%", background: active ? `${p.color}22` : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: active ? p.color : "#64748B" }}>{p.icon}</span>
+                        <span style={{ width: 22, height: 22, borderRadius: "50%", background: active ? "rgba(0,174,239,0.18)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: active ? "#00AEEF" : "#64748B" }}>{p.icon}</span>
                         {p.label} {active && <span style={{ fontSize: 12, opacity: 0.7 }}>✓</span>}
                       </button>
                     );

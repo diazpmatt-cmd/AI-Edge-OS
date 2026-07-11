@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AppShell } from "../components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "../lib/api";
@@ -187,6 +187,9 @@ function StatusPill({ status }: { status: string }) {
 export default function ReviewsEnginePage() {
   const { colors: t } = useTheme();
   const apiFetch = useApiFetch();
+  const apiFetchRef = useRef(apiFetch);
+  apiFetchRef.current = apiFetch;
+
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [stats, setStats]         = useState<PlatformStat[]>([]);
   const [requests, setRequests]   = useState<ReviewRequest[]>([]);
@@ -211,8 +214,8 @@ export default function ReviewsEnginePage() {
     setLoading(true); setError(null);
     try {
       const [statsData, reqsData] = await Promise.all([
-        apiFetch<{ stats: PlatformStat[] }>("/reviews/stats"),
-        apiFetch<{ requests: ReviewRequest[] }>("/reviews/requests"),
+        apiFetchRef.current<{ stats: PlatformStat[] }>("/reviews/stats"),
+        apiFetchRef.current<{ requests: ReviewRequest[] }>("/reviews/requests"),
       ]);
       setStats(statsData.stats ?? []);
       setRequests(reqsData.requests ?? []);
@@ -221,7 +224,8 @@ export default function ReviewsEnginePage() {
     } finally {
       setLoading(false);
     }
-  }, [apiFetch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 

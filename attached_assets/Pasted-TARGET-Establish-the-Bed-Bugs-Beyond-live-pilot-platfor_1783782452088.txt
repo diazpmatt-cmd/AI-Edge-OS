@@ -1,0 +1,366 @@
+TARGET: Establish the Bed Bugs & Beyond live pilot platform baseline for Facebook, Instagram, Google Business Profile, YouTube, and audit the existing Nextdoor connection.
+
+IMPORTANT
+
+Follow the AI Edge audit-first workflow:
+
+1. Audit
+2. Consolidate
+3. Verify
+4. Expand
+
+This task is not to build every future platform.
+
+The immediate BB&B pilot platforms are:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+
+Nextdoor must be audited because a page may already exist and may already have been linked.
+
+TikTok, LinkedIn, and Pinterest are deferred for now.
+
+Do not:
+- add new platforms
+- rebuild the provider registry
+- create duplicate integration pages
+- create fake connection states
+- claim publishing support without a working backend path
+- start full video generation in this task
+- modify unrelated mobile code
+
+PHASE 1 — TRACE THE EXISTING PLATFORM SYSTEMS
+
+Locate and document the exact production routes, pages, components, registries, hooks, endpoints, tables, and provider records for:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+- Nextdoor
+
+Search for:
+
+- social-providers.ts
+- provider registry
+- platform registry
+- connected accounts
+- social connections
+- publishing center
+- Content Autopilot
+- media engine
+- Nextdoor
+- nextdoor
+- Facebook
+- Instagram
+- Google Business Profile
+- GBP
+- YouTube
+- OAuth
+- access tokens
+- refresh tokens
+- provider health
+- publishing handlers
+- draft queue
+- social posts
+- platform capabilities
+
+Report the existing architecture before changing anything.
+
+PHASE 2 — AUDIT THE ACTUAL BB&B CONNECTION STATE
+
+For each of these providers:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+- Nextdoor
+
+Determine independently:
+
+1. Is the provider represented in the canonical registry?
+2. Does the provider have a production UI page?
+3. Is there a stored connection record for Bed Bugs & Beyond?
+4. Is the connection tied to the correct tenant or business?
+5. Does it have valid authentication or OAuth credentials?
+6. Are required scopes present?
+7. Is token refresh implemented?
+8. Is provider health tracked?
+9. Is content generation supported?
+10. Is image generation supported?
+11. Is video generation supported?
+12. Is internal draft queueing supported?
+13. Is direct publishing supported?
+14. Is publishing currently working?
+15. Are analytics supported?
+16. Is the visible UI status truthful?
+
+Do not expose secrets, tokens, or credentials in the report.
+
+PHASE 3 — NEXTDOOR AUDIT
+
+Specifically investigate Nextdoor.
+
+Determine:
+
+1. Whether a Nextdoor page already exists.
+2. The exact route and component.
+3. Whether it is:
+   - a real integration page
+   - a setup checklist
+   - a manual-link page
+   - a placeholder
+   - or an actual connected publishing workflow
+4. Whether a Nextdoor business account or page URL is stored.
+5. Whether Bed Bugs & Beyond is linked to the correct Nextdoor business page.
+6. Whether there is an OAuth or API connection.
+7. Whether direct publishing is implemented.
+8. Whether queueing creates only an internal draft.
+9. Whether the system currently requires copy-and-paste manual publishing.
+10. Whether the page status shown to Matthew matches the real capability.
+
+Do not mark Nextdoor connected merely because a page URL or UI card exists.
+
+PHASE 4 — DEFINE THE BB&B PILOT PLATFORM SET
+
+Create or reuse one canonical BB&B pilot configuration.
+
+The active pilot platforms should be:
+
+- facebook
+- instagram
+- google_business_profile
+- youtube
+
+Use the exact canonical IDs already defined by the provider registry.
+
+Requirements:
+
+1. Do not create a second provider registry.
+2. Do not remove deferred platforms from the canonical registry.
+3. Mark TikTok, LinkedIn, Pinterest, and Nextdoor as deferred or non-pilot for this phase through an existing capability or rollout model.
+4. Content Autopilot should default to the four active BB&B pilot platforms.
+5. Users may still deselect any of the four.
+6. Deferred platforms should not be included in Queue All for the BB&B pilot unless explicitly enabled later.
+7. Preserve the existing saved-selection normalization logic.
+8. If the user already has a saved selection, normalize it safely against the active pilot set.
+
+Use a versioned pilot or rollout configuration rather than hard-coding platform names directly into the page.
+
+PHASE 5 — VERIFY END-TO-END CAPABILITY FOR THE FOUR ACTIVE PLATFORMS
+
+For Facebook, Instagram, Google Business Profile, and YouTube, trace the entire workflow:
+
+1. Platform selected in Content Autopilot.
+2. Platform-specific caption selected or created.
+3. Image idea or media requirement produced.
+4. Draft record created.
+5. Queue record created.
+6. Publishing Center receives the item.
+7. Provider-specific handler is selected.
+8. Authentication is validated.
+9. Publish request is made.
+10. Success or failure is stored.
+11. User-visible status updates.
+12. Diagnostics record any failure.
+
+For each provider, report where the flow is complete and where it stops.
+
+PHASE 6 — TRUTHFUL STATUS MODEL
+
+For each active pilot provider, keep these states separate:
+
+- registry support
+- tenant connection
+- authentication health
+- content-generation capability
+- image capability
+- video capability
+- queue capability
+- direct-publish capability
+- analytics capability
+- current health
+- last successful publish
+- last failed publish
+
+Do not reduce all of these to one “Connected” or “Ready” label.
+
+Correct any misleading user-facing status discovered during the audit.
+
+PHASE 7 — FACEBOOK AND INSTAGRAM REVIEW
+
+Confirm:
+
+1. Whether Facebook and Instagram share a Meta connection.
+2. Whether the correct Facebook Page and Instagram Business account are linked.
+3. Whether both can receive platform-specific captions.
+4. Whether both support image publishing.
+5. Whether video/Reels publishing is implemented.
+6. Whether current media requirements are enforced.
+7. Whether failed permissions or expired tokens are visible in diagnostics.
+
+Do not add Reels generation yet unless the underlying publishing support already exists.
+
+PHASE 8 — GOOGLE BUSINESS PROFILE REVIEW
+
+Confirm:
+
+1. Correct BB&B location/account connection.
+2. Required scopes.
+3. Local post generation.
+4. Image support.
+5. CTA support.
+6. Posting constraints.
+7. Direct-publish handler.
+8. Success/failure logging.
+9. Whether local service-area copy is being used.
+
+Preserve Baldwin County targeting, including:
+
+- Foley
+- Gulf Shores
+- Orange Beach
+- Fairhope
+- Baldwin County
+
+PHASE 9 — YOUTUBE REVIEW
+
+Confirm:
+
+1. YouTube is operational, not pending approval.
+2. The connected account is correct.
+3. Required scopes are present.
+4. Caption/description creation works.
+5. Internal queueing works.
+6. Direct publishing requires an actual video file.
+7. Thumbnail support status.
+8. Video upload handler status.
+9. Whether Shorts and standard video are distinguished.
+10. Whether publishing errors are visible.
+
+Do not claim YouTube video creation exists unless the system actually produces a video file.
+
+PHASE 10 — PILOT READINESS DASHBOARD OR REPORT
+
+Do not create a new page unless an existing diagnostics or operations page can be extended.
+
+Provide one concise BB&B pilot readiness summary showing, for each of the five audited providers:
+
+- Connected
+- Content ready
+- Image ready
+- Video ready
+- Queue ready
+- Direct publish ready
+- Manual action required
+- Blocker
+- Next step
+
+Prefer extending an existing diagnostics or operations surface.
+
+PHASE 11 — TESTS
+
+Add or update tests for:
+
+1. BB&B pilot defaults to Facebook, Instagram, GBP, and YouTube.
+2. Deferred platforms are excluded from default Queue All.
+3. Saved platform selections normalize safely.
+4. Nextdoor page existence does not imply API connection.
+5. Draft-only status is not shown as direct publishing.
+6. YouTube remains operational.
+7. Each active provider resolves truthful capability states.
+8. Unknown providers fail safely.
+9. Publishing actions use canonical IDs.
+10. No duplicate provider metadata is introduced.
+
+PHASE 12 — MANUAL ACCEPTANCE PLAN
+
+Prepare a manual test checklist for Matthew to perform while signed in.
+
+It must include:
+
+FACEBOOK
+- create content
+- queue
+- publish
+- confirm live post
+- confirm stored success state
+
+INSTAGRAM
+- create content
+- queue
+- publish
+- confirm live post
+- confirm stored success state
+
+GOOGLE BUSINESS PROFILE
+- create local post
+- queue
+- publish
+- confirm live post
+- confirm stored success state
+
+YOUTUBE
+- create title and description
+- attach a valid test video
+- queue
+- publish
+- confirm uploaded video
+- confirm stored success state
+
+NEXTDOOR
+- open existing page
+- confirm linked business page
+- confirm whether posting is API-driven or manual
+- document exact remaining action
+
+Do not claim these manual tests were completed unless they were physically performed.
+
+PHASE 13 — REQUIRED REPORT
+
+Return:
+
+1. Exact production route for every audited page.
+2. Exact components and systems inspected.
+3. Canonical provider IDs.
+4. Actual BB&B connection state for each provider.
+5. Content-generation status for each.
+6. Image-generation status for each.
+7. Video-generation status for each.
+8. Queue status for each.
+9. Direct-publish status for each.
+10. Analytics status for each.
+11. Nextdoor’s real implementation level.
+12. Whether a Nextdoor account/page is actually linked.
+13. Any misleading statuses corrected.
+14. Files changed.
+15. Tests added or changed.
+16. Typecheck result.
+17. Build result.
+18. Manual acceptance checklist.
+19. Blockers.
+20. Recommended next implementation phase.
+
+DOCUMENTATION
+
+Update:
+
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+- ROADMAP.md
+
+Add or amend an ADR only if the BB&B pilot rollout model introduces a durable architectural decision.
+
+Do not mark this task complete merely because the four platforms appear in the UI.
+
+Completion requires a truthful end-to-end readiness assessment for:
+
+- Facebook
+- Instagram
+- Google Business Profile
+- YouTube
+
+and a factual audit of the existing Nextdoor page and connection.

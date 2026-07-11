@@ -8,6 +8,13 @@ import { useApiFetch } from "@/lib/api";
 import { WorkflowNav } from "@/components/WorkflowNav";
 import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
 import { SOCIAL_PROVIDERS, QUEUEABLE_PROVIDERS, type SocialProviderId } from "@/lib/social-providers";
+import {
+  BBB_PILOT_PROVIDERS,
+  BBB_DEFERRED_PROVIDERS,
+  BBB_SELECTION_STORAGE_KEY,
+  normalizeSavedSelection,
+  isPilotPlatform,
+} from "@/lib/bbb-pilot";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -264,13 +271,19 @@ const CONTENT_PROFILES: Record<SocialProviderId, ContentProfile> = {
     frequency: "1–2x/week", ctaTip: "Neighbor-to-neighbor tone; no hard sell",
     hashtagCount: "0", note: "Avoid hard-sell language. Share seasonal alerts & local tips. Respond quickly.",
   },
+  x_twitter: {
+    mediaType: "text", maxLength: "280 chars", bestFormat: "Short update or thread",
+    frequency: "1–3x/day", ctaTip: "Keep it punchy; include a link or image",
+    hashtagCount: "1–2", note: "Not yet available for BB&B. X Business API integration coming later.",
+  },
 };
 
 const MEDIA_ICON: Record<MediaType, string> = {
   image: "🖼️", video: "🎬", carousel: "🖼️", text: "📝", pin: "📌", article: "📄",
 };
 
-const SELECTION_STORAGE_KEY = "ai-edge:autopilot-selection:v1";
+// Storage key and default selection sourced from bbb-pilot.ts (versioned pilot config).
+// Changing BBB_PILOT_VERSION in bbb-pilot.ts resets all users to the new defaults.
 
 const STATUS_META: Record<PlatformStatus, { dot: string; label: string; color: string }> = {
   "not-queued": { dot: "#475569", label: "Not queued",        color: "#64748B" },
@@ -318,20 +331,12 @@ export default function BBBContentAutopilotPage() {
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
 
-  // Platform selection — persisted in localStorage
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<SocialProviderId>>(() => {
-    try {
-      const raw = localStorage.getItem(SELECTION_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as string[];
-        const valid = parsed.filter((id): id is SocialProviderId =>
-          QUEUEABLE_PROVIDERS.some(p => p.id === id),
-        );
-        if (valid.length > 0) return new Set(valid);
-      }
-    } catch { /* ignore corrupt storage */ }
-    return new Set(QUEUEABLE_PROVIDERS.map(p => p.id));
-  });
+  // Platform selection — persisted in localStorage.
+  // Default = BB&B pilot platforms (Facebook, Instagram, Google Business, YouTube).
+  // Deferred platforms (TikTok, LinkedIn, Pinterest, Nextdoor) are excluded by default.
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<SocialProviderId>>(
+    () => normalizeSavedSelection(BBB_SELECTION_STORAGE_KEY),
+  );
 
   // V2: real backend draft creation
   const authFetch   = useApiFetch();
@@ -365,7 +370,7 @@ export default function BBBContentAutopilotPage() {
 
   // Persist selection changes to localStorage
   useEffect(() => {
-    localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify([...selectedPlatforms]));
+    localStorage.setItem(BBB_SELECTION_STORAGE_KEY, JSON.stringify([...selectedPlatforms]));
   }, [selectedPlatforms]);
 
   // ── Derived status values (SELECTED platforms only) ──
@@ -840,7 +845,7 @@ export default function BBBContentAutopilotPage() {
               {/* Queue buttons */}
               <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "18px 20px", flex: 1 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: B.sky, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span>✅ Select Platforms ({selectedQueueable.length}/{QUEUEABLE_PROVIDERS.length})</span>
+                  <span>✅ Pilot Platforms ({selectedQueueable.filter(p => isPilotPlatform(p.id)).length}/{BBB_PILOT_PROVIDERS.length})</span>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
                       onClick={selectAll}
@@ -853,8 +858,8 @@ export default function BBBContentAutopilotPage() {
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {/* Platform selection cards — one per queueable platform */}
-                  {QUEUEABLE_PROVIDERS.map(p => {
+                  {/* Active pilot platform cards (Facebook, Instagram, Google Business, YouTube) */}
+                  {BBB_PILOT_PROVIDERS.map(p => {
                     const sel    = selectedPlatforms.has(p.id);
                     const prof   = CONTENT_PROFILES[p.id];
                     const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
@@ -894,6 +899,55 @@ export default function BBBContentAutopilotPage() {
                           </div>
                         </div>
                         {/* Status chip */}
+                        <div style={{ flexShrink: 0 }}>
+                          <PlatformStateChip state={uiState} />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Deferred platforms — not in v1 pilot default; can still be enabled manually */}
+                  {BBB_DEFERRED_PROVIDERS.length > 0 && (
+                    <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginTop: 4, marginBottom: 2 }}>
+                      Deferred — not in pilot default
+                    </div>
+                  )}
+                  {BBB_DEFERRED_PROVIDERS.map(p => {
+                    const sel    = selectedPlatforms.has(p.id);
+                    const prof   = CONTENT_PROFILES[p.id];
+                    const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => togglePlatform(p.id)}
+                        style={{
+                          background: sel ? `${p.color}08` : "transparent",
+                          border: `1px dashed ${sel ? `${p.color}40` : `${p.color}15`}`,
+                          borderRadius: 10, padding: "10px 14px",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                          display: "flex", alignItems: "center", gap: 10,
+                          opacity: sel ? 0.8 : 0.4,
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 5,
+                          border: `1.5px solid ${sel ? p.color : "#475569"}`,
+                          background: sel ? p.color : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          flexShrink: 0,
+                        }}>
+                          {sel && <span style={{ color: B.navy, fontSize: 10, fontWeight: 800 }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: sel ? p.color : B.dim }}>
+                            <span>{p.icon}</span> {p.label}
+                          </div>
+                          <div style={{ fontSize: 9, color: B.dim, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
+                            <span>• {prof.maxLength}</span>
+                          </div>
+                        </div>
                         <div style={{ flexShrink: 0 }}>
                           <PlatformStateChip state={uiState} />
                         </div>

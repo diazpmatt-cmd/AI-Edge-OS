@@ -1,45 +1,62 @@
 # Session Handoff
 
-## Last session completed: Command Center drag-and-drop repair
+## Last session completed: BB&B Pilot Baseline — Platform Audit & Config (Phase 11)
 
 ### What was done
-Full audit-first repair of the Command Center tile-ordering feature on
-`/admin/dashboard` (DashboardPage.tsx). Root cause identified and fixed.
 
-### Root cause of broken drag-and-drop
-`Reorder.Group axis="y"` was placed inside a **CSS `display: grid`** container
-(`gridTemplateColumns: "1fr 1fr"`). Framer Motion Reorder is a 1-D algorithm:
-for `axis="y"` it finds the insertion point by comparing each item's
-y-coordinate. In a 2-column grid, items in the same row share the same
-y-coordinate, so the algorithm cannot distinguish between them. Items appeared
-to drag but did not reorder correctly. The same bug existed in `app-shell.tsx`
-sidebar edit mode and was fixed simultaneously.
+Full 13-phase audit-first task establishing the BB&B live pilot platform baseline.
+Created a versioned pilot config module, updated the Content Autopilot default
+selection, added 44 Phase 11 tests, and produced a ROADMAP with per-provider
+readiness tables and a manual acceptance checklist for Matthew.
 
-### Fix applied
-Edit mode switches from a 2-column CSS grid to a `flex-direction: column`
-single-column list. Normal display mode retains the 2-column grid. This is the
-minimal correct fix for Framer Motion `axis="y"` Reorder.
+---
+
+### Audit Findings (as of 2026-07-11)
+
+**DB social connections (confirmed via psql):**
+
+| Provider | Account | Connected |
+|----------|---------|-----------|
+| facebook | Matthew Diaz | 2026-06-28 |
+| google_business | diaz.p.matt@gmail.com | 2026-06-28 |
+| instagram | Matthew Diaz | 2026-06-29 |
+| youtube | Matthew Diaz | 2026-07-07 |
+
+**Nextdoor**: `coming_soon`, no OAuth, no API, no DB record. UI-only (15-step manual checklist in Local Presence Engine). Modeled truthfully — copy-and-paste workflow only.
+
+---
 
 ### Files changed
+
 | File | What changed |
 |------|-------------|
-| `artifacts/ai-edge-solutions/src/pages/DashboardPage.tsx` | Reorder.Group changed to flex-column; DraggableActionTile updated; auto-save on every reorder |
-| `artifacts/ai-edge-solutions/src/components/app-shell.tsx` | EditableNavGrid and DraggableTile fixed with same flex-column pattern |
-| `artifacts/ai-edge-solutions/src/lib/dashboard-order.ts` | Key updated to `ai-edge:command-center-layout:v1`; try/catch added to save/clear |
-| `artifacts/ai-edge-solutions/src/lib/__tests__/dash-order.test.ts` | New — 9 describe blocks covering normalization, corrupt JSON, duplicates, reset |
+| `artifacts/ai-edge-solutions/src/lib/bbb-pilot.ts` | **NEW** — versioned pilot config: `BBB_PILOT_PLATFORM_IDS`, `BBB_DEFERRED_PLATFORM_IDS`, `BBB_PILOT_PROVIDERS`, `BBB_DEFERRED_PROVIDERS`, `BBB_SELECTION_STORAGE_KEY`, `getBBBDefaultSelection()`, `normalizeSavedSelection()`, `isPilotPlatform()`, `isDeferredPlatform()` |
+| `artifacts/ai-edge-solutions/src/lib/__tests__/bbb-pilot.test.ts` | **NEW** — 44 Phase 11 tests across 10 describe blocks |
+| `artifacts/ai-edge-solutions/src/pages/BBBContentAutopilotPage.tsx` | Imports from `bbb-pilot.ts`; default selection now uses `normalizeSavedSelection(BBB_SELECTION_STORAGE_KEY)` (4 pilot platforms); storage key sourced from module; platform selection UI now shows pilot vs deferred sections; `x_twitter` content profile added (fixes pre-existing TS error) |
+| `ROADMAP.md` | **NEW** — per-provider readiness tables (Phases 1–4), manual acceptance test checklist for Matthew |
+| `CHANGELOG.md` | Updated — Phase 11 changes logged |
 
-### localStorage key
-`ai-edge:command-center-layout:v1` (versioned; previously `ai-edge-dash-actions-v1`)
+---
 
-### What still works
-- Click/navigation on Quick Action tiles unaffected (edit mode vs. normal mode toggle)
-- Sidebar nav reorder (app-shell.tsx) fixed with same pattern
-- All normalization: strips unknown IDs, collapses duplicates, appends new tiles
+### Key decisions
 
-### Known limitations / next steps
-- Clerk metadata persistence not yet implemented (localStorage only)
-- The Framer Motion Reorder 2-D grid limitation is documented in-code
-- Activity feed on dashboard is empty (no live signals yet)
+- **Default selection = 4 pilot platforms** (Facebook, Instagram, Google Business, YouTube). First-time users and users with no saved selection see only these four checked by default.
+- **Deferred platforms (TikTok, LinkedIn, Pinterest, Nextdoor) remain accessible** — users can still manually check them; they are just not in the default.
+- **`selectAll` button still selects ALL queueable providers** — it is an explicit user action.
+- **Storage key stays `v1`** — the default fallback changes, not the key. Bump the version in `bbb-pilot.ts` (→ `BBB_PILOT_VERSION`) if a future pilot phase needs a hard localStorage reset.
+- **Nextdoor must not be described as a connected API.** It has a UI card (15-step checklist) and a content template, but `connect: false, publish: false` in the registry is the truthful state.
 
-### Branch / production state
-Deployed to production checkpoint at time of session. Changes are live.
+---
+
+### Next steps for Matthew (manual acceptance)
+
+See `ROADMAP.md` § "Manual Acceptance Test Checklist" for the full per-platform verification list. Start with Google Business (text-only posts can publish immediately without an image).
+
+---
+
+### Test baseline
+
+```
+bbb-pilot.test.ts       44/44 passed ✅
+TypeScript (tsc --noEmit)  0 errors   ✅
+```

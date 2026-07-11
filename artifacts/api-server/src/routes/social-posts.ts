@@ -687,8 +687,6 @@ async function publishToGBP(
       throw new Error(`Google quota cooldown active (${minsLeft}m remaining) — no cached location available. Use "Refresh GBP Location" in System Diagnostics when the cooldown expires.`);
     }
 
-    console.log("[GBP-PUBLISH] no cached location — fetching accounts + locations from API");
-
     const saveQuotaCooldown = async () => {
       const until = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15-min cooldown
       try {
@@ -699,28 +697,34 @@ async function publishToGBP(
       return until;
     };
 
-    // Use plain fetch — fetchWithRetry429 wastes a second quota hit on 429
-    const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!acctRes.ok) {
-      const acctErrBody = await acctRes.text();
-      console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
-      if (acctRes.status === 429) {
-        const cooldownUntil = await saveQuotaCooldown();
-        const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
-        throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}. Use "Refresh GBP Location" in System Diagnostics once the cooldown expires.`);
+    // Only call Account Management API if we don't already have the account resource name
+    if (!accountResourceName) {
+      console.log("[GBP-PUBLISH] no cached account — fetching from Account Management API");
+      const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!acctRes.ok) {
+        const acctErrBody = await acctRes.text();
+        console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
+        if (acctRes.status === 429) {
+          const cooldownUntil = await saveQuotaCooldown();
+          const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
+          throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}. Use "Refresh GBP Location" in System Diagnostics once the cooldown expires.`);
+        }
+        throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
       }
-      throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
+      const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
+      const account = acctData.accounts?.[0];
+      if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
+      accountResourceName = account.name;
+    } else {
+      console.log("[GBP-PUBLISH] using cached account resource name:", accountResourceName);
     }
-    const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
-    const account = acctData.accounts?.[0];
-    if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
-    accountResourceName = account.name;
 
+    console.log("[GBP-PUBLISH] fetching locations for account:", accountResourceName);
     const locRes = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountResourceName}/locations?readMask=name,title`,
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
     );
     if (!locRes.ok) {
@@ -910,6 +914,85 @@ router.post("/social-posts/:id/performance", async (req, res) => {
   if (!updated) { res.status(404).json({ error: "Post not found" }); return; }
   res.json({ ok: true, engagementScore: engScore, post: rowToDto(updated) });
 });
+
+// ── ONE-TIME PILOT ENDPOINT — remove after use ───────────────────────────────
+// Approved by Matthew, 2026-07-11. Creates the BB&B GBP draft and publishes it
+// in one shot, reusing the same token-refresh + publishToGBP path the scheduler
+// uses.  Header: x-admin-token: BBB_PILOT_2026_07_11
+router.post("/social-posts/admin/bbb-gbp-pilot", async (req, res) => {
+  if (req.headers["x-admin-token"] !== "BBB_PILOT_2026_07_11") {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+
+  const USER_ID   = "user_3FKEVWfSuyNsJz3oQ9kPH5nzKDm";
+  const CLIENT    = "Bed Bugs & Beyond";
+  const PLATFORMS = JSON.stringify(["google"]);
+  const CAPTION   =
+    "Staying in a vacation rental this summer? Here are the early warning signs of bed bugs to check before you settle in.\n\n" +
+    "🔍 Tiny rust-colored or dark spots on mattress seams and sheets\n" +
+    "🔍 Small shed skins or pale eggshells in mattress folds\n" +
+    "🔍 Bite clusters on arms, legs, or neck — especially in the morning\n" +
+    "🔍 A faint musty odor near the bed or headboard\n\n" +
+    "Bed bugs spread fast and are much easier to treat early. Bed Bugs & Beyond provides fast, discreet inspections and treatment across all of Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, and more. Call us today for a free phone consultation.";
+  const CTA_TYPE  = "call_now";
+  const CTA_VALUE = "(251) 324-9090";
+
+  // Step 1 — create draft
+  const [draft] = await db.insert(socialPostsTable).values({
+    userId:     USER_ID,
+    clientName: CLIENT,
+    platforms:  PLATFORMS,
+    caption:    CAPTION,
+    ctaType:    CTA_TYPE,
+    ctaValue:   CTA_VALUE,
+    status:     "draft",
+  }).returning();
+
+  console.log("[BBB-PILOT] draft created:", draft.id);
+
+  // Step 2 — get connection
+  const [gbpConn] = await db.select().from(socialConnectionsTable)
+    .where(and(eq(socialConnectionsTable.userId, USER_ID), eq(socialConnectionsTable.provider, "google_business")));
+
+  if (!gbpConn?.accessToken) {
+    res.status(500).json({ error: "No google_business connection found", draftId: draft.id }); return;
+  }
+
+  // Step 3 — publish
+  let finalStatus: "published" | "failed" = "failed";
+  let errorMessage: string | null = null;
+  let providerPostId: string | null = null;
+
+  try {
+    const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });
+    const gbpResult = await publishToGBP(token, gbpConn, CAPTION, CTA_TYPE, CTA_VALUE, null);
+    providerPostId = gbpResult.id;
+    finalStatus = "published";
+    console.log("[BBB-PILOT] ✅ published — GBP post name:", providerPostId);
+  } catch (e: any) {
+    errorMessage = e.message ?? String(e);
+    console.error("[BBB-PILOT] ❌ failed:", errorMessage);
+  }
+
+  // Step 4 — update record
+  const [updated] = await db.update(socialPostsTable).set({
+    status:         finalStatus,
+    publishedAt:    finalStatus === "published" ? new Date() : null,
+    errorMessage,
+    providerPostId,
+    updatedAt:      new Date(),
+  }).where(eq(socialPostsTable.id, draft.id)).returning();
+
+  res.json({
+    ok:            finalStatus === "published",
+    draftId:       draft.id,
+    status:        finalStatus,
+    publishedAt:   updated.publishedAt?.toISOString() ?? null,
+    providerPostId,
+    error:         errorMessage,
+  });
+});
+// ── END ONE-TIME PILOT ENDPOINT ───────────────────────────────────────────────
 
 function buildCaption(caption: string, ctaType: string, ctaValue: string | null): string {
   const ctaLabels: Record<string, string> = {

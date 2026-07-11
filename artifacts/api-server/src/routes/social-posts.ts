@@ -591,6 +591,20 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 // ── Google Business Profile ───────────────────────────────────────────────────
 
 
+/** Extract diagnostically useful headers from a Google API error response. */
+function captureGbpResponseHeaders(res: Response): Record<string, string> {
+  const names = [
+    "retry-after", "x-ratelimit-limit", "x-ratelimit-remaining",
+    "x-quota-limit", "x-quota-remaining", "content-type", "date",
+  ];
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    const val = res.headers.get(name);
+    if (val) out[name] = val;
+  }
+  return out;
+}
+
 async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
   const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
   const needsRefresh = isExpired && !!conn.refreshToken;
@@ -733,7 +747,11 @@ async function publishToGBP(
       });
       const acctBody = await acctRes.text();
       if (!acctRes.ok) {
-        console.error("[GBP-PUBLISH] Account Management API error", JSON.stringify({ status: acctRes.status, body: acctBody.slice(0, 500) }));
+        console.error("[GBP-PUBLISH] Account Management API error", JSON.stringify({
+          status:  acctRes.status,
+          headers: captureGbpResponseHeaders(acctRes),
+          body:    acctBody.slice(0, 1000),
+        }));
         await saveCooldownAndThrow(acctRes, acctBody, "Account Management API", "mybusinessaccountmanagement.googleapis.com");
       }
       const acctData = JSON.parse(acctBody) as { accounts?: { name: string; accountName: string }[] };
@@ -753,12 +771,27 @@ async function publishToGBP(
     );
     const locBody = await locRes.text();
     if (!locRes.ok) {
-      console.error("[GBP-PUBLISH] Business Information API error", JSON.stringify({ status: locRes.status, body: locBody.slice(0, 500) }));
+      console.error("[GBP-PUBLISH] Business Information API error", JSON.stringify({
+        status:  locRes.status,
+        headers: captureGbpResponseHeaders(locRes),
+        body:    locBody.slice(0, 1000),
+      }));
       await saveCooldownAndThrow(locRes, locBody, "Business Information API", "mybusinessbusinessinformation.googleapis.com");
     }
     const locData  = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
     const location = locData.locations?.[0];
     if (!location) throw new Error("No GBP location found — verify the account has at least one verified location.");
+
+    // Verify location title matches the expected business before caching
+    const EXPECTED_TITLE_RE = /bed\s+bugs.{0,10}beyond/i;
+    if (!EXPECTED_TITLE_RE.test(location.title)) {
+      throw new Error(
+        `GBP location title mismatch: got "${location.title}" — ` +
+        `expected title matching "Bed Bugs & Beyond". ` +
+        `Refusing to cache unverified location (account: ${accountResourceName}).`,
+      );
+    }
+    console.log("[GBP-PUBLISH] location title verified: %s", location.title);
     locationResourceName = location.name;
     locationTitle        = location.title;
 
@@ -832,7 +865,11 @@ async function publishToGBP(
   });
   const postBody = await postRes.text();
   if (!postRes.ok) {
-    console.error("[GBP-PUBLISH] post failed", JSON.stringify({ status: postRes.status, body: postBody.slice(0, 500) }));
+    console.error("[GBP-PUBLISH] post failed", JSON.stringify({
+      status:  postRes.status,
+      headers: captureGbpResponseHeaders(postRes),
+      body:    postBody.slice(0, 1000),
+    }));
     if (postRes.status === 429) {
       const record = buildGbpCooldownRecord({
         existing:         readGbpCooldown(metadata),

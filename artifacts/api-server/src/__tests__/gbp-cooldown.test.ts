@@ -231,11 +231,11 @@ describe("stripLegacyCooldownFields", () => {
 
 describe("verifiedByApi guard semantics", () => {
   it("metadata without verifiedByApi must be treated as unverified", () => {
-    const metadata = {
+    const metadata: Record<string, unknown> = {
       accountName: "accounts/112955071079091449064", // manually seeded, not API-verified
       locationName: "accounts/112955071079091449064/locations/999",
     };
-    const hasVerified = !!metadata.verifiedByApi;
+    const hasVerified = !!metadata["verifiedByApi"];
     expect(hasVerified).toBe(false); // the guard must clear this
   });
 

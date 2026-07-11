@@ -4,6 +4,11 @@ import { socialPostsTable, socialConnectionsTable, imageAssetsTable } from "@wor
 import { eq, and, desc } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
+import {
+  readGbpCooldown, buildGbpCooldownRecord,
+  stripLegacyCooldownFields,
+} from "../lib/gbp-cooldown.js";
+import type { GbpEndpointCategory } from "../lib/gbp-cooldown.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -585,13 +590,6 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 
 // ── Google Business Profile ───────────────────────────────────────────────────
 
-async function fetchWithRetry429(url: string, opts: RequestInit, retryDelaySec = 15): Promise<Response> {
-  const r = await fetch(url, opts);
-  if (r.status !== 429) return r;
-  console.warn(`[GBP] 429 quota exceeded — retrying in ${retryDelaySec}s: ${url}`);
-  await new Promise(resolve => setTimeout(resolve, retryDelaySec * 1000));
-  return fetch(url, opts);
-}
 
 async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
   const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
@@ -665,108 +663,135 @@ async function publishToGBP(
     console.warn("[TOKENINFO] fetch failed:", tiErr?.message);
   }
 
-  // 1 — resolve account + location (use DB cache if available)
-  let metadata: Record<string, any> = {};
+  // 1 — resolve account + location (use DB cache if verified; run discovery otherwise)
+  let metadata: Record<string, unknown> = {};
   try {
     const [row] = await db.select().from(socialConnectionsTable)
       .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
     if (row?.metadata) metadata = JSON.parse(row.metadata);
   } catch {}
 
-  let locationResourceName: string | null = (metadata.locationName as string) ?? null;
-  let accountResourceName: string | null = (metadata.accountName as string) ?? null;
-  let locationTitle: string | null = (metadata.locationTitle as string) ?? (metadata.primaryLocationTitle as string) ?? null;
+  // Auto-clear expired cooldown on read
+  const activeCooldown = readGbpCooldown(metadata);
 
-  // Check quota cooldown stored in metadata
-  const cooldownUntil = metadata.cooldownUntil ? new Date(metadata.cooldownUntil) : null;
-  const isInQuotaCooldown = !!(cooldownUntil && cooldownUntil > new Date());
+  let locationResourceName: string | null = (metadata.locationName as string) ?? null;
+  let accountResourceName: string | null  = (metadata.accountName  as string) ?? null;
+  let locationTitle: string | null        = (metadata.locationTitle as string) ?? (metadata.primaryLocationTitle as string) ?? null;
+
+  // Only trust cache entries that were written by a successful API response
+  if ((accountResourceName || locationResourceName) && !metadata.verifiedByApi) {
+    console.warn("[GBP-PUBLISH] cached account/location missing verifiedByApi flag — clearing for safe rediscovery");
+    accountResourceName = null;
+    locationResourceName = null;
+    locationTitle = null;
+  }
 
   if (!locationResourceName || !accountResourceName) {
-    if (isInQuotaCooldown) {
-      const minsLeft = Math.ceil((cooldownUntil!.getTime() - Date.now()) / 60000);
-      throw new Error(`Google quota cooldown active (${minsLeft}m remaining) — no cached location available. Use "Refresh GBP Location" in System Diagnostics when the cooldown expires.`);
+    if (activeCooldown) {
+      const minsLeft = Math.ceil((new Date(activeCooldown.expiresAt).getTime() - Date.now()) / 60000);
+      throw new Error(
+        `GBP ${activeCooldown.errorType.replace(/_/g, " ")} cooldown active` +
+        ` (${minsLeft}m remaining, attempt ${activeCooldown.attemptCount})` +
+        ` — ${activeCooldown.endpoint}.`,
+      );
     }
 
-    const saveQuotaCooldown = async () => {
-      const until = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15-min cooldown
+    // Save structured cooldown and throw — honors Retry-After, preserves existing deadline
+    const saveCooldownAndThrow = async (
+      res: Response,
+      body: string,
+      endpoint: GbpEndpointCategory,
+      service: string,
+    ): Promise<never> => {
+      const record = buildGbpCooldownRecord({
+        existing:         activeCooldown,
+        responseBody:     body,
+        retryAfterHeader: res.headers.get("retry-after"),
+        httpStatus:       res.status,
+        endpoint,
+        service,
+      });
+      const cleanMeta = stripLegacyCooldownFields(metadata);
       try {
         await db.update(socialConnectionsTable)
-          .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil: until }), updatedAt: new Date() })
+          .set({ metadata: JSON.stringify({ ...cleanMeta, gbpCooldown: record }), updatedAt: new Date() })
           .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
       } catch {}
-      return until;
+      const minsLeft = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / 60000);
+      throw new Error(
+        `GBP ${record.errorType.replace(/_/g, " ")} (${res.status}) on ${record.endpoint}` +
+        ` — cooldown ${minsLeft}m, attempt ${record.attemptCount}.`,
+      );
     };
 
-    // Only call Account Management API if we don't already have the account resource name
+    // Account discovery — skip if a verified cache entry exists
     if (!accountResourceName) {
-      console.log("[GBP-PUBLISH] no cached account — fetching from Account Management API");
-      const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      console.log("[GBP-PUBLISH] no verified account cached — calling Account Management API");
+      const acctRes  = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
         headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(10000),
+        signal:  AbortSignal.timeout(10000),
       });
+      const acctBody = await acctRes.text();
       if (!acctRes.ok) {
-        const acctErrBody = await acctRes.text();
-        console.error("[GBP-PUBLISH] accounts API failed", JSON.stringify({ status: acctRes.status, body: acctErrBody.slice(0, 500) }));
-        if (acctRes.status === 429) {
-          const cooldownUntil = await saveQuotaCooldown();
-          const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
-          throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}. Use "Refresh GBP Location" in System Diagnostics once the cooldown expires.`);
-        }
-        throw new Error(`GBP accounts error (${acctRes.status}): ${acctErrBody}`);
+        console.error("[GBP-PUBLISH] Account Management API error", JSON.stringify({ status: acctRes.status, body: acctBody.slice(0, 500) }));
+        await saveCooldownAndThrow(acctRes, acctBody, "Account Management API", "mybusinessaccountmanagement.googleapis.com");
       }
-      const acctData = await acctRes.json() as { accounts?: { name: string; accountName: string }[] };
-      const account = acctData.accounts?.[0];
-      if (!account) throw new Error("No Google Business Profile account found. Make sure the connected Google account manages a Business Profile.");
+      const acctData = JSON.parse(acctBody) as { accounts?: { name: string; accountName: string }[] };
+      const account  = acctData.accounts?.[0];
+      if (!account) throw new Error("No GBP account found — verify the connected Google account manages a Business Profile.");
       accountResourceName = account.name;
+      console.log("[GBP-PUBLISH] account resolved:", accountResourceName);
     } else {
-      console.log("[GBP-PUBLISH] using cached account resource name:", accountResourceName);
+      console.log("[GBP-PUBLISH] using verified cached account:", accountResourceName);
     }
 
-    console.log("[GBP-PUBLISH] fetching locations for account:", accountResourceName);
-    const locRes = await fetch(
+    // Location discovery
+    console.log("[GBP-PUBLISH] calling Business Information API for account:", accountResourceName);
+    const locRes  = await fetch(
       `https://mybusinessbusinessinformation.googleapis.com/v1/${accountResourceName}/locations?readMask=name,title`,
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },
     );
+    const locBody = await locRes.text();
     if (!locRes.ok) {
-      if (locRes.status === 429) {
-        const cooldownUntil = await saveQuotaCooldown();
-        const minsLeft = Math.ceil((new Date(cooldownUntil).getTime() - Date.now()) / 60000);
-        throw new Error(`Google quota cooldown active. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`);
-      }
-      throw new Error(`GBP locations error (${locRes.status}): ${await locRes.text()}`);
+      console.error("[GBP-PUBLISH] Business Information API error", JSON.stringify({ status: locRes.status, body: locBody.slice(0, 500) }));
+      await saveCooldownAndThrow(locRes, locBody, "Business Information API", "mybusinessbusinessinformation.googleapis.com");
     }
-    const locData = await locRes.json() as { locations?: { name: string; title: string }[] };
+    const locData  = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
     const location = locData.locations?.[0];
-    if (!location) throw new Error("No Google Business Profile location found. Make sure the account has at least one verified location.");
+    if (!location) throw new Error("No GBP location found — verify the account has at least one verified location.");
     locationResourceName = location.name;
-    locationTitle = location.title;
+    locationTitle        = location.title;
 
-    // Extract IDs from resource names (e.g. "accounts/123456789" → "123456789")
-    const accountId = accountResourceName?.split("/").pop() ?? null;
+    // Persist verified cache — verifiedByApi: true required for future reads
+    const accountId  = accountResourceName?.split("/").pop() ?? null;
     const locationId = locationResourceName?.split("/").pop() ?? null;
-
-    // Save to cache — future publishes skip the Account Management API entirely
+    const cleanMeta  = stripLegacyCooldownFields(metadata);
     try {
-      const updatedMeta = {
-        ...metadata,
-        accountName: accountResourceName,
-        accountId,
-        locationName: locationResourceName,
-        locationId,
-        locationTitle,
-        primaryLocationTitle: locationTitle,
-        cachedAt: new Date().toISOString(),
-      };
       await db.update(socialConnectionsTable)
-        .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+        .set({
+          metadata: JSON.stringify({
+            ...cleanMeta,
+            accountName:          accountResourceName,
+            accountId,
+            locationName:         locationResourceName,
+            locationId,
+            locationTitle,
+            primaryLocationTitle: locationTitle,
+            verifiedByApi:        true,
+            cachedAt:             new Date().toISOString(),
+          }),
+          updatedAt: new Date(),
+        })
         .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
-      console.log("[GBP-PUBLISH] cached accountName=%s locationName=%s locationTitle=%s", accountResourceName, locationResourceName, locationTitle);
+      console.log("[GBP-PUBLISH] cached accountName=%s locationName=%s locationTitle=%s verifiedByApi=true",
+        accountResourceName, locationResourceName, locationTitle);
     } catch (cacheErr: any) {
       console.warn("[GBP-PUBLISH] cache save failed:", cacheErr?.message);
     }
   } else {
-    const cachedAt = metadata.cachedAt ? new Date(metadata.cachedAt).toLocaleString() : "unknown";
-    console.log("[GBP-PUBLISH] using cached location: %s (%s) — cached at %s%s", locationResourceName, locationTitle, cachedAt, isInQuotaCooldown ? " [quota cooldown active — cache forced]" : "");
+    const cachedAt = metadata.cachedAt ? new Date(metadata.cachedAt as string).toLocaleString() : "unknown";
+    console.log("[GBP-PUBLISH] using verified cached location: %s (%s) — cached %s",
+      locationResourceName, locationTitle, cachedAt);
   }
 
   // 2 — build post body
@@ -796,42 +821,54 @@ async function publishToGBP(
     body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
   }
 
-  // 3 — create local post
+  // 3 — create local post (direct fetch — no silent retry on 429)
   const postUrl = `https://mybusinessposts.googleapis.com/v1/${locationResourceName}/localPosts`;
   console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));
-  const postRes = await fetchWithRetry429(postUrl, {
-    method: "POST",
+  const postRes = await fetch(postUrl, {
+    method:  "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body:    JSON.stringify(body),
+    signal:  AbortSignal.timeout(15000),
   });
   const postBody = await postRes.text();
   if (!postRes.ok) {
     console.error("[GBP-PUBLISH] post failed", JSON.stringify({ status: postRes.status, body: postBody.slice(0, 500) }));
     if (postRes.status === 429) {
-      // Save cooldown so next publish/refresh is blocked for 15 min
-      const cooldownUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const record = buildGbpCooldownRecord({
+        existing:         readGbpCooldown(metadata),
+        responseBody:     postBody,
+        retryAfterHeader: postRes.headers.get("retry-after"),
+        httpStatus:       postRes.status,
+        endpoint:         "Local Posts API",
+        service:          "mybusinessposts.googleapis.com",
+      });
+      const cleanMeta = stripLegacyCooldownFields(metadata);
       try {
         await db.update(socialConnectionsTable)
-          .set({ metadata: JSON.stringify({ ...metadata, cooldownUntil }), updatedAt: new Date() })
+          .set({ metadata: JSON.stringify({ ...cleanMeta, gbpCooldown: record }), updatedAt: new Date() })
           .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
       } catch {}
-      throw new Error(`Google quota cooldown active. Try again in 15 minutes.`);
+      const minsLeft = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / 60000);
+      throw new Error(`GBP ${record.errorType.replace(/_/g, " ")} (429) on Local Posts API — cooldown ${minsLeft}m.`);
     }
-    // 404 = stale cached location → clear all location fields so next publish re-fetches
+    // 404 = stale cached location — clear for safe rediscovery
     if (postRes.status === 404) {
+      const cleanMeta = stripLegacyCooldownFields(metadata);
+      const {
+        accountName, accountId, locationName, locationId,
+        locationTitle: _lt, address, cachedAt, verifiedByApi, primaryLocationTitle,
+        ...keepMeta
+      } = cleanMeta as Record<string, unknown>;
+      void accountName; void accountId; void locationName; void locationId;
+      void _lt; void address; void cachedAt; void verifiedByApi; void primaryLocationTitle;
       try {
-        const freshMeta = { ...metadata };
-        delete freshMeta.locationName; delete freshMeta.locationId;
-        delete freshMeta.accountName; delete freshMeta.accountId;
-        delete freshMeta.locationTitle; delete freshMeta.address;
-        delete freshMeta.cachedAt;
         await db.update(socialConnectionsTable)
-          .set({ metadata: JSON.stringify(freshMeta), updatedAt: new Date() })
+          .set({ metadata: JSON.stringify(keepMeta), updatedAt: new Date() })
           .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
         console.log("[GBP-PUBLISH] invalidated stale location cache after 404 — next publish will re-fetch");
       } catch {}
     }
-    throw new Error(`GBP post error (${postRes.status}): ${postBody}`);
+    throw new Error(`GBP post error (${postRes.status}): ${postBody.slice(0, 300)}`);
   }
   const postData = JSON.parse(postBody) as { name: string };
   console.log("[GBP-PUBLISH] success name=", postData.name);
@@ -915,84 +952,6 @@ router.post("/social-posts/:id/performance", async (req, res) => {
   res.json({ ok: true, engagementScore: engScore, post: rowToDto(updated) });
 });
 
-// ── ONE-TIME PILOT ENDPOINT — remove after use ───────────────────────────────
-// Approved by Matthew, 2026-07-11. Creates the BB&B GBP draft and publishes it
-// in one shot, reusing the same token-refresh + publishToGBP path the scheduler
-// uses.  Header: x-admin-token: BBB_PILOT_2026_07_11
-router.post("/social-posts/admin/bbb-gbp-pilot", async (req, res) => {
-  if (req.headers["x-admin-token"] !== "BBB_PILOT_2026_07_11") {
-    res.status(403).json({ error: "Forbidden" }); return;
-  }
-
-  const USER_ID   = "user_3FKEVWfSuyNsJz3oQ9kPH5nzKDm";
-  const CLIENT    = "Bed Bugs & Beyond";
-  const PLATFORMS = JSON.stringify(["google"]);
-  const CAPTION   =
-    "Staying in a vacation rental this summer? Here are the early warning signs of bed bugs to check before you settle in.\n\n" +
-    "🔍 Tiny rust-colored or dark spots on mattress seams and sheets\n" +
-    "🔍 Small shed skins or pale eggshells in mattress folds\n" +
-    "🔍 Bite clusters on arms, legs, or neck — especially in the morning\n" +
-    "🔍 A faint musty odor near the bed or headboard\n\n" +
-    "Bed bugs spread fast and are much easier to treat early. Bed Bugs & Beyond provides fast, discreet inspections and treatment across all of Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, and more. Call us today for a free phone consultation.";
-  const CTA_TYPE  = "call_now";
-  const CTA_VALUE = "(251) 324-9090";
-
-  // Step 1 — create draft
-  const [draft] = await db.insert(socialPostsTable).values({
-    userId:     USER_ID,
-    clientName: CLIENT,
-    platforms:  PLATFORMS,
-    caption:    CAPTION,
-    ctaType:    CTA_TYPE,
-    ctaValue:   CTA_VALUE,
-    status:     "draft",
-  }).returning();
-
-  console.log("[BBB-PILOT] draft created:", draft.id);
-
-  // Step 2 — get connection
-  const [gbpConn] = await db.select().from(socialConnectionsTable)
-    .where(and(eq(socialConnectionsTable.userId, USER_ID), eq(socialConnectionsTable.provider, "google_business")));
-
-  if (!gbpConn?.accessToken) {
-    res.status(500).json({ error: "No google_business connection found", draftId: draft.id }); return;
-  }
-
-  // Step 3 — publish
-  let finalStatus: "published" | "failed" = "failed";
-  let errorMessage: string | null = null;
-  let providerPostId: string | null = null;
-
-  try {
-    const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });
-    const gbpResult = await publishToGBP(token, gbpConn, CAPTION, CTA_TYPE, CTA_VALUE, null);
-    providerPostId = gbpResult.id;
-    finalStatus = "published";
-    console.log("[BBB-PILOT] ✅ published — GBP post name:", providerPostId);
-  } catch (e: any) {
-    errorMessage = e.message ?? String(e);
-    console.error("[BBB-PILOT] ❌ failed:", errorMessage);
-  }
-
-  // Step 4 — update record
-  const [updated] = await db.update(socialPostsTable).set({
-    status:         finalStatus,
-    publishedAt:    finalStatus === "published" ? new Date() : null,
-    errorMessage,
-    providerPostId,
-    updatedAt:      new Date(),
-  }).where(eq(socialPostsTable.id, draft.id)).returning();
-
-  res.json({
-    ok:            finalStatus === "published",
-    draftId:       draft.id,
-    status:        finalStatus,
-    publishedAt:   updated.publishedAt?.toISOString() ?? null,
-    providerPostId,
-    error:         errorMessage,
-  });
-});
-// ── END ONE-TIME PILOT ENDPOINT ───────────────────────────────────────────────
 
 function buildCaption(caption: string, ctaType: string, ctaValue: string | null): string {
   const ctaLabels: Record<string, string> = {

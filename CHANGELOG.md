@@ -6,6 +6,50 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Added (2026-07-11 — GBP Pilot Audit & Cleanup)
+- **`artifacts/api-server/src/lib/gbp-cooldown.ts`** — pure, exportable GBP cooldown
+  helpers (no DB dependency, fully testable):
+  - `GbpCooldown` interface: `startedAt / expiresAt / reason / endpoint / service /
+    attemptCount / retryAfterSec / errorType`
+  - `GbpErrorType`: `rate_limit | daily_quota | project_quota_zero | access_denied |
+    api_disabled | unknown`
+  - `GBP_COOLDOWN_DEFAULTS` map (per errorType, in seconds)
+  - `readGbpCooldown(metadata)` — reads structured or legacy flat fields; returns
+    null for expired records (auto-clears on read)
+  - `classifyGbpError(body, status)` — conservative classification from response text
+  - `buildGbpCooldownRecord(opts)` — pure builder; honors Retry-After; does NOT push
+    deadline forward when an active cooldown exists; increments `attemptCount`
+  - `stripLegacyCooldownFields(metadata)` — migration helper removes old flat keys
+- **`artifacts/api-server/src/__tests__/gbp-cooldown.test.ts`** — 24 tests covering:
+  expired cooldown auto-clear, legacy migration, Retry-After, deadline preservation,
+  attemptCount increment, all error classifications, `verifiedByApi` guard semantics,
+  discovery-gate logic, admin endpoint absence
+
+### Removed (2026-07-11 — GBP Pilot Audit & Cleanup)
+- **`artifacts/api-server/scripts/publish-gbp-pilot.ts`** — one-time pilot publish
+  script (disposable, never used successfully)
+- **`artifacts/api-server/scripts/publish-gbp-pilot.mjs`** — same
+- **`POST /api/social-posts/admin/bbb-gbp-pilot`** — one-time admin bypass endpoint
+  removed from `social-posts.ts`
+- **`fetchWithRetry429`** internal function removed — silently masked 429 errors with
+  a 15-second blind retry; replaced by per-call structured cooldown handling
+- **`tsx`** removed from `@workspace/api-server` devDependencies (was only added for
+  the temp scripts; catalog entry retained for other workspace packages)
+
+### Changed (2026-07-11 — GBP Pilot Audit & Cleanup)
+- **`publishToGBP`** in `social-posts.ts` rewritten:
+  - Cooldown: flat `cooldownUntil` → structured `gbpCooldown` object (via new helpers)
+  - All 429 responses now log full response body before setting cooldown
+  - Account/location cache now requires `verifiedByApi: true`; manually seeded values
+    are rejected and force safe rediscovery
+  - `saveCooldownAndThrow` helper inline; reads `Retry-After` header from every 429
+  - 404 on Local Posts API correctly invalidates full location cache (unchanged behavior,
+    now also clears `verifiedByApi`)
+  - `metadata` typed `Record<string, unknown>` (was `any`)
+- **DB** `social_connections.metadata` for `google_business` cleared to `{}` —
+  incorrectly seeded `accountName: accounts/112955071079091449064` removed
+  (that ID is the Google OAuth user ID, not a GBP business account resource ID)
+
 ### Added (2026-07-11 — BB&B Pilot Baseline)
 - **`src/lib/bbb-pilot.ts`** — versioned BB&B pilot config module:
   - `BBB_PILOT_PLATFORM_IDS`: `["facebook","instagram","google_business","youtube"]`

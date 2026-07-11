@@ -12,7 +12,7 @@ Last updated: 2026-07-11
 |----------|-----------|--------------|-------------|-------------|----------------|-----------|
 | **Facebook** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ Graph API | Integrate image upload |
 | **Instagram** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ via FB Page | Requires public image URL |
-| **Google Business** | ✅ diaz.p.matt@gmail.com | ✅ Local copy + template | ❌ Not integrated | ✅ | ✅ GBP Posts API | Extend CTA options |
+| **Google Business** | ✅ diaz.p.matt@gmail.com | ✅ Local copy + template | ❌ Not integrated | ✅ | ⚠️ BLOCKED — GCP API access unconfirmed | Verify APIs enabled in GCP Console (project 474786012895) |
 | **YouTube** | ✅ Matthew Diaz | ✅ Title + description | ❌ | ✅ Draft only | ✅ (requires video file) | Manual video attach → publish |
 
 ### Deferred Platforms (Not in v1 Pilot)
@@ -111,10 +111,14 @@ Last updated: 2026-07-11
 - **Image ready**: ❌ No generation yet
 - **Video**: ❌ Not implemented
 - **Queue ready**: ✅
-- **Direct publish**: ✅ GBP Posts API with CTA (Call Now / Book Now)
+- **Direct publish**: ⚠️ **BLOCKED** — GBP Posts API returns 429 on every attempt
 - **Analytics**: ❌ Not yet
-- **Blocker**: None for text posts; image required for photo posts
-- **Manual action**: Text-only posts can publish immediately
+- **Blocker**: Google Business Profile API returning 429 (Account Management + Business
+  Information APIs). Root cause unconfirmed: "Requests per minute" message received on
+  first-ever request, persisting 7+ min across retries — inconsistent with transient
+  rate limit. Likely: API not enabled or project quota = 0 in GCP Console.
+  **Matthew must verify in console.cloud.google.com → project 474786012895.**
+- **Manual action**: Check GCP Console before any retry
 
 ### YouTube
 - **Connected**: ✅ Matthew Diaz, youtube.upload + youtube.readonly scopes
@@ -163,13 +167,17 @@ Last updated: 2026-07-11
 - [ ] Confirm success status stored
 
 ### Google Business Profile
+- [ ] **Matthew: verify GCP Console** — project 474786012895 → APIs & Services → confirm
+  "My Business Account Management API" and "My Business Business Information API" are
+  enabled with non-zero quotas (or request access if not visible)
+- [ ] Confirm token still valid at `/auth/google-business` (re-authorize if expired)
 - [ ] Select Google Business only in Content Autopilot
 - [ ] Generate and queue GBP post (local copy: Foley/Gulf Shores/Orange Beach)
 - [ ] Navigate to Publishing Center
 - [ ] Select CTA (Call Now recommended)
-- [ ] Click Publish
+- [ ] Click Publish — system will discover + cache location on first success
 - [ ] Confirm live post on Google Business listing
-- [ ] Confirm success status stored
+- [ ] Confirm success status stored (first `verifiedByApi: true` cache entry)
 
 ### YouTube
 - [ ] Select YouTube only in Content Autopilot

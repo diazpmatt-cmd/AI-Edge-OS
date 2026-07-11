@@ -5,6 +5,7 @@
 - [Object Storage wildcard routes](object-storage-wildcard-routes.md) — Express with newer path-to-regexp requires named wildcards: use `/*paramName` not `/*`.
 - [GorillaDesk API](gorilladesk-api.md) — Public API limited to /company, /users, /customers only; no jobs/invoices/payments endpoints exist.
 - [Call Intelligence DB schema](call-intelligence-schema.md) — calls + sms_conversations tables created via raw SQL (drizzle push blocked by pre-existing review_platform_stats unique constraint conflict); API at /api/call-intelligence sources BOTH tables for full historical coverage.
+- [GBP cooldown system](gbp-cooldown-system.md) — structured GbpCooldown replaces flat cooldownUntil; verifiedByApi guard required; July 2026 pilot blocked by GCP quota/access issue.
 - [Integration Health History schema](integration-health-schema.md) — integration_health_history table created via raw SQL bootstrap in diagnostics.ts; persisted fire-and-forget after every /diagnostics/health poll; never stores tokens/secrets; 90-day auto-prune.
 - [Social Posts API shape](social-posts-api-shape.md) — API returns `platforms: string[]` (plural array), never `platform: string`; use `p.platforms?.[0] ?? ""` for primary platform display.
 - [useApiFetch stability](useapifetch-stability.md) — Hook now uses useCallback([getToken]); pages must use [apiFetch] deps (not []); useRef workaround pattern is obsolete.

@@ -1,5 +1,6 @@
-import { useQuery }      from "@tanstack/react-query";
-import { useApiFetch }  from "@/lib/api";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
+import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
 
 // ── Brand ────────────────────────────────────────────────────────────────────
 const B = {
@@ -69,22 +70,6 @@ function sectionLabel(text: string) {
   );
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface CIResponse {
-  metrics: {
-    total_calls: number; missed_calls: number;
-    leads_captured: number; call_back_rate: number;
-  };
-}
-interface LeadsResponse {
-  stats: { total: number; active: number; closed: number; new_this_month: number };
-  leads: Array<{ id: number; name: string; phone: string; status: string; createdAt: string }>;
-}
-interface Post {
-  id: number; status: string; platforms: string[];
-  caption: string; created_at: string;
-}
-
 // ── Agent definitions ─────────────────────────────────────────────────────────
 const AGENTS_META = [
   { id: "emma",   emoji: "📞", name: "Emma",   title: "AI Receptionist",          color: B.blue,              missionStatus: "Call Coverage" },
@@ -116,25 +101,11 @@ const RECOMMENDED_ACTIONS = [
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function MissionControlPage() {
-  const apiFetch = useApiFetch();
+  const { data: ci, isSuccess: ciOk } = useCallIntelligenceQuery("30days", { retry: 1 });
+  const { data: leads, isSuccess: leadsOk } = useLeadsQuery({ retry: 1 });
+  const { data: postsRaw, isSuccess: postsOk } = useSocialPostsQuery({ retry: 1 });
 
-  const { data: ci, isSuccess: ciOk } = useQuery<CIResponse>({
-    queryKey: ["ci-mission"],
-    queryFn:  () => apiFetch("/call-intelligence?period=30days"),
-    retry: 1,
-  });
-  const { data: leads, isSuccess: leadsOk } = useQuery<LeadsResponse>({
-    queryKey: ["leads-mission"],
-    queryFn:  () => apiFetch("/leads"),
-    retry: 1,
-  });
-  const { data: postsRaw, isSuccess: postsOk } = useQuery<Post[] | { posts: Post[] }>({
-    queryKey: ["posts-mission"],
-    queryFn:  () => apiFetch("/social-posts"),
-    retry: 1,
-  });
-
-  const posts: Post[] = Array.isArray(postsRaw) ? postsRaw : (postsRaw as any)?.posts ?? [];
+  const posts = postsRaw ?? [];
 
   const hasLiveCalls = ciOk  && (ci?.metrics.total_calls ?? 0) > 0;
   const hasLiveLeads = leadsOk && (leads?.stats.total ?? 0) > 0;

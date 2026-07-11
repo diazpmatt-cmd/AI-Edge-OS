@@ -1,0 +1,238 @@
+Replit Task: Phase 1 Consolidation — Canonical Shared Queries for Core Business Data
+
+Background:
+
+The redundancy audit found that identical API data is being fetched independently across multiple pages with different TanStack Query keys.
+
+Confirmed examples:
+
+GET /leads:
+- Morning Brief: mb-leads
+- Mission Control: leads-mission
+- BB&B Ops Center: leads
+- Apollos: apollos-leads
+- Growth Execution: exec-leads
+- Lead Recovery AI: separate query
+
+GET /social-posts:
+- Morning Brief
+- Mission Control
+- BB&B Ops Center
+- Apollos
+- Growth Execution
+
+GET /call-intelligence?period=30days:
+- Morning Brief
+- Mission Control
+- Apollos
+
+Because each page uses a different query key, TanStack Query cannot share the cache even when the endpoint and response are identical.
+
+Goal:
+
+Create one canonical frontend query definition for each of these three resources and migrate existing callers to use it.
+
+This is a focused frontend data-layer consolidation.
+
+Do not merge pages.
+Do not redesign UI.
+Do not create a new summary endpoint.
+Do not change backend response contracts.
+Do not alter database code.
+Do not modify unrelated queries.
+
+Before changing code:
+
+1. Confirm every current caller of:
+   - /leads
+   - /social-posts
+   - /call-intelligence
+
+2. Record:
+   - current query key
+   - endpoint and query parameters
+   - expected response shape
+   - staleTime
+   - refetchInterval
+   - enabled conditions
+   - select/transform behavior
+
+3. Verify whether any caller is genuinely requesting different data.
+
+Do not combine requests that differ by:
+- period
+- filters
+- pagination
+- tenant
+- sorting
+- response transformation that changes the underlying request
+
+Implementation:
+
+1. Create or extend a shared query-key module using a consistent hierarchy.
+
+Suggested pattern:
+
+queryKeys.leads.all
+queryKeys.socialPosts.all
+queryKeys.callIntelligence.period("30days")
+queryKeys.callIntelligence.period("today")
+
+Use the project's existing naming and folder conventions if a query-key factory already exists.
+
+2. Create shared typed hooks where they provide clear value:
+
+- useLeadsQuery()
+- useSocialPostsQuery()
+- useCallIntelligenceQuery(period)
+
+Do not create duplicate wrappers if equivalent shared hooks already exist.
+
+3. All authenticated requests must continue using useApiFetch().
+
+4. Preserve the actual API response shapes.
+
+Important known contracts:
+
+- /leads returns a wrapped response such as:
+  { leads: Lead[], stats: {...} }
+
+- /social-posts returns its existing response shape, including:
+  platforms: string[]
+
+- /call-intelligence returns the existing call intelligence response.
+
+Do not introduce manual casts that hide response mismatches.
+
+5. Prefer generated OpenAPI types where they already exist.
+
+If these endpoints are not yet represented in OpenAPI:
+- do not expand the OpenAPI specification during this task
+- place the smallest accurate shared TypeScript types in an appropriate shared frontend module
+- clearly report the remaining OpenAPI gap
+
+6. Migrate all exact-match callers to the canonical keys or hooks.
+
+Pages likely involved:
+
+- MorningBriefPage
+- MissionControlPage
+- BBBOperationsCenterPage
+- Apollos page/module
+- BBBExecutionPage
+- Lead Recovery AI page/module
+
+Confirm file names rather than assuming them.
+
+7. Preserve page-specific derived calculations.
+
+Pages may continue to calculate their own:
+- counts
+- filtered lists
+- summaries
+- mission items
+- cards
+
+Only centralize fetching, response typing, and cache identity.
+
+8. Preserve intentional refresh behavior.
+
+Choose shared defaults carefully.
+
+Recommended starting defaults unless current behavior requires otherwise:
+
+- staleTime: 30 seconds
+- refetchOnWindowFocus: true
+- no aggressive polling by default
+
+If a page genuinely needs polling, pass an explicit option without changing the canonical query key.
+
+9. Avoid duplicate requests during simultaneous mounting.
+
+Verify that when multiple components request the same endpoint with the same canonical key, TanStack Query issues one request and shares the result.
+
+10. Review cache invalidations.
+
+Find mutations that currently invalidate old page-specific keys.
+
+Update them to invalidate the canonical keys so:
+- new leads appear everywhere
+- social post changes appear everywhere
+- refreshed call intelligence appears everywhere
+
+Do not leave invalidations targeting obsolete keys.
+
+11. Remove obsolete query-key constants or local query definitions only after verifying there are no remaining callers.
+
+12. Do not create one giant global dashboard store.
+
+TanStack Query should remain the server-state source of truth.
+
+Testing:
+
+Add focused tests or use existing query-client test patterns to verify:
+
+1. Two consumers of useLeadsQuery share one cache entry.
+2. Two consumers of useSocialPostsQuery share one cache entry.
+3. Two 30-day call-intelligence consumers share one cache entry.
+4. today and 30days call-intelligence queries remain separate.
+5. Canonical invalidation causes the expected query to refetch.
+6. Wrapped /leads response is handled correctly.
+7. platforms: string[] remains correctly typed for social posts.
+
+Verification:
+
+Run:
+
+- targeted tests
+- relevant frontend tests
+- TypeScript typecheck
+- frontend build
+- live browser verification
+- browser network inspection
+
+In the browser, navigate among:
+
+- Morning Brief
+- Mission Control
+- BB&B Ops Center
+- Growth Execution
+- Apollos
+- Lead Recovery AI
+
+Confirm:
+
+- pages still render correctly
+- no runtime errors
+- no leads.filter response-shape regression
+- no social-post platform/platforms regression
+- identical requests reuse the same cache
+- page navigation does not trigger unnecessary duplicate requests while data remains fresh
+
+Deliverables:
+
+- Existing callers audited
+- Canonical query keys created
+- Shared hooks created or reused
+- Files modified
+- Old query keys removed
+- Invalidations updated
+- Number of duplicate cache entries eliminated
+- Before/after network-request comparison
+- TypeScript result
+- Test result
+- Build result
+- Browser verification
+- Remaining OpenAPI gaps
+- Checkpoint or commit created
+
+Constraints:
+
+- Do not modify backend routes.
+- Do not add /api/summary.
+- Do not merge or remove pages.
+- Do not redesign UI.
+- Do not change database schema.
+- Do not alter provider integrations.
+- Do not use as any, @ts-ignore, or unsafe casts.
+- Keep the change limited to leads, social posts, and call intelligence.

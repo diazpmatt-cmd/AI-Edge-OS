@@ -1,28 +1,12 @@
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
 import { Link } from "wouter";
 import { useState } from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-type Lead = {
-  id: string;
-  client_name: string;
-  phone: string;
-  event_type: string;
-  status: string;
-  message: string;
-  created_at: string;
-};
-
-type SocialPost = {
-  id: string;
-  status: string;
-  scheduledAt: string | null;
-  publishedAt: string | null;
-  platforms: string;
-};
 
 type OpMetrics = {
   closeRate: string;
@@ -204,19 +188,13 @@ export default function BBBOperationsCenterPage() {
     saveMetrics(next);
   };
 
-  const { data: leadsData } = useQuery<{ leads: Lead[]; stats: { total: number; active: number; thisMonth: number; withMessages: number } }>({
-    queryKey: ["leads"],
-    queryFn: () => apiFetch("/leads"),
-  });
+  const { data: leadsData } = useLeadsQuery();
   const leads = leadsData?.leads ?? [];
 
-  const { data: posts = [] } = useQuery<SocialPost[]>({
-    queryKey: ["social-posts"],
-    queryFn: () => apiFetch<SocialPost[]>("/social-posts"),
-  });
+  const { data: posts = [] } = useSocialPostsQuery();
 
-  const leadsToday    = leads.filter(l => isToday(l.created_at)).length;
-  const leadsWeek     = leads.filter(l => isThisWeek(l.created_at)).length;
+  const leadsToday    = leads.filter(l => isToday(l.createdAt)).length;
+  const leadsWeek     = leads.filter(l => isThisWeek(l.createdAt)).length;
   const scheduledToday = posts.filter(p => p.status === "scheduled" && isToday(p.scheduledAt)).length;
   const postedToday   = posts.filter(p => p.status === "published"  && isToday(p.publishedAt)).length;
   const pendingDrafts = posts.filter(p => p.status === "draft").length;

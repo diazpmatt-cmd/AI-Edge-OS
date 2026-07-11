@@ -7,6 +7,9 @@ import { useLocation } from "wouter";
 import { WorkflowNav } from "@/components/WorkflowNav";
 import { useQuery }    from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
+import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -110,11 +113,6 @@ function Section({ title, children, accent = B.blue, noPrint }: { title: string;
 }
 
 // ── API types ─────────────────────────────────────────────────────────────────
-interface TodayCalls {
-  metrics: { total_calls: number; missed_calls: number; recovery_rate: number | null };
-}
-interface LeadsResp   { stats: { total: number; active: number; thisMonth: number } }
-interface SocialPost  { id: string; platforms: string[]; status: string; content: string; publishedAt: string | null; createdAt: string }
 interface ReviewsResp { requests: Array<{ id: string; status: string | null; sentAt: string | null }> }
 interface SyncResp    { realtimeStats: { revenueMatched: number; totalLeads: number; wonLeads: number } }
 
@@ -136,21 +134,9 @@ export default function BBBExecutionPage() {
   const [, navigate] = useLocation();
   const apiFetch = useApiFetch();
 
-  const callsQ   = useQuery<TodayCalls>({
-    queryKey: ["exec-calls-today"],
-    queryFn:  () => apiFetch("/call-intelligence?period=today"),
-    staleTime: 60_000,
-  });
-  const leadsQ   = useQuery<LeadsResp>({
-    queryKey: ["exec-leads"],
-    queryFn:  () => apiFetch("/leads"),
-    staleTime: 2 * 60_000,
-  });
-  const postsQ   = useQuery<SocialPost[]>({
-    queryKey: ["exec-posts"],
-    queryFn:  () => apiFetch("/social-posts"),
-    staleTime: 2 * 60_000,
-  });
+  const callsQ   = useCallIntelligenceQuery("today", { staleTime: 60_000 });
+  const leadsQ   = useLeadsQuery({ staleTime: 2 * 60_000 });
+  const postsQ   = useSocialPostsQuery({ staleTime: 2 * 60_000 });
   const reviewsQ = useQuery<ReviewsResp>({
     queryKey: ["exec-reviews"],
     queryFn:  () => apiFetch("/reviews/requests"),
@@ -806,7 +792,7 @@ export default function BBBExecutionPage() {
                 const ss   = postStatusStyle(p.status);
                 const icon = platformIcon(p.platforms?.[0] ?? "");
                 const date = new Date(p.publishedAt ?? p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                const preview = (p.content ?? "").slice(0, 80) + ((p.content?.length ?? 0) > 80 ? "…" : "");
+                const preview = (p.caption ?? "").slice(0, 80) + ((p.caption?.length ?? 0) > 80 ? "…" : "");
                 return (
                   <div key={p.id} style={{
                     background: B.panel2, border: `1px solid ${B.border}`,

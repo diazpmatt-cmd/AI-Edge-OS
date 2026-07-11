@@ -358,16 +358,24 @@ export type RegistryResolveResult =
 /**
  * Result of resolving a full client content context.
  *
- * "not_found"            — no clients table row for this userId.
- * "inactive"             — client row exists but is_active = false.
- * "unsupported_registry" — client slug maps to no known service registry (Phase B2 will add more).
+ * "not_found"               — no clients table row for this userId.
+ * "inactive"                — client row exists but is_active = false.
+ * "unsupported_registry"    — client slug maps to no known service registry.
+ * "registry_not_configured" — client exists but no service registry rows are
+ *                             present (bootstrap not yet seeded). HTTP 422.
+ * "registry_invalid"        — registry rows are present but structurally
+ *                             unusable (duplicate keys, bad values). HTTP 422.
+ * "registry_unavailable"    — DB error prevented loading the registry. HTTP 503.
  *
  * An unknown tenant MUST NOT silently receive BB&B context; callers must handle
  * the { found: false } branch explicitly before using any context values.
+ *
+ * SAFETY: resolveClientContentContextFromDb MUST NOT fall back to bbbRegistryProvider
+ * on any failure path. Every non-success branch must return a typed failure.
  */
 export type ClientResolveResult =
   | { found: true;  context: ClientContentContext; client: ClientRecord }
-  | { found: false; reason: "not_found" | "inactive" | "unsupported_registry" };
+  | { found: false; reason: "not_found" | "inactive" | "unsupported_registry" | "registry_not_configured" | "registry_invalid" | "registry_unavailable" };
 
 // Private helper — same semantics as parseJson in route files.
 function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {

@@ -150,7 +150,16 @@ router.get("/auto-content/settings", async (req, res) => {
     // An unrecognised tenant MUST NOT silently receive BB&B defaults.
     const resolved = await resolveClientContentContextFromDb(userId);
     if (!resolved.found) {
-      res.status(404).json({ error: "no_client_configured", reason: resolved.reason });
+      const r = resolved.reason;
+      if (r === "registry_unavailable") {
+        res.status(503).json({ error: "registry_unavailable", message: "Service registry temporarily unavailable. Please try again shortly." });
+      } else if (r === "registry_not_configured" || r === "registry_invalid") {
+        res.status(422).json({ error: r, message: "Service registry is not properly configured for this client." });
+      } else if (r === "inactive") {
+        res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
+      } else {
+        res.status(404).json({ error: "no_client_configured", reason: r });
+      }
       return;
     }
     const ctx = resolved.context;
@@ -394,13 +403,16 @@ router.post("/auto-content/generate", async (req, res) => {
   {
     const clientResult = await resolveClientContentContextFromDb(userId);
     if (!clientResult.found) {
-      const r = (clientResult as { found: false; reason: string }).reason;
+      const r = clientResult.reason;
       if (r === "inactive") {
         res.status(403).json({ error: "client_inactive", message: "This client account is currently inactive." });
       } else if (r === "not_found") {
         res.status(403).json({ error: "no_client_configured", message: "No client record found for this account. Contact support to set up your account." });
+      } else if (r === "registry_unavailable") {
+        res.status(503).json({ error: "registry_unavailable", message: "Service registry temporarily unavailable. Please try again shortly." });
       } else {
-        res.status(422).json({ error: "registry_not_configured", message: "No service registry is configured for this client." });
+        // registry_not_configured | registry_invalid | unsupported_registry
+        res.status(422).json({ error: r, message: "Service registry is not properly configured for this client." });
       }
       return;
     }

@@ -2,21 +2,27 @@
  * Service Registry Loader — Phase B2.
  *
  * Responsible for:
- *   1. Bootstrapping the service-registry tables via raw SQL (drizzle-kit push
- *      is blocked by a pre-existing constraint conflict — same pattern as
- *      client-resolver.ts and diagnostics.ts).
+ *   1. Bootstrapping the service-registry tables via raw SQL.
  *   2. Seeding the BB&B service registry from BBB_SERVICES (single source of
- *      truth) and bbbRegistryProvider.getSystemBusinessRules() (exact parity).
- *   3. Exporting loadClientServiceRegistry(clientId) for use by
- *      resolveClientContentContextFromDb.
+ *      truth) and bbbRegistryProvider.getSystemBusinessRules() (parity oracle).
+ *   3. Exporting loadClientServiceRegistry(clientId) for use in client-resolver.
  *
- * The bootstrap IIFE runs once at server start. The seed is idempotent:
- * repeated runs do NOT duplicate services, aliases, or rules.
+ * ── Bootstrap readiness ──────────────────────────────────────────────────────
+ * `registryBootstrapReady` is a Promise that resolves when the IIFE completes
+ * (success OR failure). `loadClientServiceRegistry` awaits it so no request can
+ * race table creation or seeding. This replaces the previous silent-fallback
+ * pattern: if the bootstrap fails, subsequent loads will get a db_error result
+ * (tables may not exist) and the caller returns registry_unavailable (HTTP 503).
+ *
+ * ── bbbRegistryProvider usage in this file ──────────────────────────────────
+ * `bbbRegistryProvider.getSystemBusinessRules()` is called ONCE at seed time to
+ * guarantee that the stored system_business_rules string is character-for-character
+ * identical to the static provider's output. This is a parity oracle / seed-time
+ * fixture use — NOT a runtime fallback. It must never be reached by a live request.
  *
  * SAFETY:
  *   • Never silently falls back to BB&B for an unknown tenant.
- *   • Returns { ok: false, reason: "no_services" } when tables are empty,
- *     giving the caller the choice to fall back to the static provider.
+ *   • Returns typed RegistryLoadResult — callers must map to ClientResolveResult.
  *   • Never reads or writes autopilot_enabled.
  *   • Never publishes content.
  */
@@ -29,19 +35,17 @@ import {
 import {
   clientServicesTable,
   clientRegistryRulesTable,
-  clientsTable,
 } from "@workspace/db/schema";
 import {
   createDbServiceRegistryProvider,
   rowToDbServiceRecord,
+  validateRegistryRows,
   type DbServiceRecord,
   type RegistryLoadResult,
 } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 
 // ── Prompt-rule prefix (mirrors getServicePromptRules special-casing) ──────────
-// Stored in the DB so the generic getServicePromptRulesFor() produces output
-// character-for-character identical to the static getServicePromptRules().
 
 function getBbbPromptRulePrefix(serviceKey: string): string | null {
   if (serviceKey === "bed_bug_inspection" || serviceKey === "bed_bug_treatment") {
@@ -66,8 +70,25 @@ function getBbbPromptRulePrefix(serviceKey: string): string | null {
   return null;
 }
 
+// ── Bootstrap readiness promise ────────────────────────────────────────────────
+//
+// Resolves when the IIFE completes (success or failure). Always resolves so
+// requests are never blocked indefinitely even if bootstrap fails.
+// loadClientServiceRegistry awaits this before issuing any DB queries.
+
+let resolveRegistryBootstrap!: () => void;
+
+/**
+ * Awaitable sentinel: resolves once the service-registry bootstrap IIFE has
+ * finished (tables created + BB&B seeded, or bootstrap error logged).
+ *
+ * Export allows tests to await it and verify bootstrap completed.
+ */
+export const registryBootstrapReady: Promise<void> = new Promise(resolve => {
+  resolveRegistryBootstrap = resolve;
+});
+
 // ── Table bootstrap (idempotent) ───────────────────────────────────────────────
-// Mirrors 0004_b2_service_registry.sql — runs on every server start.
 
 (async () => {
   try {
@@ -141,6 +162,9 @@ function getBbbPromptRulePrefix(serviceKey: string): string | null {
     // ── BB&B seed ────────────────────────────────────────────────────────────
     // Source of truth: BBB_SERVICES array (no SQL transcription risk).
     // Idempotent: ON CONFLICT DO NOTHING on (client_id, service_key).
+    // bbbRegistryProvider.getSystemBusinessRules() is used as a parity oracle
+    // at seed time — it is NOT a runtime fallback and must not be reached by
+    // any live request.
 
     const bbbResult = await pool.query<{ id: string }>(
       `SELECT id FROM clients WHERE slug = 'bed-bugs-and-beyond' LIMIT 1`,
@@ -195,8 +219,7 @@ function getBbbPromptRulePrefix(serviceKey: string): string | null {
         );
       }
 
-      // Registry rules — seeded from bbbRegistryProvider.getSystemBusinessRules()
-      // to guarantee exact character-for-character parity with the static provider.
+      // Seed system_business_rules from the parity oracle.
       await pool.query(
         `INSERT INTO client_registry_rules (client_id, system_business_rules, registry_version)
          VALUES ($1, $2, 1)
@@ -212,6 +235,11 @@ function getBbbPromptRulePrefix(serviceKey: string): string | null {
     console.log("[SERVICE-REGISTRY] service registry tables ready");
   } catch (err) {
     console.error("[SERVICE-REGISTRY] Bootstrap failed:", err);
+  } finally {
+    // Always resolve — even on error — so requests are never blocked indefinitely.
+    // If tables were not created, subsequent loadClientServiceRegistry calls will
+    // receive db_error and return registry_unavailable (HTTP 503).
+    resolveRegistryBootstrap();
   }
 })();
 
@@ -220,17 +248,22 @@ function getBbbPromptRulePrefix(serviceKey: string): string | null {
 /**
  * Load the full service registry for a client from the DB.
  *
- * Fetches all client_services rows + the client_registry_rules row in two
- * queries. The caller receives pre-parsed DbServiceRecord[] and can immediately
- * pass them to createDbServiceRegistryProvider() — no further DB access needed.
+ * Always awaits `registryBootstrapReady` first, so this function is safe to
+ * call immediately on server startup — it will block until tables exist.
  *
- * Returns { ok: false, reason: "no_services" } when the registry hasn't been
- * seeded yet (bootstrap still in progress or first-time setup). Callers should
- * fall back to the static provider for supported clients in that case.
+ * Returns typed failure results that the caller MUST map to ClientResolveResult
+ * failure reasons. There is no implicit fallback to any static provider.
+ *
+ *   ok: false, reason: "no_services"      → caller returns registry_not_configured
+ *   ok: false, reason: "invalid_registry" → caller returns registry_invalid
+ *   ok: false, reason: "db_error"         → caller returns registry_unavailable
  */
 export async function loadClientServiceRegistry(
   clientId: string,
 ): Promise<RegistryLoadResult> {
+  // Block until the IIFE has completed (tables created + seed attempted).
+  await registryBootstrapReady;
+
   try {
     const rows = await db
       .select({
@@ -265,6 +298,12 @@ export async function loadClientServiceRegistry(
     }
 
     const services: DbServiceRecord[] = rows.map(rowToDbServiceRecord);
+
+    // Validate structural soundness before building the provider.
+    const validationError = validateRegistryRows(services);
+    if (validationError) {
+      return { ok: false, reason: "invalid_registry", details: validationError };
+    }
 
     const [rulesRow] = await db
       .select({ systemBusinessRules: clientRegistryRulesTable.systemBusinessRules })

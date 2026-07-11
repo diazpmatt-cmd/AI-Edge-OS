@@ -50,14 +50,20 @@ export interface DbServiceRecord extends BBBService {
 /**
  * Result type returned by the DB loader.
  *
- * "no_services" — the registry has not been seeded yet (bootstrap still running
- *                 or explicit first-time setup required). Callers should fall
- *                 back to the static provider for supported clients.
- * "db_error"    — unexpected DB failure. Callers should log and fall back.
+ * "no_services"      — the registry has not been seeded yet (bootstrap still
+ *                      running or explicit first-time setup required). The caller
+ *                      MUST return registry_not_configured — never fall back to
+ *                      the static provider in production.
+ * "invalid_registry" — rows are present but structurally unusable (duplicates,
+ *                      missing required fields, invalid status values). The
+ *                      `details` field names the failing check. Caller must
+ *                      return registry_invalid.
+ * "db_error"         — unexpected DB failure (network, schema mismatch, etc.).
+ *                      Caller must return registry_unavailable and log safely.
  */
 export type RegistryLoadResult =
   | { ok: true;  services: DbServiceRecord[]; systemBusinessRules: string }
-  | { ok: false; reason: "no_services" | "db_error"; error?: unknown };
+  | { ok: false; reason: "no_services" | "invalid_registry" | "db_error"; details?: string; error?: unknown };
 
 /**
  * Build an in-memory ServiceRegistryProvider from pre-fetched DB rows.

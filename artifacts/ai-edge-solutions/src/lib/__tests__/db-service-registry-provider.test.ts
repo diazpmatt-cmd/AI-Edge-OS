@@ -191,7 +191,7 @@ describe("T-B2-3: Parity — matchByTopic", () => {
     "Commercial Pest Control",
     "Roach Control",
     "Rodent Control (Rats & Mice)",
-    "Mosquito Treatment",
+    "Mosquito Control",
     "Fumigation",
     "Ant Treatment",
     "Flea Treatment",
@@ -671,7 +671,7 @@ describe("T-B2-20: getServicePromptRulesFor — prefix vs serviceId fallback", (
     // This is the core parity assertion for the prompt-rules path
     const DISPLAY_NAMES = [
       "Bed Bug Inspection", "Bed Bug Treatment", "Fumigation",
-      "Roach Control", "Rodent Control (Rats & Mice)", "Mosquito Treatment",
+      "Roach Control", "Rodent Control (Rats & Mice)", "Mosquito Control",
     ];
     DISPLAY_NAMES.forEach(name => {
       const record = BBB_DB_SERVICES.find(s => s.displayName === name)!;

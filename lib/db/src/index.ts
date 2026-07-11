@@ -17,4 +17,5 @@ export * from "./schema";
 export * from "./bbb-services";
 export * from "./client-context";
 export * from "./db-service-registry-provider";
+export * from "./registry-validator";
 export { eq, and, or, sql } from "drizzle-orm";

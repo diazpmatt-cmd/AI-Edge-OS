@@ -1,0 +1,196 @@
+Proceed with Phase B2.1 — Remove Silent Static Registry Fallback and Finalize Phase B2 Validation.
+
+Phase B2 has been implemented, but one tenant-safety issue remains.
+
+Current concerning behavior:
+
+resolveClientContentContextFromDb() loads the database-backed registry but falls back to the static provider when:
+
+- Registry seeding is delayed
+- Registry rows are missing
+- Registry loading throws a database error
+
+This silent fallback violates the Phase B2 requirements.
+
+Objective:
+
+Make the database-backed service registry authoritative for configured clients.
+
+A missing, empty, corrupt, or unavailable registry must produce an explicit typed failure. It must not silently substitute bbbRegistryProvider.
+
+Audit the exact fallback path before editing.
+
+Required behavior:
+
+1. Successfully seeded BB&B client
+
+- Loads the database-backed service registry
+- Uses createDbServiceRegistryProvider(...)
+- Does not use bbbRegistryProvider as its production provider
+- Preserves exact BB&B behavior
+
+2. Missing registry
+
+Return a typed result such as:
+
+{
+  found: false,
+  reason: "registry_not_configured"
+}
+
+Use existing result conventions if different.
+
+3. Invalid or empty registry
+
+Return a typed result such as:
+
+{
+  found: false,
+  reason: "registry_invalid"
+}
+
+This should cover cases such as:
+
+- Zero service rows
+- Duplicate service keys after loading
+- Invalid availability values
+- Missing required client registry rules
+- Malformed capability data
+- Structurally unusable service records
+
+Do not overbuild validation. Add the smallest checks necessary to prevent constructing an unsafe provider.
+
+4. Database or registry-load error
+
+Return a typed result such as:
+
+{
+  found: false,
+  reason: "registry_unavailable"
+}
+
+Do not expose internal database details to API consumers.
+
+Log the operational error safely for diagnostics.
+
+5. Legacy static provider usage
+
+bbbRegistryProvider may remain only as:
+
+- A parity oracle in tests
+- A test fixture
+- An explicitly named legacy helper that is not reached by normal DB-backed client resolution
+
+Document every remaining production call site.
+
+There must be no implicit fallback from DB-backed resolution to bbbRegistryProvider.
+
+6. Route behavior
+
+Verify the following routes handle typed registry failures before AI calls or writes:
+
+- GET auto-content settings
+- GET suggestions
+- POST generate
+
+Use clear status mappings, for example:
+
+- not_found → 404
+- inactive → 403
+- registry_not_configured → 422
+- registry_invalid → 422
+- registry_unavailable → 503
+
+Follow existing API conventions if they differ.
+
+Do not modify PUT, pause, or resume in this correction phase.
+
+7. Startup race behavior
+
+The bootstrap IIFE may complete after some modules load.
+
+Do not solve this with static-provider fallback.
+
+Instead, choose the smallest reliable option:
+
+- Await a shared registry-bootstrap promise before registry reads, or
+- Make loadClientServiceRegistry ensure schema/bootstrap readiness, or
+- Return registry_unavailable until initialization completes
+
+Prefer awaiting one shared bootstrap promise so requests do not race table creation or seeding.
+
+Avoid duplicate bootstrap execution.
+
+8. Tests
+
+Add or update tests proving:
+
+- Seeded BB&B resolves through the DB-backed provider
+- Static bbbRegistryProvider is not invoked during successful DB resolution
+- Missing registry returns registry_not_configured
+- Empty registry returns registry_invalid
+- Corrupt registry returns registry_invalid
+- Registry database error returns registry_unavailable
+- Startup/bootstrap promise is awaited
+- Unknown tenants never receive BB&B services
+- Lakeside Plumbing never receives BB&B services
+- Generate performs no AI call or DB write when registry resolution fails
+- Existing exact BB&B parity tests still pass
+- Autopilot remains disabled
+- No content is published
+
+9. Consumer audit
+
+Search all production imports and calls involving:
+
+- bbbRegistryProvider
+- resolveServiceRegistryProvider
+- createDbServiceRegistryProvider
+- loadClientServiceRegistry
+
+Report each production and test-only call site.
+
+Restrictions:
+
+- Do not add UI
+- Do not add onboarding
+- Do not add a client switcher
+- Do not modify service data
+- Do not change BB&B generation behavior
+- Do not enable autopilot
+- Do not publish
+- Do not begin Phase B3
+- Do not perform unrelated refactors
+
+Validation:
+
+Run:
+
+1. lib/db TypeScript build
+2. API-server TypeScript check
+3. Phase B2 provider/parity tests
+4. New fallback-removal tests
+5. Phase B1 tests
+6. Phase A2 tests
+7. API-server tests
+8. Full relevant web tests
+9. API-server startup verification
+10. Safe DB verification that BB&B registry rows remain present and termites remain blocked
+
+Deliverables:
+
+1. Exact silent-fallback path removed
+2. Typed failure reasons added or confirmed
+3. Bootstrap readiness strategy
+4. Route status mapping
+5. Tests added
+6. Production/test-only provider consumer audit
+7. Full test counts—not “80+”
+8. TypeScript results
+9. Confirmation DB-backed BB&B remains primary
+10. Confirmation autopilot remains disabled
+11. Confirmation nothing was published
+
+Stop after Phase B2.1 validation.
+
+Do not begin Phase B3.

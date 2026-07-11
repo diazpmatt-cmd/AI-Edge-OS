@@ -1,20 +1,27 @@
 /**
- * DB-side client context resolver — Phase B1.
+ * DB-side client context resolver — Phase B1/B2.
  *
  * Responsible for:
- *   1. Bootstrapping the `clients` table via raw SQL on startup (drizzle-kit push
- *      is blocked by a pre-existing constraint conflict — same pattern as diagnostics.ts).
- *   2. Fetching the clients row + settings snapshot and delegating to the pure
- *      buildContextFromRecords function in lib/db/src/client-context.ts.
+ *   1. Bootstrapping the `clients` table via raw SQL on startup.
+ *   2. Fetching the clients row + settings snapshot.
+ *   3. Loading the DB-backed service registry from service-registry-loader.ts.
+ *   4. Returning a typed ClientResolveResult — never silently substituting
+ *      bbbRegistryProvider for a missing or broken registry.
  *
  * NEVER call this from lib/db/* — it imports from @workspace/db which would
  * create a circular dependency through lib/db/src/index.ts.
  *
+ * ── bbbRegistryProvider policy ──────────────────────────────────────────────
+ * bbbRegistryProvider MUST NOT be reached by any code path through this file.
+ * It is used only in:
+ *   • service-registry-loader.ts IIFE (parity oracle at seed time)
+ *   • Test fixtures and parity test suites
+ * No import of bbbRegistryProvider exists in this file — this is intentional.
+ *
  * SAFETY:
- *   • Never silently falls back to BB&B for an unknown tenant.
- *   • Returns { found: false, reason } for missing, inactive, or unsupported clients.
- *   • autopilot_enabled is NOT read or written here — the safety gate remains in
- *     the generate route's scheduler auth check.
+ *   • Every non-success branch returns a typed failure — no implicit fallback.
+ *   • autopilot_enabled is NOT read or written here.
+ *   • registry_unavailable is returned on DB errors (never exposed to clients).
  */
 
 import { db, pool } from "@workspace/db";
@@ -33,8 +40,6 @@ import {
 export type { ClientResolveResult };
 
 // ── Table bootstrap (idempotent) ───────────────────────────────────────────────
-// Mirrors 0003_b1_clients_table.sql — runs on every server start, no-ops when
-// the table already exists.
 
 (async () => {
   try {
@@ -57,8 +62,6 @@ export type { ClientResolveResult };
       CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_slug    ON clients(slug);
     `);
 
-    // BB&B backfill — idempotent, filtered by client_name + industry so only
-    // the BB&B auto_content_settings row is selected.
     await pool.query(`
       INSERT INTO clients (
         user_id, slug, client_name, industry, industry_label,
@@ -90,11 +93,20 @@ export type { ClientResolveResult };
 // ── DB-backed resolver ─────────────────────────────────────────────────────────
 
 /**
- * Fetch the clients row and (if present) the auto_content_settings row for
- * the given userId, then delegate to the pure buildContextFromRecords function.
+ * Fetch the clients row + settings snapshot, load the DB-backed service
+ * registry, and return a typed ClientResolveResult.
  *
- * Returns { found: false, reason: "not_found" } when no clients row exists —
- * callers MUST handle this case and must NOT substitute BB&B defaults.
+ * FAILURE MAPPING (authoritative):
+ *   not_found               — no clients row for this userId
+ *   inactive                — client exists but is_active = false
+ *   registry_not_configured — client exists but no registry rows seeded yet
+ *   registry_invalid        — registry rows present but structurally unusable
+ *   registry_unavailable    — DB error prevented loading the registry
+ *   unsupported_registry    — slug maps to no known provider (legacy path, should
+ *                             not occur in DB-backed mode with a providerOverride)
+ *
+ * There is NO fallback to bbbRegistryProvider. A typed failure is returned for
+ * every non-success case. Callers must check `found` before using `context`.
  */
 export async function resolveClientContentContextFromDb(
   userId: string,
@@ -108,8 +120,6 @@ export async function resolveClientContentContextFromDb(
     return { found: false, reason: "not_found" };
   }
 
-  // Select only the SettingsSnapshot columns so we don't pull sensitive fields
-  // (e.g. usedCombos, autopilotEnabled) into the resolution path.
   const [settingsRow] = await db
     .select({
       approvalMode:  autoContentSettingsTable.approvalMode,
@@ -127,23 +137,45 @@ export async function resolveClientContentContextFromDb(
 
   const snapshot: SettingsSnapshot | null = settingsRow ?? null;
 
-  // ── Phase B2: Load DB-backed service registry ──────────────────────────────
-  // Try the DB-backed registry first (normal path after bootstrap seed).
-  // Falls back to resolveServiceRegistryProvider for supported clients when the
-  // registry hasn't been seeded yet (first-time setup / bootstrap lag).
+  // ── Phase B2: Load DB-backed service registry (no fallback) ───────────────
+  // loadClientServiceRegistry awaits registryBootstrapReady internally, so
+  // this call is safe even on the very first request after server start.
   const registryLoad = await loadClientServiceRegistry(clientRow.id);
-  if (registryLoad.ok && registryLoad.services.length > 0) {
-    const provider = createDbServiceRegistryProvider(
-      registryLoad.services,
-      registryLoad.systemBusinessRules,
-    );
-    return buildContextFromRecords(clientRow, snapshot, provider);
+
+  if (!registryLoad.ok) {
+    switch (registryLoad.reason) {
+      case "db_error":
+        // Do not expose internal error details to callers — log safely here.
+        console.error(
+          "[CLIENT-RESOLVER] DB error loading registry for",
+          clientRow.slug,
+          ":",
+          registryLoad.error,
+        );
+        return { found: false, reason: "registry_unavailable" };
+
+      case "invalid_registry":
+        console.error(
+          "[CLIENT-RESOLVER] Invalid registry rows for",
+          clientRow.slug,
+          "— details:",
+          registryLoad.details,
+        );
+        return { found: false, reason: "registry_invalid" };
+
+      case "no_services":
+        console.warn(
+          "[CLIENT-RESOLVER] No registry rows for",
+          clientRow.slug,
+          "— registry not yet seeded",
+        );
+        return { found: false, reason: "registry_not_configured" };
+    }
   }
 
-  if (!registryLoad.ok && registryLoad.reason === "db_error") {
-    console.error("[CLIENT-RESOLVER] DB error loading service registry for", clientRow.slug, ":", registryLoad.error);
-  } else {
-    console.warn("[CLIENT-RESOLVER] Service registry not yet seeded for", clientRow.slug, "— falling back to static provider");
-  }
-  return buildContextFromRecords(clientRow, snapshot);
+  const provider = createDbServiceRegistryProvider(
+    registryLoad.services,
+    registryLoad.systemBusinessRules,
+  );
+  return buildContextFromRecords(clientRow, snapshot, provider);
 }

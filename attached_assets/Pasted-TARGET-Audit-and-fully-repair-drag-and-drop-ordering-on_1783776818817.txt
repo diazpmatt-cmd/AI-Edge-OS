@@ -1,0 +1,229 @@
+TARGET: Audit and fully repair drag-and-drop ordering on the production-visible AI Edge Command Center.
+
+IMPORTANT ENGINEERING RULES
+
+Follow the AI Edge audit-first workflow:
+
+1. Audit
+2. Consolidate
+3. Verify
+4. Expand
+
+Do not create:
+- a second Command Center
+- a duplicate dashboard page
+- a duplicate tile registry
+- a parallel drag-and-drop system
+- a new dependency if Framer Motion is already installed
+
+Do not change the Content Autopilot in this task. This task is only for the visible Command Center tile-ordering feature.
+
+PHASE 1 — FIND THE ACTUAL PRODUCTION COMPONENT
+
+1. Trace the production route for the Command Center from the application router.
+2. Identify the exact page and components rendered on the live Command Center.
+3. Identify the exact cards, buttons, widgets, or tiles Matthew is trying to drag.
+4. Confirm whether previous drag-and-drop work was applied to:
+   - the correct production page,
+   - a mockup,
+   - an unused component,
+   - a different dashboard,
+   - or an incomplete implementation.
+5. Report the exact production route and component hierarchy before modifying anything.
+
+PHASE 2 — AUDIT EXISTING IMPLEMENTATIONS
+
+Search the repository for:
+
+- Reorder.Group
+- Reorder.Item
+- drag
+- dragControls
+- useDragControls
+- onReorder
+- localStorage
+- dashboardOrder
+- tileOrder
+- widgetOrder
+- layoutOrder
+- commandCenter
+- CommandCenter
+- dashboard tile arrays
+- widget registries
+- card registries
+
+Determine:
+
+1. Whether Framer Motion is already installed and used.
+2. Whether the visible tiles come from a canonical array or hard-coded JSX.
+3. Whether there are multiple competing tile configurations.
+4. Whether reorder state already exists but is not wired to the rendered UI.
+5. Whether CSS blocks dragging through:
+   - pointer-events
+   - touch-action
+   - overflow
+   - z-index
+   - positioned overlays
+   - clickable child buttons
+6. Whether unstable keys, array indexes, or recreated object values prevent Framer Motion reordering.
+7. The exact reason the tiles currently cannot be grabbed and moved.
+
+PHASE 3 — CONSOLIDATE THE TILE MODEL
+
+Use one canonical tile configuration for the visible Command Center.
+
+Each tile must have a stable identifier, for example:
+
+{
+  id: "publishing-center",
+  title: "Publishing Center",
+  ...
+}
+
+Requirements:
+
+- Never use array indexes as tile identity.
+- Never use display labels as persistence IDs.
+- Remove or consolidate duplicate tile arrays where safe.
+- Preserve existing tile actions, permissions, navigation, icons, content, and visibility rules.
+- Do not redesign the dashboard in this task.
+
+PHASE 4 — IMPLEMENT WORKING DRAG AND DROP
+
+Use the existing Framer Motion dependency.
+
+Preferred implementation:
+
+- Reorder.Group
+- Reorder.Item
+
+unless the audit proves an existing working internal abstraction should be reused.
+
+Acceptance requirements:
+
+1. A user can grab a visible tile.
+2. The tile visibly follows the pointer.
+3. Neighboring tiles move to show the new position.
+4. Releasing the tile updates the order.
+5. Tile click and navigation behavior still works.
+6. Dragging does not accidentally activate a tile.
+7. Clicking a tile does not accidentally begin dragging.
+8. Add a clearly visible drag handle if full-card dragging conflicts with clickable content.
+9. The drag handle should use an appropriate grab/grabbing cursor.
+10. Support desktop pointer interaction.
+11. Preserve reasonable touch behavior.
+12. Do not merely add animation or a grab cursor—the items must physically reorder.
+
+If the Command Center uses a responsive CSS grid and Framer Motion Reorder cannot reliably support the required two-dimensional movement, document that finding and use the smallest existing-compatible approach that provides reliable grid reordering. Do not add a large new drag-and-drop library without first explaining why the existing dependency cannot satisfy the requirement.
+
+PHASE 5 — LOCAL STORAGE PERSISTENCE
+
+Persist the order locally first.
+
+Create or reuse a small persistence helper or hook so the storage provider can later be replaced with Clerk metadata.
+
+Requirements:
+
+1. Use a clear versioned storage key, such as:
+   ai-edge:command-center-layout:v1
+
+2. Store stable tile IDs only.
+
+3. On startup, normalize the saved order against the canonical tile list:
+
+   - remove unknown IDs
+   - remove duplicate IDs
+   - preserve recognized saved IDs
+   - append newly introduced tiles in canonical default order
+   - safely recover from malformed JSON
+   - safely recover from invalid non-array values
+
+4. If localStorage is unavailable, the dashboard must still render in default order.
+
+5. Persist only after an actual order change.
+
+6. Do not add Clerk metadata persistence yet.
+
+PHASE 6 — OPTIONAL RESET CONTROL
+
+If there is already an appropriate dashboard settings menu or customization control, add a small “Reset layout” action that:
+
+- clears the stored layout
+- restores canonical default order
+
+Do not introduce a new settings page solely for this control.
+
+PHASE 7 — VERIFICATION
+
+Perform these exact manual acceptance tests:
+
+TEST A — Basic reorder
+
+1. Open the production-visible Command Center.
+2. Drag the first visible tile to a different position.
+3. Confirm the tile visibly moves.
+4. Release it.
+5. Confirm the new order remains on screen.
+
+TEST B — Persistence
+
+1. Refresh the browser.
+2. Confirm the changed order is restored.
+
+TEST C — Navigation
+
+1. Click several reordered tiles.
+2. Confirm their original actions and navigation still work.
+
+TEST D — Normalization
+
+Temporarily test saved data containing:
+
+- an unknown tile ID
+- a duplicate tile ID
+- a missing current tile ID
+
+Confirm the layout loads safely and appends valid missing tiles.
+
+TEST E — Corrupt storage
+
+Temporarily store malformed JSON under the layout key.
+
+Confirm the page falls back to default order without crashing.
+
+TEST F — Responsive behavior
+
+Verify the interaction on:
+
+- desktop width
+- narrower tablet width
+- mobile width or the smallest supported dashboard width
+
+PHASE 8 — REQUIRED REPORT
+
+Return a concise report containing:
+
+1. Exact production route audited.
+2. Exact production component hierarchy.
+3. Root cause of the failed drag-and-drop behavior.
+4. Whether previous work targeted the wrong component or was incomplete.
+5. Existing systems reused.
+6. Files inspected.
+7. Files changed.
+8. Duplicate code removed or consolidated.
+9. LocalStorage key used.
+10. How saved layouts are normalized.
+11. Manual acceptance-test results.
+12. Typecheck results.
+13. Build results.
+14. Tests run.
+15. Any remaining limitation.
+
+Also update:
+
+- SESSION_HANDOFF.md
+- CHANGELOG.md
+
+Add or amend an ADR only if the implementation requires a durable architectural decision not already covered by ADR-008.
+
+Do not mark this complete unless a visible tile can be dragged to a different position, released, and found in the same position after a browser refresh.

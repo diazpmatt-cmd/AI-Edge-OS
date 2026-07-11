@@ -2,6 +2,17 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { autoContentSettingsTable, socialPostsTable, imageAssetsTable } from "@workspace/db/schema";
+import {
+  normalizeTopics,
+  validateTopicForGeneration,
+  getDefaultTopics,
+  getServicePromptRules,
+  matchServiceByTopic,
+  BBB_DEFAULT_APPROVAL_MODE,
+  BBB_SERVICES,
+  BBB_AUDIENCES,
+  CAMPAIGN_GOALS,
+} from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -30,10 +41,9 @@ const DEFAULT_SERVICE_AREAS = [
   "Lillian, AL", "Perdido Beach, AL",
 ];
 
-const DEFAULT_TOPICS = [
-  "Bed bugs", "Roaches", "Ants", "Fleas", "Ticks",
-  "Mice", "Rats", "Wasps", "Spiders", "Mosquitoes", "Moles",
-];
+// Canonical topic list from the BB&B service registry — single source of truth.
+// Do NOT maintain a separate pest array here.
+const DEFAULT_TOPICS = getDefaultTopics();
 
 const DEFAULT_ANGLES = [
   "educational", "warning", "promotional", "seasonal",
@@ -121,7 +131,7 @@ router.get("/auto-content/settings", async (req, res) => {
       frequency: "every_other_day",
       postingTimes: ["08:00", "12:00", "17:00"],
       platforms: ["facebook", "google"],
-      approvalMode: "auto_schedule",
+      approvalMode: BBB_DEFAULT_APPROVAL_MODE,
       ctaText: "Call Now \u2014 (251) 324-9090",
       ctaPreference: "call_now",
       toneStyle: DEFAULT_TONE,
@@ -178,7 +188,7 @@ router.put("/auto-content/settings", async (req, res) => {
     frequency: frequency ?? "every_other_day",
     postingTimes: JSON.stringify(postingTimes ?? ["08:00", "12:00", "17:00"]),
     platforms: JSON.stringify(platforms ?? ["facebook"]),
-    approvalMode: approvalMode ?? "auto_schedule",
+    approvalMode: approvalMode ?? BBB_DEFAULT_APPROVAL_MODE,
     ctaText: ctaText ?? "Call Now \u2014 (251) 324-9090",
     ctaPreference: ctaPreference ?? "call_now",
     toneStyle: JSON.stringify(Array.isArray(toneStyle) ? toneStyle : DEFAULT_TONE),
@@ -362,6 +372,39 @@ router.post("/auto-content/generate", async (req, res) => {
     return;
   }
 
+  // ── Registry enforcement — hard block prohibited services ──────────────────
+  // Check each topic against the canonical BB&B service registry.
+  for (const topic of topics as string[]) {
+    const errorCode = validateTopicForGeneration(topic);
+    if (errorCode === "SERVICE_COMING_SOON") {
+      res.status(422).json({
+        error: errorCode,
+        message: `"${topic}" is a coming-soon service and cannot be used for content generation.`,
+      });
+      return;
+    }
+    if (errorCode === "SERVICE_DISABLED") {
+      res.status(422).json({
+        error: errorCode,
+        message: `"${topic}" is not an offered service and cannot be used for content generation.`,
+      });
+      return;
+    }
+    if (errorCode === "SERVICE_NOT_GENERATABLE") {
+      res.status(422).json({
+        error: errorCode,
+        message: `"${topic}" is not eligible for content generation.`,
+      });
+      return;
+    }
+  }
+  // Normalize: silently strip any remaining blocked entries (defence in depth)
+  topics = normalizeTopics(topics as string[]);
+  if (!topics.length) {
+    res.status(422).json({ error: "SERVICE_NOT_GENERATABLE", message: "None of the requested topics are eligible for content generation." });
+    return;
+  }
+
   const effectiveAngles: string[] = Array.isArray(postAngles) && postAngles.length ? postAngles : DEFAULT_ANGLES;
   const effectiveTone: string[] = Array.isArray(toneStyle) && toneStyle.length ? toneStyle : DEFAULT_TONE;
   const effectiveTimes: string[] = Array.isArray(postingTimes) && postingTimes.length ? postingTimes : ["08:00", "12:00", "17:00"];
@@ -373,19 +416,36 @@ router.post("/auto-content/generate", async (req, res) => {
   );
 
   const model = getAiModel();
-  const system = `You are a local pest control social media copywriter for the Gulf Coast of Alabama. Write authentic, local posts that feel genuine. Return ONLY valid JSON:
+  const system = `You are a local pest control social media copywriter for Bed Bugs & Beyond, serving the Gulf Coast of Alabama (Baldwin County). Write authentic, local posts that feel genuine. Return ONLY valid JSON:
 {"caption":string,"hashtags":string[],"imagePrompt":string}
-Rules: caption is 2-3 sentences, mentions the specific city by name, names the pest/service naturally, matches the post angle (educational=informative, warning=urgent risk, promotional=offer/deal, seasonal=time-relevant, faq=question+answer, testimonial=social proof voice, prevention=tips, emergency=urgent call), ends with the CTA. No markdown, no code fences. hashtags: 5-8 tags mixing local and service tags. imagePrompt: 1 sentence describing a realistic photo. JSON only.`;
+
+CORE RULES:
+- caption is 2-3 sentences, mentions the specific city by name, names the pest/service naturally
+- matches the post angle (educational=informative, warning=urgent risk, promotional=offer/deal, seasonal=time-relevant, faq=question+answer, testimonial=social proof voice, prevention=tips, emergency=urgent call)
+- ends with the CTA
+- No markdown, no code fences
+- hashtags: 5-8 tags mixing local and service tags
+- imagePrompt: 1 sentence describing a realistic professional photo
+- JSON only
+
+BUSINESS RULES (MUST FOLLOW):
+- BB&B uses targeted treatment of affected furniture and specific areas — NOT whole-home heat treatment
+- Do NOT claim BB&B offers heat treatment or whole-home heat treatment
+- Do NOT claim guaranteed elimination or specific savings without verified data
+- Do NOT generate termite content, wildlife removal content, or heat treatment content
+- Do NOT generate chemical dosages, DIY fumigation instructions, or regulatory compliance claims
+- Fumigation content must remain at awareness/educational level only`;
 
   const generated = await Promise.all(
     slots.map(async ({ date, city, topic, angle }) => {
+      const serviceRules = getServicePromptRules(topic);
       const prompt = `Business: ${clientName || "Bed Bugs & Beyond"}
 City: ${city}
 Pest/Service: ${topic}
 Post Angle: ${angle}
 Tone: ${effectiveTone.join(", ")}
 CTA: ${ctaText ?? "Call Now \u2014 (251) 324-9090"}
-
+${serviceRules ? `\n${serviceRules}\n` : ""}
 Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       try {
         const { text } = await generateText({ model, system, prompt });
@@ -416,7 +476,13 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
     inArray(socialPostsTable.status, ["scheduled", "draft"]),
   ));
 
-  const postStatus = approvalMode === "draft_only" ? "draft" : "scheduled";
+  // approval_required and draft_only both produce drafts; auto_schedule produces scheduled.
+  const postStatus =
+    approvalMode === "approval_required" || approvalMode === "draft_only"
+      ? "draft"
+      : "scheduled";
+  // approval_required marks posts as pending review; other modes leave approvalStatus null.
+  const postApprovalStatus = approvalMode === "approval_required" ? "pending_review" : null;
   const insertedIds: string[] = [];
   const effectiveClient = clientName || "Bed Bugs & Beyond";
 
@@ -461,6 +527,9 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       bestPlatform: bestPlat,
       imageRecommendation: imgRec,
       duplicateRisk: dupRisk,
+      // V5: Campaign metadata from canonical registry
+      serviceId: matchServiceByTopic(post.topic)?.serviceId ?? null,
+      approvalStatus: postApprovalStatus,
     }).returning({ id: socialPostsTable.id });
     insertedIds.push(ins.id);
   }
@@ -631,7 +700,7 @@ router.post("/auto-content/pause", async (req, res) => {
     serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
     topics: JSON.stringify(DEFAULT_TOPICS),
     frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook","google"]', approvalMode: "auto_schedule",
+    platforms: '["facebook","google"]', approvalMode: BBB_DEFAULT_APPROVAL_MODE,
     ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "true",
   }).onConflictDoUpdate({
     target: [autoContentSettingsTable.userId],
@@ -652,7 +721,7 @@ router.post("/auto-content/resume", async (req, res) => {
     serviceAreas: JSON.stringify(DEFAULT_SERVICE_AREAS),
     topics: JSON.stringify(DEFAULT_TOPICS),
     frequency: "every_other_day", postingTimes: '["08:00","12:00","17:00"]',
-    platforms: '["facebook","google"]', approvalMode: "auto_schedule",
+    platforms: '["facebook","google"]', approvalMode: BBB_DEFAULT_APPROVAL_MODE,
     ctaText: "Call Now \u2014 (251) 324-9090", usedCombos: "[]", enginePaused: "false",
   }).onConflictDoUpdate({
     target: [autoContentSettingsTable.userId],
@@ -950,6 +1019,110 @@ router.get("/auto-content/recommendations", async (req, res) => {
   }
 
   res.json({ recommendations: recs, hasData });
+});
+
+// ── POST /auto-content/approve/:id ────────────────────────────────────────────
+// Approve a single post that is in pending_review state.
+// Records the approver's Clerk userId and timestamp, then advances to "scheduled".
+
+router.post("/auto-content/approve/:id", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { id } = req.params;
+
+  const [post] = await db.select().from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, id), eq(socialPostsTable.userId, userId)));
+
+  if (!post) {
+    res.status(404).json({ error: "Post not found." });
+    return;
+  }
+  if (post.status !== "draft") {
+    res.status(409).json({ error: "Post is not in draft state and cannot be approved." });
+    return;
+  }
+
+  await db.update(socialPostsTable).set({
+    approvalStatus: "approved",
+    approvedBy:     userId,
+    approvedAt:     new Date(),
+    status:         "scheduled",
+    updatedAt:      new Date(),
+  }).where(eq(socialPostsTable.id, id));
+
+  res.json({ ok: true, id, status: "scheduled", approvedBy: userId });
+});
+
+// ── POST /auto-content/reject/:id ─────────────────────────────────────────────
+// Reject a post from the approval queue.
+
+router.post("/auto-content/reject/:id", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { id } = req.params;
+
+  const [post] = await db.select().from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, id), eq(socialPostsTable.userId, userId)));
+
+  if (!post) {
+    res.status(404).json({ error: "Post not found." });
+    return;
+  }
+
+  await db.update(socialPostsTable).set({
+    approvalStatus: "rejected",
+    approvedBy:     userId,
+    approvedAt:     new Date(),
+    updatedAt:      new Date(),
+  }).where(eq(socialPostsTable.id, id));
+
+  res.json({ ok: true, id, status: post.status, approvalStatus: "rejected" });
+});
+
+// ── GET /auto-content/pending-approval ────────────────────────────────────────
+// Returns all posts awaiting approval (status=draft, approvalStatus=pending_review).
+
+router.get("/auto-content/pending-approval", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const posts = await db.select().from(socialPostsTable).where(and(
+    eq(socialPostsTable.userId, userId),
+    eq(socialPostsTable.status, "draft"),
+    eq(socialPostsTable.approvalStatus, "pending_review"),
+  )).orderBy(socialPostsTable.scheduledAt).limit(50);
+
+  res.json({
+    posts: posts.map(p => ({
+      id:              p.id,
+      serviceId:       p.serviceId ?? null,
+      campaignGoal:    p.campaignGoal ?? null,
+      city:            p.aiCity ?? null,
+      topic:           p.aiTopic ?? null,
+      angle:           p.aiAngle ?? null,
+      caption:         p.captionFacebook ?? p.caption ?? "",
+      platforms:       parseJson<string[]>(p.platforms, []),
+      scheduledAt:     p.scheduledAt?.toISOString() ?? null,
+      contentScore:    p.contentScore ? parseInt(p.contentScore, 10) : null,
+      matchedImageUrl: p.matchedImageUrl ?? null,
+      approvalStatus:  p.approvalStatus ?? "pending_review",
+      weeklyPlanId:    p.weeklyPlanId ?? null,
+    })),
+    total: posts.length,
+  });
+});
+
+// ── GET /auto-content/registry ────────────────────────────────────────────────
+// Returns the canonical BB&B service and audience registry for UI consumption.
+
+router.get("/auto-content/registry", (_req, res) => {
+  res.json({
+    services:  BBB_SERVICES,
+    audiences: BBB_AUDIENCES,
+    campaignGoals: CAMPAIGN_GOALS,
+  });
 });
 
 export default router;

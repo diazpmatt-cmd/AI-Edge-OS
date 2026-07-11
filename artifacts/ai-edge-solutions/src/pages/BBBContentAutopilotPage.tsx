@@ -531,6 +531,115 @@ export default function BBBContentAutopilotPage() {
       {/* ── Body ── */}
       <div style={{ padding: "28px 36px", maxWidth: 1100, margin: "0 auto" }}>
 
+        {/* ── Service Status Registry Panel ── */}
+        <div style={{
+          background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
+          padding: "20px 24px", marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: B.blue, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 14 }}>
+            ⚙️ BB&amp;B Service Registry — Pilot Status
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 20 }}>
+
+            {/* Active Services */}
+            <div style={{ flex: "1 1 260px" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.emerald, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+                ✅ Active — Content Generation Enabled
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6 }}>
+                {[
+                  "Bed Bug Inspection", "Bed Bug Treatment",
+                  "Roach Control", "Rodent Control", "Mosquito Control",
+                  "Commercial Pest Control", "Fumigation",
+                  "Ant Control", "Fleas", "Ticks",
+                  "Wasps & Hornets", "Spider Control",
+                ].map(s => (
+                  <span key={s} style={{
+                    fontSize: 11, fontWeight: 600, color: B.white,
+                    background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)",
+                    borderRadius: 6, padding: "3px 9px",
+                  }}>{s}</span>
+                ))}
+                <span style={{
+                  fontSize: 11, fontWeight: 600, color: B.dim,
+                  background: "rgba(100,116,139,0.1)", border: "1px solid rgba(100,116,139,0.2)",
+                  borderRadius: 6, padding: "3px 9px",
+                }}>Moles — low priority</span>
+              </div>
+            </div>
+
+            {/* Restricted Services */}
+            <div style={{ flex: "1 1 220px" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.gold, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+                🔜 Coming Soon
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{
+                  fontSize: 12, color: B.gold,
+                  background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)",
+                  borderRadius: 8, padding: "8px 12px",
+                }}>
+                  <div style={{ fontWeight: 700 }}>Termites</div>
+                  <div style={{ fontSize: 11, color: B.dim, marginTop: 2 }}>
+                    Not currently offered · No content generation · No CTAs
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.red, letterSpacing: "1px", textTransform: "uppercase", margin: "12px 0 8px" }}>
+                🚫 Not Offered
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{
+                  fontSize: 12, color: B.red,
+                  background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)",
+                  borderRadius: 8, padding: "8px 12px",
+                }}>
+                  <div style={{ fontWeight: 700 }}>Wildlife Removal</div>
+                  <div style={{ fontSize: 11, color: B.dim, marginTop: 2 }}>Disabled · Not an offered service</div>
+                </div>
+                <div style={{
+                  fontSize: 12, color: B.red,
+                  background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)",
+                  borderRadius: 8, padding: "8px 12px",
+                }}>
+                  <div style={{ fontWeight: 700 }}>Whole-Home Bed Bug Heat Treatment</div>
+                  <div style={{ fontSize: 11, color: B.dim, marginTop: 2 }}>
+                    Not offered · BB&amp;B uses targeted furniture/area treatment
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Approval Mode */}
+            <div style={{ flex: "1 1 180px" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.blue, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+                🔒 Autopilot Mode
+              </div>
+              <div style={{
+                background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)",
+                borderRadius: 10, padding: "12px 14px",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: B.blue }}>Approval Required</div>
+                <div style={{ fontSize: 11, color: B.dim, marginTop: 4 }}>
+                  Each generated post requires explicit approval before scheduling.
+                  BB&amp;B pilot default — not auto-publishing.
+                </div>
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: B.bbbOrange, letterSpacing: "1px", textTransform: "uppercase", margin: "12px 0 8px" }}>
+                📊 Campaign Mix
+              </div>
+              <div style={{
+                background: "rgba(242,108,33,0.06)", border: "1px solid rgba(242,108,33,0.18)",
+                borderRadius: 10, padding: "10px 14px", fontSize: 12, color: B.silver,
+              }}>
+                <div>60% Revenue &amp; Leads</div>
+                <div style={{ marginTop: 2 }}>25% Education</div>
+                <div style={{ marginTop: 2 }}>15% Trust &amp; Local</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* ── Generate card ── */}
         <div style={{
           background: `linear-gradient(135deg, ${B.bbbDark} 0%, #0A1E35 60%, ${B.panel} 100%)`,

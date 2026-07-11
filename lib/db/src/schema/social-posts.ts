@@ -44,6 +44,14 @@ export const socialPostsTable = pgTable("social_posts", {
   comments:        text("comments"),
   shares:          text("shares"),
   engagementScore: text("engagement_score"),
+  // V5: Campaign Metadata — sourced from canonical BB&B service registry
+  serviceId:      text("service_id"),      // canonical serviceId from BBB_SERVICES registry
+  campaignGoal:   text("campaign_goal"),   // one of CAMPAIGN_GOALS
+  audienceId:     text("audience_id"),     // one of BBB_AUDIENCES audienceId
+  weeklyPlanId:   text("weekly_plan_id"), // groups posts belonging to the same generated week
+  approvalStatus: text("approval_status"), // 'pending_review' | 'approved' | 'rejected' | null
+  approvedAt:     timestamp("approved_at", { withTimezone: true }),
+  approvedBy:     text("approved_by"),     // Clerk userId of approver
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

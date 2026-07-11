@@ -1,0 +1,213 @@
+Replit Task: Diagnose and Repair Repeated API 502 Errors
+
+Issue:
+
+The AI Edge web application is now showing many:
+
+API 502
+
+errors.
+
+This began after the recent publishing-platform and Content Autopilot changes, but do not assume those changes are the cause.
+
+Goal:
+
+Identify every endpoint returning 502, determine the actual failure point, and apply only the smallest necessary repair.
+
+Start with diagnosis before modifying code.
+
+PART A — Identify the failing requests
+
+1. Inspect the browser Network tab and console while reproducing the issue.
+
+2. Produce a list of every request returning 502, including:
+
+- HTTP method
+- full frontend request path
+- response body
+- request initiator/page
+- time of failure
+- whether it fails consistently or intermittently
+
+3. Group repeated failures by endpoint so the same error is not counted multiple times.
+
+4. Identify which pages trigger the errors, especially:
+
+- Publishing Center
+- Content Autopilot
+- Connected Accounts
+- System Diagnostics
+- Morning Brief
+- Command Center
+
+PART B — Check the API server
+
+1. Inspect the API server process and logs.
+
+2. Confirm:
+
+- whether the Express API server is running
+- its bound port
+- whether it restarted or crashed
+- whether Replit is routing requests to the correct port
+- whether health endpoints respond
+
+3. Test directly from the Replit shell:
+
+- API health endpoint
+- one simple authenticated or non-authenticated route as appropriate
+- each endpoint identified as failing
+
+4. Look for:
+
+- uncaught exceptions
+- unhandled promise rejections
+- process exits
+- out-of-memory errors
+- connection refused errors
+- request timeouts
+- invalid JSON responses
+- headers already sent errors
+
+PART C — Check the proxy and base URL
+
+1. Inspect:
+
+- Vite proxy configuration
+- frontend API base URL
+- useApiFetch()
+- environment variables controlling the API URL
+- Replit deployment/run configuration
+
+2. Verify the frontend is not sending requests to:
+
+- the wrong port
+- a stale deployment URL
+- a malformed /api/api/... path
+- a route that exists only in development or only in production
+
+3. Confirm whether the 502 originates from:
+
+- Vite proxy
+- Replit proxy
+- Express
+- an upstream external provider
+
+PART D — Inspect recent changes
+
+Review the recent Phase 2 changes for accidental request issues:
+
+- SocialPublishingPage.tsx
+- BBBContentAutopilotPage.tsx
+- PlatformStateChip.tsx
+- social-providers.ts
+- shared social-connections query
+
+Check specifically for:
+
+- wrong query endpoint
+- wrong query key paired with a different response shape
+- duplicate or aggressive refetching
+- requests firing while required values are undefined
+- malformed provider IDs
+- google_business vs google mismatches
+- requests for unsupported LinkedIn routes
+- TikTok or YouTube calls firing when their controls should be disabled
+
+Do not roll back the entire feature unless a specific change is proven responsible.
+
+PART E — Inspect failing backend routes
+
+For each failing route:
+
+1. Trace:
+
+frontend caller
+→ useApiFetch/apiFetch
+→ Express route
+→ service/provider call
+→ response
+
+2. Confirm every async provider call is wrapped with safe error handling.
+
+3. Determine whether an upstream error is being incorrectly converted into a 502.
+
+4. Report the original upstream status and sanitized message.
+
+5. Verify that one failing provider does not crash or block unrelated API responses.
+
+PART F — Database and authentication checks
+
+1. Confirm PostgreSQL connectivity.
+
+2. Confirm Clerk token validation is not causing the API process to fail.
+
+3. Distinguish correctly between:
+
+- 401 unauthenticated
+- 403 unauthorized
+- 429 provider quota
+- 500 application error
+- 502 gateway/upstream failure
+- 503 service unavailable
+- 504 timeout
+
+Do not return 502 for every type of error.
+
+PART G — Apply the smallest repair
+
+Only after confirming the root cause:
+
+- repair the broken route, proxy, process, or request path
+- preserve existing working behavior
+- add targeted error handling if needed
+- do not change unrelated pages or integrations
+- do not hide failures by returning fake success responses
+
+PART H — Verification
+
+After the repair:
+
+1. Restart the API server cleanly.
+
+2. Run:
+
+- TypeScript typecheck
+- relevant tests
+- frontend build if frontend code changed
+
+3. Reproduce the same page flows.
+
+4. Confirm:
+
+- zero 502 responses
+- no API server crashes
+- browser console is clean
+- health endpoint remains responsive
+- disconnected/pending platforms do not trigger unsupported API calls
+
+Deliverables:
+
+- Exact endpoints that returned 502
+- Page or component that triggered each request
+- Whether the 502 originated from Replit proxy, Vite proxy, Express, or an upstream provider
+- Root cause
+- Files modified
+- Exact repair
+- API server status before and after
+- Browser Network result
+- Browser console result
+- TypeScript result
+- Test/build result
+- Any remaining unrelated errors
+- Checkpoint or commit created
+
+Constraints:
+
+- Diagnose first.
+- Do not perform a broad rollback.
+- Do not modify database schemas.
+- Do not change OAuth credentials.
+- Do not enable unsupported publishing.
+- Do not suppress errors without logging a sanitized cause.
+- Do not use as any, @ts-ignore, or unsafe casts.

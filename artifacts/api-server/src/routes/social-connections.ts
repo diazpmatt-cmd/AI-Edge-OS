@@ -174,7 +174,7 @@ router.post("/social-connections/pull-from-prod", async (req, res) => {
       return;
     }
 
-    let data: { found: boolean; provider?: string; accountName?: string; accountId?: string; accessToken?: string; refreshToken?: string | null; metadata?: string | null };
+    let data: { found: boolean; provider?: string; accountName?: string; accountId?: string; accessToken?: string; refreshToken?: string | null; expiresAt?: string | null; metadata?: string | null };
     try { data = JSON.parse(rawBody); } catch {
       res.status(502).json({ error: "parse_failed", raw: rawBody.slice(0, 200) });
       return;

@@ -1,0 +1,211 @@
+Replit Task: Urgently Diagnose and Repair the Reviews Engine API 502 Regression
+
+Current evidence:
+
+- Reviews Engine page loads successfully.
+- Navigation, layout, tabs, and Clerk authentication render correctly.
+- The page displays a red "API 502" error.
+- Reviews Engine worked before the recent Phase 2 Always-Visible Publishing Platforms changes.
+- Therefore, treat the recent changes as the primary regression window until the logs prove otherwise.
+
+Goal:
+
+Restore Reviews Engine functionality with the smallest targeted fix.
+
+Do not perform a broad rollback unless a specific recent change is proven responsible.
+
+STEP 1 — Reproduce and identify the exact failing endpoint
+
+1. Open Reviews Engine while authenticated.
+
+2. Inspect the browser Network tab and console.
+
+3. Identify every request returning 502, including:
+   - HTTP method
+   - exact request path
+   - response body
+   - request initiator
+   - timestamp
+   - whether it fails consistently
+
+4. Reviews Engine likely calls endpoints such as:
+   - /api/reviews/stats
+   - /api/reviews/requests
+   - related review template or response-library routes
+
+Confirm the real failing endpoint instead of assuming.
+
+STEP 2 — Inspect API server health and logs
+
+1. Confirm the Express API server is running.
+
+2. Inspect logs at the exact time of the Reviews Engine request.
+
+3. Look for:
+   - uncaught exception
+   - process restart
+   - connection refused
+   - proxy target failure
+   - database error
+   - invalid route import
+   - module initialization failure
+   - request timeout
+   - malformed response
+   - unhandled promise rejection
+
+4. Confirm the API health endpoint responds normally.
+
+5. Test the failing review endpoint directly from the Replit shell where possible.
+
+STEP 3 — Compare against the last known working revision
+
+Review the exact files changed in the recent Phase 2 implementation:
+
+- src/components/PlatformStateChip.tsx
+- src/lib/social-providers.ts
+- src/pages/SocialPublishingPage.tsx
+- src/pages/BBBContentAutopilotPage.tsx
+- any shared social-connections query or hook changed during Phase 2
+
+Determine whether any of those changes affected:
+
+- useApiFetch()
+- shared query configuration
+- API base URL
+- query client defaults
+- route imports
+- application startup
+- global error handling
+- shared types used by Reviews Engine
+- server workflow or proxy startup
+
+Do not assume a frontend-only change cannot affect the API server if shared workspace dependencies, startup scripts, or imports changed.
+
+STEP 4 — Inspect ReviewsEnginePage directly
+
+1. Confirm its current data-loading logic.
+
+2. Identify every request it makes during initial render.
+
+3. Verify:
+   - correct endpoint paths
+   - correct useApiFetch usage
+   - no stale response-shape assumptions
+   - no infinite request loop
+   - no accidental dependency regression
+   - no query key collision with the new social-connections query
+   - no global fetch wrapper returning generic "API 502"
+
+4. Confirm the previous useApiFetch stabilization is still intact.
+
+STEP 5 — Determine where the 502 originates
+
+Classify the failure as one of:
+
+A. Replit proxy cannot reach the API server  
+B. Vite proxy misrouting  
+C. Express route throws or returns 502  
+D. Database or internal service failure  
+E. Upstream provider failure  
+F. Shared frontend API helper incorrectly reports another error as 502  
+
+Report the original underlying error, not only the displayed "API 502".
+
+STEP 6 — Check whether other endpoints are also failing
+
+Test at least:
+
+- /api/reviews/stats
+- /api/reviews/requests
+- /api/leads
+- /api/social-posts
+- /api/social-connections
+- /api/diagnostics/health
+
+This will determine whether the issue is:
+
+- Reviews-only
+- all authenticated API calls
+- all API routes
+- only recently modified routes
+
+STEP 7 — Apply the smallest repair
+
+Once the root cause is confirmed:
+
+- repair only the broken route, proxy, import, shared helper, or startup issue
+- preserve all working Phase 2 platform UI changes
+- do not hide the failure with fake empty data
+- do not return 200 for failed requests
+- do not broadly revert unrelated consolidation work
+
+If a specific Phase 2 change caused the regression:
+
+- revert or correct only that exact change
+- explain why it affected Reviews Engine
+- retain the rest of Phase 2 if safe
+
+STEP 8 — Verification
+
+After the repair:
+
+1. Restart the API server cleanly.
+
+2. Open Reviews Engine while authenticated.
+
+3. Verify:
+   - Overview loads
+   - Request Center loads
+   - Templates loads
+   - Response Library loads
+   - no API 502 banner
+   - no repeated request loop
+   - browser console is clean
+
+4. Also verify:
+   - Publishing Center still loads
+   - Content Autopilot still loads
+   - Connected Accounts still loads
+   - all six platform controls remain visible
+   - TikTok and LinkedIn remain safely disabled as intended
+
+5. Run:
+   - TypeScript typecheck
+   - focused Reviews Engine tests
+   - relevant frontend tests
+   - production frontend build if frontend code changes
+
+Deliverables:
+
+- Exact endpoint returning 502
+- Original underlying error
+- Source of 502:
+  - Replit proxy
+  - Vite proxy
+  - Express
+  - database
+  - upstream provider
+  - frontend error mapping
+- Root cause
+- Whether the recent Phase 2 changes caused it
+- Files modified
+- Exact fix
+- API server status before and after
+- Browser Network result
+- Browser console result
+- Reviews Engine verification
+- Publishing Center regression check
+- Content Autopilot regression check
+- TypeScript result
+- Test/build result
+- Checkpoint or commit created
+
+Constraints:
+
+- Diagnose before changing code.
+- Do not perform a broad rollback.
+- Do not change database schemas.
+- Do not modify OAuth credentials.
+- Do not disable error reporting.
+- Do not return fake successful data.
+- Do not use as any, @ts-ignore, or unsafe casts.

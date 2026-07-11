@@ -3,16 +3,21 @@
  * AI Edge content engine.
  *
  * ── PHASE BOUNDARY ──────────────────────────────────────────────────────────
- * Phase A1 (this file): Interface definition + BB&B registry provider shim.
+ * Phase A1: Interface definition + BB&B registry provider shim.
  *   • Only one registry provider exists: bbbRegistryProvider (backed by
  *     the static BBB_SERVICES array in bbb-services.ts).
  *   • buildClientContentContext() reproduces BB&B's exact defaults when called
  *     with null — behavior is CHARACTER-FOR-CHARACTER identical to the
  *     pre-Phase-A1 hardcoded strings in auto-content.ts.
  *
- * Phase B (future): DB-backed ServiceRegistryProvider + `clients` table.
+ * Phase B1 (this file): Pure resolution layer — ClientRecord, SettingsSnapshot,
+ *   resolveServiceRegistryProvider, buildContextFromRecords.
+ *   • DB-fetching lives in api-server/src/lib/client-resolver.ts.
+ *   • Only BB&B is supported; unsupported clients receive a typed error result.
+ *   • An unknown tenant MUST NOT silently receive BB&B context.
+ *
+ * Phase B2 (future): DB-backed ServiceRegistryProvider per client.
  *   • This interface does NOT change; only the provider implementation swaps.
- *   • No migration of BBB_SERVICES or auto-content.ts is needed at that time.
  *
  * ── SAFETY RULES ────────────────────────────────────────────────────────────
  * • Never change the BB&B registry provider's getSystemBusinessRules() output
@@ -20,6 +25,9 @@
  * • Never remove exports — downstream consumers depend on named exports.
  * • The BBB_REGION and BBB_DEFAULT_SERVICE_AREAS constants are the source of
  *   truth for all geographic defaults; do not duplicate them in routes.
+ * • resolveServiceRegistryProvider must remain the single place where
+ *   a client slug is mapped to a registry provider. Never hardcode this
+ *   selection in routes or handlers.
  */
 
 import {
@@ -307,6 +315,128 @@ export function buildClientContentContext(
     platforms,
     postAngles,
     registry,
+  };
+}
+
+// ── Phase B1: Pure resolution layer ───────────────────────────────────────────
+//
+// These types and functions are pure (no DB access). They are imported by:
+//   • artifacts/api-server/src/lib/client-resolver.ts — wraps with DB fetch
+//   • artifacts/ai-edge-solutions/src/lib/__tests__/ — unit tests (no DB)
+//
+// The DB layer (resolveClientContentContextFromDb) lives in api-server to
+// avoid circular imports through lib/db/src/index.ts.
+
+import type { ClientRecord } from "./schema/clients";
+export type { ClientRecord };
+
+/** Canonical slug for the BB&B pilot client. */
+export const BBB_CLIENT_SLUG = "bed-bugs-and-beyond";
+
+/**
+ * Minimal snapshot of auto_content_settings columns used by the resolver.
+ * All fields use string | null to match the widest possible column nullability;
+ * the DB layer's selected columns are structurally compatible as a subtype.
+ */
+export interface SettingsSnapshot {
+  approvalMode:   string | null;
+  frequency:      string | null;
+  postingTimes:   string | null;
+  platforms:      string | null;
+  toneStyle:      string | null;
+  postAngles:     string | null;
+  topics:         string | null;
+  ctaText:        string | null;
+  ctaPreference:  string | null;
+}
+
+/** Result of resolving a client's service registry provider. */
+export type RegistryResolveResult =
+  | { supported: true;  provider: ServiceRegistryProvider }
+  | { supported: false; slug: string; reason: "no_registry_for_industry" };
+
+/**
+ * Result of resolving a full client content context.
+ *
+ * "not_found"            — no clients table row for this userId.
+ * "inactive"             — client row exists but is_active = false.
+ * "unsupported_registry" — client slug maps to no known service registry (Phase B2 will add more).
+ *
+ * An unknown tenant MUST NOT silently receive BB&B context; callers must handle
+ * the { found: false } branch explicitly before using any context values.
+ */
+export type ClientResolveResult =
+  | { found: true;  context: ClientContentContext; client: ClientRecord }
+  | { found: false; reason: "not_found" | "inactive" | "unsupported_registry" };
+
+// Private helper — same semantics as parseJson in route files.
+function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
+  try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
+}
+
+/**
+ * Map a client slug to its ServiceRegistryProvider.
+ *
+ * This is the SINGLE authoritative place where slugs are mapped to providers.
+ * Never hardcode this selection in route handlers or resolvers.
+ *
+ * Phase B1: only "bed-bugs-and-beyond" is supported.
+ * Phase B2: add additional slug → provider mappings here.
+ */
+export function resolveServiceRegistryProvider(
+  client: Pick<ClientRecord, "slug">,
+): RegistryResolveResult {
+  if (client.slug === BBB_CLIENT_SLUG) {
+    return { supported: true, provider: bbbRegistryProvider };
+  }
+  return { supported: false, slug: client.slug, reason: "no_registry_for_industry" };
+}
+
+/**
+ * Pure function: build a ClientResolveResult from a client record + optional
+ * settings snapshot.
+ *
+ * No DB access. Callers must fetch the records from the DB first.
+ * The DB-side wrapper is resolveClientContentContextFromDb in api-server.
+ *
+ * Phase B1 contract:
+ * - Inactive clients → { found: false, reason: "inactive" }
+ * - Unsupported registry → { found: false, reason: "unsupported_registry" }
+ *   (non-BB&B tenants MUST NOT receive BB&B context)
+ * - Active BB&B client → { found: true, context: ... }
+ */
+export function buildContextFromRecords(
+  client: ClientRecord,
+  settings: SettingsSnapshot | null,
+): ClientResolveResult {
+  if (!client.isActive) {
+    return { found: false, reason: "inactive" };
+  }
+
+  const registryResult = resolveServiceRegistryProvider(client);
+  if (!registryResult.supported) {
+    return { found: false, reason: "unsupported_registry" };
+  }
+
+  const config: PartialClientConfig = {
+    clientName:    client.clientName,
+    industry:      client.industry,
+    serviceAreas:  parseJsonSafe<string[]>(client.serviceAreas, []),
+    approvalMode:  settings?.approvalMode  ?? null,
+    frequency:     settings?.frequency     ?? null,
+    postingTimes:  parseJsonSafe<string[]>(settings?.postingTimes, []),
+    platforms:     parseJsonSafe<string[]>(settings?.platforms, []),
+    toneStyle:     parseJsonSafe<string[]>(settings?.toneStyle, []),
+    postAngles:    parseJsonSafe<string[]>(settings?.postAngles, []),
+    topics:        parseJsonSafe<string[]>(settings?.topics, []),
+    ctaText:       settings?.ctaText       ?? null,
+    ctaPreference: settings?.ctaPreference ?? null,
+  };
+
+  return {
+    found:   true,
+    context: buildClientContentContext(config, registryResult.provider),
+    client,
   };
 }
 

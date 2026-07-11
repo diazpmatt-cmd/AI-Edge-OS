@@ -24,6 +24,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
+import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -145,47 +146,61 @@ router.get("/auto-content/settings", async (req, res) => {
     .where(eq(autoContentSettingsTable.userId, userId));
 
   if (!row) {
+    // No settings row — resolve canonical client context.
+    // An unrecognised tenant MUST NOT silently receive BB&B defaults.
+    const resolved = await resolveClientContentContextFromDb(userId);
+    if (!resolved.found) {
+      res.status(404).json({ error: "no_client_configured", reason: resolved.reason });
+      return;
+    }
+    const ctx = resolved.context;
     res.json({
-      clientName: "Bed Bugs & Beyond",
-      industry: "pest_control",
-      serviceAreas: DEFAULT_SERVICE_AREAS,
-      topics: DEFAULT_TOPICS,
-      frequency: "every_other_day",
-      postingTimes: ["08:00", "12:00", "17:00"],
-      platforms: ["facebook", "google"],
-      approvalMode: BBB_DEFAULT_APPROVAL_MODE,
-      ctaText: "Call Now \u2014 (251) 324-9090",
-      ctaPreference: "call_now",
-      toneStyle: DEFAULT_TONE,
-      postAngles: DEFAULT_ANGLES,
+      clientName:          ctx.clientName,
+      industry:            ctx.industry,
+      serviceAreas:        ctx.serviceAreas,
+      topics:              ctx.topics,
+      frequency:           ctx.frequency,
+      postingTimes:        ctx.postingTimes,
+      platforms:           ctx.platforms,
+      approvalMode:        ctx.approvalMode,
+      ctaText:             ctx.ctaText,
+      ctaPreference:       ctx.ctaPreference,
+      toneStyle:           ctx.toneStyle,
+      postAngles:          ctx.postAngles,
       autoGenerateEnabled: true,
-      enginePaused: false,
-      usedCombos: [],
-      lastGeneratedAt: null,
+      enginePaused:        false,
+      usedCombos:          [],
+      lastGeneratedAt:     null,
     });
     return;
   }
 
-  const parsedAreas = parseJson<string[]>(row.serviceAreas, []);
+  // Settings row exists — use it, falling back to resolved client context for
+  // empty service area / topic arrays rather than hardcoded BB&B values.
+  const resolved = await resolveClientContentContextFromDb(userId);
+  const fallbackAreas  = resolved.found ? resolved.context.serviceAreas : DEFAULT_SERVICE_AREAS;
+  const fallbackTopics = resolved.found ? resolved.context.topics        : DEFAULT_TOPICS;
+
+  const parsedAreas  = parseJson<string[]>(row.serviceAreas, []);
   const parsedTopics = parseJson<string[]>(row.topics, []);
 
   res.json({
-    clientName: row.clientName,
-    industry: row.industry ?? "pest_control",
-    serviceAreas: parsedAreas.length ? parsedAreas : DEFAULT_SERVICE_AREAS,
-    topics: parsedTopics.length ? parsedTopics : DEFAULT_TOPICS,
-    frequency: row.frequency,
-    postingTimes: parseJson<string[]>(row.postingTimes, ["08:00", "12:00", "17:00"]),
-    platforms: parseJson<string[]>(row.platforms, ["facebook"]),
-    approvalMode: row.approvalMode,
-    ctaText: row.ctaText,
-    ctaPreference: row.ctaPreference ?? "call_now",
-    toneStyle: parseJson<string[]>(row.toneStyle, DEFAULT_TONE),
-    postAngles: parseJson<string[]>(row.postAngles, DEFAULT_ANGLES),
+    clientName:          row.clientName,
+    industry:            row.industry ?? "pest_control",
+    serviceAreas:        parsedAreas.length  ? parsedAreas  : fallbackAreas,
+    topics:              parsedTopics.length ? parsedTopics : fallbackTopics,
+    frequency:           row.frequency,
+    postingTimes:        parseJson<string[]>(row.postingTimes, ["08:00", "12:00", "17:00"]),
+    platforms:           parseJson<string[]>(row.platforms, ["facebook"]),
+    approvalMode:        row.approvalMode,
+    ctaText:             row.ctaText,
+    ctaPreference:       row.ctaPreference ?? "call_now",
+    toneStyle:           parseJson<string[]>(row.toneStyle, DEFAULT_TONE),
+    postAngles:          parseJson<string[]>(row.postAngles, DEFAULT_ANGLES),
     autoGenerateEnabled: row.autoGenerateEnabled !== "false",
-    enginePaused: row.enginePaused === "true",
-    usedCombos: parseJson<string[]>(row.usedCombos, []),
-    lastGeneratedAt: row.lastGeneratedAt?.toISOString() ?? null,
+    enginePaused:        row.enginePaused === "true",
+    usedCombos:          parseJson<string[]>(row.usedCombos, []),
+    lastGeneratedAt:     row.lastGeneratedAt?.toISOString() ?? null,
   });
 });
 
@@ -916,6 +931,11 @@ router.get("/auto-content/suggestions", async (req, res) => {
     inArray(socialPostsTable.status, ["scheduled", "draft"]),
   )).orderBy(socialPostsTable.scheduledAt).limit(50);
 
+  // Resolve client context for fallback values — replaces hardcoded BB&B defaults.
+  const suggestResolved = await resolveClientContentContextFromDb(userId);
+  const sgFallbackTopics = suggestResolved.found ? suggestResolved.context.topics       : DEFAULT_TOPICS;
+  const sgFallbackAreas  = suggestResolved.found ? suggestResolved.context.serviceAreas : DEFAULT_SERVICE_AREAS;
+
   const suggestions: string[] = [];
 
   // Topic repetition
@@ -926,8 +946,8 @@ router.get("/auto-content/suggestions", async (req, res) => {
   const freqTopics = Object.entries(topicCounts).filter(([, c]) => c >= 3).map(([t]) => t);
   if (freqTopics.length >= 2) {
     const configTopics = settings
-      ? parseJson<string[]>(settings.topics, DEFAULT_TOPICS)
-      : DEFAULT_TOPICS;
+      ? parseJson<string[]>(settings.topics, sgFallbackTopics)
+      : sgFallbackTopics;
     const unusedTopics = configTopics.filter(t => !topicCounts[t]);
     if (unusedTopics.length > 0) {
       suggestions.push(
@@ -964,8 +984,8 @@ router.get("/auto-content/suggestions", async (req, res) => {
 
   // Best next post suggestion
   if (settings) {
-    const areas = parseJson<string[]>(settings.serviceAreas, DEFAULT_SERVICE_AREAS);
-    const settingsTopics = parseJson<string[]>(settings.topics, DEFAULT_TOPICS);
+    const areas = parseJson<string[]>(settings.serviceAreas, sgFallbackAreas);
+    const settingsTopics = parseJson<string[]>(settings.topics, sgFallbackTopics);
     const usedCombos = parseJson<string[]>(settings.usedCombos, []);
     const unusedCombos = areas
       .flatMap(c => settingsTopics.map(t => ({ city: c, topic: t, key: `${c}:${t}` })))

@@ -1,0 +1,263 @@
+Proceed with Phase B1 — Canonical Clients Table and DB-Backed Client Context Resolution.
+
+Phase A1 and Phase A2 are complete and verified.
+
+Current foundation:
+
+- ServiceRegistryProvider exists
+- bbbRegistryProvider exists
+- ClientContentContext exists
+- buildClientContentContext(config | null) preserves BB&B behavior
+- buildSystemPrompt(context) preserves exact BB&B prompt behavior
+- Context arrays are isolated through spread-copying
+- 116/116 Phase A2 tests pass
+- 415/415 existing web tests pass
+- 174/174 API-server tests pass
+- lib/db and API-server TypeScript checks are clean
+
+Objective:
+
+Introduce the smallest canonical client persistence layer required to resolve a tenant-aware ClientContentContext from the database.
+
+This phase must establish one reusable source of truth for client identity and content configuration without building a full onboarding system.
+
+Audit first.
+
+Before editing, inspect:
+
+- Existing organization/account/workspace/client-related tables
+- Clerk organization or tenant identifiers already stored
+- Existing tenant-resolution middleware
+- Existing business-profile or company-settings tables
+- Existing auto-content settings schema
+- Existing service registry storage
+- Existing migration naming and versioning conventions
+- Existing seed patterns
+- Existing repository/service patterns in lib/db
+- Existing API route request context and authentication data
+
+Do not create a duplicate clients table if an existing canonical business, organization, tenant, account, or company table can be safely extended.
+
+First produce a short audit finding that states:
+
+1. Which existing table, if any, should become the canonical client table
+2. Why it should be reused or why a new clients table is necessary
+3. Which existing tenant identifier should be canonical
+4. Which current tables already reference that identifier
+5. Any migration compatibility risks
+
+Then implement only the approved minimal design.
+
+Required data model:
+
+The canonical client record must support at least:
+
+- id
+- tenant or organization identifier
+- slug
+- client name
+- industry
+- industry label
+- region
+- service areas
+- timezone
+- active status
+- created timestamp
+- updated timestamp
+
+Also support the minimum content configuration currently required by ClientContentContext, either directly or through an existing related settings table:
+
+- approval mode
+- posts per week
+- posting days
+- posting times
+- platforms
+- tone/style
+- post angles
+- topics
+- include holidays
+- minimum lead days
+- autopilot enabled
+
+Important:
+
+Do not duplicate fields that already exist canonically in auto-content settings or another configuration table.
+
+Prefer:
+
+- Client table for identity and durable business metadata
+- Existing auto-content settings table for scheduling/content configuration
+- A resolver that combines them into ClientContentContext
+
+Avoid:
+
+- Storing the same setting in multiple tables
+- BB&B-specific columns
+- Industry-specific schemas
+- JSON blobs when typed columns or existing tables already fit
+- Building onboarding UI
+- Building a generic service-registry editor in this phase
+
+Required implementation:
+
+1. Canonical Client Schema
+
+Create or extend the canonical client table based on the audit.
+
+Use existing project conventions for:
+
+- IDs
+- timestamps
+- indexes
+- unique constraints
+- organization/tenant ownership
+- exports
+- migrations
+
+The tenant or organization identifier must be indexed and uniquely resolvable where appropriate.
+
+2. BB&B Seed or Backfill
+
+Create a safe migration/backfill so the existing BB&B environment has one canonical client record.
+
+Use the existing BB&B values from client-context.ts as the source of truth where appropriate:
+
+- Bed Bugs & Beyond
+- Pest-control industry values
+- BBB_REGION
+- BBB_DEFAULT_SERVICE_AREAS
+- Current timezone
+
+Do not create duplicate BB&B records if the migration is run more than once.
+
+Do not enable Content Autopilot.
+
+The existing safety gate must remain:
+
+autopilot_enabled = false
+
+3. Client Repository or Resolver
+
+Add a small reusable database function or repository method such as:
+
+resolveClientContentContext(...)
+
+The exact name may follow existing conventions.
+
+It must:
+
+- Resolve the canonical client by tenant/organization identifier or client ID
+- Load the existing auto-content settings
+- Build a ClientContentContext
+- Use bbbRegistryProvider only for the BB&B client during this phase
+- Return a typed not-found result or error when no client exists
+- Avoid silently falling back to BB&B for an unknown tenant
+- Preserve explicit null fallback only where legacy BB&B behavior is intentionally required
+
+Critical tenant safety rule:
+
+An unknown authenticated tenant must never receive the BB&B context.
+
+4. Registry Provider Resolution Boundary
+
+Add the smallest provider-resolution boundary required for future registries.
+
+For example:
+
+resolveServiceRegistryProvider(client)
+
+For Phase B1:
+
+- BB&B resolves to bbbRegistryProvider
+- Unsupported clients return a typed unsupported-registry result or use an explicit test-only provider
+- Do not implement the database-backed service registry yet
+- Do not hardcode registry selection throughout routes
+
+Keep provider selection centralized.
+
+5. Read-Path Integration Only
+
+Integrate DB-backed context resolution into the safest existing auto-content read path first.
+
+Target only:
+
+- GET auto-content settings
+- GET suggestions, only if it shares the same safe resolution path
+
+Replace the remaining duplicated BB&B geography and identity values in those read paths with resolved context values.
+
+Do not modify generate, PUT, pause, or resume in Phase B1 unless strictly required for compilation.
+
+The generate route already has its Phase A abstraction and should remain behaviorally unchanged.
+
+6. Tenant Isolation Tests
+
+Add tests proving:
+
+- BB&B tenant resolves to BB&B context
+- Unknown tenant does not fall back to BB&B
+- Two clients cannot resolve each other’s records
+- Client service areas are isolated
+- Client settings are isolated
+- Inactive clients are rejected or handled explicitly
+- Duplicate tenant identifiers are prevented
+- BB&B backfill is idempotent
+- Autopilot remains disabled after migration/backfill
+- Unsupported registry clients return an explicit typed result
+
+7. Backward Compatibility
+
+Preserve all current BB&B behavior.
+
+Existing unauthenticated or legacy internal scheduler behavior must not be changed accidentally.
+
+Document any legacy null-context fallback that remains and exactly where it is still permitted.
+
+Restrictions:
+
+- Do not build client onboarding UI
+- Do not build a client switcher
+- Do not implement the generic DB-backed service registry
+- Do not modify the Content Autopilot generation behavior
+- Do not enable autopilot
+- Do not publish content
+- Do not modify pause/resume yet
+- Do not add Growth Engine UI
+- Do not add outreach, backlink, authority, or measurement tables
+- Do not refactor unrelated modules
+- Do not introduce a second tenant system
+- Do not silently map unknown clients to BB&B
+- Do not begin Phase B2 automatically
+
+Validation:
+
+Run:
+
+1. Database schema TypeScript build
+2. Migration validation
+3. New Phase B1 tests
+4. Existing Phase A1/A2 tests
+5. API-server tests
+6. Full relevant web tests
+7. API-server TypeScript check
+8. Search for remaining hardcoded BB&B identity/geography in the GET settings and suggestions paths
+
+Deliverables:
+
+1. Audit finding on existing tenant/client tables
+2. Files created or modified
+3. Migration and backfill summary
+4. Canonical tenant identifier selected
+5. Resolver API and behavior
+6. Registry provider-resolution behavior
+7. Read paths integrated
+8. Tenant-isolation tests added
+9. Remaining BB&B hardcoding
+10. Explicit legacy fallback locations
+11. Confirmation that autopilot remains disabled
+12. Full validation results
+13. Recommended Phase B2 scope
+
+Stop after Phase B1 validation.
+
+Do not begin Phase B2.

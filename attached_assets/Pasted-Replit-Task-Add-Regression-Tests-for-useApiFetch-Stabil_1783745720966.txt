@@ -1,0 +1,65 @@
+Replit Task: Add Regression Tests for useApiFetch Stability and Authentication
+
+Background:
+useApiFetch() was recently fixed to return a memoized callback using useCallback([getToken]).
+
+Previously, the hook returned a new function on every render, causing infinite effect loops across multiple pages.
+
+Goal:
+Add focused automated regression coverage so this behavior cannot silently return.
+
+Tasks:
+
+1. Inspect the project's existing frontend testing setup.
+
+2. Identify the established testing tools and conventions, such as:
+   - Vitest
+   - React Testing Library
+   - renderHook
+   - existing Clerk mocks
+   - existing fetch or API mocks
+
+3. Add a focused test suite for useApiFetch().
+
+4. Test that the returned apiFetch function preserves the same reference across ordinary component or hook rerenders when getToken has not changed.
+
+5. Test that getToken() is called separately for every API request.
+   This must prove that memoizing the callback does not reuse a stale token.
+
+6. Test that the current token is attached as:
+
+   Authorization: Bearer <token>
+
+7. Test behavior when getToken() returns null or rejects:
+   - preserve the hook's current intended behavior
+   - do not invent new authentication behavior
+
+8. Test at least one successful JSON response through the hook.
+
+9. Test the existing API error behavior, including status and parsed error details where supported.
+
+10. Mock Clerk and network requests using the project's existing testing patterns.
+    Do not make real external requests.
+
+11. Do not alter the production hook unless a test exposes a real defect.
+
+12. Run:
+    - the new focused tests
+    - the complete relevant frontend test suite
+    - TypeScript typecheck
+
+Deliverables:
+- Test file created or modified
+- Test cases added
+- Exact commands run
+- Focused test result
+- Relevant full-suite result
+- TypeScript result
+- Any uncovered behavior or limitation
+- Checkpoint or commit created
+
+Constraints:
+- Do not modify unrelated components or styling.
+- Do not weaken Clerk authentication.
+- Do not use arbitrary delays or flaky timing assertions.
+- Do not use as any, @ts-ignore, or unsafe casts unless already required by an established test helper.

@@ -75,7 +75,25 @@ export type DiagnosticCode =
   | "stage_complete"
   | "stage_failed"
   | "stage_skipped"
-  | "stage_cancelled";
+  | "stage_cancelled"
+  | "schedule_created"
+  | "schedule_claimed"
+  | "schedule_dispatched"
+  | "schedule_skipped_overlap"
+  | "schedule_skipped_budget"
+  | "schedule_skipped_governance"
+  | "schedule_catch_up"
+  | "schedule_failure_threshold"
+  | "schedule_error_blocked"
+  | "scheduler_tick_started"
+  | "scheduler_tick_complete"
+  | "scheduler_tick_failed"
+  | "scheduler_leadership_acquired"
+  | "scheduler_leadership_lost"
+  | "recovery_scan_started"
+  | "recovery_scan_complete"
+  | "stale_claim_found"
+  | "stale_claim_released";
 
 // ── Diagnostic event ──────────────────────────────────────────────────────────
 

@@ -330,3 +330,100 @@ export type {
 } from "./discovery-c6-repository";
 
 export { eq, and, or, sql } from "drizzle-orm";
+
+// ── Phase C7: Discovery Scheduling ────────────────────────────────────────────
+
+// Schedule model (pure logic)
+export {
+  validateScheduleTransition,
+  allowedScheduleNextStates,
+  isScheduleTerminal,
+  isScheduleEligibleForDispatch,
+  isCountableFailure,
+  isValidScheduleTimezone,
+  validateCronExpression,
+  calculateNextRun,
+  enumerateCronOccurrences,
+  resolveCatchUp,
+  validateScheduleInput,
+  deriveScheduleId,
+  deriveOccurrenceId,
+  deriveOccurrenceIdempotencyKey,
+  deriveSchedulerOwnerId,
+  SCHEDULER_LEADER_ID,
+} from "./discovery-schedule";
+export type {
+  ScheduleStatus,
+  OccurrenceStatus,
+  OverlapPolicy,
+  CatchUpPolicy,
+  FailureCategory,
+  DiscoverySchedule,
+  ScheduleOccurrence,
+  SchedulerLeadershipRecord,
+  LeadershipAcquireResult,
+  CatchUpResolution,
+  ScheduleValidationError,
+  ScheduleValidationResult,
+} from "./discovery-schedule";
+
+// Schedule policy (pure logic)
+export {
+  DEFAULT_SCHEDULE_FAILURE_POLICY,
+  evaluateFailurePolicy,
+  resetFailureCount,
+  evaluateScheduleBudget,
+  resolveOverlap,
+  evaluateCatchUpBudget,
+  makeEmptyTickSummary,
+} from "./discovery-schedule-policy";
+export type {
+  ScheduleFailurePolicy,
+  FailurePolicyAction,
+  FailurePolicyResult,
+  ScheduleBudgetPolicy,
+  ScheduleBudgetDenyReason,
+  ScheduleBudgetCheckResult,
+  OverlapDecision,
+  OverlapResolutionResult,
+  SchedulerTickOutcome,
+  SchedulerTickSummary,
+} from "./discovery-schedule-policy";
+
+// C7 schema tables
+export {
+  discoverySchedulesTable,
+  discoveryScheduleOccurrencesTable,
+  discoverySchedulerLeadershipTable,
+} from "./schema/discovery-schedules";
+export type {
+  DiscoveryScheduleRow,
+  DiscoveryScheduleInsert,
+  DiscoveryScheduleOccurrenceRow,
+  DiscoveryScheduleOccurrenceInsert,
+  DiscoverySchedulerLeadershipRow,
+  DiscoverySchedulerLeadershipInsert,
+} from "./schema/discovery-schedules";
+
+// C7 repository (schedule CRUD + leadership + claiming)
+export {
+  bootstrapC7Tables,
+  insertSchedule,
+  getSchedule,
+  listSchedules,
+  updateScheduleStatus,
+  updateScheduleAfterRun,
+  updateScheduleNextRun,
+  findDueSchedules,
+  insertOccurrence,
+  updateOccurrenceStatus,
+  getOccurrenceByScheduleAndTime,
+  listRecentOccurrences,
+  countActiveOccurrences,
+  countPendingOccurrences,
+  findStaleClaimedOccurrences,
+  releaseStaleOccurrenceClaim,
+  acquireSchedulerLeadership,
+  releaseSchedulerLeadership,
+  getSchedulerLeadership,
+} from "./discovery-c7-repository";

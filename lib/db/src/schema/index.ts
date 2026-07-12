@@ -22,3 +22,4 @@ export * from "./integration-health";
 export * from "./clients";
 export * from "./service-registry";
 export * from "./discovery";
+export * from "./discovery-schedules";

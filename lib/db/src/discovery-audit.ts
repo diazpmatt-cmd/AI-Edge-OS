@@ -52,7 +52,27 @@ export type AuditAction =
   | "lease_released"
   | "lease_recovered"
   | "transition_recorded"
-  | "diagnostic_created";
+  | "diagnostic_created"
+  | "schedule_created"
+  | "schedule_updated"
+  | "schedule_paused"
+  | "schedule_resumed"
+  | "schedule_disabled"
+  | "schedule_archived"
+  | "schedule_error_blocked"
+  | "schedule_run_dispatched"
+  | "schedule_run_skipped_overlap"
+  | "schedule_run_skipped_budget"
+  | "schedule_run_skipped_governance"
+  | "schedule_occurrence_idempotency_hit"
+  | "schedule_catch_up_created"
+  | "scheduler_leadership_acquired"
+  | "scheduler_leadership_lost"
+  | "scheduler_leadership_released"
+  | "recovery_scan_invoked"
+  | "stale_run_recovered"
+  | "stale_claim_released"
+  | "schedule_read";
 
 // ── Actor types ───────────────────────────────────────────────────────────────
 

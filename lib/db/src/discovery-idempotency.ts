@@ -36,7 +36,7 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7E]{1,128}$/;
 
 // ── Operation type ─────────────────────────────────────────────────────────────
 
-export type IdempotencyOperation = "manual_run" | "dry_run";
+export type IdempotencyOperation = "manual_run" | "dry_run" | "scheduled_run";
 
 // ── Idempotency record ─────────────────────────────────────────────────────────
 

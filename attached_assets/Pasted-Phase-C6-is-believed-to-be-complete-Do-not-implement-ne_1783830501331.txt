@@ -1,0 +1,98 @@
+Phase C6 is believed to be complete.
+
+Do not implement new features.
+
+Instead, perform a full independent verification audit of the existing Phase C6 implementation.
+
+Your job is to prove the implementation is correct—or identify every remaining defect.
+
+Do not assume previous summaries are accurate.
+
+Verification steps
+
+1. Read every Phase C6 source file.
+2. Read every Phase C6 test.
+3. Compare the implementation against the original C6 specification.
+4. Verify every required feature actually exists.
+5. Verify every required API endpoint exists.
+6. Verify every required persistence boundary exists.
+7. Verify lifecycle rules are enforced centrally.
+8. Verify tenant isolation for every repository and API.
+9. Verify idempotency cannot be bypassed.
+10. Verify execution leases cannot be stolen or leaked.
+11. Verify cancellation cannot corrupt persisted state.
+12. Verify diagnostics redact secrets.
+13. Verify audit events cannot leak credentials.
+14. Verify recovery cannot duplicate provider charges.
+15. Verify rate limiting executes before provider calls.
+16. Verify correlation IDs propagate correctly.
+17. Verify no code bypasses governance, budget, or service-registry gates.
+18. Verify BB&B safety behavior is unchanged.
+19. Verify no hidden TODOs, placeholders, or stub implementations remain.
+20. Verify all public APIs validate input and reject malformed requests.
+
+Code quality audit
+
+Look specifically for:
+
+* duplicated logic
+* dead code
+* unreachable branches
+* race conditions
+* missing transaction boundaries
+* missing ownership predicates
+* nondeterministic behavior
+* accidental global state
+* unsafe casts
+* improper error handling
+* missing logging
+* missing audit entries
+* missing tests
+* fragile assumptions
+* schema mismatches
+* migration mistakes
+* inconsistent naming
+* backward compatibility issues
+
+Test audit
+
+Do not rely only on test counts.
+
+Determine whether tests genuinely verify behavior or merely increase coverage.
+
+Identify:
+
+* missing edge cases
+* false-positive tests
+* redundant tests
+* weak assertions
+* missing negative tests
+
+Validation
+
+Run the complete validation suite again.
+
+Report:
+
+* exact pass/fail/skip counts
+* build status
+* typecheck status
+* regression status
+
+Final report
+
+Produce one of only two conclusions.
+
+Option A
+
+“Phase C6 is production-ready.”
+
+Only choose this if no material defects remain.
+
+Option B
+
+“Phase C6 is not production-ready.”
+
+List every remaining issue ranked by severity with precise file names, root causes, and recommended fixes.
+
+Do not write new code unless you discover a genuine defect that prevents Phase C6 from being considered production-ready.

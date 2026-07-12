@@ -36,6 +36,7 @@ const PRIMARY_NAV = [
 
 // ── Secondary nav — advanced / future tools (collapsed by default) ────────────
 const SECONDARY_NAV = [
+  { to: "/admin/secrets",            icon: "🔑", label: "Secrets",                  bg: "#071C2A", accent: "#00AEEF" },
   { to: "/admin/customer-timeline",  icon: "👤", label: "Customer\nTimeline",       bg: "#0A1E2E", accent: "#06B6D4" },
   { to: "/admin/profit-center",      icon: "💰", label: "Profit\nCenter",           bg: "#0A1E0A", accent: "#10B981" },
   { to: "/admin/bbb-success",        icon: "🐛", label: "BB&B\nSuccess",            bg: "#0D1A10", accent: "#22C55E" },

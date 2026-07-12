@@ -432,8 +432,48 @@ router.post("/api/discovery/manual-run", async (req, res) => {
   const ownerId = deriveLeaseOwnerId(correlationId);
   let   leaseAcquired = false;
 
-  // ── C6: Pre-initialize snapshot so governance count is immediately visible ─
-  // persistRunResult uses INSERT ON CONFLICT DO UPDATE — safe to call before pipeline.
+  // ── C6: Acquire execution lease FIRST (Invariants 1, 2, 3) ──────────────────
+  //
+  // ORDER IS LOAD-BEARING — do NOT reorder these three steps:
+  //   1. acquireLease  — DB-atomic; only one winner for (runId, clientId).
+  //   2. persistRunResult  — snapshot written ONLY after lease is secured.
+  //   3. pipeline.run  — providers called ONLY after both above succeed.
+  //
+  // Invariant 1: No provider fetch can begin before a lease is held.
+  //   Providers are called inside pipeline.run() (step 3).
+  //   Lease is acquired in step 1. Steps are strictly sequential.
+  //
+  // Invariant 2: Exactly one lease holder can execute a deterministic run.
+  //   acquireLease uses an atomic DB INSERT ON CONFLICT DO NOTHING.
+  //   Only one request wins; all others receive acquired=false.
+  //
+  // Invariant 3: A failed lease acquisition leaves no orphaned running snapshot.
+  //   persistRunResult (step 2) is only reached when leaseAcquired=true.
+  //   If acquireLease returns false or throws, we return 409 here — no snapshot
+  //   is written and no orphan is created.
+  const leaseResult = await acquireLease(pool, runId, clientId, ownerId, 1).catch(() => null);
+  if (!leaseResult?.acquired) {
+    const concurrAudit = createAuditEvent({
+      clientId, runId, action: "execution_denied_concurrency",
+      actorType: "system", actorId: "discovery-run", correlationId,
+      metadata: { reason: "lease_held", runId },
+    });
+    appendAudit(pool, concurrAudit).catch((err: unknown) => {
+      console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
+    });
+    res.status(409).json({
+      error:        "concurrent_run",
+      message:      "A discovery run for this client is already executing. Wait for it to complete or cancel it first.",
+      runId,
+      correlationId,
+    });
+    return;
+  }
+  leaseAcquired = true;
+
+  // ── C6: Pre-initialize snapshot under the lease ────────────────────────────
+  // Called after lease acquisition so a failed acquire (above) leaves no orphan.
+  // persistRunResult uses INSERT ON CONFLICT DO UPDATE — idempotent if retried.
   const repository = new DrizzleDiscoveryRepository(db);
   await repository.persistRunResult({
     runId, clientId,
@@ -455,27 +495,6 @@ router.post("/api/discovery/manual-run", async (req, res) => {
   }).catch((err: unknown) => {
     console.error("[discovery-run] Snapshot pre-init failed:", err instanceof Error ? err.message : String(err));
   });
-
-  // ── C6: Acquire execution lease — hard guard against concurrent runs ────────
-  const leaseResult = await acquireLease(pool, runId, clientId, ownerId, 1).catch(() => null);
-  if (!leaseResult?.acquired) {
-    const concurrAudit = createAuditEvent({
-      clientId, runId, action: "execution_denied_concurrency",
-      actorType: "system", actorId: "discovery-run", correlationId,
-      metadata: { reason: "lease_held", runId },
-    });
-    appendAudit(pool, concurrAudit).catch((err: unknown) => {
-      console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
-    });
-    res.status(409).json({
-      error:        "concurrent_run",
-      message:      "A discovery run for this client is already executing. Wait for it to complete or cancel it first.",
-      runId,
-      correlationId,
-    });
-    return;
-  }
-  leaseAcquired = true;
 
   // ── C6: Audit live run requested (after lease — run is committed) ──────────
   const liveRunAudit = createAuditEvent({

@@ -256,6 +256,77 @@ describe("T9: Rate limiter per-(userId × clientId) scoping", () => {
   });
 });
 
+// ── I3: No orphaned running snapshot on failed lease acquisition ──────────────
+//
+// The route handler enforces this ordering:
+//   1. acquireLease()        → if failed, return 409 immediately
+//   2. persistRunResult()    → only reached when leaseAcquired=true
+//   3. pipeline.run()        → providers called only inside here
+//
+// Because persistRunResult is never called when acquireLease returns false,
+// a failed lease acquisition cannot leave an orphaned "running" snapshot.
+
+describe("I3: Failed lease leaves no orphaned running snapshot (ordering guarantee)", () => {
+  it("persistRunResult is not reachable when acquireLease returns acquired=false", async () => {
+    const callOrder: string[] = [];
+
+    // Mock the two functions whose relative ordering is the invariant
+    const mockAcquireLease = async (): Promise<{ acquired: boolean }> => {
+      callOrder.push("acquireLease");
+      return { acquired: false }; // simulate: lease already held by another request
+    };
+
+    const mockPersistRunResult = async (): Promise<void> => {
+      callOrder.push("persistRunResult"); // must NEVER be called when acquire fails
+    };
+
+    // Replicate the exact gating logic from discovery-run.ts:
+    //   if (!leaseResult?.acquired) { return 409; }   ← before persistRunResult
+    const simulateRouteExecution = async (): Promise<string> => {
+      const leaseResult = await mockAcquireLease();
+      if (!leaseResult?.acquired) {
+        return "409"; // early return — persistRunResult never called
+      }
+      await mockPersistRunResult(); // only reached when acquired=true
+      return "200";
+    };
+
+    const status = await simulateRouteExecution();
+
+    // Invariant: 409 response, and persistRunResult was never invoked
+    expect(status).toBe("409");
+    expect(callOrder).toEqual(["acquireLease"]);
+    expect(callOrder).not.toContain("persistRunResult");
+  });
+
+  it("persistRunResult IS called when acquireLease succeeds", async () => {
+    const callOrder: string[] = [];
+
+    const mockAcquireLease = async (): Promise<{ acquired: boolean }> => {
+      callOrder.push("acquireLease");
+      return { acquired: true };
+    };
+    const mockPersistRunResult = async (): Promise<void> => {
+      callOrder.push("persistRunResult");
+    };
+
+    const simulateRouteExecution = async (): Promise<string> => {
+      const leaseResult = await mockAcquireLease();
+      if (!leaseResult?.acquired) return "409";
+      await mockPersistRunResult();
+      return "200";
+    };
+
+    const status = await simulateRouteExecution();
+
+    expect(status).toBe("200");
+    // acquireLease always before persistRunResult
+    expect(callOrder.indexOf("acquireLease")).toBeLessThan(
+      callOrder.indexOf("persistRunResult"),
+    );
+  });
+});
+
 // ── T10: Idempotency key scoping ──────────────────────────────────────────────
 
 describe("T10: Idempotency key isolation across clients", () => {

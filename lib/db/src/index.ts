@@ -405,6 +405,13 @@ export type {
   DiscoverySchedulerLeadershipInsert,
 } from "./schema/discovery-schedules";
 
+// Phase C8R-1: provider-agnostic backlink foundation (pure; no persistence)
+export * from "./backlink-types";
+export * from "./backlink-providers";
+export * from "./backlink-normalizer";
+export * from "./backlink-scorer";
+export * from "./backlink-fixtures";
+
 // C7 repository (schedule CRUD + leadership + claiming)
 export {
   bootstrapC7Tables,

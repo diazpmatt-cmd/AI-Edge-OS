@@ -4,7 +4,6 @@
  *
  * Protected internal endpoint for manually triggering a discovery run.
  * Intended for developer inspection, QA validation, and cost monitoring.
- * NEVER wired to the autopilot scheduler — this is a manual trigger only.
  *
  * Routes:
  *   POST /api/discovery/manual-run   — Dry run (plan only) or live run
@@ -28,14 +27,17 @@
  *   - Credentials are NEVER returned in any response.
  *   - costCeilingUSD is clamped to MAX_RUN_CEILING_USD regardless of caller input.
  *
- * C6 governance:
- *   - Rate limited: live_run=2/min, dry_run=10/min per userId+clientId.
+ * C6 governance (this route owns):
+ *   - Rate limiting: live_run=2/min, dry_run=10/min per userId.
  *   - Idempotency: Idempotency-Key header enables 24h replay.
  *   - Governance: maximum 1 active run per client (default policy).
- *   - Correlation ID: generated per request and stored on snapshot.
- *   - Audit: every live run and dry run is audited.
- *   - Lifecycle transitions recorded for live runs.
- *   - Lease acquired before pipeline.run(), released in finally.
+ *   - Correlation ID: generated per request.
+ *   - Audit: dry-run and governance-denied events.
+ *
+ * C6 execution (DiscoveryExecutionService owns):
+ *   - Lease acquire → snapshot pre-init → pipeline → finalization → lease release.
+ *   - All four execution invariants (I1–I4) are enforced inside the service.
+ *   - The C7 scheduler also calls the service — this route is the manual trigger only.
  */
 
 import { Router }     from "express";
@@ -43,28 +45,18 @@ import { randomUUID } from "node:crypto";
 import { z }          from "zod";
 import { getAuth }    from "@clerk/express";
 import {
-  db,
   pool,
-  DiscoveryPipeline,
   buildDiscoveryContext,
-  DrizzleDiscoveryRepository,
   bootstrapDiscoveryTables,
   parseDataForSEOConfig,
   getDataForSEOHealthState,
-  DataForSEOContextAdapter,
   buildDataForSEOQueryPlan,
-  // C5 imports:
   DATAFORSEO_CAPABILITIES,
   describeCapabilities,
   BudgetGuard,
   MAX_RUN_CEILING_USD,
   DEFAULT_RUN_CEILING_USD,
-  SearchOrchestrator,
-  CostLedger,
   bootstrapCostTable,
-  saveCostRecords,
-  deriveCostRecordId,
-  // C6 imports:
   bootstrapC6Tables,
   DEFAULT_GOVERNANCE_POLICY,
   evaluateGovernance,
@@ -75,23 +67,13 @@ import {
   validateIdempotencyKey,
   checkIdempotency,
   saveIdempotency,
-  deriveLeaseOwnerId,
-  acquireLease,
-  releaseLease,
-  buildTransitionRecord,
-  appendTransition,
-  nextTransitionSeq,
-  updateRunState,
   createAuditEvent,
   appendAudit,
-  createDiagnosticEvent,
-  appendDiagnostic,
-  CancellationSignal,
-  deriveRunId,
 } from "@workspace/db";
 import type { OrchestrationMode } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { discoveryRateLimiter }               from "../lib/discovery-rate-limiter.js";
+import { DiscoveryExecutionService }          from "../lib/discovery-execution-service.js";
 
 // ── Table bootstrap (idempotent, runs once on server start) ───────────────────
 bootstrapDiscoveryTables(pool).catch(err =>
@@ -386,7 +368,7 @@ router.post("/api/discovery/manual-run", async (req, res) => {
     return;
   }
 
-  // ── Step 6: Live run — requires enabled=true ───────────────────────────────
+  // ── Step 6: Live run — requires provider enabled ──────────────────────────
   if (health.status !== "configured") {
     res.status(503).json({
       error:  "provider_not_ready",
@@ -403,16 +385,14 @@ router.post("/api/discovery/manual-run", async (req, res) => {
   const budgetGuard = new BudgetGuard({ perRunCeilingUSD: costCeilingUSD });
   const budgetCheck = budgetGuard.check(plan.estimatedCostUSD, plan.estimatedApiCalls);
   if (!budgetCheck.allowed) {
-    const auditEvent = createAuditEvent({
+    appendAudit(pool, createAuditEvent({
       clientId, runId: null, action: "execution_denied_budget",
       actorType: "user", actorId: userId, correlationId,
       metadata: { reason: budgetCheck.reason, costCeilingUSD,
                   estimatedCostUSD: plan.estimatedCostUSD },
-    });
-    appendAudit(pool, auditEvent).catch((err: unknown) => {
+    })).catch((err: unknown) => {
       console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
     });
-
     res.status(402).json({
       error:            "budget_exceeded",
       reason:           budgetCheck.reason,
@@ -427,321 +407,125 @@ router.post("/api/discovery/manual-run", async (req, res) => {
     return;
   }
 
-  // ── C6: Derive canonical run ID before any provider call ──────────────────
-  const runId   = deriveRunId(clientId, discoveryContext.currentWeek);
-  const ownerId = deriveLeaseOwnerId(correlationId);
-  let   leaseAcquired = false;
+  // ── Step 8: Execute via DiscoveryExecutionService (C6 canonical path) ──────
+  //
+  // The service owns: lease → snapshot → audit → pipeline → finalization →
+  //                   transitions → diagnostics → cost-ledger → lease-release.
+  //
+  // All four execution invariants (I1–I4) are enforced inside the service.
+  // The C7 scheduler will also call this service — never the HTTP route.
+  const executionService = new DiscoveryExecutionService();
+  const result = await executionService.execute({
+    clientId,
+    correlationId,
+    mode: mode as OrchestrationMode,
+    costCeilingUSD,
+    discoveryContext,
+    plan: {
+      estimatedCostUSD:  plan.estimatedCostUSD,
+      estimatedApiCalls: plan.estimatedApiCalls,
+    },
+    actor: { actorType: "user", actorId: userId },
+  });
 
-  // ── C6: Acquire execution lease FIRST (Invariants 1, 2, 3) ──────────────────
-  //
-  // ORDER IS LOAD-BEARING — do NOT reorder these three steps:
-  //   1. acquireLease  — DB-atomic; only one winner for (runId, clientId).
-  //   2. persistRunResult  — snapshot written ONLY after lease is secured.
-  //   3. pipeline.run  — providers called ONLY after both above succeed.
-  //
-  // Invariant 1: No provider fetch can begin before a lease is held.
-  //   Providers are called inside pipeline.run() (step 3).
-  //   Lease is acquired in step 1. Steps are strictly sequential.
-  //
-  // Invariant 2: Exactly one lease holder can execute a deterministic run.
-  //   acquireLease uses an atomic DB INSERT ON CONFLICT DO NOTHING.
-  //   Only one request wins; all others receive acquired=false.
-  //
-  // Invariant 3: A failed lease acquisition leaves no orphaned running snapshot.
-  //   persistRunResult (step 2) is only reached when leaseAcquired=true.
-  //   If acquireLease returns false or throws, we return 409 here — no snapshot
-  //   is written and no orphan is created.
-  const leaseResult = await acquireLease(pool, runId, clientId, ownerId, 1).catch(() => null);
-  if (!leaseResult?.acquired) {
-    const concurrAudit = createAuditEvent({
-      clientId, runId, action: "execution_denied_concurrency",
-      actorType: "system", actorId: "discovery-run", correlationId,
-      metadata: { reason: "lease_held", runId },
-    });
-    appendAudit(pool, concurrAudit).catch((err: unknown) => {
-      console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
-    });
+  // ── Step 9: Dispatch on result status ──────────────────────────────────────
+
+  if (result.status === "lease_denied") {
     res.status(409).json({
       error:        "concurrent_run",
       message:      "A discovery run for this client is already executing. Wait for it to complete or cancel it first.",
-      runId,
+      runId:        result.runId,
       correlationId,
     });
     return;
   }
-  leaseAcquired = true;
 
-  // ── C6: Pre-initialize snapshot under the lease ────────────────────────────
-  // Called after lease acquisition so a failed acquire (above) leaves no orphan.
-  // persistRunResult uses INSERT ON CONFLICT DO UPDATE — idempotent if retried.
-  const repository = new DrizzleDiscoveryRepository(db);
-  await repository.persistRunResult({
-    runId, clientId,
-    weekLabel:           discoveryContext.currentWeek,
-    status:              "running",
-    providersAttempted:  [],
-    providersSucceeded:  [],
-    providersFailed:     [],
-    providerFailures:    [],
-    signals:             { received: 0, accepted: 0, blocked: 0 },
-    clusters:            { created: 0 },
-    opportunities:       { created: 0, highPriority: 0 },
-    topOpportunityScore: 0,
-    runDurationMs:       0,
-    topOpportunities:    [],
-    allClusters:         [],
-    allSignals:          [],
-    allOpportunities:    [],
-  }).catch((err: unknown) => {
-    console.error("[discovery-run] Snapshot pre-init failed:", err instanceof Error ? err.message : String(err));
-  });
-
-  // ── C6: Audit live run requested (after lease — run is committed) ──────────
-  const liveRunAudit = createAuditEvent({
-    clientId, runId, action: "live_run_requested",
-    actorType: "user", actorId: userId, correlationId,
-    metadata: { mode, costCeilingUSD, estimatedCostUSD: plan.estimatedCostUSD },
-  });
-  appendAudit(pool, liveRunAudit).catch((err: unknown) => {
-    console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
-  });
-
-  // ── C6: Cooperative cancellation signal (polls DB every 2 s) ──────────────
-  const cancelSignal = new CancellationSignal();
-  let   cancelPollInterval: NodeJS.Timeout | null = null;
-
-  try {
-    // Poll DB for cancel_requested state set by the cancel route
-    cancelPollInterval = setInterval(() => {
-      pool.query<{ status: string }>(
-        "SELECT status FROM discovery_snapshots WHERE id=$1 AND client_id=$2 LIMIT 1",
-        [runId, clientId],
-      ).then(snap => {
-        if (snap.rows[0]?.status === "cancel_requested") {
-          cancelSignal.request("Cancellation requested via API", "user_requested");
-        }
-      }).catch(() => { /* ignore transient poll errors */ });
-    }, 2000);
-
-    // ── Step 8: Build orchestrator and pipeline ────────────────────────────
-    const adapter    = new DataForSEOContextAdapter(config, discoveryContext);
-    const orchestrator = new SearchOrchestrator({
-      mode: mode as OrchestrationMode,
-      providers: [{ provider: adapter, capabilities: DATAFORSEO_CAPABILITIES, priority: 1 }],
-    });
-    const pipeline = new DiscoveryPipeline({ search: orchestrator }, repository);
-
-    const startAt   = Date.now();
-    const summary   = await pipeline.run(discoveryContext, cancelSignal);
-    const elapsedMs = Date.now() - startAt;
-
-    // ── C6: Handle cooperative cancellation ───────────────────────────────
-    if (summary.status === "cancelled") {
-      updateRunState(pool, runId, clientId, "cancelled", { correlationId }).catch((err: unknown) => {
-        console.error("[discovery-run] State update failed:", err instanceof Error ? err.message : String(err));
-      });
-      const cancelSeq = await nextTransitionSeq(pool, runId, clientId).catch(() => 1);
-      const cancelTrans = buildTransitionRecord({
-        runId, clientId, seq: cancelSeq,
-        fromState:  "cancel_requested",
-        toState:    "cancelled",
-        reasonCode: "cancellation_honored",
-        message:    `Pipeline honoured cancellation after ${elapsedMs}ms.`,
-        actorType:  "system",
-        actorId:    "discovery-pipeline",
-        correlationId,
-        metadata:   { elapsedMs },
-      });
-      appendTransition(pool, cancelTrans).catch((err: unknown) => {
-        console.error("[discovery-run] Transition write failed:", err instanceof Error ? err.message : String(err));
-      });
-      const cancelAudit = createAuditEvent({
-        clientId, runId, action: "run_cancelled_requested",
-        actorType: "system", actorId: "discovery-pipeline", correlationId,
-        metadata: { elapsedMs, cancelledAt: cancelSignal.cancelledAt?.toISOString() },
-      });
-      appendAudit(pool, cancelAudit).catch((err: unknown) => {
-        console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
-      });
-      res.status(200).json({
-        dryRun: false, mode, clientId, runId, correlationId,
-        status:  "cancelled",
-        message: "Run was cancelled cooperatively before completing all provider stages.",
-        elapsedMs,
-      });
-      return;
-    }
-
-    // ── C6: Update snapshot with final status + correlation_id ─────────────
-    updateRunState(pool, runId, clientId, summary.status, { correlationId }).catch((err: unknown) => {
-      console.error("[discovery-run] State update failed:", err instanceof Error ? err.message : String(err));
-    });
-
-    // ── C6: Record lifecycle transitions ────────────────────────────────────
-    const transSeq = await nextTransitionSeq(pool, runId, clientId).catch(() => 1);
-    const transRecord = buildTransitionRecord({
-      runId, clientId, seq: transSeq,
-      fromState:  "running",
-      toState:    summary.status as "complete" | "partial" | "failed",
-      reasonCode: summary.status === "complete"  ? "execution_complete"
-                : summary.status === "partial"   ? "provider_partial_failure"
-                :                                  "execution_failed",
-      message:    `Run ${summary.status} in ${elapsedMs}ms. ` +
-                  `Signals: ${summary.signals.accepted}/${summary.signals.received}.`,
-      actorType:  "system",
-      actorId:    "discovery-pipeline",
-      correlationId,
-      metadata: {
-        elapsedMs,
-        signalsAccepted:  summary.signals.accepted,
-        clustersCreated:  summary.clusters.created,
-        opportunitiesCreated: summary.opportunities.created,
-      },
-    });
-    appendTransition(pool, transRecord).catch((err: unknown) => {
-      console.error("[discovery-run] Transition write failed:", err instanceof Error ? err.message : String(err));
-    });
-
-    // ── C6: Diagnostic event for run completion ─────────────────────────────
-    const diagSeqRes = await pool.query<{ max: string | null }>(
-      `SELECT MAX(seq) AS max FROM discovery_diagnostics WHERE run_id=$1 AND client_id=$2`,
-      [runId, clientId],
-    ).catch(() => ({ rows: [{ max: null }] }));
-    const diagSeq = diagSeqRes.rows[0]?.max == null ? 1 : parseInt(diagSeqRes.rows[0].max, 10) + 1;
-    const diagCode = summary.status === "complete"  ? "run_complete"
-                   : summary.status === "partial"   ? "run_partial"
-                   :                                  "run_failed";
-    const diagEvent = createDiagnosticEvent({
-      runId, clientId, seq: diagSeq,
-      severity:      summary.status === "failed" ? "error" : "info",
-      code:          diagCode,
-      message:       `Run ${summary.status} in ${elapsedMs}ms.`,
-      retryable:     false,
-      correlationId,
-      metadata: { elapsedMs, status: summary.status },
-    });
-    appendDiagnostic(pool, diagEvent).catch((err: unknown) => {
-      console.error("[discovery-run] Diagnostic write failed:", err instanceof Error ? err.message : String(err));
-    });
-
-    // ── Step 9: Build and save cost ledger ─────────────────────────────────
-    const ledger = new CostLedger();
-    ledger.record({
-      id:               deriveCostRecordId(summary.runId, "dataforseo", "serp_results", 1),
-      runId:            summary.runId,
-      clientId,
-      provider:         "dataforseo",
-      capability:       "serp_results",
-      endpoint:         "serp/google/organic/live/regular",
-      estimatedCostUSD: plan.estimatedCostUSD,
-      actualCostUSD:    null,
-      requestCount:     plan.estimatedApiCalls,
-      retryCount:       0,
-      success:          summary.status !== "failed",
-      errorKind:        summary.status === "failed" ? "provider_error" : null,
-      recordedAt:       new Date(),
-    });
-    saveCostRecords(ledger.getRecords(), pool).catch(err =>
-      console.error("[discovery-run] Cost record persistence failed:", err),
-    );
-
-    // ── Step 10: Execution diagnostics from orchestrator ───────────────────
-    const executionRecords = orchestrator.getExecutionRecords();
-
-    const responseBody = {
-      dryRun:     false,
-      mode,
-      clientId,
-      clientName: contentContext.clientName,
-      week:       discoveryContext.currentWeek,
-      location:   discoveryContext.location,
-      correlationId,
-      health:     { status: "configured" },
-      capabilities: describeCapabilities("dataforseo", DATAFORSEO_CAPABILITIES),
-      plan: {
-        estimatedApiCalls: plan.estimatedApiCalls,
-        estimatedCostUSD:  plan.estimatedCostUSD,
-        blockedQueries:    plan.blockedQueries,
-      },
-      budget: {
-        costCeilingUSD,
-        maxRunCeilingUSD: MAX_RUN_CEILING_USD,
-        planWithinBudget: true,
-      },
-      summary: {
-        runId:               summary.runId,
-        weekLabel:           summary.weekLabel,
-        status:              summary.status,
-        signalsReceived:     summary.signals.received,
-        signalsAccepted:     summary.signals.accepted,
-        signalsBlocked:      summary.signals.blocked,
-        clustersCreated:     summary.clusters.created,
-        opportunitiesCreated: summary.opportunities.created,
-        highPriorityCount:   summary.opportunities.highPriority,
-        providersAttempted:  summary.providersAttempted,
-        providersSucceeded:  summary.providersSucceeded,
-        providerFailures:    summary.providerFailures,
-        durationMs:          elapsedMs,
-      },
-      costLedger: ledger.toReport(),
-      diagnostics: {
-        orchestrationMode:  mode,
-        providerExecutions: executionRecords,
-      },
-    };
-
-    // C6: Save idempotency record for replay
-    if (idempotencyKey !== null) {
-      const idemId = deriveIdempotencyId(clientId, idempotencyKey, "manual_run", false);
-      const idemRecord = {
-        id:                 idemId,
-        clientId,
-        idempotencyKey,
-        operation:          "manual_run" as const,
-        requestFingerprint: deriveRequestFingerprint({ mode, costCeilingUSD, isDryRun: false }),
-        runId:              summary.runId,
-        isDryRun:           false,
-        responseStatus:     200,
-        responseBody: {
-          runId:       summary.runId,
-          status:      summary.status,
-          correlationId,
-          dryRun:      false,
-          mode,
-          clientId,
-        } as Record<string, unknown>,
-        createdAt: new Date(),
-        expiresAt: deriveIdempotencyExpiry(),
-      };
-      saveIdempotency(pool, idemRecord).catch((err: unknown) => {
-        console.error("[discovery-run] Idempotency write failed:", err instanceof Error ? err.message : String(err));
-      });
-    }
-
-    res.json(responseBody);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[discovery-run] Live run failed for client ${clientId}: ${message}`);
-
-    // C6: Audit run failure
-    const failAudit = createAuditEvent({
-      clientId, runId, action: "execution_failed",
-      actorType: "system", actorId: "discovery-pipeline", correlationId,
-      metadata: { error: message.slice(0, 200) },
-    });
-    appendAudit(pool, failAudit).catch((err: unknown) => {
-      console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
-    });
-
-    res.status(500).json({ error: "run_failed", message, correlationId });
-  } finally {
-    if (cancelPollInterval) clearInterval(cancelPollInterval);
-    if (leaseAcquired) {
-      releaseLease(pool, runId, ownerId).catch((err: unknown) => {
-        console.error("[discovery-run] Lease release failed:", err instanceof Error ? err.message : String(err));
-      });
-    }
+  if (result.status === "failed") {
+    res.status(500).json({ error: "run_failed", message: result.error, correlationId });
+    return;
   }
+
+  if (result.status === "cancelled") {
+    res.status(200).json({
+      dryRun: false, mode, clientId,
+      runId:   result.runId,
+      correlationId,
+      status:  "cancelled",
+      message: "Run was cancelled cooperatively before completing all provider stages.",
+      elapsedMs: result.elapsedMs,
+    });
+    return;
+  }
+
+  // status === "complete" | "partial"
+  const { summary, costReport, orchestrationRecords, runId, elapsedMs } = result;
+
+  const responseBody = {
+    dryRun:     false,
+    mode,
+    clientId,
+    clientName: contentContext.clientName,
+    week:       discoveryContext.currentWeek,
+    location:   discoveryContext.location,
+    correlationId,
+    health:     { status: "configured" },
+    capabilities: describeCapabilities("dataforseo", DATAFORSEO_CAPABILITIES),
+    plan: {
+      estimatedApiCalls: plan.estimatedApiCalls,
+      estimatedCostUSD:  plan.estimatedCostUSD,
+      blockedQueries:    plan.blockedQueries,
+    },
+    budget: {
+      costCeilingUSD,
+      maxRunCeilingUSD: MAX_RUN_CEILING_USD,
+      planWithinBudget: true,
+    },
+    summary: {
+      runId:                summary.runId,
+      weekLabel:            summary.weekLabel,
+      status:               summary.status,
+      signalsReceived:      summary.signals.received,
+      signalsAccepted:      summary.signals.accepted,
+      signalsBlocked:       summary.signals.blocked,
+      clustersCreated:      summary.clusters.created,
+      opportunitiesCreated: summary.opportunities.created,
+      highPriorityCount:    summary.opportunities.highPriority,
+      providersAttempted:   summary.providersAttempted,
+      providersSucceeded:   summary.providersSucceeded,
+      providerFailures:     summary.providerFailures,
+      durationMs:           elapsedMs,
+    },
+    costLedger:  costReport,
+    diagnostics: {
+      orchestrationMode:  mode,
+      providerExecutions: orchestrationRecords,
+    },
+  };
+
+  // C6: Save idempotency record for replay
+  if (idempotencyKey !== null) {
+    const idemId = deriveIdempotencyId(clientId, idempotencyKey, "manual_run", false);
+    saveIdempotency(pool, {
+      id:                 idemId,
+      clientId,
+      idempotencyKey,
+      operation:          "manual_run" as const,
+      requestFingerprint: deriveRequestFingerprint({ mode, costCeilingUSD, isDryRun: false }),
+      runId:              summary.runId,
+      isDryRun:           false,
+      responseStatus:     200,
+      responseBody: {
+        runId: summary.runId, status: summary.status,
+        correlationId, dryRun: false, mode, clientId,
+      } as Record<string, unknown>,
+      createdAt: new Date(),
+      expiresAt: deriveIdempotencyExpiry(),
+    }).catch((err: unknown) => {
+      console.error("[discovery-run] Idempotency write failed:", err instanceof Error ? err.message : String(err));
+    });
+  }
+
+  res.json(responseBody);
 });
 
 export default router;

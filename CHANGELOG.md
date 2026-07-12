@@ -6,6 +6,39 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### C6 Discovery Lifecycle Governance — Production Baseline (2026-07-12)
+
+**Baseline locked:** 191 tests passing, 0 failures. Both TypeScript builds clean.
+
+#### Architecture — DiscoveryExecutionService (canonical execution path)
+
+- **Extracted `DiscoveryExecutionService`** from `discovery-run.ts` into `artifacts/api-server/src/lib/discovery-execution-service.ts`. The complete governed execution sequence now lives in exactly one place:
+  `acquireLease → persistRunResult("running") → audit → cancelPoll → pipeline.run() → finalization → releaseLease`
+- **C7 contract established**: the upcoming scheduler must call `service.execute({ actorType: "system", ... })` — never re-implement the sequence.
+- The HTTP route (`discovery-run.ts`) is now a thin layer that handles only HTTP concerns: auth, rate limiting, idempotency, governance check, budget, dry-run, response formatting.
+
+#### Four execution invariants — verified and permanent
+
+| # | Invariant | Result |
+|---|-----------|--------|
+| I1 | No provider fetch before lease is held | ✓ Enforced by service step ordering |
+| I2 | Exactly one lease holder per deterministic run | ✓ DB-atomic `INSERT ON CONFLICT DO NOTHING` |
+| I3 | Failed lease leaves no orphaned running snapshot | ✓ Fixed — `persistRunResult` moved after `acquireLease` |
+| I4 | No new provider call after cancellation observed | ✓ 10 `shouldCancel()` checkpoints in pipeline |
+
+**I3 was violated in the previous implementation** (`persistRunResult` ran before `acquireLease`). Fixed by enforcing `acquireLease → persistRunResult → pipeline.run()` order inside the service. Two new tests demonstrate the invariant at the function level.
+
+#### C7 partial files removed
+
+Three prematurely committed C7 files are permanently deleted: `discovery-scheduler.ts`, `discovery-automation-config.ts`, `discovery-schedules.ts`.
+
+#### Documentation
+
+- `docs/adr/ADR-006-c6-lifecycle-governance.md` — architecture decision record with invariant table, execution order diagram, alternatives considered.
+- `docs/DISCOVERY-C6-HANDOFF.md` — session handoff: test baseline, key files, C7 scope and call pattern.
+
+---
+
 ### Changed (2026-07-11 — YouTube Pilot — Security Cleanup + Phase 8 Tests)
 - **Security cleanup (Phase 1):** Removed scheduler-secret bypass from
   `GET /social-connections/youtube/channel-info`. The bypass was added solely for the

@@ -5,6 +5,9 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
+import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
 
 // ── Brand ─────────────────────────────────────────────────────────────────────
 const B = {
@@ -281,25 +284,13 @@ export default function ApollosPage() {
   const apiFetch = useApiFetch();
 
   // ── Live data queries ────────────────────────────────────────────────────────
-  const ciQuery = useQuery<{ metrics: { total_calls: number; missed_calls: number; leads_captured: number } }>({
-    queryKey: ["apollos-ci"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/call-intelligence?period=30days"),
-  });
-  const leadsQuery = useQuery<{ stats: { total: number; active: number; thisMonth: number } }>({
-    queryKey: ["apollos-leads"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/leads"),
-  });
-  const postsQuery = useQuery<{ posts?: { status: string }[] } | { status: string }[]>({
-    queryKey: ["apollos-posts"], staleTime: 60_000, retry: 1,
-    queryFn: () => apiFetch("/social-posts"),
-  });
+  const ciQuery    = useCallIntelligenceQuery("30days", { retry: 1 });
+  const leadsQuery = useLeadsQuery({ retry: 1 });
+  const postsQuery = useSocialPostsQuery({ retry: 1 });
 
   const ci       = ciQuery.data;
   const leads    = leadsQuery.data;
-  const rawPosts = postsQuery.data;
-  const posts: { status: string }[] = rawPosts
-    ? (Array.isArray(rawPosts) ? rawPosts : (rawPosts as any).posts ?? [])
-    : [];
+  const posts    = postsQuery.data ?? [];
 
   const hasLiveCalls   = (ci?.metrics.total_calls ?? 0) > 0;
   const hasLiveLeads   = (leads?.stats.total ?? 0) > 0;

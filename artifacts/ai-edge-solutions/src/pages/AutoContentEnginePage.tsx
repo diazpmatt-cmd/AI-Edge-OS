@@ -6,6 +6,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/StatusBadge";
+import { getSocialProvider } from "@/lib/social-providers";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -72,15 +73,18 @@ const FREQUENCY_OPTIONS = [
   { value: "3x_week",         label: "3× per week",      desc: "6 posts over 14 days"  },
 ];
 
+// "google" is a page-local alias for the canonical "google_business" provider ID.
+// Colors are display-tuned dark-background variants; icons from canonical registry.
 const PLATFORM_OPTIONS = [
-  { value: "facebook",         label: "Facebook",  icon: "f", color: "#6B9EFF" },
-  { value: "instagram",        label: "Instagram", icon: "✦", color: "#FF6B9D" },
-  { value: "google",           label: "Google",    icon: "G", color: "#EA4335" },
+  { value: "facebook", label: "Facebook",  icon: getSocialProvider("facebook").icon,        color: "#6B9EFF" },
+  { value: "instagram", label: "Instagram", icon: getSocialProvider("instagram").icon,       color: "#FF6B9D" },
+  { value: "google",   label: "Google",    icon: getSocialProvider("google_business").icon,  color: "#EA4335" },
 ];
 
 const APPROVAL_OPTIONS = [
-  { value: "auto_schedule", label: "Auto schedule", desc: "Posts saved as scheduled (recommended)" },
-  { value: "draft_only",    label: "Draft only",    desc: "All posts saved as drafts for review" },
+  { value: "approval_required", label: "Approval Required", desc: "Posts queued for review — must be approved before scheduling (recommended for BB&B)" },
+  { value: "draft_only",        label: "Draft Only",        desc: "Posts saved as drafts — no approval queue, no automatic scheduling" },
+  { value: "auto_schedule",     label: "Full Autopilot",    desc: "Posts scheduled automatically — enable only when ready" },
 ];
 
 const TONE_OPTIONS = [
@@ -129,6 +133,8 @@ const DEFAULT_SETTINGS: Settings = {
   autoGenerateEnabled: false, enginePaused: false, usedCombos: [], lastGeneratedAt: null,
 };
 
+// BB&B preset — topics sourced from canonical service registry (no local array).
+// Termites and wildlife are intentionally excluded (coming_soon / disabled).
 const BED_BUGS_PRESET: Settings = {
   clientName: "Bed Bugs & Beyond",
   industry: "pest_control",
@@ -138,13 +144,16 @@ const BED_BUGS_PRESET: Settings = {
     "Elberta, AL", "Lillian, AL", "Perdido Beach, AL",
   ],
   topics: [
-    "Bed Bugs", "Roaches", "Ants", "Fleas", "Ticks",
-    "Rats", "Mice", "Wasps", "Spiders", "Mosquitoes", "Moles",
+    "Bed Bug Inspection", "Bed Bug Treatment",
+    "Roach Control", "Rodent Control (Rats & Mice)", "Mosquito Control",
+    "Commercial Pest Control", "Fumigation",
+    "Ant Control", "Flea Control", "Tick Control",
+    "Wasp & Hornet Control", "Spider Control", "Mole Control",
   ],
   frequency: "every_other_day",
   postingTimes: ["08:00", "12:00", "17:00"],
   platforms: ["facebook", "google"],
-  approvalMode: "auto_schedule",
+  approvalMode: "approval_required",
   ctaText: "Call Now \u2014 (251) 324-9090",
   ctaPreference: "call_now",
   toneStyle: ["professional", "educational", "urgent", "friendly"],
@@ -696,7 +705,7 @@ export default function AutoContentEnginePage() {
                   items={settings.topics}
                   onRemove={i => set("topics", settings.topics.filter((_, idx) => idx !== i))}
                   onAdd={v => set("topics", [...settings.topics, v])}
-                  placeholder="e.g. Termites"
+                  placeholder="e.g. Bed Bug Inspection"
                 />
               </div>
 
@@ -785,12 +794,12 @@ export default function AutoContentEnginePage() {
                     return (
                       <button key={p.value} onClick={() => toggleArr("platforms", p.value)} style={{
                         display: "flex", alignItems: "center", gap: 8, padding: "10px 16px",
-                        background: active ? `${p.color}20` : "rgba(255,255,255,0.04)",
-                        border: `1px solid ${active ? p.color : "rgba(255,255,255,0.08)"}`,
+                        background: active ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.04)",
+                        border: `1px solid ${active ? "rgba(0,174,239,0.45)" : "rgba(255,255,255,0.08)"}`,
                         borderRadius: 10, cursor: "pointer",
-                        color: active ? p.color : "#64748B", fontSize: 13.5, fontWeight: 600,
+                        color: active ? "#E2E8F0" : "#64748B", fontSize: 13.5, fontWeight: 600,
                       }}>
-                        <span style={{ width: 22, height: 22, borderRadius: "50%", background: active ? `${p.color}22` : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: active ? p.color : "#64748B" }}>{p.icon}</span>
+                        <span style={{ width: 22, height: 22, borderRadius: "50%", background: active ? "rgba(0,174,239,0.18)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: active ? "#00AEEF" : "#64748B" }}>{p.icon}</span>
                         {p.label} {active && <span style={{ fontSize: 12, opacity: 0.7 }}>✓</span>}
                       </button>
                     );

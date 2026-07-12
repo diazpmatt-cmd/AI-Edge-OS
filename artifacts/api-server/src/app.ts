@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttpImport from "pino-http";
 import path from "path";
 import { fileURLToPath } from "url";
+
 const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,7 +11,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import oauthCallbacksRouter from "./routes/oauth-callbacks";
-import { router as telnyxRouter } from "./routes/telnyx";
+import telnyxRouter from "./routes/telnyx";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -23,14 +24,14 @@ const app: Express = express();
 app.use(
   pinoHttp({
     logger,
-   serializers: {
-  req(req: any) {
-    return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
-  },
-  res(res: any) {
-    return { statusCode: res.statusCode };
-  },
-},
+    serializers: {
+      req(req: any) {
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+      },
+      res(res: any) {
+        return { statusCode: res.statusCode };
+      },
+    },
   }),
 );
 

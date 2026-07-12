@@ -1,26 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
+import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface CIMetrics {
-  total_calls: number; missed_calls: number; transferred_calls: number;
-  sms_conversations: number; leads_captured: number; recovery_rate: number | null;
-}
-interface CIActivity {
-  id: string; timestamp: string; caller_number: string;
-  call_type: string; outcome: string; duration_secs: number | null;
-}
-interface CIResponse { metrics: CIMetrics; recent_activity: CIActivity[]; }
-
-interface Lead {
-  id: string; phone: string; customerName: string | null; message: string | null;
-  eventType: string; status: string; createdAt: string;
-}
-interface LeadsResponse { leads: Lead[]; stats: { total: number; active: number; thisMonth: number }; }
-
-interface SocialPost { id: string; status: string; platforms: string; published_at: string | null; }
 
 interface SocialConnection { provider: string; accessToken?: string; metadata?: any; }
 
@@ -196,21 +181,9 @@ function AgentPanel({
 export default function MorningBriefPage() {
   const apiFetch = useApiFetch();
 
-  const ciQuery = useQuery<CIResponse>({
-    queryKey: ["mb-ci"],
-    queryFn: () => apiFetch("/call-intelligence?period=30days"),
-    staleTime: 60_000, retry: 1,
-  });
-  const leadsQuery = useQuery<LeadsResponse>({
-    queryKey: ["mb-leads"],
-    queryFn: () => apiFetch("/leads"),
-    staleTime: 60_000, retry: 1,
-  });
-  const postsQuery = useQuery<SocialPost[] | { posts: SocialPost[] }>({
-    queryKey: ["mb-posts"],
-    queryFn: () => apiFetch("/social-posts"),
-    staleTime: 60_000, retry: 1,
-  });
+  const ciQuery    = useCallIntelligenceQuery("30days", { retry: 1 });
+  const leadsQuery = useLeadsQuery({ retry: 1 });
+  const postsQuery = useSocialPostsQuery({ retry: 1 });
   const connectionsQuery = useQuery<SocialConnection[]>({
     queryKey: ["mb-connections"],
     queryFn: () => apiFetch("/social-connections"),
@@ -241,16 +214,12 @@ export default function MorningBriefPage() {
 
   const ci      = ciQuery.data;
   const leads   = leadsQuery.data;
-  const rawPosts = postsQuery.data;
+  const posts   = postsQuery.data ?? [];
   const connections: SocialConnection[] = Array.isArray(connectionsQuery.data) ? connectionsQuery.data : [];
   const reviewStats: ReviewStat[]       = reviewStatsQuery.data?.stats ?? [];
   const reviewReqs: ReviewRequest[]     = reviewReqQuery.data?.requests ?? [];
   const receptionist                    = receptionistQuery.data;
   const presence                        = presenceQuery.data;
-
-  const posts: SocialPost[] = rawPosts
-    ? (Array.isArray(rawPosts) ? rawPosts : (rawPosts as any).posts ?? [])
-    : [];
 
   const loading = ciQuery.isLoading || leadsQuery.isLoading || postsQuery.isLoading;
 

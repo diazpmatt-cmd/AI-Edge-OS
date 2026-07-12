@@ -95,8 +95,6 @@ const EMPTY: GorilladeskAnalytics = {
 
 export function useGorilladeskAnalytics() {
   const apiFetch = useApiFetch();
-  const apiFetchRef = useRef(apiFetch);
-  apiFetchRef.current = apiFetch;
 
   const [state, setState] = useState<FetchState>({
     data: EMPTY,
@@ -108,17 +106,16 @@ export function useGorilladeskAnalytics() {
   const loadedRef = useRef(false);
 
   const fetchAll = useCallback(() => {
-    const fn = apiFetchRef.current;
     return Promise.all([
-      fn<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
-      fn<JobsAnalytics>("/analytics/gorilladesk/jobs"),
-      fn<CustomersAnalytics>("/analytics/gorilladesk/customers"),
-      fn<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
-      fn<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
+      apiFetch<RevenueAnalytics>("/analytics/gorilladesk/revenue"),
+      apiFetch<JobsAnalytics>("/analytics/gorilladesk/jobs"),
+      apiFetch<CustomersAnalytics>("/analytics/gorilladesk/customers"),
+      apiFetch<MarketingAnalytics>("/analytics/gorilladesk/marketing"),
+      apiFetch<PaymentsAnalytics>("/analytics/gorilladesk/payments"),
     ]).then(([revenue, jobs, customers, marketing, payments]) => ({
       revenue, jobs, customers, marketing, payments,
     }));
-  }, []);
+  }, [apiFetch]);
 
   useEffect(() => {
     if (loadedRef.current) return;
@@ -159,8 +156,7 @@ export function useGorilladeskAnalytics() {
   const syncFromGorillaDesk = useCallback(async (): Promise<SyncResult | null> => {
     setState(s => ({ ...s, syncing: true }));
     try {
-      const fn = apiFetchRef.current;
-      const result = await fn<SyncResult>("/analytics/gorilladesk/sync", {
+      const result = await apiFetch<SyncResult>("/analytics/gorilladesk/sync", {
         method: "POST",
       });
       // Reload analytics data after sync
@@ -179,7 +175,7 @@ export function useGorilladeskAnalytics() {
       setState(s => ({ ...s, syncing: false }));
       throw err;
     }
-  }, [fetchAll]);
+  }, [apiFetch, fetchAll]);
 
   return { ...state, reload, syncFromGorillaDesk };
 }

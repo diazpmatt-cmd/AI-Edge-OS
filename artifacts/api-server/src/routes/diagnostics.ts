@@ -1,14 +1,148 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
-import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable } from "@workspace/db/schema";
+import { db, pool } from "@workspace/db";
+import { socialConnectionsTable, socialPostsTable, autoContentSettingsTable, integrationHealthHistoryTable } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+import {
+  HEARTBEAT_INTERVAL_MS,
+  sanitizeDetail,
+  healthScore,
+  safeMeta,
+  decideInsert,
+  parseLimit,
+} from "../lib/health-history-utils.js";
 
 const BACKUP_DIR = path.resolve(process.cwd(), "backups");
 
 const router = Router();
+
+// ── Integration Health History — raw-SQL table + index bootstrap ─────────────
+// drizzle-kit push is blocked by a pre-existing constraint conflict in the DB,
+// so we manage the table and indexes directly via pool.query on startup.
+// Composite indexes replace the original separate ones; all statements are
+// idempotent (CREATE/DROP IF EXISTS).
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS integration_health_history (
+        id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id         TEXT        NOT NULL,
+        provider        TEXT        NOT NULL,
+        status          TEXT        NOT NULL,
+        checked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_success_at TIMESTAMPTZ,
+        response_time_ms INTEGER,
+        error_code      TEXT,
+        error_message   TEXT,
+        health_score    INTEGER,
+        metadata        JSONB,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- Replace old separate indexes with composite indexes aligned to
+      -- actual query patterns (user+provider newest-first, user newest-first).
+      DROP INDEX IF EXISTS idx_ihh_user_provider;
+      DROP INDEX IF EXISTS idx_ihh_checked_at;
+      CREATE INDEX IF NOT EXISTS idx_ihh_user_provider_time
+        ON integration_health_history(user_id, provider, checked_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ihh_user_time
+        ON integration_health_history(user_id, checked_at DESC);
+    `);
+    console.log("[HEALTH-HISTORY] Table and indexes ready");
+  } catch (err) {
+    console.error("[HEALTH-HISTORY] Bootstrap failed:", err);
+  }
+})();
+
+// ── Prune guard — runs at most once per 24 h per server process ───────────────
+
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+let lastPruneAt: Date | null = null;
+
+async function maybePrune(now: Date): Promise<void> {
+  if (lastPruneAt && now.getTime() - lastPruneAt.getTime() < PRUNE_INTERVAL_MS) return;
+  lastPruneAt = now;
+  try {
+    const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      "DELETE FROM integration_health_history WHERE checked_at < $1",
+      [cutoff],
+    );
+    console.log("[HEALTH-HISTORY] Pruned records older than 90 days");
+  } catch (err) {
+    // Reset so the next request retries instead of silently skipping.
+    lastPruneAt = null;
+    console.error("[HEALTH-HISTORY] Prune failed:", err);
+  }
+}
+
+// ── Deduplication + heartbeat persistence ────────────────────────────────────
+
+async function persistHealthSnapshot(
+  userId: string,
+  platforms: Record<string, unknown>,
+  checkedAt: Date,
+): Promise<void> {
+  // Fetch the most recent stored record for each provider in one query.
+  // DISTINCT ON (provider) with ORDER BY provider, checked_at DESC returns the
+  // newest row per provider — efficient with the idx_ihh_user_provider_time index.
+  const { rows: latestRows } = await pool.query<{
+    provider: string;
+    status: string;
+    error_message: string | null;
+    health_score: number | null;
+    checked_at: Date;
+    metadata: Record<string, unknown> | null;
+  }>(
+    `SELECT DISTINCT ON (provider)
+       provider, status, error_message, health_score, checked_at, metadata
+     FROM integration_health_history
+     WHERE user_id = $1
+     ORDER BY provider, checked_at DESC`,
+    [userId],
+  );
+
+  const latestByProvider = new Map(latestRows.map(r => [r.provider, r]));
+
+  const toInsert: Array<{
+    userId: string;
+    provider: string;
+    status: string;
+    checkedAt: Date;
+    lastSuccessAt: Date | null;
+    errorMessage: string | null;
+    healthScore: number;
+    metadata: Record<string, unknown>;
+  }> = [];
+
+  for (const [provider, ph] of Object.entries(platforms)) {
+    const ph_ = ph as Record<string, unknown>;
+    const decision = decideInsert(provider, ph_, latestByProvider.get(provider), checkedAt);
+    if (!decision) continue;
+
+    toInsert.push({
+      userId,
+      provider: decision.provider,
+      status: decision.status,
+      checkedAt: decision.checkedAt,
+      lastSuccessAt: decision.lastSuccessAt,
+      errorMessage: decision.errorMessage,
+      healthScore: decision.healthScore,
+      metadata: decision.metadata,
+    });
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(integrationHealthHistoryTable).values(toInsert);
+  }
+
+  // Pruning is best-effort and must not block the health response.
+  maybePrune(checkedAt).catch(err =>
+    console.error("[HEALTH-HISTORY] Prune error:", err),
+  );
+}
 
 // ── In-memory log buffer (populated by console interception) ─────────────────
 
@@ -304,7 +438,7 @@ router.get("/diagnostics/health", async (req, res) => {
     .filter(p => p.scheduledAt && new Date(p.scheduledAt) > now)
     .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime())[0];
 
-  res.json({
+  const healthPayload = {
     platforms,
     postCounts,
     recentPosts: posts.slice(0, 50).map(p => {
@@ -340,7 +474,47 @@ router.get("/diagnostics/health", async (req, res) => {
       lastUpdated: acRow?.updatedAt?.toISOString() ?? null,
     },
     checkedAt: now.toISOString(),
-  });
+  };
+  res.json(healthPayload);
+
+  // Persist health snapshot in the background — must not block the response.
+  persistHealthSnapshot(userId, platforms, now).catch(err =>
+    console.error("[HEALTH-PERSIST] failed:", err),
+  );
+});
+
+// ── GET /diagnostics/health-history ─────────────────────────────────────────
+router.get("/diagnostics/health-history", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const provider =
+    typeof req.query.provider === "string" && req.query.provider
+      ? req.query.provider
+      : null;
+  const limit = parseLimit(req.query.limit);
+
+  try {
+    const params: any[] = [userId];
+    let query = `
+      SELECT provider, status, checked_at, last_success_at,
+             error_message, health_score, metadata
+      FROM integration_health_history
+      WHERE user_id = $1
+    `;
+    if (provider) {
+      params.push(provider);
+      query += ` AND provider = $${params.length}`;
+    }
+    params.push(limit);
+    query += ` ORDER BY checked_at DESC LIMIT $${params.length}`;
+
+    const { rows } = await pool.query(query, params);
+    res.json({ history: rows });
+  } catch (err) {
+    console.error("[HEALTH-HISTORY] Read failed:", err);
+    res.status(500).json({ error: "Failed to load health history" });
+  }
 });
 
 // ── GET /diagnostics/logs ────────────────────────────────────────────────────

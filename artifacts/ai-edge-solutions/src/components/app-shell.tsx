@@ -2,8 +2,15 @@ import { Link, useLocation } from "wouter";
 import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { Reorder, useDragControls } from "framer-motion";
 import { useTheme } from "@/contexts/theme-context";
+import {
+  loadSavedOrder,
+  saveNavOrder,
+  clearNavOrder,
+  type NavItem,
+} from "@/lib/nav-order";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 
@@ -48,6 +55,11 @@ const SECONDARY_NAV = [
 
 // All nav items combined (used for mobile header active detection)
 const ALL_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV];
+
+// Explicit typed copies used by the reorder system
+const PRIMARY_NAV_DEFAULT: NavItem[] = PRIMARY_NAV;
+const SECONDARY_NAV_DEFAULT: NavItem[] = SECONDARY_NAV;
+void ALL_NAV; // keep for mobile header detection
 
 const SIDEBAR_W = 252;
 
@@ -104,6 +116,106 @@ function NavGrid({ items, location }: { items: typeof PRIMARY_NAV; location: str
         );
       })}
     </div>
+  );
+}
+
+// ── DraggableTile — one tile in edit mode, with a drag handle ─────────────────
+// Rendered as a single-row list item (flex-column container) so axis="y" works.
+function DraggableTile({ item, location }: { item: NavItem; location: string }) {
+  const controls = useDragControls();
+  const active   = location.startsWith(item.to);
+  const lines    = item.label.split("\n");
+
+  return (
+    <Reorder.Item
+      as="div"
+      value={item}
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{
+        scale: 1.02,
+        boxShadow: `0 8px 28px ${item.accent}44`,
+        zIndex: 50,
+        opacity: 0.95,
+      }}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "10px 10px",
+        borderRadius: 10,
+        background: active
+          ? `linear-gradient(135deg, ${item.bg} 0%, ${item.bg}CC 100%)`
+          : `linear-gradient(135deg, ${item.bg} 0%, ${item.bg}99 100%)`,
+        border: active
+          ? `1.5px solid ${item.accent}`
+          : `1.5px dashed ${item.accent}55`,
+        boxShadow: active ? `0 0 10px ${item.accent}28` : "none",
+        cursor: "default",
+        userSelect: "none",
+        listStyle: "none",
+        touchAction: "none",
+      }}
+    >
+      {/* Grip handle — only element that initiates drag */}
+      <div
+        onPointerDown={e => { e.preventDefault(); controls.start(e); }}
+        style={{
+          cursor: "grab",
+          fontSize: 13,
+          color: `${item.accent}99`,
+          lineHeight: 1,
+          touchAction: "none",
+          padding: "2px 3px",
+          flexShrink: 0,
+        }}
+        aria-label="Drag to reorder"
+        role="button"
+      >
+        ⠿
+      </div>
+
+      <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>
+        {item.icon}
+      </span>
+      <div style={{ flex: 1 }}>
+        {lines.map((line, i) => (
+          <div key={i} style={{
+            fontSize: 11, fontWeight: 600, lineHeight: 1.2,
+            color: active ? "#FFFFFF" : "rgba(200,215,235,0.75)",
+            letterSpacing: "0.2px",
+          }}>
+            {line}
+          </div>
+        ))}
+      </div>
+      <span style={{ fontSize: 10, color: `${item.accent}60`, fontWeight: 700, flexShrink: 0 }}>↕</span>
+    </Reorder.Item>
+  );
+}
+
+// ── EditableNavGrid — Reorder.Group as single-column flex list ────────────────
+// NOTE: Must use flexDirection:"column", NOT CSS grid.
+// Framer Motion Reorder axis="y" compares y-coordinates to find the insertion
+// point. In a 2-column grid items in the same row share y-coordinates and the
+// algorithm breaks. A flex-column ensures every item has a unique y-offset.
+function EditableNavGrid({
+  items, location, onReorder,
+}: {
+  items: NavItem[]; location: string; onReorder: (items: NavItem[]) => void;
+}) {
+  return (
+    <Reorder.Group
+      axis="y"
+      values={items}
+      onReorder={onReorder}
+      style={{
+        display: "flex", flexDirection: "column", gap: 4,
+        listStyle: "none", margin: 0, padding: 0,
+      }}
+    >
+      {items.map(item => (
+        <DraggableTile key={item.to} item={item} location={location} />
+      ))}
+    </Reorder.Group>
   );
 }
 
@@ -237,8 +349,29 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, setTheme, colors: t, isDark } = useTheme();
   const [advOpen, setAdvOpen] = useState(false);
 
+  // ── Tile reorder state ────────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false);
+  // Lazy-init from localStorage; never read at module scope (avoids SSR issues)
+  const [orderedNav, setOrderedNav] = useState<NavItem[]>(() =>
+    loadSavedOrder(PRIMARY_NAV_DEFAULT),
+  );
+
+  const handleReorder = useCallback((items: NavItem[]) => {
+    setOrderedNav(items);
+    saveNavOrder(items);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setOrderedNav(PRIMARY_NAV_DEFAULT);
+    clearNavOrder();
+  }, []);
+
+  const handleDone = useCallback(() => {
+    setEditMode(false);
+  }, []);
+
   // Auto-open advanced section if current route lives there
-  const isInSecondary = SECONDARY_NAV.some(n => location.startsWith(n.to));
+  const isInSecondary = SECONDARY_NAV_DEFAULT.some(n => location.startsWith(n.to));
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
@@ -290,16 +423,48 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span style={{ fontSize: 10.5 }}>{isDark ? "Light" : "Dark"}</span>
             </button>
           </div>
-          <div style={{ fontSize: 9.5, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.9px", textTransform: "uppercase", marginTop: 8, opacity: 0.8 }}>
-            Command Center
+          {/* "Command Center" label + Edit Order / Done toggle */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+            <div style={{ fontSize: 9.5, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.9px", textTransform: "uppercase", opacity: 0.8 }}>
+              Command Center
+            </div>
+            <button
+              onClick={() => editMode ? handleDone() : setEditMode(true)}
+              style={{
+                padding: "2px 8px", borderRadius: 5, cursor: "pointer",
+                background: editMode ? "rgba(0,174,239,0.18)" : "transparent",
+                border: `1px solid ${editMode ? "rgba(0,174,239,0.45)" : "rgba(0,174,239,0.22)"}`,
+                color: "#00AEEF", fontSize: 9.5, fontWeight: 700,
+                letterSpacing: "0.3px", transition: "all 0.15s",
+              }}
+            >
+              {editMode ? "Done" : "Edit Order"}
+            </button>
           </div>
+          {/* Reset Order — visible in edit mode only */}
+          {editMode && (
+            <button
+              onClick={handleReset}
+              style={{
+                width: "100%", marginTop: 4, padding: "3px 0",
+                background: "transparent", border: "none", cursor: "pointer",
+                color: "rgba(148,163,184,0.5)", fontSize: 9, fontWeight: 600,
+                letterSpacing: "0.4px", textAlign: "right",
+              }}
+            >
+              ↺ Reset Order
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
         <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px 10px", scrollbarWidth: "none" }}>
 
-          {/* Primary nav */}
-          <NavGrid items={PRIMARY_NAV} location={location} />
+          {/* Primary nav — normal clickable tiles, or reorderable edit mode */}
+          {editMode
+            ? <EditableNavGrid items={orderedNav} location={location} onReorder={handleReorder} />
+            : <NavGrid items={orderedNav} location={location} />
+          }
 
           {/* Advanced / future toggle */}
           <button
@@ -325,7 +490,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {/* Secondary nav — shown when expanded or current route is secondary */}
           {(advOpen || isInSecondary) && (
             <div style={{ marginTop: 6 }}>
-              <NavGrid items={SECONDARY_NAV} location={location} />
+              <NavGrid items={SECONDARY_NAV_DEFAULT} location={location} />
             </div>
           )}
 
@@ -395,7 +560,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 32, width: "auto" }} />
         </Link>
         <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
-          {PRIMARY_NAV.slice(0, 8).map(({ to, label, accent }) => (
+          {orderedNav.slice(0, 8).map(({ to, label, accent }) => (
             <Link key={to} to={to} style={{
               padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontSize: 11,
               background: location.startsWith(to) ? `${accent}22` : "transparent",

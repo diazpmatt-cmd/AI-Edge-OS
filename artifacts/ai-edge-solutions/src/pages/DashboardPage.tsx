@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Reorder, useDragControls } from "framer-motion";
 import { useTheme } from "@/contexts/theme-context";
 import { AppShell } from "@/components/app-shell";
 import { loadProfile, type Keyword, type ArticleDraft } from "@/lib/business-data";
@@ -11,6 +12,7 @@ import { useApiFetch } from "@/lib/api";
 import { useGorilladeskAnalytics } from "@/lib/gorilladesk-analytics";
 import { AiInsightsPanel } from "@/components/AiInsightsPanel";
 import { toast } from "sonner";
+import { loadSavedDashOrder, saveDashOrder, clearDashOrder, type DashTile } from "@/lib/dashboard-order";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Telnyx analytics type
@@ -131,15 +133,15 @@ const SNAPSHOTS = [
   },
 ];
 
-const QUICK_ACTIONS = [
-  { label: "Open Lead Recovery",        icon: "📞", link: "/admin/lead-recovery",      color: "#22C55E" },
-  { label: "AI Visibility Scan",        icon: "✨", link: "/admin/ai-visibility",      color: "#3B82F6" },
-  { label: "Open Local Presence",       icon: "📍", link: "/admin/local-presence",     color: "#00AEEF" },
-  { label: "Publishing Center",         icon: "📸", link: "/admin/social-publishing",  color: "#00AEEF" },
-  { label: "View Diagnostics",          icon: "🛰", link: "/admin/diagnostics",        color: "#64748B" },
-  { label: "Auto Content Engine",       icon: "🤖", link: "/admin/auto-content",       color: "#F59E0B" },
-  { label: "Image Asset Manager",       icon: "🖼", link: "/admin/image-assets",       color: "#64748B" },
-  { label: "Connected Accounts",        icon: "⚡", link: "/admin/connections",        color: "#00AEEF" },
+const QUICK_ACTIONS_DEFAULT: DashTile[] = [
+  { id: "lead-recovery",   label: "Open Lead Recovery",   icon: "📞", link: "/admin/lead-recovery",     color: "#22C55E" },
+  { id: "ai-visibility",   label: "AI Visibility Scan",   icon: "✨", link: "/admin/ai-visibility",     color: "#3B82F6" },
+  { id: "local-presence",  label: "Open Local Presence",  icon: "📍", link: "/admin/local-presence",    color: "#00AEEF" },
+  { id: "social-pub",      label: "Publishing Center",    icon: "📸", link: "/admin/social-publishing", color: "#00AEEF" },
+  { id: "diagnostics",     label: "View Diagnostics",     icon: "🛰", link: "/admin/diagnostics",       color: "#64748B" },
+  { id: "auto-content",    label: "Auto Content Engine",  icon: "🤖", link: "/admin/auto-content",      color: "#F59E0B" },
+  { id: "image-assets",    label: "Image Asset Manager",  icon: "🖼", link: "/admin/image-assets",      color: "#64748B" },
+  { id: "connections",     label: "Connected Accounts",   icon: "⚡", link: "/admin/connections",       color: "#00AEEF" },
 ];
 
 // Activity feed — will populate with real timestamped events once modules
@@ -153,6 +155,56 @@ const NEXT_ACTIONS = [
   { rank: 4, action: "Launch review request campaign",               impact: "High", time: "1 day"  },
   { rank: 5, action: "Create Foley and Gulf Shores city pages",      impact: "High", time: "1 day"  },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Draggable quick-action tile (edit mode only)
+//
+// IMPORTANT: The Reorder.Group MUST use flexDirection:"column" (not CSS grid)
+// in edit mode. Framer Motion Reorder uses a 1-D algorithm that compares
+// y-coordinates to find the insertion point. In a 2-column CSS grid, items in
+// the same row share the same y-coordinate and the algorithm cannot distinguish
+// them — causing incorrect or no reordering. Switching to a single flex-column
+// list makes axis="y" work correctly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DraggableActionTile({ tile }: { tile: DashTile }) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      as="div"
+      value={tile}
+      dragListener={false}
+      dragControls={controls}
+      whileDrag={{ scale: 1.02, zIndex: 50, boxShadow: "0 8px 28px rgba(0,0,0,0.55)", opacity: 0.95 }}
+      style={{ listStyle: "none", touchAction: "none" }}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        background: "rgba(11,22,41,0.9)",
+        border: `1px solid ${tile.color}35`,
+        borderRadius: 10, padding: "11px 14px",
+        userSelect: "none", cursor: "default",
+      }}>
+        {/* Grip handle — sole initiator of drag; rest of card is inert */}
+        <span
+          onPointerDown={e => { e.preventDefault(); controls.start(e); }}
+          style={{
+            fontSize: 14, color: "#475569",
+            cursor: "grab",
+            touchAction: "none", flexShrink: 0, lineHeight: 1,
+            padding: "2px 4px",
+            WebkitUserSelect: "none",
+          }}
+          role="button"
+          aria-label="Drag to reorder"
+        >⠿</span>
+        <span style={{ fontSize: 16, flexShrink: 0 }}>{tile.icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1", flex: 1 }}>{tile.label}</span>
+        <span style={{ fontSize: 10, color: `${tile.color}80`, fontWeight: 700 }}>↕</span>
+      </div>
+    </Reorder.Item>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI atoms
@@ -203,6 +255,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<null | "keywords" | "plan">(null);
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "healthy">("all");
+  const [dashEditMode,    setDashEditMode]    = useState(false);
+  const [orderedActions,  setOrderedActions]  = useState<DashTile[]>(() => loadSavedDashOrder(QUICK_ACTIONS_DEFAULT));
+  const handleDashReorder = useCallback((next: DashTile[]) => {
+    setOrderedActions(next);
+    saveDashOrder(next);   // persist immediately on each reorder
+  }, []);
+  const handleDashDone  = useCallback(() => { setDashEditMode(false); }, []);
+  const handleDashReset = useCallback(() => { clearDashOrder(); setOrderedActions(QUICK_ACTIONS_DEFAULT); setDashEditMode(false); }, []);
   const { data: gd, loading: gdLoading, error: gdError, syncing: gdSyncing, lastSyncedAt, syncFromGorillaDesk } = useGorilladeskAnalytics();
   const dashApiFetch = useApiFetch();
   const { data: telnyxData, isLoading: telnyxLoading } = useQuery<TelnyxAnalytics>({
@@ -837,22 +897,66 @@ export default function DashboardPage() {
 
           {/* Quick Actions */}
           <div>
-            <SectionDivider title="Quick Actions" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {QUICK_ACTIONS.map(qa => (
-                <Link key={qa.label} to={qa.link}>
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.07)",
-                    borderRadius: 10, padding: "12px 14px", cursor: "pointer",
-                    transition: "border-color 0.15s",
-                  }}>
-                    <span style={{ fontSize: 16 }}>{qa.icon}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>{qa.label}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <SectionDivider title="Quick Actions" right={
+              <div style={{ display: "flex", gap: 6 }}>
+                {dashEditMode && (
+                  <button
+                    onClick={handleDashReset}
+                    style={{
+                      padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                      cursor: "pointer", border: "1px solid rgba(239,68,68,0.3)",
+                      background: "rgba(239,68,68,0.08)", color: "#EF4444",
+                    }}
+                  >↺ Reset</button>
+                )}
+                <button
+                  onClick={dashEditMode ? handleDashDone : () => setDashEditMode(true)}
+                  style={{
+                    padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                    cursor: "pointer",
+                    border: dashEditMode ? "1px solid rgba(0,174,239,0.4)" : "1px solid rgba(255,255,255,0.12)",
+                    background: dashEditMode ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.04)",
+                    color: dashEditMode ? "#00AEEF" : "#64748B",
+                  }}
+                >{dashEditMode ? "✓ Done" : "⠿ Edit Order"}</button>
+              </div>
+            } />
+            {dashEditMode ? (
+              /* Edit mode: single flex-column so axis="y" works correctly.
+                 CSS grid (2-col) breaks Framer Motion Reorder because items in
+                 the same row share y-coordinates — the 1-D insertion algorithm
+                 cannot distinguish them. */
+              <Reorder.Group
+                axis="y"
+                values={orderedActions}
+                onReorder={handleDashReorder}
+                as="div"
+                style={{
+                  display: "flex", flexDirection: "column", gap: 6,
+                  listStyle: "none", padding: 0, margin: 0,
+                }}
+              >
+                {orderedActions.map(tile => (
+                  <DraggableActionTile key={tile.id} tile={tile} />
+                ))}
+              </Reorder.Group>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {orderedActions.map(qa => (
+                  <Link key={qa.id} to={qa.link}>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: 10, padding: "12px 14px", cursor: "pointer",
+                      transition: "border-color 0.15s",
+                    }}>
+                      <span style={{ fontSize: 16 }}>{qa.icon}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>{qa.label}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Recent Activity */}

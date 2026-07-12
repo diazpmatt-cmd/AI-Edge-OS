@@ -1,11 +1,15 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/react";
 import { useSearch, useLocation } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { useTheme } from "@/contexts/theme-context";
 import { toast } from "sonner";
+import { SOCIAL_PROVIDERS, getSocialProvider, type SocialProviderId } from "@/lib/social-providers";
+import { PlatformStateChip, resolvePlatformUIState } from "@/components/PlatformStateChip";
+import { MediaUploader, type MediaAttachment } from "@/components/MediaUploader";
+import { resolvePreviewUrl } from "@/lib/media-config";
+import { PLATFORM_MEDIA_COMPAT } from "@/lib/media-compat";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube";
 
@@ -15,6 +19,10 @@ type SocialPost = {
   platforms: Platform[];
   imageUrl: string | null;
   videoUrl: string | null;
+  audioUrl: string | null;
+  youtubeTitle:   string | null;
+  youtubePrivacy: string | null;
+  youtubeVideoId: string | null;
   caption: string;
   captionFacebook: string | null;
   captionGoogle: string | null;
@@ -59,11 +67,13 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   failed:    { bg: "rgba(239,68,68,0.12)",   color: "#EF4444" },
 };
 
+// "google" is a page-local alias for the canonical "google_business" provider ID.
+// bg and color are display-optimized dark-background variants; icon and label from registry.
 const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; label: string }> = {
-  facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: "f", label: "Facebook" },
-  instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: "✦", label: "Instagram" },
-  google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: "G", label: "Google Business" },
-  youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: "▶", label: "YouTube" },
+  facebook:  { bg: "rgba(59,130,246,0.18)",  color: "#3B82F6", icon: getSocialProvider("facebook").icon,        label: getSocialProvider("facebook").shortLabel },
+  instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: getSocialProvider("instagram").icon,       label: getSocialProvider("instagram").shortLabel },
+  google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: getSocialProvider("google_business").icon, label: "Google Business" },
+  youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: getSocialProvider("youtube").icon,         label: getSocialProvider("youtube").shortLabel },
 };
 
 function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | null; error?: string }> {
@@ -87,10 +97,6 @@ function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | 
   ]));
 }
 
-const COMING_SOON_PLATFORMS = [
-  { key: "tiktok",  label: "TikTok",         icon: "♪", color: "#69C9D0", note: "Video + creator integration" },
-];
-
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -107,14 +113,15 @@ function fmtDate(iso: string | null) {
 }
 
 const MAX_CAPTION = 2200;
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
 
 const EMPTY_FORM = {
   clientName:   "Bed Bugs & Beyond",
   platforms:    ["facebook"] as Platform[],
   imageUrl:     null as string | null,
   videoUrl:     "" as string,
+  audioUrl:     null as string | null,
+  youtubeTitle:   "" as string,
+  youtubePrivacy: "private" as string,
   caption:      "",
   ctaType:      "call_now",
   ctaValue:     "(251) 324-9090",
@@ -140,9 +147,7 @@ type MetaPublishStatus = {
 
 export default function SocialPublishingPage() {
   const authFetch  = useApiFetch();
-  const { getToken } = useAuth();
   const qc         = useQueryClient();
-  const fileRef    = useRef<HTMLInputElement>(null);
   const search     = useSearch();
   const [, navigate] = useLocation();
   const { colors: t } = useTheme();
@@ -150,8 +155,6 @@ export default function SocialPublishingPage() {
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
   const [form,          setForm]          = useState({ ...EMPTY_FORM });
-  const [uploadState,   setUploadState]   = useState<"idle" | "uploading" | "done" | "error">("idle");
-  const [uploadError,   setUploadError]   = useState<string | null>(null);
   const [publishingId,      setPublishingId]      = useState<string | null>(null);
   const [publishResult,     setPublishResult]     = useState<{ ok: boolean; msg: string } | null>(null);
   const [publishStatusOpen, setPublishStatusOpen] = useState(false);
@@ -220,6 +223,15 @@ export default function SocialPublishingPage() {
     retry: 1,
   });
 
+  // Social connections — shared cache key with ConnectionsPage
+  const { data: connections = [] } = useQuery<Array<{ id: string; provider: string; accountName: string | null }>>({
+    queryKey: ["social_connections"],
+    queryFn: () => authFetch<Array<{ id: string; provider: string; accountName: string | null }>>("/social-connections"),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+  const connectedProviders = new Set(connections.map(c => c.provider));
+
   // Handle ?connected=facebook&status=success redirect from OAuth upgrade flow
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -236,8 +248,6 @@ export default function SocialPublishingPage() {
     setShowForm(false);
     setEditId(null);
     setForm({ ...EMPTY_FORM });
-    setUploadState("idle");
-    setUploadError(null);
   };
 
   const startEdit = (post: SocialPost) => {
@@ -247,56 +257,39 @@ export default function SocialPublishingPage() {
       platforms:    post.platforms,
       imageUrl:     post.imageUrl,
       videoUrl:     post.videoUrl ?? "",
+      audioUrl:     post.audioUrl ?? null,
+      youtubeTitle:   post.youtubeTitle   ?? "",
+      youtubePrivacy: post.youtubePrivacy ?? "private",
       caption:      post.caption,
       ctaType:      post.ctaType,
       ctaValue:     post.ctaValue ?? "",
       scheduleMode: post.scheduledAt ? "later" : "now",
       scheduledAt:  post.scheduledAt ? post.scheduledAt.slice(0, 16) : "",
     });
-    setUploadState(post.imageUrl ? "done" : "idle");
-    setUploadError(null);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const uploadFile = useCallback(async (file: File) => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setUploadError("Only JPG, PNG, WEBP, or GIF files are allowed.");
+  // Derive current media attachment from form fields (for MediaUploader)
+  const currentMedia = useMemo((): MediaAttachment | null => {
+    if (form.imageUrl) return { objectPath: form.imageUrl, kind: "image", mimeType: "image/jpeg", filename: "", byteSize: 0 };
+    if (form.videoUrl) return { objectPath: form.videoUrl, kind: "video", mimeType: "video/mp4", filename: "", byteSize: 0 };
+    if (form.audioUrl) return { objectPath: form.audioUrl, kind: "audio", mimeType: "audio/mpeg", filename: "", byteSize: 0 };
+    return null;
+  }, [form.imageUrl, form.videoUrl, form.audioUrl]);
+
+  const handleMediaChange = useCallback((att: MediaAttachment | null) => {
+    if (!att) {
+      setForm(f => ({ ...f, imageUrl: null, videoUrl: "", audioUrl: null }));
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadError("Image is too large. Maximum size is 10 MB.");
-      return;
-    }
-    setUploadError(null);
-    setUploadState("uploading");
-    setForm(f => ({ ...f, imageUrl: null }));
-
-    try {
-      const token = await getToken().catch(() => null);
-      const formData = new FormData();
-      formData.append("image", file);
-      const res = await fetch(`${BASE}/api/social-posts/upload-image`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        credentials: "include",
-      });
-      const data = await res.json() as any;
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setForm(f => ({ ...f, imageUrl: data.imageUrl }));
-      setUploadState("done");
-    } catch (e: any) {
-      setUploadError(e.message ?? "Upload failed. Try again.");
-      setUploadState("error");
-    }
-  }, [getToken]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
-  };
+    setForm(f => ({
+      ...f,
+      imageUrl: att.kind === "image" ? att.objectPath : null,
+      videoUrl: att.kind === "video" ? att.objectPath : "",
+      audioUrl: att.kind === "audio" ? att.objectPath : null,
+    }));
+  }, []);
 
   const togglePlatform = (p: Platform) =>
     setForm(f => ({
@@ -308,7 +301,10 @@ export default function SocialPublishingPage() {
     clientName:  form.clientName,
     platforms:   form.platforms,
     imageUrl:    form.imageUrl,
-    videoUrl:    form.videoUrl.trim() || null,
+    videoUrl:       form.videoUrl.trim() || null,
+    audioUrl:       form.audioUrl || null,
+    youtubeTitle:   form.platforms.includes("youtube") ? form.youtubeTitle.trim() || null : null,
+    youtubePrivacy: form.platforms.includes("youtube") ? form.youtubePrivacy || "private" : null,
     caption:     form.caption,
     ctaType:     form.ctaType,
     ctaValue:    form.ctaValue || null,
@@ -343,9 +339,8 @@ export default function SocialPublishingPage() {
     else if (p.status === "failed")                            counts.failed++;
   }
 
-  const isUploading   = uploadState === "uploading";
-  const canSave       = !saveMut.isPending && !isUploading;
-  const canPublish    = canSave && !publishMut.isPending && form.platforms.length > 0 && !!form.caption.trim();
+  const canSave    = !saveMut.isPending;
+  const canPublish = canSave && !publishMut.isPending && form.platforms.length > 0 && !!form.caption.trim();
 
   return (
     <AppShell>
@@ -500,32 +495,56 @@ export default function SocialPublishingPage() {
                 <div style={sectionStyle}>
                   <label style={labelStyle}>Platforms</label>
 
-                  {/* Active platforms */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {/* Platform selector — all 6 providers from canonical registry */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+
+                    {/* ── Selectable: operational providers ── */}
                     {(["facebook", "instagram", "google", "youtube"] as Platform[]).map(p => {
                       const s = PLATFORM_STYLE[p];
                       const checked = form.platforms.includes(p);
+                      const registryId: SocialProviderId = p === "google" ? "google_business" : p as SocialProviderId;
+                      const provider = getSocialProvider(registryId);
+                      const isConnected = connectedProviders.has(registryId);
+                      const uiState = resolvePlatformUIState(provider, isConnected);
                       return (
-                        <button key={p} onClick={() => togglePlatform(p)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}>
-                          <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
-                          {s.label}
-                        </button>
+                        <div key={p} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                          <button
+                            onClick={() => togglePlatform(p)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}
+                          >
+                            <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
+                            {s.label}
+                          </button>
+                          <PlatformStateChip state={uiState} showConnectLink={uiState === "disconnected"} />
+                        </div>
                       );
                     })}
 
-                    {/* Coming soon platforms */}
-                    {COMING_SOON_PLATFORMS.map(p => (
-                      <div key={p.key} title={p.note} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 8, cursor: "not-allowed", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 12.5, userSelect: "none" }}>
-                        <span style={{ fontFamily: "monospace", fontWeight: 900, color: p.color, opacity: 0.35 }}>{p.icon}</span>
-                        <span style={{ color: "#374151" }}>{p.label}</span>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: "#4B5563", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "1px 6px", letterSpacing: "0.4px", textTransform: "uppercase", marginLeft: 2 }}>Soon</span>
-                      </div>
-                    ))}
+                    {/* ── Non-selectable: pending approval / coming soon ── */}
+                    {SOCIAL_PROVIDERS
+                      .filter(p => !["facebook", "instagram", "google_business", "youtube"].includes(p.id))
+                      .map(provider => {
+                        const uiState = resolvePlatformUIState(provider, connectedProviders.has(provider.id));
+                        return (
+                          <div key={provider.id} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                            <div
+                              title={provider.status === "pending_approval"
+                                ? "Pending platform approval — publishing not yet available"
+                                : "Publishing support coming soon"}
+                              style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", borderRadius: 8, cursor: "not-allowed", background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 12.5, userSelect: "none" }}
+                            >
+                              <span style={{ fontFamily: "monospace", fontWeight: 900, color: provider.color, opacity: 0.35 }}>{provider.icon}</span>
+                              <span style={{ color: "#374151" }}>{provider.shortLabel}</span>
+                            </div>
+                            <PlatformStateChip state={uiState} />
+                          </div>
+                        );
+                    })}
                   </div>
 
                   {/* Helper text */}
                   <p style={{ margin: 0, fontSize: 11.5, color: "#4B5563", lineHeight: 1.6 }}>
-                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok coming next.
+                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok and LinkedIn are visible but not yet available for publishing.
                     {form.platforms.includes("google") && (
                       <span style={{ display: "block", marginTop: 4, color: "#EA4335", opacity: 0.8 }}>
                         Google Business: posts go to your first verified location. Connect your account in <strong>Connected Accounts</strong> if not done yet.
@@ -591,79 +610,117 @@ export default function SocialPublishingPage() {
                 </div>
               </div>
 
-              {/* RIGHT — image upload */}
+              {/* RIGHT — media upload */}
               <div style={{ padding: "24px" }}>
-                <label style={labelStyle}>Photo / Image</label>
+                <label style={labelStyle}>Media</label>
+                <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>
+                  Image (JPG/PNG/WEBP/GIF · 10 MB) · Video MP4 (100 MB) · Audio MP3 (50 MB)
+                </div>
 
-                {/* Upload error */}
-                {uploadError && (
-                  <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#EF4444", fontSize: 12 }}>
-                    ⚠ {uploadError}
-                  </div>
-                )}
-
-                {/* Uploading spinner */}
-                {isUploading && (
-                  <div style={{ border: "2px dashed rgba(0,174,239,0.3)", borderRadius: 12, padding: "40px 20px", textAlign: "center", background: "rgba(0,174,239,0.04)" }}>
-                    <div style={{ fontSize: 12, color: "#00AEEF", fontWeight: 600 }}>⏳ Uploading image…</div>
-                  </div>
-                )}
-
-                {/* Preview */}
-                {!isUploading && form.imageUrl && (
-                  <div style={{ position: "relative" }}>
-                    <img src={form.imageUrl} alt="Preview" style={{ width: "100%", borderRadius: 10, objectFit: "cover", maxHeight: 280, display: "block" }} />
-                    <button onClick={() => { setForm(f => ({ ...f, imageUrl: null })); setUploadState("idle"); setUploadError(null); }} style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                    <button onClick={() => fileRef.current?.click()} style={{ marginTop: 10, width: "100%", padding: "8px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8", fontSize: 12, cursor: "pointer" }}>Replace image</button>
-                  </div>
-                )}
-
-                {/* Drop zone */}
-                {!isUploading && !form.imageUrl && (
-                  <div
-                    onDrop={handleDrop}
-                    onDragOver={e => e.preventDefault()}
-                    onClick={() => fileRef.current?.click()}
-                    style={{ border: "2px dashed rgba(0,174,239,0.25)", borderRadius: 12, padding: "40px 20px", textAlign: "center", cursor: "pointer", background: "rgba(0,174,239,0.03)" }}
-                  >
-                    <div style={{ fontSize: 36, marginBottom: 10 }}>🖼</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>Drop image here or click to browse</div>
-                    <div style={{ fontSize: 11, color: "#475569" }}>JPG, PNG, WEBP, GIF · Max 10 MB</div>
-                  </div>
-                )}
-
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-                  style={{ display: "none" }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }}
+                <MediaUploader
+                  value={currentMedia}
+                  onChange={handleMediaChange}
                 />
 
-                {/* Video URL — required for YouTube publishing */}
+                {/* Platform / media compatibility warnings */}
+                {currentMedia && form.platforms.length > 0 && (() => {
+                  const blockers: string[] = [];
+                  const warnings: string[] = [];
+                  for (const platform of form.platforms) {
+                    const pId = platform === "google" ? "google_business" : platform;
+                    const compat = PLATFORM_MEDIA_COMPAT[pId as keyof typeof PLATFORM_MEDIA_COMPAT];
+                    if (!compat) continue;
+                    const pLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
+                    if (currentMedia.kind === "video" && platform === "youtube") {
+                      // good
+                    } else if (currentMedia.kind === "audio") {
+                      warnings.push(`${pLabel}: MP3 stored as source asset — not published directly.`);
+                    } else if (currentMedia.kind === "video" && platform !== "youtube") {
+                      warnings.push(`${pLabel}: video publishing not yet implemented.`);
+                    }
+                  }
+                  if (form.platforms.includes("youtube") && currentMedia.kind !== "video") {
+                    blockers.push("YouTube requires an MP4 video to publish.");
+                  }
+                  if (form.platforms.includes("instagram") && currentMedia.kind !== "image") {
+                    blockers.push("Instagram requires an image (JPG/PNG/WEBP/GIF).");
+                  }
+                  if (!blockers.length && !warnings.length) return null;
+                  return (
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {blockers.map((b, i) => (
+                        <div key={i} style={{ padding: "6px 10px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 11, color: "#EF4444" }}>⚠ {b}</div>
+                      ))}
+                      {warnings.map((w, i) => (
+                        <div key={i} style={{ padding: "6px 10px", borderRadius: 6, background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)", fontSize: 11, color: "#F59E0B" }}>ℹ {w}</div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* YouTube-specific fields */}
                 {form.platforms.includes("youtube") && (
-                  <div style={{ marginTop: 16 }}>
-                    <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 15 }}>▶</span> YouTube Video URL
-                    </label>
-                    <input
-                      type="url"
-                      value={form.videoUrl}
-                      onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
-                      placeholder="https://storage.googleapis.com/… or direct .mp4 URL"
-                      style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
-                    />
-                    <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-                      Direct link to an .mp4 file. YouTube requires video — image-only posts will be skipped.
+                  <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Video URL status */}
+                    <div>
+                      <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 15 }}>▶</span> YouTube Video
+                      </label>
+                      {form.videoUrl ? (
+                        <div style={{ padding: "7px 10px", borderRadius: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 11, color: "#22C55E" }}>
+                          ✓ MP4 attached · ready for upload
+                          <div style={{ marginTop: 2, fontFamily: "monospace", fontSize: 10, color: "#64748B", wordBreak: "break-all" }}>{form.videoUrl.startsWith("/objects/") ? `Object storage: ${form.videoUrl}` : form.videoUrl.slice(0, 60) + (form.videoUrl.length > 60 ? "…" : "")}</div>
+                        </div>
+                      ) : (
+                        <div style={{ padding: "7px 10px", borderRadius: 8, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", fontSize: 11, color: "#EF4444" }}>
+                          No video attached — upload an MP4 above to publish to YouTube.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* YouTube Title */}
+                    <div>
+                      <label style={labelStyle}>YouTube Title</label>
+                      <input
+                        type="text"
+                        value={form.youtubeTitle}
+                        onChange={e => setForm(f => ({ ...f, youtubeTitle: e.target.value }))}
+                        placeholder="Video title (max 100 chars) — defaults to first line of caption"
+                        maxLength={100}
+                        style={inputStyle}
+                      />
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                        <span>Set an explicit title, or leave blank to use the first 100 chars of your caption.</span>
+                        <span style={{ color: form.youtubeTitle.length > 90 ? "#F59E0B" : "#475569" }}>
+                          {form.youtubeTitle.length}/100
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Privacy */}
+                    <div>
+                      <label style={labelStyle}>Privacy</label>
+                      <select
+                        value={form.youtubePrivacy}
+                        onChange={e => setForm(f => ({ ...f, youtubePrivacy: e.target.value }))}
+                        style={{ ...inputStyle, cursor: "pointer" }}
+                      >
+                        <option value="private">🔒 Private — only you can see it</option>
+                        <option value="unlisted">🔗 Unlisted — anyone with the link</option>
+                        <option value="public">🌐 Public — visible to everyone</option>
+                      </select>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                        Use <strong>Private</strong> or <strong>Unlisted</strong> for test uploads before going public.
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* Post preview card */}
-                {(form.caption || form.imageUrl) && !isUploading && (
+                {(form.caption || form.imageUrl) && (
                   <div style={{ marginTop: 20, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10, overflow: "hidden" }}>
                     <div style={{ padding: "8px 12px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>Post Preview</div>
-                    {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", display: "block" }} />}
+                    {form.imageUrl && <img src={resolvePreviewUrl(form.imageUrl, BASE)} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", display: "block" }} />}
                     {form.caption && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "#D1D5DB", lineHeight: 1.6, maxHeight: 80, overflow: "hidden" }}>{form.caption}</div>}
                     {form.ctaType !== "none" && (
                       <div style={{ padding: "6px 12px 10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
@@ -725,7 +782,7 @@ export default function SocialPublishingPage() {
                     <div style={{ width: 64, height: 64, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                       {post.imageUrl || post.matchedImageUrl ? (
                         <>
-                          <img src={post.imageUrl ?? `${BASE}/api/storage${post.matchedImageUrl}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <img src={post.imageUrl ? resolvePreviewUrl(post.imageUrl, BASE) : `${BASE}/api/storage${post.matchedImageUrl}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           {!post.imageUrl && post.matchedImageUrl && (
                             <div style={{ position: "absolute", bottom: 2, right: 2, background: "rgba(0,174,239,0.9)", borderRadius: 3, fontSize: 7, fontWeight: 800, color: "#fff", padding: "1px 3px", lineHeight: 1 }}>AI</div>
                           )}

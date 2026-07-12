@@ -195,3 +195,52 @@ export interface RepurposeResult {
   assets: RepurposeResultAssetsItem[];
 }
 
+/**
+ * Non-sensitive provider-specific context (no tokens or secrets)
+ * @nullable
+ */
+export type IntegrationHealthHistoryItemMetadata = { [key: string]: unknown } | null;
+
+export interface IntegrationHealthHistoryItem {
+  /** Provider identifier (facebook, youtube, google_business, etc.) */
+  provider: string;
+  /** Health status: healthy | warning | failed */
+  status: string;
+  /** When this record was captured */
+  checked_at: string;
+  /**
+     * Timestamp of the last known-healthy check, or null
+     * @nullable
+     */
+  last_success_at?: string | null;
+  /**
+     * Sanitized error detail when status is not healthy, or null
+     * @nullable
+     */
+  error_message?: string | null;
+  /** Numeric score: 100=healthy, 50=warning, 0=failed */
+  health_score: number;
+  /**
+     * Non-sensitive provider-specific context (no tokens or secrets)
+     * @nullable
+     */
+  metadata?: IntegrationHealthHistoryItemMetadata;
+}
+
+export interface IntegrationHealthHistoryResponse {
+  history: IntegrationHealthHistoryItem[];
+}
+
+export type GetDiagnosticsHealthHistoryParams = {
+/**
+ * Filter to a single provider name (e.g. facebook, youtube)
+ */
+provider?: string;
+/**
+ * Maximum number of records to return (1–500, default 100)
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+};
+

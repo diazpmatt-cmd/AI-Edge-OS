@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { SOCIAL_PROVIDERS } from "@/lib/social-providers";
 
 type DbConnection = {
   id: string;
@@ -26,14 +27,15 @@ type DebugInfo = {
   source: "replit_database" | "env_secrets_only" | "not_configured";
 };
 
-const PLATFORMS = [
-  { id: "facebook",        label: "Facebook Pages",          abbrev: "f",  color: "#1877F2", bg: "linear-gradient(135deg, #1877F2, #0C5BC4)", description: "Publish posts directly to your Facebook Business Page." },
-  { id: "youtube",         label: "YouTube",                 abbrev: "▶",  color: "#FF0000", bg: "linear-gradient(135deg, #FF0000, #CC0000)", description: "Upload Shorts and videos to your YouTube channel." },
-  { id: "tiktok",          label: "TikTok Business",         abbrev: "T",  color: "#010101", bg: "linear-gradient(135deg, #010101, #25F4EE)", description: "Publish videos to your TikTok Business account." },
-  { id: "instagram",       label: "Instagram Business",      abbrev: "IG", color: "#E1306C", bg: "linear-gradient(135deg, #833AB4, #E1306C, #F77737)", description: "Publish content to your Instagram Business account." },
-  { id: "google_business", label: "Google Business Profile", abbrev: "G",  color: "#4285F4", bg: "linear-gradient(135deg, #4285F4, #34A853)", description: "Post updates and manage your Google Business listing." },
-  { id: "linkedin",        label: "LinkedIn Company Pages",  abbrev: "in", color: "#0A66C2", bg: "linear-gradient(135deg, #0A66C2, #004182)", description: "Publish updates to your LinkedIn company page." },
-];
+// Derived from canonical registry — field names kept for backward compat with JSX below
+const PLATFORMS = SOCIAL_PROVIDERS.map(p => ({
+  id:          p.id,
+  label:       p.label,
+  abbrev:      p.abbreviation,
+  color:       p.color,
+  bg:          p.gradient,
+  description: p.description,
+}));
 
 type MigrationState = {
   status: "needs_reconnect" | "needs_review" | "coming_soon" | "blocked";
@@ -831,7 +833,7 @@ export default function ConnectionsPage() {
                     background: platform.bg,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 16, fontWeight: 900, color: "#FFFFFF",
-                    boxShadow: `0 0 16px ${platform.color}33`,
+                    boxShadow: "0 0 16px rgba(255,255,255,0.08)",
                   }}>
                     {platform.abbrev}
                   </div>

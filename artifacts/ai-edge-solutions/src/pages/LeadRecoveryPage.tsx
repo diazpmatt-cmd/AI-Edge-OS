@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLeadsQuery } from "@/hooks/useLeadsQuery";
+import type { Lead } from "@/lib/shared-api-types";
 import { useTheme } from "@/contexts/theme-context";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
@@ -29,26 +31,6 @@ type TelnyxAnalytics = {
   data_source:        "live";
   period:             string;
 };
-
-type Lead = {
-  id: string;
-  clientName: string;
-  source: string;
-  phone: string;
-  customerName: string | null;
-  message: string | null;
-  eventType: string;
-  status: string;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type LeadsResponse = {
-  leads: Lead[];
-  stats: { total: number; active: number; thisMonth: number; withMessages: number };
-};
-
 
 const PIPELINE_STAGES = [
   { id: "missed_call",         label: "Missed Call",        icon: "📵", color: "#EF4444" },
@@ -181,11 +163,7 @@ export default function LeadRecoveryPage() {
   const [hoursClose, setHoursClose]     = useState("6:00 PM");
 
   // Live Telnyx leads
-  const { data, isLoading } = useQuery<LeadsResponse>({
-    queryKey: ["leads"],
-    queryFn: () => authFetch<LeadsResponse>("/leads"),
-    refetchInterval: 30000,
-  });
+  const { data, isLoading } = useLeadsQuery({ refetchInterval: 30_000 });
 
   // Telnyx analytics (real webhook data)
   const { data: telnyxData, isLoading: telnyxLoading } = useQuery<TelnyxAnalytics>({

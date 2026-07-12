@@ -1,4 +1,4 @@
-import { Router, type Response as ExpressResponse } from "express";
+import { Router } from "express";
 import { createHmac } from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -28,10 +28,16 @@ const httpFetch = globalThis.fetch as unknown as (
 // the dev frontend sees the token without requiring Facebook app-settings changes.
 async function syncToDevServer(devOrigin: string, payload: {
   provider: string; userId: string; accountName: string; accountId: string;
-  accessToken: string; metadata: string | null;
+  accessToken: string; refreshToken?: string | null; expiresAt?: string | null; metadata: string | null;
 }) {
   const secret = process.env.OAUTH_STATE_SECRET ?? process.env.CLERK_SECRET_KEY ?? "";
-  const sig = createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+  // HMAC covers only the core fields — must match what oauth-sync validates on the other end.
+  const corePayload = {
+    provider: payload.provider, userId: payload.userId,
+    accountName: payload.accountName, accountId: payload.accountId,
+    accessToken: payload.accessToken, metadata: payload.metadata ?? null,
+  };
+  const sig = createHmac("sha256", secret).update(JSON.stringify(corePayload)).digest("hex");
   const syncUrl = `${devOrigin}/api/social-connections/oauth-sync`;
 
   console.log("[DEV-SYNC ATTEMPT]", {
@@ -50,12 +56,14 @@ async function syncToDevServer(devOrigin: string, payload: {
     r = await fetch(syncUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // Extra fields (refreshToken, expiresAt) are passed alongside the signed core — oauth-sync
+      // stores them but does not include them in the signature check.
       body: JSON.stringify({ ...payload, sig }),
       signal: AbortSignal.timeout(8000),
     }) as unknown as FetchResponse;
   } catch (fetchErr: any) {
-      console.error("[DEV-SYNC ERROR]", { error: fetchErr?.message ?? String(fetchErr) });
-      throw fetchErr;
+    console.error("[DEV-SYNC ERROR]", { error: fetchErr?.message ?? String(fetchErr) });
+    throw fetchErr;
   }
 
   const body = await r.text().catch(() => "(could not read body)");
@@ -137,7 +145,7 @@ router.get("/oauth/callback-debug-log", async (req, res) => {
   res.json(getCallbackLog());
 });
 
-// ── Google / YouTube ────────────────────────────────────────────────────────[...]
+// ── Google / YouTube ──────────────────────────────────────────────────────────
 async function exchangeGoogleCode(code: string, redirectUri: string) {
   const r = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -262,6 +270,8 @@ router.get("/oauth/google/callback", async (req, res) => {
           accountName: userInfo.name ?? userInfo.email,
           accountId: userInfo.id,
           accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token ?? null,
+          expiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null,
           metadata: null,
         });
         console.log(`[GOOGLE-CALLBACK] ✓ dev-sync OK`);
@@ -680,7 +690,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
   }
 });
 
-// ── TikTok ───────────────────────────────────────────────────────────�[...]
+// ── TikTok ────────────────────────────────────────────────────────────────────
 router.get("/oauth/tiktok/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectError(res, "tiktok", error, "tiktok_callback"); return; }
@@ -727,7 +737,7 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
   }
 });
 
-// ── LinkedIn ──────────────────────────────────────────────────────────��[...] 
+// ── LinkedIn ──────────────────────────────────────────────────────────────────
 router.get("/oauth/linkedin/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) { redirectError(res, "linkedin", error, "linkedin_callback"); return; }

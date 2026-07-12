@@ -1,20 +1,39 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { getAuth } from "@clerk/express";
 import { Readable } from "stream";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { validateUploadRequest, isBlockedExtension } from "../lib/media-config";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
   const { name, size, contentType } = (req.body ?? {}) as { name?: string; size?: number; contentType?: string };
   if (!name || size == null || !contentType) {
     res.status(400).json({ error: "Missing required fields: name, size, contentType" });
     return;
   }
+
+  // Reject blocked file extensions unconditionally
+  if (isBlockedExtension(name)) {
+    res.status(400).json({ error: `File type not allowed: "${name}".` });
+    return;
+  }
+
+  // Validate MIME type, extension match, and size limits
+  const validation = validateUploadRequest(contentType, name, size);
+  if (!validation.ok) {
+    res.status(400).json({ error: validation.error.message, code: validation.error.code });
+    return;
+  }
+
   try {
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-    res.json({ uploadURL, objectPath, metadata: { name, size, contentType } });
+    res.json({ uploadURL, objectPath, metadata: { name, size, contentType: validation.normalizedMimeType } });
   } catch (error) {
     console.error("Error generating upload URL", error);
     res.status(500).json({ error: "Failed to generate upload URL" });

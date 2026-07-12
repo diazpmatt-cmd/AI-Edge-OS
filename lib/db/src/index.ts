@@ -19,4 +19,15 @@ export * from "./client-context";
 export * from "./db-service-registry-provider";
 export * from "./registry-validator";
 export * from "./scheduler-eligibility";
+
+// ── Phase C2: Discovery Engine ────────────────────────────────────────────────
+export * from "./discovery-types";
+export * from "./discovery-providers";
+export * from "./discovery-context";
+export * from "./discovery-registry-gate";
+export * from "./discovery-normalizer";
+export * from "./discovery-cluster-builder";
+export * from "./discovery-scorer";
+export * from "./discovery-pipeline";
+
 export { eq, and, or, sql } from "drizzle-orm";

@@ -16,6 +16,10 @@ const clerkPubKey = publishableKeyFromHost(
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const clerkSignInUrl         = `${basePath}${import.meta.env.VITE_CLERK_SIGN_IN_URL                  ?? "/admin/login"}`;
+const clerkSignUpUrl         = `${basePath}${import.meta.env.VITE_CLERK_SIGN_UP_URL                  ?? "/sign-up"}`;
+const clerkSignInFallbackUrl = `${basePath}${import.meta.env.VITE_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ?? "/admin/dashboard"}`;
+const clerkSignUpFallbackUrl = `${basePath}${import.meta.env.VITE_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL ?? "/admin/dashboard"}`;
 
 // ── OAuth popup close page (public — no auth, used by popup OAuth flows) ────
 const OAuthClosePage  = lazy(() => import("./pages/OAuthClosePage"));
@@ -244,7 +248,14 @@ function AppRouter() {
 function App() {
   return (
     <ThemeProvider>
-      <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}>
+      <ClerkProvider
+        publishableKey={clerkPubKey}
+        proxyUrl={clerkProxyUrl}
+        signInUrl={clerkSignInUrl}
+        signUpUrl={clerkSignUpUrl}
+        signInFallbackRedirectUrl={clerkSignInFallbackUrl}
+        signUpFallbackRedirectUrl={clerkSignUpFallbackUrl}
+      >
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
             <WouterRouter base={basePath}>

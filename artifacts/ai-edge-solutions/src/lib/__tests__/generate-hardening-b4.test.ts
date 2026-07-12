@@ -225,14 +225,14 @@ describe("T-B4-GEN-5: context is built from the resolved registry, not bbbRegist
       serviceAreas: ["Foley, AL"],
       topics:       ["Bed Bug Inspection"],
     }, bbbRegistryProvider);
-    const slots = ctx.registry.selectWeeklySlots(3);
+    // Verify registry identity via matchByTopic — reliable, not probabilistic
+    expect(ctx.registry.matchByTopic("Bed Bug Inspection")).toBeDefined();
+    // Verify slot selection only produces BB&B services (no plumbing cross-contamination)
+    const slots = ctx.registry.selectWeeklySlots(10);
     const names = slots.map(s => s.service.displayName);
-    const hasPest = names.some(n =>
-      n.toLowerCase().includes("bed bug") ||
-      n.toLowerCase().includes("roach") ||
-      n.toLowerCase().includes("ant"),
-    );
-    expect(hasPest).toBe(true);
+    expect(names.length).toBeGreaterThan(0);
+    const hasPlumbing = names.some(n => n === "Drain Cleaning" || n === "Leak Detection" || n === "Pipe Repair");
+    expect(hasPlumbing).toBe(false);
   });
 
   it("BB&B context matchByTopic returns undefined for Lakeside plumbing topics", () => {

@@ -1,7 +1,11 @@
 /**
  * Phase C3 — Discovery Persistence Schema
+ * Phase C6 — Lifecycle Governance Schema Extension
  *
- * Four tables for the canonical discovery engine persistence layer.
+ * Tables:
+ *   C3: discovery_snapshots, discovery_signals, discovery_clusters, discovery_opportunities
+ *   C6: discovery_run_transitions, discovery_run_leases, discovery_idempotency,
+ *       discovery_diagnostics, discovery_audit
  *
  * Design decisions:
  * - Text PKs (not UUIDs) for discovery_signals, discovery_clusters,
@@ -15,10 +19,12 @@
  *   does not rely exclusively on globally-unique IDs.
  * - No FK constraints (drizzle-kit push is blocked by a pre-existing constraint
  *   conflict; tables are bootstrapped via bootstrapDiscoveryTables() raw SQL).
+ * - C6 columns on discovery_snapshots are added via ALTER TABLE IF NOT EXISTS
+ *   in bootstrapC6Tables() — backward-safe for existing rows.
  *
  * NOTE: drizzle-kit push is NOT used for this schema.
- * Tables are created via bootstrapDiscoveryTables(pool) in
- * lib/db/src/discovery-drizzle-repository.ts.
+ * Tables are created via bootstrapDiscoveryTables(pool) and bootstrapC6Tables(pool)
+ * in lib/db/src/discovery-drizzle-repository.ts and discovery-c6-repository.ts.
  */
 
 import {
@@ -53,6 +59,15 @@ export const discoverySnapshotsTable = pgTable("discovery_snapshots", {
   runDurationMs:             integer("run_duration_ms").notNull().default(0),
   createdAt:                 timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt:               timestamp("completed_at", { withTimezone: true }),
+  // ── C6 additions (added via ALTER TABLE in bootstrapC6Tables) ──────────────
+  /** Correlation ID for the request/session that created this run. */
+  correlationId:             text("correlation_id"),
+  /** Timestamp when cancellation completed (distinct from cancel_requested). */
+  cancelledAt:               timestamp("cancelled_at", { withTimezone: true }),
+  /** JSON ProgressSnapshot — updated at stage boundaries. */
+  progress:                  jsonb("progress"),
+  /** Idempotency key supplied by the caller (for replay lookup). */
+  idempotencyKey:            text("idempotency_key"),
 });
 
 export type DiscoverySnapshotRow = typeof discoverySnapshotsTable.$inferSelect;
@@ -138,3 +153,112 @@ export const discoveryOpportunitiesTable = pgTable("discovery_opportunities", {
 
 export type DiscoveryOpportunityRow = typeof discoveryOpportunitiesTable.$inferSelect;
 export type InsertDiscoveryOpportunity = typeof discoveryOpportunitiesTable.$inferInsert;
+
+// ── C6: discovery_run_transitions ──────────────────────────────────────────────
+// Append-only FSM transition history for every discovery run state change.
+
+export const discoveryRunTransitionsTable = pgTable("discovery_run_transitions", {
+  /** Deterministic: "trans::{runId}::{seq}" */
+  id:            text("id").primaryKey(),
+  runId:         text("run_id").notNull(),
+  clientId:      text("client_id").notNull(),
+  seq:           integer("seq").notNull(),
+  fromState:     text("from_state").notNull(),
+  toState:       text("to_state").notNull(),
+  reasonCode:    text("reason_code").notNull(),
+  message:       text("message").notNull(),
+  actorType:     text("actor_type").notNull(),
+  actorId:       text("actor_id"),
+  correlationId: text("correlation_id"),
+  /** JSON — sanitized, no credentials. */
+  metadata:      jsonb("metadata").notNull().default({}),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DiscoveryRunTransitionRow = typeof discoveryRunTransitionsTable.$inferSelect;
+
+// ── C6: discovery_run_leases ───────────────────────────────────────────────────
+// One row per run; prevents duplicate execution.
+
+export const discoveryRunLeasesTable = pgTable("discovery_run_leases", {
+  /** FK → discovery_snapshots.id (run_id is the PK — one lease per run). */
+  runId:        text("run_id").primaryKey(),
+  clientId:     text("client_id").notNull(),
+  /** "owner::{correlationId}" */
+  ownerId:      text("owner_id").notNull(),
+  acquiredAt:   timestamp("acquired_at",  { withTimezone: true }).notNull(),
+  expiresAt:    timestamp("expires_at",   { withTimezone: true }).notNull(),
+  renewedAt:    timestamp("renewed_at",   { withTimezone: true }),
+  releasedAt:   timestamp("released_at",  { withTimezone: true }),
+});
+
+export type DiscoveryRunLeaseRow = typeof discoveryRunLeasesTable.$inferSelect;
+
+// ── C6: discovery_idempotency ──────────────────────────────────────────────────
+// One record per caller-supplied idempotency key. Enables replay.
+
+export const discoveryIdempotencyTable = pgTable("discovery_idempotency", {
+  /**
+   * Deterministic:
+   *   "idem::{clientId}::{operation}::{dry|live}::{key}"
+   */
+  id:                 text("id").primaryKey(),
+  clientId:           text("client_id").notNull(),
+  idempotencyKey:     text("idempotency_key").notNull(),
+  operation:          text("operation").notNull(),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  /** FK → discovery_snapshots.id (null for dry-run). */
+  runId:              text("run_id"),
+  isDryRun:           boolean("is_dry_run").notNull().default(false),
+  responseStatus:     integer("response_status"),
+  /** JSON — safe subset of original response; no credentials. */
+  responseBody:       jsonb("response_body"),
+  createdAt:          timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt:          timestamp("expires_at",  { withTimezone: true }).notNull(),
+});
+
+export type DiscoveryIdempotencyRow = typeof discoveryIdempotencyTable.$inferSelect;
+
+// ── C6: discovery_diagnostics ─────────────────────────────────────────────────
+// Append-only structured diagnostic events per run.
+
+export const discoveryDiagnosticsTable = pgTable("discovery_diagnostics", {
+  /** Deterministic: "diag::{runId}::{seq}" */
+  id:            text("id").primaryKey(),
+  runId:         text("run_id").notNull(),
+  clientId:      text("client_id").notNull(),
+  seq:           integer("seq").notNull(),
+  severity:      text("severity").notNull(),
+  code:          text("code").notNull(),
+  message:       text("message").notNull(),
+  stage:         text("stage"),
+  provider:      text("provider"),
+  capability:    text("capability"),
+  retryable:     boolean("retryable"),
+  correlationId: text("correlation_id"),
+  /** JSON — sanitized metadata; no credentials. */
+  metadata:      jsonb("metadata").notNull().default({}),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DiscoveryDiagnosticRow = typeof discoveryDiagnosticsTable.$inferSelect;
+
+// ── C6: discovery_audit ───────────────────────────────────────────────────────
+// Append-only, tenant-scoped audit trail for governance actions.
+
+export const discoveryAuditTable = pgTable("discovery_audit", {
+  /** Deterministic: "audit::{clientId}::{action}::{correlationFragment}" */
+  id:            text("id").primaryKey(),
+  clientId:      text("client_id").notNull(),
+  /** FK → discovery_snapshots.id (null for pre-run actions). */
+  runId:         text("run_id"),
+  action:        text("action").notNull(),
+  actorType:     text("actor_type").notNull(),
+  actorId:       text("actor_id"),
+  correlationId: text("correlation_id"),
+  /** JSON — sanitized; no credentials, no provider payloads. */
+  metadata:      jsonb("metadata").notNull().default({}),
+  createdAt:     timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DiscoveryAuditRow = typeof discoveryAuditTable.$inferSelect;

@@ -146,4 +146,187 @@ export {
   enrichOpportunity,
 } from "./discovery-enricher";
 
+// ── Phase C6: Lifecycle Governance ────────────────────────────────────────────
+
+// Schema additions (C6 tables + DiscoverySnapshotRow with new columns)
+export {
+  discoveryRunTransitionsTable,
+  discoveryRunLeasesTable,
+  discoveryIdempotencyTable,
+  discoveryDiagnosticsTable,
+  discoveryAuditTable,
+} from "./schema/discovery";
+export type {
+  DiscoveryRunTransitionRow,
+  DiscoveryRunLeaseRow,
+  DiscoveryIdempotencyRow,
+  DiscoveryDiagnosticRow,
+  DiscoveryAuditRow,
+} from "./schema/discovery";
+
+// FSM + transitions
+export {
+  validateTransition,
+  allowedNextStates,
+  isTerminalState,
+  isActiveState,
+  isCancellable,
+  normalizeRunState,
+  deriveTransitionId,
+  buildTransitionRecord,
+  deriveTransitionFingerprint,
+  assertTransition,
+  InvalidTransitionError,
+} from "./discovery-lifecycle";
+export type {
+  RunState,
+  TransitionActorType,
+  TransitionReasonCode,
+  RunTransitionRecord,
+} from "./discovery-lifecycle";
+
+// Execution lease
+export {
+  LEASE_DURATION_MS,
+  LEASE_MAX_DURATION_MS,
+  LEASE_RECOVERY_GRACE_MS,
+  DEFAULT_MAX_ACTIVE_RUNS_PER_CLIENT,
+  isLeaseExpired,
+  isLeaseRecoverable,
+  isLeaseOwner,
+  deriveLeasExpiry,
+  deriveLeaseOwnerId,
+} from "./discovery-lease";
+export type {
+  LeaseRecord,
+  LeaseAcquireResult,
+  LeaseAcquireFailureReason,
+  LeaseRenewResult,
+  LeaseReleaseResult,
+  LeaseRecoveryResult,
+} from "./discovery-lease";
+
+// Idempotency
+export {
+  IDEMPOTENCY_TTL_MS,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_PATTERN,
+  deriveIdempotencyId,
+  deriveRequestFingerprint,
+  validateIdempotencyKey,
+  isIdempotencyExpired,
+  fingerprintMatches,
+  deriveIdempotencyExpiry,
+} from "./discovery-idempotency";
+export type {
+  IdempotencyOperation,
+  IdempotencyRecord,
+  IdempotencyCheckResult,
+} from "./discovery-idempotency";
+
+// Progress
+export {
+  PIPELINE_STAGES,
+  TOTAL_PIPELINE_STAGES,
+  calculateProgress,
+  stageIndex,
+  stageIsBefore,
+  buildInitialProgress,
+  isValidProgressSnapshot,
+} from "./discovery-progress";
+export type {
+  PipelineStage,
+  StageStatus,
+  StageOutcome,
+  ProgressSnapshot,
+} from "./discovery-progress";
+
+// Diagnostics
+export {
+  sanitizeMetadata,
+  redactSecrets,
+  deriveDiagnosticId,
+  createDiagnosticEvent,
+} from "./discovery-diagnostics";
+export type {
+  DiagnosticSeverity,
+  DiagnosticCode,
+  DiagnosticEvent,
+} from "./discovery-diagnostics";
+
+// Governance
+export {
+  DEFAULT_GOVERNANCE_POLICY,
+  evaluateGovernance,
+  evaluateProviderOpLimit,
+  evaluateMergeConcurrency,
+} from "./discovery-governance";
+export type {
+  GovernancePolicy,
+  GovernanceDenyReason,
+  GovernanceResult,
+} from "./discovery-governance";
+
+// Cancellation
+export {
+  NullCancellationToken,
+  CancellationSignal,
+  shouldCancel,
+} from "./discovery-cancellation";
+export type {
+  CancellationObservationPoint,
+  CancellationReasonCode,
+  CancellationToken,
+} from "./discovery-cancellation";
+
+// Audit
+export {
+  deriveAuditId,
+  createAuditEvent,
+} from "./discovery-audit";
+export type {
+  AuditAction,
+  AuditActorType,
+  AuditEvent,
+} from "./discovery-audit";
+
+// Rate limiter (pure in-memory, no Express dependency)
+export {
+  DiscoveryRateLimiter,
+  discoveryRateLimiter,
+  DEFAULT_RATE_LIMIT_POLICIES,
+} from "./discovery-rate-limiter";
+export type {
+  RateLimitOperation,
+  RateLimitPolicy,
+  RateLimitResult,
+} from "./discovery-rate-limiter";
+
+// C6 repository (persistence)
+export {
+  bootstrapC6Tables,
+  appendTransition,
+  getTransitionHistory,
+  nextTransitionSeq,
+  updateRunState,
+  acquireLease,
+  releaseLease,
+  renewLease,
+  recoverLease,
+  getActiveRunCount,
+  checkIdempotency,
+  saveIdempotency,
+  pruneExpiredIdempotency,
+  appendDiagnostic,
+  getDiagnosticEvents,
+  appendAudit,
+  getAuditEvents,
+  getRunInspection,
+  findStaleRuns,
+} from "./discovery-c6-repository";
+export type {
+  RunInspectionResult,
+  StaleRunInfo,
+} from "./discovery-c6-repository";
+
 export { eq, and, or, sql } from "drizzle-orm";

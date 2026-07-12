@@ -29,6 +29,7 @@ import localPresenceRouter from "./local-presence";
 import adminAssetsRouter from "./admin-assets";
 import apollosRouter from "./apollos";
 import discoveryRunRouter from "./discovery-run";
+import discoveryInspectRouter from "./discovery-inspect";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(localPresenceRouter);
 router.use(adminAssetsRouter);
 router.use(apollosRouter);
 router.use(discoveryRunRouter);
+router.use(discoveryInspectRouter);
 
 export default router;

@@ -73,7 +73,25 @@ export type TargetEngine =
   | "optimization" // → Phase E: Optimization Engine
   | "measurement"; // → Phase F: Measurement Engine
 
-export type SnapshotStatus = "running" | "complete" | "failed" | "partial";
+/**
+ * C3 states (backward-compatible):
+ *   "running" | "complete" | "failed" | "partial"
+ *
+ * C6 additions:
+ *   "planned"          — queued for execution, not yet started
+ *   "queued"           — waiting for execution slot
+ *   "cancel_requested" — user requested cancellation; run may still be in-flight
+ *   "cancelled"        — fully cancelled; no further provider work
+ */
+export type SnapshotStatus =
+  | "planned"
+  | "queued"
+  | "running"
+  | "partial"
+  | "complete"
+  | "failed"
+  | "cancel_requested"
+  | "cancelled";
 
 export type OpportunityStatus = "pending" | "assigned" | "in_progress" | "complete" | "suppressed";
 

@@ -1,9 +1,10 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+import pinoHttpImport from "pino-http";
 import path from "path";
 import { fileURLToPath } from "url";
 
+const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { clerkMiddleware } from "@clerk/express";
@@ -24,8 +25,12 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) { return { id: req.id, method: req.method, url: req.url?.split("?")[0] }; },
-      res(res) { return { statusCode: res.statusCode }; },
+      req(req: any) {
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+      },
+      res(res: any) {
+        return { statusCode: res.statusCode };
+      },
     },
   }),
 );

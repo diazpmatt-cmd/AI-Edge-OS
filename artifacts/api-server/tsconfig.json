@@ -5,7 +5,8 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node", "express"],
+    "lib": ["es2022", "DOM"]
   },
   "include": ["src"],
   "exclude": ["src/__tests__"],

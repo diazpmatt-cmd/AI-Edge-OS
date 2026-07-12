@@ -8,6 +8,21 @@ import { logCallback, getCallbackLog } from "../lib/callbackDebugLog";
 import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
 
+// FetchResponse is defined explicitly to avoid accidental collisions with other
+// "Response" types that may be present in the project (for example the
+// Express Response type).  Use this type for values returned from the Fetch
+// API so TypeScript doesn't confuse them with Express Response objects.
+type FetchResponse = {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+  json<T = unknown>(): Promise<T>;
+};
+
+const httpFetch = globalThis.fetch as unknown as (
+  input: Parameters<typeof globalThis.fetch>[0],
+  init?: Parameters<typeof globalThis.fetch>[1],
+) => Promise<FetchResponse>;
 // After saving to the production DB, notify the dev server so it can sync the
 // same row to the dev DB.  This bridges the Replit dev/prod database split so
 // the dev frontend sees the token without requiring Facebook app-settings changes.
@@ -32,7 +47,11 @@ async function syncToDevServer(devOrigin: string, payload: {
     signaturePrefix: sig.slice(0, 12),
   });
 
-  let r: Response;
+  // Use the explicitly defined FetchResponse type here rather than the
+  // unqualified global "Response" name which can collide with the Express
+  // Response type.  Let inference work where possible, but when we need a
+  // variable declaration, prefer FetchResponse to keep types clear.
+  let r: FetchResponse;
   try {
     r = await fetch(syncUrl, {
       method: "POST",
@@ -41,7 +60,7 @@ async function syncToDevServer(devOrigin: string, payload: {
       // stores them but does not include them in the signature check.
       body: JSON.stringify({ ...payload, sig }),
       signal: AbortSignal.timeout(8000),
-    });
+    }) as unknown as FetchResponse;
   } catch (fetchErr: any) {
     console.error("[DEV-SYNC ERROR]", { error: fetchErr?.message ?? String(fetchErr) });
     throw fetchErr;
@@ -138,7 +157,7 @@ async function exchangeGoogleCode(code: string, redirectUri: string) {
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
-  });
+  }) as unknown as FetchResponse;
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new Error(`Token exchange failed (${r.status}): ${body}`);
@@ -149,7 +168,7 @@ async function exchangeGoogleCode(code: string, redirectUri: string) {
 async function getGoogleUserInfo(accessToken: string) {
   const r = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  }) as unknown as FetchResponse;
   if (!r.ok) throw new Error("Failed to fetch Google userinfo");
   return r.json() as Promise<{ email: string; name?: string; id: string }>;
 }
@@ -269,7 +288,7 @@ router.get("/oauth/google/callback", async (req, res) => {
         const tiR = await fetch(
           `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${tokens.access_token}`,
           { signal: AbortSignal.timeout(5000) }
-        );
+        ) as unknown as FetchResponse;
         if (tiR.ok) {
           const ti = await tiR.json() as { scope?: string; email?: string; expires_in?: number };
           const grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
@@ -297,7 +316,7 @@ router.get("/oauth/google/callback", async (req, res) => {
         const tiR = await fetch(
           `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${tokens.access_token}`,
           { signal: AbortSignal.timeout(5000) }
-        );
+        ) as unknown as FetchResponse;
         if (tiR.ok) {
           const ti = await tiR.json() as { scope?: string; email?: string; expires_in?: number };
           const grantedScopes = (ti.scope ?? "").split(" ").filter(Boolean);
@@ -322,7 +341,7 @@ router.get("/oauth/google/callback", async (req, res) => {
         const acctR = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
           signal: AbortSignal.timeout(8000),
-        });
+        }) as unknown as FetchResponse;
         const acctBody = await acctR.text();
         console.log(`[GOOGLE-VERIFY] accounts API: status=${acctR.status} body=${acctBody.slice(0, 400)}`);
 
@@ -343,7 +362,7 @@ router.get("/oauth/google/callback", async (req, res) => {
               const locR = await fetch(
                 `https://mybusinessbusinessinformation.googleapis.com/v1/${accounts[0].name}/locations?readMask=name,title`,
                 { headers: { Authorization: `Bearer ${tokens.access_token}` }, signal: AbortSignal.timeout(8000) }
-              );
+              ) as unknown as FetchResponse;
               const locBody = await locR.text();
               console.log(`[GOOGLE-VERIFY] locations API: status=${locR.status} body=${locBody.slice(0, 500)}`);
 
@@ -420,7 +439,7 @@ async function exchangeMetaCode(code: string, redirectUri: string) {
       client_secret: process.env.META_APP_SECRET ?? "",
       redirect_uri: redirectUri,
     }),
-  });
+  }) as unknown as FetchResponse;
   if (!r.ok) {
     const body = await r.text().catch(() => "");
     throw new Error(`Meta token exchange failed (${r.status}): ${body}`);
@@ -429,7 +448,7 @@ async function exchangeMetaCode(code: string, redirectUri: string) {
 }
 
 async function getMetaUserInfo(accessToken: string) {
-  const r = await fetch(`https://graph.facebook.com/me?fields=id,name&access_token=${accessToken}`);
+  const r = await fetch(`https://graph.facebook.com/me?fields=id,name&access_token=${accessToken}`) as unknown as FetchResponse;
   if (!r.ok) throw new Error("Failed to fetch Meta user info");
   return r.json() as Promise<{ id: string; name: string }>;
 }
@@ -553,7 +572,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
     let pageNames: string[] = [];
     let storedMetadata: Record<string, any> = {};
     try {
-      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${tokens.access_token}`);
+      const acctR = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token&access_token=${tokens.access_token}`) as unknown as FetchResponse;
       if (acctR.ok) {
         const acctData = await acctR.json() as { data?: Array<{ id: string; name: string; access_token: string }> };
         pagesFound = acctData.data?.length ?? 0;
@@ -569,7 +588,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
 
           // Try to get connected Instagram business account
           try {
-            const igR = await fetch(`https://graph.facebook.com/v19.0/${firstPage.id}?fields=instagram_business_account&access_token=${firstPage.access_token}`);
+            const igR = await fetch(`https://graph.facebook.com/v19.0/${firstPage.id}?fields=instagram_business_account&access_token=${firstPage.access_token}`) as unknown as FetchResponse;
             if (igR.ok) {
               const igData = await igR.json() as { instagram_business_account?: { id: string } };
               if (igData.instagram_business_account?.id) {
@@ -632,7 +651,7 @@ router.get("/oauth/meta/callback", async (req, res) => {
     let grantedScopes: string[] = [];
     let missingScopes: string[] = [];
     try {
-      const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${tokens.access_token}`);
+      const permR = await fetch(`https://graph.facebook.com/v19.0/me/permissions?access_token=${tokens.access_token}`) as unknown as FetchResponse;
       if (permR.ok) {
         const permData = await permR.json() as { data: Array<{ permission: string; status: string }> };
         grantedScopes = permData.data.filter(p => p.status === "granted").map(p => p.permission);
@@ -693,7 +712,7 @@ router.get("/oauth/tiktok/callback", async (req, res) => {
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
       }),
-    });
+    }) as unknown as FetchResponse;
     if (!r.ok) throw new Error(`TikTok token exchange failed: ${r.status}`);
     const tokens = await r.json() as any;
 
@@ -730,7 +749,7 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
 
   try {
     const redirectUri = `${getAppBase()}/api/oauth/linkedin/callback`;
-    const r = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+    const r = await httpFetch("https://www.linkedin.com/oauth/v2/accessToken", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -745,7 +764,7 @@ router.get("/oauth/linkedin/callback", async (req, res) => {
 
     const meR = await fetch("https://api.linkedin.com/v2/me?projection=(id,localizedFirstName,localizedLastName)", {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
+    }) as unknown as FetchResponse;
     const me = meR.ok ? await meR.json() as any : null;
     const accountName = me ? `${me.localizedFirstName ?? ""} ${me.localizedLastName ?? ""}`.trim() : null;
 

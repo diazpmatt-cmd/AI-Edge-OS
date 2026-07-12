@@ -40,7 +40,32 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type PlatformStatus = "not-queued" | "ready" | "success" | "failed";
+type PlatformStatus = "not-queued" | "draft-saved" | "approved" | "publishing" | "success" | "published-warning" | "failed";
+
+interface BulkPublishDelivery {
+  platform:       string;
+  deliveryId:     string;
+  status:         string;
+  externalPostId: string | null;
+  externalPostUrl: string | null;
+  errorMessage:   string | null;
+}
+
+interface BulkPublishPostResult {
+  postId:        string;
+  postStatus:    string;
+  published:     number;
+  failed:        number;
+  skipped:       number;
+  deliveries:    BulkPublishDelivery[];
+  summary:       string;
+}
+
+interface BulkPublishResult {
+  ok:      boolean;
+  results: BulkPublishPostResult[];
+  summary: string;
+}
 
 interface ContentTemplate {
   topic:     string;
@@ -287,10 +312,13 @@ const MEDIA_ICON: Record<MediaType, string> = {
 // Changing BBB_PILOT_VERSION in bbb-pilot.ts resets all users to the new defaults.
 
 const STATUS_META: Record<PlatformStatus, { dot: string; label: string; color: string }> = {
-  "not-queued": { dot: "#475569", label: "Not queued",        color: "#64748B" },
-  "ready":      { dot: "#FBBF24", label: "Ready for review",  color: "#FBBF24" },
-  "success":    { dot: "#22C55E", label: "Published",         color: "#22C55E" },
-  "failed":     { dot: "#EF4444", label: "Failed",            color: "#EF4444" },
+  "not-queued":        { dot: "#475569", label: "Not queued",             color: "#64748B" },
+  "draft-saved":       { dot: "#FBBF24", label: "Draft saved",            color: "#FBBF24" },
+  "approved":          { dot: "#A78BFA", label: "Approved",               color: "#A78BFA" },
+  "publishing":        { dot: "#F97316", label: "Publishing...",           color: "#F97316" },
+  "success":           { dot: "#22C55E", label: "Published ✓",            color: "#22C55E" },
+  "published-warning": { dot: "#FBBF24", label: "Published (partial)",    color: "#FBBF24" },
+  "failed":            { dot: "#EF4444", label: "Failed",                 color: "#EF4444" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -333,6 +361,13 @@ export default function BBBContentAutopilotPage() {
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
   const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
 
+  // V6: Production publishing workflow state
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [publishInProgress, setPublishInProgress] = useState(false);
+  const [publishResult,     setPublishResult]     = useState<BulkPublishResult | null>(null);
+  const [savedDraftIds,     setSavedDraftIds]     = useState<Map<string, string>>(new Map()); // platform → postId UUID
+  const [timeSlot,          setTimeSlot]          = useState<"now" | "morning" | "afternoon" | "evening">("now");
+
   // Platform selection — persisted in localStorage.
   // Default = BB&B pilot platforms (Facebook, Instagram, Google Business, YouTube).
   // Deferred platforms (TikTok, LinkedIn, Pinterest, Nextdoor) are excluded by default.
@@ -344,7 +379,36 @@ export default function BBBContentAutopilotPage() {
   const authFetch   = useApiFetch();
   const createDraft = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
-      authFetch<{ id: number }>("/social-posts", { method: "POST", body: JSON.stringify(data) }),
+      authFetch<{ id: string }>("/social-posts", { method: "POST", body: JSON.stringify(data) }),
+  });
+
+  // V6: bulk publish mutation (Send / Publish Selected)
+  const bulkPublish = useMutation({
+    mutationFn: (postIds: string[]) =>
+      authFetch<BulkPublishResult>("/social-posts/bulk/publish", {
+        method: "POST",
+        body:   JSON.stringify({ postIds }),
+      }),
+    onSuccess: (data) => {
+      setPublishResult(data);
+      setShowPublishDialog(false);
+      setPublishInProgress(false);
+      // Update platform status chips from delivery results
+      const newStatus: Partial<Record<SocialProviderId, PlatformStatus>> = { ...platformStatus };
+      for (const postResult of data.results) {
+        for (const delivery of postResult.deliveries) {
+          const pid = (delivery.platform === "google" ? "google_business" : delivery.platform) as SocialProviderId;
+          if      (delivery.status === "published")           newStatus[pid] = "success";
+          else if (delivery.status === "published_with_warning") newStatus[pid] = "published-warning";
+          else if (delivery.status === "failed")              newStatus[pid] = "failed";
+          else if (delivery.status === "skipped")             newStatus[pid] = "failed";
+        }
+      }
+      setPlatformStatus(newStatus);
+    },
+    onError: () => {
+      setPublishInProgress(false);
+    },
   });
 
   // Live social connections — used to derive connected/disconnected state per provider
@@ -377,18 +441,20 @@ export default function BBBContentAutopilotPage() {
 
   // ── Derived status values (SELECTED platforms only) ──
   const selectedQueueable = QUEUEABLE_PROVIDERS.filter(p => selectedPlatforms.has(p.id));
-  const anyReady   = selectedQueueable.some(p => platformStatus[p.id] === "ready");
-  const anyFailed  = selectedQueueable.some(p => platformStatus[p.id] === "failed");
-  const allReady   = selectedQueueable.length > 0 && selectedQueueable.every(p => platformStatus[p.id] === "ready");
-  const noneQueued = selectedQueueable.every(p => platformStatus[p.id] === "not-queued");
+  const anyDraftSaved = selectedQueueable.some(p => ["draft-saved", "approved", "publishing"].includes(platformStatus[p.id] ?? "not-queued"));
+  const anyFailed     = selectedQueueable.some(p => platformStatus[p.id] === "failed");
+  const anySuccess    = selectedQueueable.some(p => ["success", "published-warning"].includes(platformStatus[p.id] ?? "not-queued"));
+  const allDraftSaved = selectedQueueable.length > 0 && selectedQueueable.every(p => (platformStatus[p.id] ?? "not-queued") !== "not-queued");
+  const noneQueued    = selectedQueueable.every(p => platformStatus[p.id] === "not-queued");
+  const hasDraftsToPublish = [...savedDraftIds.values()].length > 0;
 
-  const banner = anyFailed
-    ? { color: B.red,    bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.3)",   icon: "🔴", text: "Some platforms need attention"   }
-    : allReady
-    ? { color: B.green,  bg: "rgba(34,197,94,0.08)",   border: "rgba(34,197,94,0.3)",   icon: "🟢", text: "All platforms ready for review"  }
-    : anyReady
-    ? { color: B.gold,   bg: "rgba(251,191,36,0.08)",  border: "rgba(251,191,36,0.3)",  icon: "🟡", text: "Posts ready for review"          }
-    : { color: B.dim,    bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.2)", icon: "⚪", text: "No posts queued yet"              };
+  const banner = anyFailed && !anySuccess
+    ? { color: B.red,    bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.3)",   icon: "🔴", text: "Some platforms failed — retry below"    }
+    : anySuccess
+    ? { color: B.green,  bg: "rgba(34,197,94,0.08)",   border: "rgba(34,197,94,0.3)",   icon: "🟢", text: "Published to live accounts"             }
+    : anyDraftSaved
+    ? { color: B.gold,   bg: "rgba(251,191,36,0.08)",  border: "rgba(251,191,36,0.3)",  icon: "🟡", text: "Drafts saved — click Send to publish"   }
+    : { color: B.dim,    bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.2)", icon: "⚪", text: "No posts queued yet"                     };
 
   function handleGenerate() {
     if (selectedQueueable.length === 0) return; // nothing to generate
@@ -402,7 +468,7 @@ export default function BBBContentAutopilotPage() {
 
   function queuePost(platform: SocialProviderId) {
     if (!generated) return;
-    if (!selectedPlatforms.has(platform)) return; // skip unselected
+    if (!selectedPlatforms.has(platform)) return;
     const post: QueuedPost = {
       id:        uid(),
       platform,
@@ -414,17 +480,16 @@ export default function BBBContentAutopilotPage() {
     };
     setQueue(q => [post, ...q]);
     setJustQueued(prev => [...new Set([...prev, platform])]);
-    setPlatformStatus(s => ({ ...s, [platform]: "ready" }));
+    setPlatformStatus(s => ({ ...s, [platform]: "draft-saved" }));
     setActivityLog(prev => [{
       id:       uid(),
       ts:       nowTs(),
       platform,
-      action:   `"${generated.topic}" added to review queue`,
-      status:   "ready",
+      action:   `"${generated.topic}" draft saved — ready to publish`,
+      status:   "draft-saved",
     }, ...prev]);
 
-    // V2: save to backend as a real draft in the Publishing Center
-    // Backend expects "google" (page-local alias), not "google_business" (registry ID)
+    // Save to backend as draft. Backend expects "google", not "google_business".
     const platformKey = platform === "google_business" ? "google" : platform;
     createDraft.mutate({
       caption:         captionFor(generated, "instagram"),
@@ -436,7 +501,11 @@ export default function BBBContentAutopilotPage() {
       ...(mediaAttachment?.kind === "video" && { videoUrl: mediaAttachment.objectPath }),
       ...(mediaAttachment?.kind === "audio" && { audioUrl: mediaAttachment.objectPath }),
     }, {
-      onSuccess: () => setDraftsSaved(prev => new Set([...prev, post.id])),
+      onSuccess: (row) => {
+        setDraftsSaved(prev => new Set([...prev, post.id]));
+        // Capture the UUID for later use in bulk-publish
+        setSavedDraftIds(prev => new Map([...prev, [platform, row.id]]));
+      },
     });
   }
 
@@ -479,6 +548,28 @@ export default function BBBContentAutopilotPage() {
   const isInfoTab      = !QUEUEABLE_PROVIDERS.some(p => p.id === activeTab);
   const activeProvider = SOCIAL_PROVIDERS.find(p => p.id === activeTab) ?? SOCIAL_PROVIDERS[0];
   const allQueued      = selectedQueueable.length > 0 && selectedQueueable.every(p => justQueued.includes(p.id));
+
+  // ── Pre-flight validation for confirmation dialog ──────────────────────────
+  function getPlatformWarnings(): Array<{ platform: string; icon: string; label: string; warning: string }> {
+    const warnings: Array<{ platform: string; icon: string; label: string; warning: string }> = [];
+    for (const p of selectedQueueable) {
+      const platformKey = p.id === "google_business" ? "google_business" : p.id;
+      if (!connectedProviders.has(platformKey)) {
+        warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Not connected — link account in Connected Accounts" });
+      } else if ((p.id === "youtube" || p.id === "tiktok") && !mediaAttachment?.kind?.includes("video")) {
+        warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Requires video content to publish" });
+      } else if (p.id === "instagram" && mediaAttachment?.kind === "audio") {
+        warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Instagram requires an image (audio only won't work)" });
+      }
+    }
+    return warnings;
+  }
+
+  function getPublishableCount(): number {
+    const warnings = getPlatformWarnings();
+    const blockedPlatforms = new Set(warnings.filter(w => w.warning.startsWith("Not connected")).map(w => w.platform));
+    return selectedQueueable.filter(p => !blockedPlatforms.has(p.id)).length;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -1107,6 +1198,7 @@ export default function BBBContentAutopilotPage() {
                     );
                   })}
 
+                  {/* ── Step 1: Save Drafts ── */}
                   <button
                     onClick={queueAll}
                     disabled={allQueued || selectedQueueable.length === 0}
@@ -1127,9 +1219,83 @@ export default function BBBContentAutopilotPage() {
                     {selectedQueueable.length === 0
                       ? "❌ No Platforms Selected"
                       : allQueued
-                        ? `🟢 All ${selectedQueueable.length} Selected Platforms Ready`
-                        : `⚡ Queue All ${selectedQueueable.length} Selected Platforms`}
+                        ? `✓ ${selectedQueueable.length} Drafts Saved to Publishing Center`
+                        : `📋 Step 1: Save ${selectedQueueable.length} Platform Draft${selectedQueueable.length !== 1 ? "s" : ""}`}
                   </button>
+
+                  {/* ── Time Slot Selector ── */}
+                  {hasDraftsToPublish && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>
+                        ⏰ When to Publish
+                      </div>
+                      <div style={{ display: "flex", gap: 5 }}>
+                        {(["now", "morning", "afternoon", "evening"] as const).map(slot => (
+                          <button
+                            key={slot}
+                            onClick={() => setTimeSlot(slot)}
+                            style={{
+                              flex: 1,
+                              background: timeSlot === slot ? "rgba(0,174,239,0.15)" : "rgba(255,255,255,0.03)",
+                              border: `1px solid ${timeSlot === slot ? "rgba(0,174,239,0.5)" : "rgba(255,255,255,0.1)"}`,
+                              borderRadius: 7, padding: "6px 4px",
+                              fontSize: 9, fontWeight: 700,
+                              color: timeSlot === slot ? B.blue : B.dim,
+                              cursor: "pointer", transition: "all 0.15s",
+                            }}
+                          >
+                            {slot === "now" ? "📤 Now" : slot === "morning" ? "🌅 8am" : slot === "afternoon" ? "☀️ 1pm" : "🌙 7pm"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Step 2: Send / Publish ── */}
+                  <button
+                    onClick={() => {
+                      if (!hasDraftsToPublish) return;
+                      setShowPublishDialog(true);
+                    }}
+                    disabled={!hasDraftsToPublish || publishInProgress}
+                    style={{
+                      marginTop: 4,
+                      background: !hasDraftsToPublish
+                        ? "rgba(100,116,139,0.08)"
+                        : publishInProgress
+                        ? "rgba(249,115,22,0.15)"
+                        : "linear-gradient(135deg, #00AEEF 0%, #0077B6 100%)",
+                      border: `2px solid ${!hasDraftsToPublish ? "rgba(100,116,139,0.2)" : publishInProgress ? "rgba(249,115,22,0.4)" : "rgba(0,174,239,0.7)"}`,
+                      borderRadius: 10, padding: "13px 14px",
+                      fontSize: 13, fontWeight: 900,
+                      color: !hasDraftsToPublish ? B.dim : B.white,
+                      cursor: !hasDraftsToPublish || publishInProgress ? "not-allowed" : "pointer",
+                      transition: "all 0.2s",
+                      letterSpacing: "-0.2px",
+                      boxShadow: hasDraftsToPublish && !publishInProgress ? "0 4px 20px rgba(0,174,239,0.25)" : "none",
+                    }}
+                    onMouseEnter={e => {
+                      if (!hasDraftsToPublish || publishInProgress) return;
+                      (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, #0BC5FF 0%, #0090D0 100%)";
+                      (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 24px rgba(0,174,239,0.4)";
+                    }}
+                    onMouseLeave={e => {
+                      if (!hasDraftsToPublish || publishInProgress) return;
+                      (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, #00AEEF 0%, #0077B6 100%)";
+                      (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(0,174,239,0.25)";
+                    }}
+                  >
+                    {publishInProgress
+                      ? "⏳ Publishing to live accounts..."
+                      : !hasDraftsToPublish
+                      ? "📋 Save drafts first (Step 1)"
+                      : `🚀 Step 2: Send / Publish to ${savedDraftIds.size} Platform${savedDraftIds.size !== 1 ? "s" : ""}`}
+                  </button>
+                  {hasDraftsToPublish && !publishInProgress && (
+                    <div style={{ fontSize: 10, color: B.dim, textAlign: "center" as const, marginTop: 2 }}>
+                      Opens a confirmation dialog before sending to live accounts
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1438,7 +1604,222 @@ export default function BBBContentAutopilotPage() {
             );
           })}
         </div>
+
+        {/* ── Publish Results Banner ── */}
+        {publishResult && (
+          <div style={{
+            background: publishResult.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+            border: `1px solid ${publishResult.ok ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+            borderRadius: 14, padding: "16px 20px", marginTop: 16,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: publishResult.ok ? B.green : B.red, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                  {publishResult.ok ? "✅ Publish Complete" : "⚠️ Publish — Some Issues"}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: B.white, marginTop: 4 }}>{publishResult.summary}</div>
+              </div>
+              <button
+                onClick={() => setPublishResult(null)}
+                style={{ background: "transparent", border: "none", color: B.dim, cursor: "pointer", fontSize: 18, padding: 4 }}
+              >×</button>
+            </div>
+
+            {/* Per-delivery breakdown */}
+            {publishResult.results.flatMap(r => r.deliveries).length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
+                {publishResult.results.flatMap(r => r.deliveries).map((d, i) => {
+                  const prov = SOCIAL_PROVIDERS.find(p => p.id === (d.platform === "google" ? "google_business" : d.platform));
+                  const isOk = d.status === "published";
+                  const isWarn = d.status === "published_with_warning";
+                  const dotColor = isOk ? B.green : isWarn ? B.gold : B.red;
+                  return (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      background: "rgba(255,255,255,0.04)", border: `1px solid ${dotColor}30`,
+                      borderRadius: 8, padding: "7px 12px",
+                    }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                      <span style={{ fontSize: 12 }}>{prov?.icon ?? "?"}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: B.silver }}>{prov?.abbreviation ?? d.platform}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: dotColor, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {isOk ? "Published" : isWarn ? "Partial" : d.status === "skipped" ? "Skipped" : "Failed"}
+                      </span>
+                      {d.externalPostUrl && (
+                        <a href={d.externalPostUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 9, color: B.blue, textDecoration: "none", fontWeight: 700 }}>
+                          View ↗
+                        </a>
+                      )}
+                      {d.errorMessage && (
+                        <span title={d.errorMessage} style={{ fontSize: 9, color: B.red, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                          {d.errorMessage}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ── Confirmation Dialog ── */}
+      {showPublishDialog && (
+        <div style={{
+          position: "fixed" as const, inset: 0,
+          background: "rgba(3,6,18,0.85)", backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 9999, padding: 24,
+        }}
+          onClick={e => { if (e.target === e.currentTarget) setShowPublishDialog(false); }}
+        >
+          <div style={{
+            background: "#0D1526", border: "1px solid rgba(0,174,239,0.25)",
+            borderRadius: 20, padding: "32px 36px",
+            width: "100%", maxWidth: 540,
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+          }}>
+            {/* Header */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 8 }}>
+                🚀 Confirm Publish
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: B.white, letterSpacing: "-0.4px", lineHeight: 1.2 }}>
+                Send to Live Accounts?
+              </div>
+              <div style={{ fontSize: 12, color: B.dim, marginTop: 6 }}>
+                This will immediately publish your content to the selected platforms.
+                Make sure the captions and media are ready before confirming.
+              </div>
+            </div>
+
+            {/* Platform Summary */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10 }}>
+                Platforms to Publish ({savedDraftIds.size})
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[...savedDraftIds.entries()].map(([pid, _postId]) => {
+                  const prov = SOCIAL_PROVIDERS.find(p => p.id === pid);
+                  const warnings = getPlatformWarnings();
+                  const warn = warnings.find(w => w.platform === pid);
+                  const isBlocked = warn?.warning.startsWith("Not connected");
+                  return (
+                    <div key={pid} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: isBlocked ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${isBlocked ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"}`,
+                      borderRadius: 8, padding: "8px 12px",
+                    }}>
+                      <span style={{ fontSize: 14 }}>{prov?.icon ?? "?"}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: isBlocked ? "#F87171" : B.silver }}>
+                          {prov?.label ?? pid}
+                        </div>
+                        {warn && (
+                          <div style={{ fontSize: 9, color: isBlocked ? "#F87171" : B.gold, marginTop: 2 }}>
+                            ⚠️ {warn.warning}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{
+                        fontSize: 9, fontWeight: 700,
+                        color: isBlocked ? "#F87171" : B.green,
+                        background: isBlocked ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
+                        border: `1px solid ${isBlocked ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`,
+                        borderRadius: 4, padding: "2px 7px",
+                      }}>
+                        {isBlocked ? "BLOCKED" : "READY"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Timing */}
+            <div style={{
+              background: "rgba(0,174,239,0.06)", border: "1px solid rgba(0,174,239,0.15)",
+              borderRadius: 8, padding: "10px 14px", marginBottom: 24,
+              display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: B.silver,
+            }}>
+              <span>⏰</span>
+              <span>
+                <strong style={{ color: B.white }}>Timing:</strong>{" "}
+                {timeSlot === "now"
+                  ? "Publishing immediately after confirmation"
+                  : timeSlot === "morning"
+                  ? "Scheduled for 8:00 AM today"
+                  : timeSlot === "afternoon"
+                  ? "Scheduled for 1:00 PM today"
+                  : "Scheduled for 7:00 PM today"}
+              </span>
+            </div>
+
+            {/* Warning if not all publishable */}
+            {getPublishableCount() < savedDraftIds.size && (
+              <div style={{
+                background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)",
+                borderRadius: 8, padding: "10px 14px", marginBottom: 20,
+                fontSize: 11, color: "#FCD34D",
+              }}>
+                ⚠️ <strong>{savedDraftIds.size - getPublishableCount()} platform(s)</strong> are blocked and will be skipped.
+                Only <strong>{getPublishableCount()}</strong> will publish successfully.
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowPublishDialog(false)}
+                disabled={publishInProgress}
+                style={{
+                  flex: 1, padding: "13px 0", borderRadius: 10,
+                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                  fontSize: 13, fontWeight: 700, color: B.silver,
+                  cursor: publishInProgress ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={publishInProgress || getPublishableCount() === 0}
+                onClick={() => {
+                  if (publishInProgress) return;
+                  setPublishInProgress(true);
+                  bulkPublish.mutate([...savedDraftIds.values()]);
+                }}
+                style={{
+                  flex: 2, padding: "13px 0", borderRadius: 10,
+                  background: (publishInProgress || getPublishableCount() === 0)
+                    ? "rgba(100,116,139,0.2)"
+                    : "linear-gradient(135deg, #00AEEF 0%, #0077B6 100%)",
+                  border: `2px solid ${(publishInProgress || getPublishableCount() === 0) ? "rgba(100,116,139,0.3)" : "rgba(0,174,239,0.6)"}`,
+                  fontSize: 14, fontWeight: 900, color: B.white,
+                  cursor: (publishInProgress || getPublishableCount() === 0) ? "not-allowed" : "pointer",
+                  transition: "all 0.2s",
+                  letterSpacing: "-0.3px",
+                  boxShadow: (publishInProgress || getPublishableCount() === 0) ? "none" : "0 4px 20px rgba(0,174,239,0.3)",
+                }}
+              >
+                {publishInProgress
+                  ? "⏳ Publishing..."
+                  : getPublishableCount() === 0
+                  ? "No Platforms Ready"
+                  : `🚀 Confirm & Publish to ${getPublishableCount()} Platform${getPublishableCount() !== 1 ? "s" : ""}`}
+              </button>
+            </div>
+
+            {/* Safety note */}
+            <div style={{ fontSize: 10, color: B.dim, textAlign: "center" as const, marginTop: 14 }}>
+              🔒 All posts are logged in the Publishing Center with full delivery history.
+              Failed posts can be retried individually.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

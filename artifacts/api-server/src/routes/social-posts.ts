@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { socialPostsTable, socialConnectionsTable, imageAssetsTable } from "@workspace/db/schema";
+import { socialPostsTable, socialConnectionsTable, imageAssetsTable, platformDeliveriesTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { bootstrapPlatformDeliveries, publishingService } from "../lib/publishing-service";
 import { getAuth } from "@clerk/express";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import {
@@ -16,6 +17,52 @@ import { ObjectStorageService } from "../lib/objectStorage";
 
 const router = Router();
 const objectStorageService = new ObjectStorageService();
+
+// Bootstrap platform_deliveries table + V6 columns on startup (idempotent)
+bootstrapPlatformDeliveries().catch(e =>
+  console.error("[PLATFORM-DELIVERIES] bootstrap failed:", e)
+);
+
+// ── POST /social-posts/bulk/publish ──────────────────────────────────────────
+// Approve + immediately publish one or more draft posts.
+// This is the "Send / Publish Selected" action from the Content Autopilot.
+// Each post must already exist in the DB; the route auto-approves then delegates
+// to PublishingService which enforces idempotency and delivery tracking.
+router.post("/social-posts/bulk/publish", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const b = req.body as { postIds?: string[] };
+  const postIds: string[] = Array.isArray(b.postIds) ? b.postIds : [];
+  if (!postIds.length) {
+    res.status(400).json({ error: "postIds array is required and must not be empty" });
+    return;
+  }
+
+  const port        = parseInt(process.env.PORT ?? "8080", 10);
+  const internalBase = `http://127.0.0.1:${port}`;
+
+  const results = [];
+  for (const id of postIds) {
+    // Auto-approve: clicking "Confirm & Publish" constitutes approval
+    await db.update(socialPostsTable).set({
+      approvalStatus: "approved",
+      approvedAt:     new Date(),
+      approvedBy:     userId,
+      status:         "approved",
+      updatedAt:      new Date(),
+    }).where(and(eq(socialPostsTable.id, id), eq(socialPostsTable.userId, userId)));
+
+    const result = await publishingService.publishPost(id, userId, userId, internalBase, SCHEDULER_SECRET);
+    results.push(result);
+  }
+
+  const totalPublished = results.filter(r => r.postStatus === "published").length;
+  const totalFailed    = results.filter(r => r.postStatus === "failed").length;
+  const summary = `${totalPublished} of ${results.length} post${results.length !== 1 ? "s" : ""} published successfully${totalFailed ? `; ${totalFailed} failed` : ""}.`;
+
+  res.json({ ok: totalFailed === 0, results, summary });
+});
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads", "social-posts");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -615,7 +662,7 @@ router.post("/social-posts/:id/publish", async (req, res) => {
 
   const allOk = platforms.every(p => results[p]?.ok === true);
   const anyOk = platforms.some(p => results[p]?.ok === true);
-  const newStatus = allOk ? "published" : anyOk ? "partial" : "failed";
+  const newStatus = allOk ? "published" : anyOk ? "published_with_warning" : "failed";
 
   const [updated] = await db.update(socialPostsTable).set({
     status:       newStatus,
@@ -1041,5 +1088,91 @@ function buildCaption(caption: string, ctaType: string, ctaValue: string | null)
   const label = ctaLabels[ctaType] ?? ctaType;
   return ctaValue ? `${caption}\n\n${label}: ${ctaValue}` : `${caption}\n\n${label}`;
 }
+
+// ── POST /social-posts/:id/approve ───────────────────────────────────────────
+router.post("/social-posts/:id/approve", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const [row] = await db.update(socialPostsTable).set({
+    approvalStatus: "approved",
+    approvedAt:     new Date(),
+    approvedBy:     userId,
+    status:         "approved",
+    updatedAt:      new Date(),
+  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
+  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  res.json({ ok: true, post: rowToDto(row) });
+});
+
+// ── POST /social-posts/:id/queue ─────────────────────────────────────────────
+router.post("/social-posts/:id/queue", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const [row] = await db.update(socialPostsTable).set({
+    status:    "queued",
+    updatedAt: new Date(),
+  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
+  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  res.json({ ok: true, post: rowToDto(row) });
+});
+
+// ── POST /social-posts/:id/cancel ────────────────────────────────────────────
+router.post("/social-posts/:id/cancel", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const b = req.body as { reason?: string };
+  const [row] = await db.update(socialPostsTable).set({
+    status:       "cancelled",
+    cancelledAt:  new Date(),
+    cancelledBy:  userId,
+    cancelReason: b.reason ?? null,
+    updatedAt:    new Date(),
+  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
+  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  res.json({ ok: true, post: rowToDto(row) });
+});
+
+// ── GET /social-posts/:id/deliveries ─────────────────────────────────────────
+router.get("/social-posts/:id/deliveries", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  // Verify post ownership before returning delivery records
+  const [post] = await db.select({ id: socialPostsTable.id })
+    .from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+  if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+  const deliveries = await db.select()
+    .from(platformDeliveriesTable)
+    .where(and(
+      eq(platformDeliveriesTable.postId, req.params.id),
+      eq(platformDeliveriesTable.userId, userId),
+    ))
+    .orderBy(platformDeliveriesTable.createdAt);
+  res.json(deliveries);
+});
+
+// ── POST /social-posts/:id/retry ─────────────────────────────────────────────
+// Re-approve and republish a failed post. Creates new delivery records with
+// incremented attempt_number — prior attempts are preserved for audit.
+router.post("/social-posts/:id/retry", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  // Re-approve for retry
+  await db.update(socialPostsTable).set({
+    approvalStatus: "approved",
+    approvedAt:     new Date(),
+    approvedBy:     userId,
+    status:         "approved",
+    updatedAt:      new Date(),
+  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+
+  const port         = parseInt(process.env.PORT ?? "8080", 10);
+  const internalBase = `http://127.0.0.1:${port}`;
+  const result = await publishingService.publishPost(
+    req.params.id, userId, userId, internalBase, SCHEDULER_SECRET
+  );
+  res.json(result);
+});
 
 export default router;

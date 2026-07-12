@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { socialPostsTable, leadsTable, autoContentSettingsTable, clientsTable } from "@workspace/db/schema";
 import { createWeeklyPlanId, evaluateClientEligibility, isValidIanaTimezone } from "@workspace/db";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { eq, and, gte, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
@@ -36,6 +36,9 @@ interface SchedulerCycleSummary {
 
 async function publishDuePosts(): Promise<void> {
   // Query for posts whose scheduled time has passed and are still "scheduled"
+  // T6 approval gate: only publish posts that have been explicitly approved.
+  // Posts with approvalStatus='pending' or null are held until a human (or
+  // auto-approve rule) sets approvalStatus to 'approved' or 'auto_approved'.
   const duePosts = await db
     .select({
       id:     socialPostsTable.id,
@@ -46,6 +49,7 @@ async function publishDuePosts(): Promise<void> {
       and(
         eq(socialPostsTable.status, "scheduled"),
         sql`${socialPostsTable.scheduledAt} IS NOT NULL AND ${socialPostsTable.scheduledAt} <= now()`,
+        inArray(socialPostsTable.approvalStatus, ["approved", "auto_approved"]),
       )
     );
 

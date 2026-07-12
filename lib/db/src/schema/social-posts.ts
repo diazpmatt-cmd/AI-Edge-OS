@@ -56,6 +56,16 @@ export const socialPostsTable = pgTable("social_posts", {
   generationRunId: text("generation_run_id"), // UUID grouping all posts from one scheduler run
   revenueWeight:   text("revenue_weight"),    // registry revenueWeight at generation time
   urgency:         text("urgency"),           // registry urgency at generation time
+  // V6: 3-posts-per-day scheduling
+  timeSlot:        text("time_slot"),         // 'morning' | 'afternoon' | 'evening'
+  slotIndex:       text("slot_index"),        // '0' | '1' | '2' (ordinal within the day)
+  campaignSlotKey: text("campaign_slot_key"), // e.g. '2026-W28-monday-morning' — unique slot identifier
+  postsPerDay:     text("posts_per_day"),     // '1' | '2' | '3' — how many slots were active when generated
+  // V6: Publishing actor tracking
+  publishedBy:     text("published_by"),      // Clerk userId or 'scheduler' that triggered Send/Publish
+  cancelledAt:     timestamp("cancelled_at",  { withTimezone: true }),
+  cancelledBy:     text("cancelled_by"),
+  cancelReason:    text("cancel_reason"),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

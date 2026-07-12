@@ -90,7 +90,8 @@ export type DataForSEOErrorKind =
   | "malformed_response"    // response doesn't match expected shape
   | "provider_error"        // 5xx from DataForSEO
   | "task_error"            // DataForSEO task-level error (status_code != 20000)
-  | "no_results";           // task succeeded but returned 0 results
+  | "no_results"            // task succeeded but returned 0 results
+  | "budget_rejected";      // BudgetGuard blocked the call before it was made
 
 /**
  * Typed error thrown by the DataForSEO adapter.

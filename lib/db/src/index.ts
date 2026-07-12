@@ -82,4 +82,68 @@ export {
   parseProviderFailures,
 } from "./discovery-drizzle-repository";
 
+// ── Phase C5: Capability + Orchestration + Coverage + Budget + Cost + Enrichment ──
+export {
+  DATAFORSEO_CAPABILITIES,
+  ALL_CAPABILITIES,
+  hasCapability,
+  describeCapabilities,
+} from "./discovery-capability";
+export type {
+  ProviderCapability,
+  ProviderCapabilitySet,
+  CapabilityDescription,
+} from "./discovery-capability";
+
+export {
+  UnknownCoverageProvider,
+} from "./discovery-coverage";
+export type {
+  CoverageResult,
+  SiteCoverageProvider,
+} from "./discovery-coverage";
+
+export {
+  MAX_RUN_CEILING_USD,
+  DEFAULT_RUN_CEILING_USD,
+  BudgetGuard,
+} from "./discovery-budget-guard";
+export type {
+  BudgetPolicy,
+  BudgetCheckResult,
+  BudgetBlockReason,
+  BudgetDiagnostic,
+} from "./discovery-budget-guard";
+
+export {
+  bootstrapCostTable,
+  saveCostRecords,
+  deriveCostRecordId,
+  CostLedger,
+} from "./discovery-cost-ledger";
+export type {
+  ProviderCostRecord,
+} from "./discovery-cost-ledger";
+
+export {
+  mergeSignals,
+  mergeKeywordResults,
+} from "./discovery-merger";
+
+export {
+  isRetryableError,
+  SearchOrchestrator,
+} from "./discovery-orchestrator";
+export type {
+  OrchestrationMode,
+  OrchestrationProviderEntry,
+  SearchOrchestratorConfig,
+  ProviderExecutionRecord,
+} from "./discovery-orchestrator";
+
+export {
+  extractEnrichmentFromSignals,
+  enrichOpportunity,
+} from "./discovery-enricher";
+
 export { eq, and, or, sql } from "drizzle-orm";

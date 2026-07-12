@@ -10,7 +10,7 @@
  * C9 (Reddit + PAA), C10 (Review).
  */
 
-import type { ProviderSource, SearchIntent } from "./discovery-types";
+import type { ProviderSource, SearchIntent, CoverageState } from "./discovery-types";
 import type {
   DiscoverySignal,
   DiscoveryCluster,
@@ -167,6 +167,30 @@ export interface SocialListeningProvider {
   }): Promise<RawRedditResult[]>;
 }
 
+// ── Site coverage provider (Phase C5) ─────────────────────────────────────────
+
+export interface CoverageResult {
+  state:       CoverageState;
+  reason:      string;
+  coveredUrls: string[];
+}
+
+/**
+ * Phase C5 — Site coverage provider interface.
+ * Determines whether the client already has meaningful coverage for a topic.
+ *
+ * C5 default: UnknownCoverageProvider (returns "unknown" for all topics).
+ * Phase C6: content-inventory-backed implementation.
+ */
+export interface SiteCoverageProvider {
+  readonly name: string;
+  checkCoverage(input: {
+    topic:     string;
+    clientId:  string;
+    serviceId: string | null;
+  }): Promise<CoverageResult>;
+}
+
 // ── Provider set (injected into the pipeline) ─────────────────────────────────
 
 /**
@@ -179,6 +203,8 @@ export interface DiscoveryProviderSet {
   trend?:    TrendProvider;
   aiSearch?: AISearchProvider;
   social?:   SocialListeningProvider;
+  /** Phase C5: site coverage provider. Optional — skipped when absent. */
+  coverage?: SiteCoverageProvider;
 }
 
 // ── Persistence boundary ───────────────────────────────────────────────────────

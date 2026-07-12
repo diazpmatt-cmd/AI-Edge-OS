@@ -430,6 +430,7 @@ function buildSerpKeywordResult(
       serviceId:           query.serviceId,
       educationalOnly:     query.educationalOnly,
       competitionLevel:    volume?.competition_level ?? null,
+      cpcUsd:              volume?.cpc ?? null,
       organicResultCount:  organicItems.length,
       organicResults:      organicItems.map(item => ({
         rank:    item.rank_absolute,
@@ -472,6 +473,7 @@ function buildVolumeOnlyResult(
       source:           "dataforseo_volume",
       locationName:     location,
       competitionLevel: volume.competition_level ?? null,
+      cpcUsd:           volume.cpc ?? null,
     },
   };
 }

@@ -85,6 +85,17 @@ export type GeographicScope = "local" | "regional" | "national";
 
 export type TrendDirection = "rising" | "stable" | "declining" | "unknown";
 
+/**
+ * Site coverage state for a discovered topic (Phase C5).
+ * Determined by the SiteCoverageProvider (defined in discovery-coverage.ts).
+ *
+ *   "covered"  — client has strong, current ranking/content for this topic
+ *   "partial"  — some coverage exists but it may be thin or dated
+ *   "gap"      — topic is discoverable but client has no meaningful coverage
+ *   "unknown"  — no data source configured (C5 default — UnknownCoverageProvider)
+ */
+export type CoverageState = "covered" | "partial" | "gap" | "unknown";
+
 // ── Registry gate result ───────────────────────────────────────────────────────
 
 /**
@@ -221,6 +232,21 @@ export interface DiscoveryCluster {
  *   "medium" = gpt_simulated source OR volume is null
  *   "low"    = only one signal in the cluster
  */
+/**
+ * C5 enrichment block added to OpportunityScoreCard when real SERP/coverage
+ * data is available. undefined on C2-scored cards (version = "c2" or undefined).
+ */
+export interface C5EnrichmentData {
+  /** Count of distinct competitor domains found in organic SERP results. */
+  competitorDomainCount: number;
+  /** Count of PAA questions found in the SERP for this topic. */
+  paaQuestionCount:      number;
+  /** Max cost-per-click across signals (USD). null if no CPC data available. */
+  cpcUsd:                number | null;
+  /** Site coverage state from SiteCoverageProvider. */
+  coverageState:         CoverageState;
+}
+
 export interface OpportunityScoreCard {
   searchDemand:        number; // 0–100
   competitorGap:       number; // 0–100
@@ -239,6 +265,17 @@ export interface OpportunityScoreCard {
     seasonalRelevance:  string;
     aiSearchPotential:  string;
   };
+  /**
+   * Scorecard version. undefined or "c2" = Phase C2 base scoring.
+   * "c5" = enriched with real SERP data (competitorDomains, PAA, CPC, coverage).
+   * Optional for backward compatibility — old DB records parse without this field.
+   */
+  version?:    "c2" | "c5";
+  /**
+   * C5 enrichment data. Present only when version = "c5".
+   * Optional for backward compatibility — C2 records have undefined here.
+   */
+  enrichment?: C5EnrichmentData;
 }
 
 // ── Opportunity ────────────────────────────────────────────────────────────────

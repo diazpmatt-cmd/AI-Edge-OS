@@ -92,6 +92,14 @@ const scoreCardSchema = z.object({
     seasonalRelevance:  z.string(),
     aiSearchPotential:  z.string(),
   }),
+  // Phase C5 additions — optional for backward compat with C2 records:
+  version:    z.enum(["c2", "c5"]).optional(),
+  enrichment: z.object({
+    competitorDomainCount: z.number(),
+    paaQuestionCount:      z.number(),
+    cpcUsd:                z.number().nullable(),
+    coverageState:         z.enum(["covered", "partial", "gap", "unknown"]),
+  }).optional(),
 });
 
 const providerFailureSchema = z.object({

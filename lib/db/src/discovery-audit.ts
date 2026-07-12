@@ -45,6 +45,7 @@ export type AuditAction =
   | "execution_denied_rate_limit"
   | "execution_denied_concurrency"
   | "execution_denied_governance"
+  | "execution_failed"
   | "recovery_invoked"
   | "idempotency_replay"
   | "idempotency_mismatch_rejected"

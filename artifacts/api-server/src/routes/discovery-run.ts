@@ -596,7 +596,7 @@ router.post("/api/discovery/manual-run", async (req, res) => {
 
     // C6: Audit run failure
     const failAudit = createAuditEvent({
-      clientId, runId, action: "execution_denied_governance",
+      clientId, runId, action: "execution_failed",
       actorType: "system", actorId: "discovery-pipeline", correlationId,
       metadata: { error: message.slice(0, 200) },
     });

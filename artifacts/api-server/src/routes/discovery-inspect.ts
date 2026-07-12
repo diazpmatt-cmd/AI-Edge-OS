@@ -268,11 +268,12 @@ router.post("/api/discovery/runs/:runId/cancel", async (req, res) => {
       });
 
       // Audit: cancellation rejected
-      createAuditEvent({
+      const rejAudit = createAuditEvent({
         clientId, runId, action: "run_cancelled_requested",
         actorType: "user", actorId: userId, correlationId,
         metadata: { rejected: true, reason: "not_cancellable", currentState },
       });
+      appendAudit(pool, rejAudit).catch(() => {});
       return;
     }
 

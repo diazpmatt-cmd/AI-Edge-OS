@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { isSecretsPreviewAvailable } from "@/lib/development-preview";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const MissionControlPage            = lazy(() => import("./pages/MissionControlP
 const CustomerTimelinePage          = lazy(() => import("./pages/CustomerTimelinePage"));
 const ProfitCenterPage              = lazy(() => import("./pages/ProfitCenterPage"));
 const ApollosPage                   = lazy(() => import("./pages/ApollosPage"));
+const SecretsPage                   = lazy(() => import("./pages/SecretsPage"));
 const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 
 const PageLoader = () => (
@@ -112,6 +114,13 @@ function AppRouter() {
         <Route path="/demo">
           <Suspense fallback={<PageLoader />}><DemoPage /></Suspense>
         </Route>
+
+        {/* Development-only mock UI preview; excluded from production routing. */}
+        {isSecretsPreviewAvailable(import.meta.env.DEV) && (
+          <Route path="/secrets-preview">
+            <Suspense fallback={<PageLoader />}><SecretsPage developmentPreview /></Suspense>
+          </Route>
+        )}
 
         {/* ── Admin access gate (passcode) + login ── */}
         <Route path="/admin-access" component={() => <Suspense fallback={<PageLoader />}><AdminAccessPage /></Suspense>} />
@@ -216,6 +225,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/apollos">
           <Authenticated><ApollosPage /></Authenticated>
+        </Route>
+        <Route path="/admin/secrets">
+          <Authenticated><SecretsPage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

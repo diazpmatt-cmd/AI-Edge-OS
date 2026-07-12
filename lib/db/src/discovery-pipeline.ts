@@ -349,45 +349,18 @@ export class DiscoveryPipeline {
     // Sort opportunities by compositeScore desc
     opportunities.sort((a, b) => b.compositeScore - a.compositeScore);
 
-    // ── Stage 11: Persistence [DB write, skipped in Phase C2] ─────────────────
-    if (this.repository) {
-      try {
-        await this.repository.persistRunResult({
-          runId,
-          clientId:   context.clientId,
-          weekLabel:  context.currentWeek,
-          status:     "complete",
-          providersAttempted,
-          providersSucceeded,
-          providersFailed: providerFailures.map(f => f.provider),
-          providerFailures,
-          signals: {
-            received: allSignals.length,
-            accepted: allowedSignals.length,
-            blocked:  blockedSignals.length,
-          },
-          clusters:      { created: scoredClusters.length },
-          opportunities: {
-            created:      opportunities.length,
-            highPriority: opportunities.filter(o =>
-              o.priority === "critical" || o.priority === "high"
-            ).length,
-          },
-          topOpportunityScore: opportunities[0]?.compositeScore ?? 0,
-          runDurationMs:       Date.now() - startTime,
-          topOpportunities:    opportunities.slice(0, 5),
-          allClusters:         scoredClusters,
-        });
-      } catch (err) {
-        console.error(`[discovery] stage 11 failed (persistence): ${String(err)}`);
-        // Persistence failure does not change the result returned to the caller
-      }
-    }
+    // ── Phase C3: restamp snapshotId on all child records ─────────────────────
+    // During C2, signals/clusters/opportunities carry snapshotId: "pending" because
+    // no DB existed to assign a real snapshot PK. Now that the runId is known,
+    // restamp every child record so they can be stored against the correct FK.
+    const stampedSignals      = allSignals.map(s => s.snapshotId === runId ? s : { ...s, snapshotId: runId });
+    const stampedClusters     = scoredClusters.map(c => c.snapshotId === runId ? c : { ...c, snapshotId: runId });
+    const stampedOpportunities = opportunities.map(o => o.snapshotId === runId ? o : { ...o, snapshotId: runId });
 
-    // ── Assemble summary ──────────────────────────────────────────────────────
+    // ── Assemble summary fields ───────────────────────────────────────────────
     const status: SnapshotStatus = providerFailures.length > 0 ? "partial" : "complete";
 
-    return {
+    const summaryBase = {
       runId,
       clientId:   context.clientId,
       weekLabel:  context.currentWeek,
@@ -401,18 +374,34 @@ export class DiscoveryPipeline {
         accepted: allowedSignals.length,
         blocked:  blockedSignals.length,
       },
-      clusters:      { created: scoredClusters.length },
+      clusters:      { created: stampedClusters.length },
       opportunities: {
-        created:      opportunities.length,
-        highPriority: opportunities.filter(o =>
+        created:      stampedOpportunities.length,
+        highPriority: stampedOpportunities.filter(o =>
           o.priority === "critical" || o.priority === "high"
         ).length,
       },
-      topOpportunityScore: opportunities[0]?.compositeScore ?? 0,
-      runDurationMs:       Date.now() - startTime,
-      topOpportunities:    opportunities.slice(0, 5),
-      allClusters:         scoredClusters,
+      topOpportunityScore:  stampedOpportunities[0]?.compositeScore ?? 0,
+      runDurationMs:        Date.now() - startTime,
+      topOpportunities:     stampedOpportunities.slice(0, 5),
+      allClusters:          stampedClusters,
+      // Phase C3: full signal and opportunity lists for persistence
+      allSignals:           stampedSignals,
+      allOpportunities:     stampedOpportunities,
     };
+
+    // ── Stage 11: Persistence [DB write, skipped when no repository] ──────────
+    if (this.repository) {
+      try {
+        await this.repository.persistRunResult(summaryBase);
+      } catch (err) {
+        console.error(`[discovery] stage 11 failed (persistence): ${String(err)}`);
+        // Persistence failure does not change the result returned to the caller.
+        // The summary is already assembled above — return it regardless.
+      }
+    }
+
+    return summaryBase;
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────

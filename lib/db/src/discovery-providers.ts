@@ -190,13 +190,71 @@ export interface DiscoveryProviderSet {
  * directly. In Phase C2, no implementation exists — the pipeline accepts an
  * optional repository and skips persistence when absent.
  *
- * In Phase C3, DrizzleDiscoveryRepository will implement this interface.
+ * In Phase C3, DrizzleDiscoveryRepository implements this interface.
  *
- * All writes must be idempotent on (clientId, weekLabel) via ON CONFLICT DO UPDATE.
+ * Write-path contract:
+ *   - All writes are idempotent on deterministic IDs (ON CONFLICT DO NOTHING).
+ *   - persistRunResult is the primary entry point: it persists the snapshot,
+ *     all signals, all clusters, and all opportunities atomically.
+ *   - saveSignals / saveClusters / saveOpportunities are exposed individually
+ *     for partial writes and retry scenarios.
+ *
+ * Read-path contract:
+ *   - Every read method requires BOTH the runId/snapshotId AND the clientId.
+ *   - A caller cannot retrieve another tenant's records even with a valid ID.
+ *   - listRunsByClient returns summaries without child records (lightweight).
  */
 export interface DiscoveryRepository {
+  // ── Write ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Persist a complete run result: snapshot + all signals + clusters + opportunities.
+   * Idempotent: re-persisting the same run is safe (ON CONFLICT DO NOTHING on children).
+   */
   persistRunResult(summary: DiscoveryRunSummary): Promise<void>;
+
+  /**
+   * Persist normalized signals for a run. Idempotent on signal.id.
+   * Signals with duplicate IDs are silently skipped (ON CONFLICT DO NOTHING).
+   */
   saveSignals(signals: DiscoverySignal[]): Promise<void>;
+
+  /**
+   * Persist clusters. Idempotent on cluster.id.
+   */
   saveClusters(clusters: DiscoveryCluster[]): Promise<void>;
+
+  /**
+   * Persist opportunities. Idempotent on opportunity.id.
+   */
   saveOpportunities(opportunities: DiscoveryOpportunity[]): Promise<void>;
+
+  // ── Read ────────────────────────────────────────────────────────────────────
+
+  /**
+   * Fetch a full run summary by runId, scoped to clientId.
+   * Returns null if the run does not exist OR belongs to a different client.
+   */
+  getRunById(runId: string, clientId: string): Promise<DiscoveryRunSummary | null>;
+
+  /**
+   * List recent run summaries for a client (lightweight — no child records).
+   * Ordered by createdAt desc.
+   */
+  listRunsByClient(clientId: string, limit?: number): Promise<DiscoveryRunSummary[]>;
+
+  /**
+   * Fetch all signals for a run, tenant-scoped.
+   */
+  getSignalsForRun(runId: string, clientId: string): Promise<DiscoverySignal[]>;
+
+  /**
+   * Fetch all clusters for a run, tenant-scoped.
+   */
+  getClustersForRun(runId: string, clientId: string): Promise<DiscoveryCluster[]>;
+
+  /**
+   * Fetch all opportunities for a run, tenant-scoped.
+   */
+  getOpportunitiesForRun(runId: string, clientId: string): Promise<DiscoveryOpportunity[]>;
 }

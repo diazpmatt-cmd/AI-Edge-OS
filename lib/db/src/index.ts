@@ -30,4 +30,21 @@ export * from "./discovery-cluster-builder";
 export * from "./discovery-scorer";
 export * from "./discovery-pipeline";
 
+// ── Phase C3: Discovery Persistence ───────────────────────────────────────────
+export {
+  DrizzleDiscoveryRepository,
+  InMemoryDiscoveryRepository,
+  bootstrapDiscoveryTables,
+  serializeSignal,
+  deserializeSignal,
+  serializeCluster,
+  deserializeCluster,
+  serializeOpportunity,
+  deserializeOpportunity,
+  serializeSnapshot,
+  deserializeSnapshot,
+  parseScoreCard,
+  parseProviderFailures,
+} from "./discovery-drizzle-repository";
+
 export { eq, and, or, sql } from "drizzle-orm";

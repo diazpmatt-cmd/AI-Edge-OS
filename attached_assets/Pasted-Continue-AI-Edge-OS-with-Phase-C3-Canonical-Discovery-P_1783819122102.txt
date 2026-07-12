@@ -1,0 +1,284 @@
+Continue AI Edge OS with Phase C3 — Canonical Discovery Persistence Integration.
+
+Phase C2 is complete and validated:
+
+* Clean TypeScript build
+* 1,109 total tests passing
+* 888 pre-existing tests
+* 221 Phase C2 discovery tests covering categories A–T
+* Canonical discovery core lives in lib/db/src/discovery/
+* The existing discovery pipeline is provider-agnostic and exposes a repository/persistence boundary
+* No BB&B autopilot safety state was changed
+
+Primary objective
+
+Implement the production-ready persistence layer for the canonical discovery engine using the existing Drizzle/PostgreSQL architecture while preserving all Phase C2 behavior, determinism, tenant isolation, fault tolerance, and provider independence.
+
+Start with an audit-first workflow. Before writing code:
+
+1. Read the Phase C1 architecture document.
+2. Read all Phase C2 discovery modules and tests.
+3. Audit the existing Drizzle schema, migrations, repositories, database helpers, transaction patterns, tenant-scoping conventions, test database setup, and generated types.
+4. Search for any existing discovery, opportunity, signal, cluster, analytics, research, trend, or content-idea persistence structures that should be reused or extended.
+5. Identify redundant or overlapping tables, types, repositories, and APIs.
+6. Produce a concise implementation plan and proposed file changes before editing code.
+
+Do not assume a migration is necessary. First determine whether existing schema can support the required persistence model cleanly. If a migration is genuinely required, explain why and implement the smallest safe migration consistent with current repository conventions.
+
+Required implementation
+
+1. Canonical repository implementation
+
+Implement a Drizzle-backed repository that satisfies the Phase C2 discovery repository contract.
+
+Suggested location:
+
+lib/db/src/discovery/drizzle-discovery-repository.ts
+
+Use the existing database client and transaction abstractions. Do not create an independent connection layer.
+
+The repository must support, as required by the Phase C2 interface:
+
+* Persisting discovery runs
+* Persisting normalized signals
+* Persisting clusters
+* Persisting scored opportunities
+* Reading a discovery run by ID
+* Listing runs by client/tenant
+* Reading signals, clusters, and opportunities for a run
+* Upserting or safely deduplicating deterministic entities
+* Updating run completion status and summary
+* Recording partial provider failure metadata
+* Atomic persistence where appropriate
+* Idempotent replay of the same deterministic run
+
+Adapt exact method names to the existing Phase C2 repository interface rather than inventing a parallel abstraction.
+
+2. Persistence model
+
+Persist the canonical Phase C2 data without leaking provider-specific raw response structures into the canonical tables.
+
+The persistence layer should represent:
+
+* Discovery run identity
+* clientId
+* Context snapshot or safely versioned context metadata
+* Run status
+* ISO week
+* Start/completion timestamps
+* Provider execution outcomes
+* Run summary
+* Canonical normalized signals
+* Canonical clusters
+* Canonical scorecards
+* Canonical opportunities
+* Registry-gate status
+* Evidence strength
+* Deterministic IDs
+* Created/updated timestamps
+
+Provider raw payloads should only be stored when an existing safe JSON metadata pattern supports them. Canonical business logic must not depend on stored raw payloads.
+
+3. Tenant isolation
+
+Every repository read and write must be tenant-scoped.
+
+A caller must never be able to retrieve or mutate another client’s:
+
+* Runs
+* Signals
+* Clusters
+* Opportunities
+* Provider execution records
+* Summaries
+
+Do not rely exclusively on globally unique IDs for isolation. Include clientId in repository predicates and ownership checks.
+
+4. Pipeline integration
+
+Integrate the Drizzle repository with the existing Phase C2 DiscoveryPipeline through dependency injection.
+
+Requirements:
+
+* Pure discovery functions remain pure.
+* The pipeline must continue to work with an in-memory/fake repository in tests.
+* Persistence failures must be represented correctly in run status and diagnostics.
+* Provider failures must still yield a partial run instead of crashing the entire pipeline.
+* Avoid double-writing during retries.
+* Do not introduce hidden global database state.
+* No external provider APIs may be called.
+
+5. Idempotency and determinism
+
+The same client, context, inputs, and deterministic run identity must not create duplicate canonical records.
+
+Define and test the idempotency behavior explicitly for:
+
+* Replayed runs
+* Duplicate normalized signals
+* Duplicate clusters
+* Duplicate opportunities
+* Partial runs retried after persistence interruption
+* Concurrent or near-concurrent writes where supported by current DB patterns
+
+Use existing deterministic Phase C2 IDs wherever possible.
+
+6. Transaction behavior
+
+Use transactions where needed to prevent partially persisted canonical state.
+
+Clearly define behavior when failure occurs during:
+
+* Run creation
+* Signal persistence
+* Cluster persistence
+* Opportunity persistence
+* Run finalization
+
+A failed transaction must not leave misleading “completed” state.
+
+7. Serialization boundary
+
+Create explicit serialization/deserialization helpers when canonical TypeScript objects contain values that should not be written directly to JSON or database columns.
+
+Round-trip persistence must preserve all canonical values required by Phase C2 scoring, summaries, diagnostics, and future Phase C4 consumers.
+
+Avoid unsafe as casting when parsing JSON-backed columns. Validate persisted JSON using existing Zod/schema conventions where available.
+
+8. Test boundary
+
+No tests may require live external APIs.
+
+Prefer the project’s existing database test conventions. If the repository test system uses mocks or an in-memory adapter, follow that pattern. Do not introduce a completely different database testing framework unless unavoidable.
+
+Required tests
+
+Add comprehensive Phase C3 tests covering at least the following categories:
+
+A. Repository contract compliance
+
+The Drizzle repository satisfies the canonical Phase C2 repository interface.
+
+B. Run creation
+
+A tenant-scoped discovery run is created with the expected initial status and metadata.
+
+C. Complete-run persistence
+
+Signals, clusters, scorecards, opportunities, and summary round-trip correctly.
+
+D. Partial-run persistence
+
+Provider failures and partial completion metadata are preserved.
+
+E. Failed-run persistence
+
+A failed run cannot appear completed and retains useful diagnostics.
+
+F. Tenant read isolation
+
+Client A cannot read Client B’s run or child records.
+
+G. Tenant write isolation
+
+Client A cannot update, finalize, or append data to Client B’s run.
+
+H. Deterministic replay
+
+Replaying the same deterministic run does not create duplicate canonical records.
+
+I. Signal deduplication
+
+Duplicate signal IDs are safely ignored or updated according to the repository contract.
+
+J. Cluster deduplication
+
+Duplicate deterministic clusters do not multiply.
+
+K. Opportunity deduplication
+
+Duplicate deterministic opportunities do not multiply.
+
+L. Transaction rollback
+
+A failure in a multi-stage persistence transaction does not leave misleading partial state.
+
+M. Finalization atomicity
+
+Run status and summary transition together correctly.
+
+N. JSON round-trip validation
+
+Scorecards, evidence, diagnostics, and provider outcomes deserialize safely and accurately.
+
+O. Unknown or malformed persisted JSON
+
+Invalid data fails safely and does not silently become trusted canonical data.
+
+P. Pipeline with fake repository
+
+Existing provider-independent pipeline tests continue to pass.
+
+Q. Pipeline with Drizzle repository
+
+A full deterministic test run persists and reloads correctly.
+
+R. Persistence failure tolerance
+
+Repository failures produce the expected pipeline result without corrupting other tenant data.
+
+S. Cross-run isolation
+
+Records from separate runs for the same client do not become incorrectly associated.
+
+T. Regression protection
+
+All pre-existing tests, including the 221 Phase C2 tests and BB&B autopilot safety tests, remain green.
+
+Add additional tests for concurrency, retries, ownership predicates, and schema constraints where relevant.
+
+Constraints
+
+Do not build:
+
+* UI
+* Scheduler or cron jobs
+* Live provider integrations
+* Content generation
+* Content publishing
+* Campaign execution
+* Discovery dashboards
+* Background workers
+* Public API endpoints unless strictly required by an already-existing internal architecture contract
+
+Do not:
+
+* Modify BB&B service definitions
+* Enable termite services
+* Add bed bug whole-home heat treatment
+* Remove fumigation
+* Change existing BB&B autopilot safety behavior
+* Add nondeterministic IDs
+* Use Math.random()
+* Hardcode Bed Bugs & Beyond behavior into the canonical repository
+* Couple persistence to a specific search, social, AI, or trends provider
+* Create redundant database abstractions
+* weaken tenant predicates for convenience
+
+Validation process
+
+After implementation:
+
+1. Run the TypeScript build.
+2. Run all new Phase C3 tests.
+3. Run all Phase C2 discovery tests.
+4. Run the complete pre-existing test suite.
+5. Inspect the final diff for accidental UI, mobile, provider, or BB&B autopilot changes.
+6. Report exact test counts and any migration generated.
+7. Report files created, modified, and deleted.
+8. Document key schema, transaction, idempotency, and tenant-isolation decisions.
+9. Identify the clean boundary for Phase C4 without implementing C4.
+
+Do not declare Phase C3 complete unless the full test suite is green or clearly report every remaining failure with its root cause.
+
+Work autonomously using the existing architecture and conventions. Make the smallest cohesive implementation that establishes a production-quality persistence foundation for the discovery engine.

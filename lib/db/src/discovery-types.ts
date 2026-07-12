@@ -276,6 +276,10 @@ export interface ProviderFailure {
 /**
  * Final output of DiscoveryPipeline.run().
  * Contains everything needed to persist the result and surface it in the UI.
+ *
+ * Phase C3 additions (backward-compatible):
+ *   allSignals       — all normalized signals from all provider stages
+ *   allOpportunities — all scored opportunities (topOpportunities = slice(0, 5))
  */
 export interface DiscoveryRunSummary {
   runId: string;
@@ -304,4 +308,8 @@ export interface DiscoveryRunSummary {
   topOpportunities: DiscoveryOpportunity[];
   /** All clusters built during this run. */
   allClusters: DiscoveryCluster[];
+  /** ALL normalized signals from all provider stages. Added in Phase C3 for persistence. */
+  allSignals: DiscoverySignal[];
+  /** ALL scored opportunities (topOpportunities is a slice of this). Added in Phase C3. */
+  allOpportunities: DiscoveryOpportunity[];
 }

@@ -273,7 +273,9 @@ router.post("/api/discovery/runs/:runId/cancel", async (req, res) => {
         actorType: "user", actorId: userId, correlationId,
         metadata: { rejected: true, reason: "not_cancellable", currentState },
       });
-      appendAudit(pool, rejAudit).catch(() => {});
+      appendAudit(pool, rejAudit).catch((err: unknown) => {
+        console.error("[discovery-inspect] Audit write failed:", err instanceof Error ? err.message : String(err));
+      });
       return;
     }
 
@@ -308,7 +310,9 @@ router.post("/api/discovery/runs/:runId/cancel", async (req, res) => {
       retryable:     false,
       correlationId,
     });
-    appendDiagnostic(pool, diagEvent).catch(() => {});  // fire-and-forget
+    appendDiagnostic(pool, diagEvent).catch((err: unknown) => {
+      console.error("[discovery-inspect] Diagnostic write failed:", err instanceof Error ? err.message : String(err));
+    });
 
     // Audit event
     const auditEvent = createAuditEvent({
@@ -316,7 +320,9 @@ router.post("/api/discovery/runs/:runId/cancel", async (req, res) => {
       actorType: "user", actorId: userId, correlationId,
       metadata: { fromState: currentState },
     });
-    appendAudit(pool, auditEvent).catch(() => {});  // fire-and-forget
+    appendAudit(pool, auditEvent).catch((err: unknown) => {
+      console.error("[discovery-inspect] Audit write failed:", err instanceof Error ? err.message : String(err));
+    });
 
     res.status(202).json({
       accepted:       true,

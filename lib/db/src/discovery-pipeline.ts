@@ -1,5 +1,6 @@
 /**
  * Phase C2 — Fault-Tolerant Discovery Pipeline
+ * Phase C6 — Cooperative Cancellation (CancellationToken boundary)
  *
  * Accepts a DiscoveryContext and a set of injected providers.
  * Executes 11 pipeline stages, isolating failures per provider.
@@ -12,6 +13,15 @@
  *   - Downstream stages receive whatever the upstream stages produced.
  *   - After all stages: status = "complete" if all provider stages succeeded,
  *     "partial" if any failed, "failed" only if Stage 1 (seed extraction) throws.
+ *
+ * Cancellation contract (C6):
+ *   - `run()` accepts an optional CancellationToken (default: NullCancellationToken).
+ *   - `shouldCancel()` is checked before Stage 1 and between every pipeline stage.
+ *   - Inside Stage 3 (PAA) and Stage 6 (AI search) inner loops, the token is
+ *     checked before each individual provider call so no new call starts after
+ *     cancellation is observed.
+ *   - When cancelled, `run()` returns status "cancelled" immediately without
+ *     calling Stage 11 persistence. The caller is responsible for finalizing state.
  *
  * Dependency injection contract:
  *   - The pipeline never calls Drizzle directly.
@@ -40,6 +50,11 @@ import {
   normalizeRedditResult,
 } from "./discovery-normalizer";
 import { evaluateSeasonality } from "./discovery-registry-gate";
+import {
+  type CancellationToken,
+  NullCancellationToken,
+  shouldCancel,
+} from "./discovery-cancellation";
 
 // ── Run ID derivation ──────────────────────────────────────────────────────────
 
@@ -91,8 +106,16 @@ export class DiscoveryPipeline {
    * Stages 1, 8, 9, 10 are pure functions that always succeed.
    * Stages 2–7 wrap provider calls in try/catch — failures produce empty arrays.
    * Stage 11 persists via the injected repository (skipped if absent in C2).
+   *
+   * @param cancelToken  Optional cooperative cancellation token (C6).
+   *   Checked before Stage 1, between every stage, and before each provider
+   *   call inside the Stage 3 and Stage 6 inner loops. When cancelled, returns
+   *   a DiscoveryRunSummary with status "cancelled" without calling Stage 11.
    */
-  async run(context: DiscoveryContext): Promise<DiscoveryRunSummary> {
+  async run(
+    context:     DiscoveryContext,
+    cancelToken: CancellationToken = NullCancellationToken,
+  ): Promise<DiscoveryRunSummary> {
     const startTime = Date.now();
     const runId     = deriveRunId(context.clientId, context.currentWeek);
 
@@ -102,8 +125,18 @@ export class DiscoveryPipeline {
 
     let allSignals: DiscoverySignal[] = [];
 
+    // ── Cancellation check: before any provider work ──────────────────────────
+    if (shouldCancel(cancelToken, "before_execution")) {
+      return this.buildCancelledSummary(runId, context, startTime);
+    }
+
     // ── Stage 1: Seed Extraction (pure, always succeeds) ─────────────────────
     const seeds = extractSeeds(context);
+
+    // ── Cancellation check: after Stage 1, before first provider call ─────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime);
+    }
 
     // ── Stage 2: Keyword Expansion [SearchDataProvider] ──────────────────────
     if (this.providers.search) {
@@ -147,6 +180,11 @@ export class DiscoveryPipeline {
       }
     }
 
+    // ── Cancellation check: after Stage 2, before Stage 3 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
+    }
+
     // ── Stage 3: People Also Ask [PeopleAlsoAskProvider] ─────────────────────
     if (this.providers.paa) {
       const provider = this.providers.paa;
@@ -155,6 +193,8 @@ export class DiscoveryPipeline {
       const topSeeds = seeds.slice(0, 5);
       try {
         for (const seed of topSeeds) {
+          // Check before each individual provider call — no new calls after cancel
+          if (shouldCancel(cancelToken, "between_stages")) break;
           const raws = await provider.fetchPAA({
             seedKeyword: seed,
             location:    `${context.location.city}, ${context.location.state}`,
@@ -172,7 +212,8 @@ export class DiscoveryPipeline {
           });
           allSignals.push(...normalized);
         }
-        providersSucceeded.push(provider.name);
+        // Only mark succeeded if we completed the full loop without cancellation
+        if (!cancelToken.isCancelled) providersSucceeded.push(provider.name);
       } catch (err) {
         console.error(`[discovery] stage 3 failed (${provider.name}): ${String(err)}`);
         providerFailures.push({
@@ -182,6 +223,11 @@ export class DiscoveryPipeline {
           occurredAt: new Date(),
         });
       }
+    }
+
+    // ── Cancellation check: after Stage 3, before Stage 4 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
     }
 
     // ── Stage 4: Trend Overlay [TrendProvider] ────────────────────────────────
@@ -222,6 +268,11 @@ export class DiscoveryPipeline {
     // Skipped in C2 (no competitor domain data available yet).
     // Will be activated in C4 when competitor data is sourced from ai_visibility_audits.
 
+    // ── Cancellation check: after Stage 4, before Stage 6 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
+    }
+
     // ── Stage 6: AI Search Audit [AISearchProvider] ───────────────────────────
     if (this.providers.aiSearch) {
       const provider = this.providers.aiSearch;
@@ -233,6 +284,8 @@ export class DiscoveryPipeline {
           .sort((a, b) => (b.volumeEstimate ?? 0) - (a.volumeEstimate ?? 0))
           .slice(0, 5);
         for (const kw of topKeywords) {
+          // Check before each individual provider call — no new calls after cancel
+          if (shouldCancel(cancelToken, "between_stages")) break;
           const probe = await provider.probeQuery({
             query:        kw.rawValue,
             businessName: context.clientName,
@@ -248,7 +301,8 @@ export class DiscoveryPipeline {
             };
           }
         }
-        providersSucceeded.push(provider.name);
+        // Only mark succeeded if we completed the full loop without cancellation
+        if (!cancelToken.isCancelled) providersSucceeded.push(provider.name);
       } catch (err) {
         console.error(`[discovery] stage 6 failed (${provider.name}): ${String(err)}`);
         providerFailures.push({
@@ -259,6 +313,11 @@ export class DiscoveryPipeline {
         });
         // Failure: aiSearchPotential defaults to context.aiSearchGapScore gap in scorer
       }
+    }
+
+    // ── Cancellation check: after Stage 6, before Stage 7 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
     }
 
     // ── Stage 7: Social Listening [SocialListeningProvider] ──────────────────
@@ -298,6 +357,11 @@ export class DiscoveryPipeline {
       }
     }
 
+    // ── Cancellation check: after Stage 7, before Stage 8 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
+    }
+
     // ── Stage 8: Registry Gate (pure, always succeeds) ────────────────────────
     const gateResults = allSignals.map(signal => ({
       signal,
@@ -315,8 +379,18 @@ export class DiscoveryPipeline {
       .filter(r => r.gate.status === "blocked" || r.gate.status === "unsupported")
       .map(r => r.signal);
 
+    // ── Cancellation check: after Stage 8, before Stage 9 ────────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
+    }
+
     // ── Stage 9: Cluster Building (pure, always succeeds) ─────────────────────
     const clusters = buildClusters(allowedSignals, context.registry, context);
+
+    // ── Cancellation check: after Stage 9, before Stage 10 ───────────────────
+    if (shouldCancel(cancelToken, "between_stages")) {
+      return this.buildCancelledSummary(runId, context, startTime, allSignals);
+    }
 
     // ── Stage 10: Opportunity Scoring (pure, always succeeds) ─────────────────
     const signalById = new Map<string, DiscoverySignal>(allSignals.map(s => [s.id, s]));
@@ -390,6 +464,12 @@ export class DiscoveryPipeline {
       allOpportunities:     stampedOpportunities,
     };
 
+    // ── Cancellation check: before Stage 11 (persistence) ────────────────────
+    // Checked last so partial results are still computed and returned as cancelled.
+    if (shouldCancel(cancelToken, "during_persistence")) {
+      return this.buildCancelledSummary(runId, context, startTime, stampedSignals);
+    }
+
     // ── Stage 11: Persistence [DB write, skipped when no repository] ──────────
     if (this.repository) {
       try {
@@ -405,6 +485,39 @@ export class DiscoveryPipeline {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * Build a minimal DiscoveryRunSummary representing a cooperatively cancelled run.
+   * Called when `shouldCancel()` returns true at any pipeline checkpoint.
+   *
+   * @param partialSignals  Signals collected before cancellation was observed.
+   */
+  private buildCancelledSummary(
+    runId:          string,
+    context:        DiscoveryContext,
+    startTime:      number,
+    partialSignals: DiscoverySignal[] = [],
+  ): DiscoveryRunSummary {
+    return {
+      runId,
+      clientId:            context.clientId,
+      weekLabel:           context.currentWeek,
+      status:              "cancelled",
+      providersAttempted:  [],
+      providersSucceeded:  [],
+      providersFailed:     [],
+      providerFailures:    [],
+      signals:             { received: partialSignals.length, accepted: 0, blocked: 0 },
+      clusters:            { created: 0 },
+      opportunities:       { created: 0, highPriority: 0 },
+      topOpportunityScore: 0,
+      runDurationMs:       Date.now() - startTime,
+      topOpportunities:    [],
+      allClusters:         [],
+      allSignals:          partialSignals,
+      allOpportunities:    [],
+    };
+  }
 
   /**
    * Attempt to map a raw text value to a service registry serviceId.

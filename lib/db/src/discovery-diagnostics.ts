@@ -138,7 +138,7 @@ const REDACTED_KEY_PATTERNS: RegExp[] = [
   /api_key/i,
   /token/i,
   /credential/i,
-  /auth/i,          // catches Authorization, authHeader, authToken
+  /^auth(?:orization|[_-]?(?:key|header))?$/i,  // authorization, authKey, auth_key, authHeader — NOT author/authority
   /cookie/i,
   /database_url/i,
   /connection_string/i,

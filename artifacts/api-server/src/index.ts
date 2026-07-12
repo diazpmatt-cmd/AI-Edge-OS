@@ -1,8 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
-import { startDiscoverySchedulerLoop } from "./lib/discovery-scheduler";
-import { loadDiscoveryAutomationConfig } from "./lib/discovery-automation-config";
 
 const rawPort = process.env["PORT"];
 
@@ -26,5 +24,4 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   startScheduler();
-  startDiscoverySchedulerLoop(loadDiscoveryAutomationConfig());
 });

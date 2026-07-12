@@ -30,6 +30,41 @@ export * from "./discovery-cluster-builder";
 export * from "./discovery-scorer";
 export * from "./discovery-pipeline";
 
+// ── Phase C4: DataForSEO Discovery Provider ────────────────────────────────────
+export {
+  parseDataForSEOConfig,
+  getDataForSEOHealthState,
+  buildBasicAuthHeader,
+  estimateCostUSD,
+  DataForSEOError,
+} from "./dataforseo-config";
+export type {
+  DataForSEOConfig,
+  DataForSEOHealthState,
+  DataForSEOErrorKind,
+} from "./dataforseo-config";
+
+export {
+  buildDataForSEOQueryPlan,
+  buildLocationName,
+  isQueryBlocked,
+  isQueryEducationalOnly,
+  inferQueryCategory,
+} from "./dataforseo-query-planner";
+export type {
+  DataForSEOQueryPlan,
+  PlannedSerpQuery,
+  PlannedVolumeKeyword,
+  QueryCategory,
+} from "./dataforseo-query-planner";
+
+export {
+  DataForSEOAdapter,
+  DataForSEOContextAdapter,
+  extractCompetitorDomains,
+  extractPAAQuestions,
+} from "./dataforseo-adapter";
+
 // ── Phase C3: Discovery Persistence ───────────────────────────────────────────
 export {
   DrizzleDiscoveryRepository,

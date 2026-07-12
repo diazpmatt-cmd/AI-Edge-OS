@@ -28,6 +28,7 @@ import aiReceptionistRouter from "./ai-receptionist";
 import localPresenceRouter from "./local-presence";
 import adminAssetsRouter from "./admin-assets";
 import apollosRouter from "./apollos";
+import discoveryRunRouter from "./discovery-run";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(aiReceptionistRouter);
 router.use(localPresenceRouter);
 router.use(adminAssetsRouter);
 router.use(apollosRouter);
+router.use(discoveryRunRouter);
 
 export default router;

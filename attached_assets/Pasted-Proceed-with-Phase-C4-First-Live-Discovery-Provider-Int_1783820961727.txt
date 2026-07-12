@@ -1,0 +1,388 @@
+Proceed with Phase C4 — First Live Discovery Provider Integration.
+
+Phase C1, C2, and C3 are complete and verified.
+
+Current state:
+
+- Canonical Discovery Engine architecture exists
+- Provider-agnostic core exists
+- Registry gating exists
+- Deterministic normalization, clustering, scoring, and failure isolation exist
+- Discovery persistence exists
+- Four canonical discovery tables exist
+- DrizzleDiscoveryRepository and InMemoryDiscoveryRepository exist
+- Persistence is idempotent and tenant-isolated
+- Stage 11 persistence failure does not abort the pipeline
+- 1202/1202 tests pass across 26 files
+- No live external discovery provider is connected yet
+
+Objective:
+
+Connect exactly one real search-data provider to the canonical Discovery Engine.
+
+This provider must supply real external evidence suitable for:
+
+- Search queries
+- Ranking positions
+- Result URLs
+- Result titles
+- Competitor domains
+- Geography or location context
+- Search-result features where available
+- People Also Ask data only if included naturally by the selected provider
+
+Do not connect multiple providers in C4.
+
+Audit first.
+
+Before writing code, inspect:
+
+- .local/phase-c1-discovery-architecture.md
+- Discovery provider interfaces from C2
+- Discovery pipeline
+- Discovery normalization
+- Discovery persistence
+- Existing environment-variable conventions
+- Existing external API clients
+- Existing retry, timeout, and health-check patterns
+- Existing Google-related integrations
+- Current secrets and configuration systems
+- Existing billing-sensitive provider usage
+
+First produce a short provider-selection audit comparing realistic options.
+
+Evaluate at least:
+
+- Google Search Console, if usable for this purpose
+- Google Business Profile APIs
+- Google Custom Search or Programmable Search
+- Bing Web Search or Microsoft search APIs
+- DataForSEO
+- SerpAPI
+- Another provider already supported by the codebase, if one exists
+
+Compare:
+
+- Data quality
+- Search-result depth
+- Local/geographic support
+- Competitor visibility
+- People Also Ask support
+- Pricing
+- Rate limits
+- Terms and compliance
+- Ease of testing
+- Multi-tenant suitability
+- Whether credentials already exist
+- Whether the provider returns actual observed data rather than generated estimates
+
+Choose one provider only.
+
+If no suitable credential is currently available, still implement the adapter, configuration boundary, tests, and disabled health state, but do not make live calls.
+
+Required implementation:
+
+1. Provider Adapter
+
+Implement one production adapter that conforms exactly to the canonical SearchDataProvider interface.
+
+It must:
+
+- Accept DiscoveryContext
+- Accept explicit queries or query plans
+- Respect client service areas and region
+- Return raw provider results without fabricating missing values
+- Preserve provider-specific IDs and URLs where allowed
+- Preserve timestamps
+- Return typed success, partial-success, timeout, quota, authentication, malformed-response, and provider-error results
+- Never throw untyped provider errors into the pipeline
+
+Keep provider-specific response types isolated inside the adapter.
+
+2. Configuration
+
+Add typed configuration for:
+
+- API key or credentials
+- Base URL if applicable
+- Timeout
+- Maximum requests per run
+- Maximum results per query
+- Optional location or locale configuration
+- Feature flag or enabled state
+
+Do not hardcode credentials.
+
+Do not log secrets.
+
+Do not add credentials to tracked files.
+
+If credentials are absent:
+
+- Provider health should report disabled or unavailable
+- The pipeline should continue with other supplied providers
+- No crash should occur
+- No fake data should be returned
+
+3. Query Planner
+
+Add the smallest deterministic query-planning layer required for this provider.
+
+Inputs may include:
+
+- Enabled client services
+- Service areas
+- Region
+- Existing topics
+- Existing opportunities
+- Provider request limits
+
+For C4, generate a conservative bounded set of real queries.
+
+Examples:
+
+- “[service] [city]”
+- “[service] near me” only where provider location context makes it meaningful
+- “[service] cost [region]”
+- “[service] questions”
+- Branded competitor queries only when competitor domains are explicitly configured or discovered from real results
+
+Do not create hundreds of queries.
+
+Do not use AI to generate query plans in C4.
+
+Do not query blocked or unsupported services.
+
+For BB&B:
+
+- No actionable termite queries
+- No wildlife-removal queries
+- No whole-home heat-treatment promotion
+- Fumigation queries must respect educational-only constraints
+
+4. Rate and Cost Controls
+
+Implement strict controls:
+
+- Maximum queries per client per run
+- Maximum provider calls per cycle
+- Timeout per call
+- Retry count
+- Backoff policy
+- Quota-exhaustion handling
+- Cost-estimate or request-count metadata in the run result
+- No unbounded loops
+- No automatic retry storms
+
+Default to the lowest practical request volume.
+
+5. Provider Health
+
+Add provider health reporting using existing project conventions where practical.
+
+Track:
+
+- enabled
+- configured
+- last success
+- last failure
+- last error category
+- average or recent latency
+- quota exhaustion state if available
+
+Do not invent quota remaining if the provider does not expose it.
+
+6. Normalization Integration
+
+Map real provider output into the existing canonical normalization pipeline.
+
+Preserve:
+
+- Real query
+- Real rank or result position
+- Real URL
+- Real domain
+- Real title/snippet where permitted
+- Geography
+- Search-result feature type
+- Provider timestamp
+- Evidence quality
+- Provider name
+
+Unknown data must remain unknown.
+
+Do not derive fictional search volume.
+
+Do not use GPT to fill missing provider fields.
+
+7. Competitor Evidence
+
+Where real search results expose domains:
+
+- Identify repeated non-client domains
+- Preserve them as competitor evidence
+- Do not automatically declare every domain a competitor
+- Add deterministic rules for likely local competitors
+- Exclude directories, social platforms, search engines, and obvious aggregators where appropriate
+- Retain excluded domains as raw evidence if useful
+
+Do not write hardcoded BB&B competitor lists.
+
+8. Live-Call Boundary
+
+Create an explicit execution boundary separating:
+
+- Unit tests with fixtures
+- Optional integration tests
+- Production live calls
+
+Unit tests must never call the real provider.
+
+Integration tests must be skipped automatically unless the required credential and an explicit live-test flag are present.
+
+Example:
+
+DISCOVERY_LIVE_TESTS=true
+
+Do not make live calls merely because an API key exists.
+
+9. Persistence
+
+Persist successful live-provider results through the existing C3 repository.
+
+Verify:
+
+- Snapshot persistence
+- Signal persistence
+- Cluster persistence
+- Opportunity persistence
+- Idempotent repeat execution
+- Tenant isolation
+- Provider metadata preservation
+- Failure details stored or surfaced appropriately
+
+Do not change the canonical persistence model unless a real implementation blocker is documented first.
+
+10. Manual Run Entry Point
+
+Add one safe internal/manual execution path for testing the provider.
+
+Use the narrowest existing pattern, such as:
+
+- Internal CLI script
+- Protected internal route
+- Admin-only operation
+- Development command
+
+It must:
+
+- Require an explicit client identifier
+- Resolve the client safely
+- Never fall back to BB&B for an unknown client
+- Require provider configuration
+- Support dry-run mode
+- Report estimated/planned request count before execution where practical
+- Never publish content
+- Never trigger outreach
+- Never enable autopilot
+- Never run automatically on server startup
+
+Prefer a CLI or protected internal route over public UI for C4.
+
+11. Safety and Compliance
+
+Confirm:
+
+- Provider usage complies with its documented API terms
+- No unauthorized scraping is introduced
+- No browser automation is introduced
+- No CAPTCHA bypass is introduced
+- No credentials are exposed
+- No restricted Google data is used outside permitted purposes
+- No customer data crosses tenant boundaries
+
+12. Legacy Mock Protection
+
+The live provider must not write into or depend on:
+
+- Math.random() AI visibility score changes
+- GPT-fabricated keyword volume
+- Hardcoded competitor JSON
+- Demo-only AI visibility blobs
+
+The canonical Discovery Engine remains the only destination for C4 results.
+
+Required tests:
+
+A. Provider config parsing
+B. Missing credential handling
+C. Disabled provider handling
+D. Query-plan determinism
+E. Query caps
+F. Blocked-service exclusion
+G. Educational-only constraints
+H. Response parsing
+I. Partial response handling
+J. Timeout handling
+K. Authentication error handling
+L. Quota error handling
+M. Malformed response handling
+N. Retry limits
+O. Cost/request-count metadata
+P. Domain extraction
+Q. Competitor-candidate filtering
+R. Normalization into canonical signals
+S. Persistence through C3 repository
+T. Idempotent rerun
+U. Tenant isolation
+V. No live call in unit tests
+W. Live integration test opt-in
+X. Pipeline continuation after provider failure
+Y. No fabricated metrics
+Z. No legacy mock dependency
+
+Validation:
+
+Run:
+
+1. New C4 unit tests
+2. Optional live integration test only if:
+   - credentials exist
+   - DISCOVERY_LIVE_TESTS=true
+   - request count is explicitly bounded
+3. Existing C2 and C3 discovery tests
+4. Existing Phase A and B tests
+5. API-server tests
+6. Relevant web tests
+7. lib/db TypeScript build
+8. API-server TypeScript check
+9. Search for accidental credentials, Math.random(), fabricated volume, and hardcoded competitor data inside the new provider path
+10. Confirm BB&B autopilot remains disabled
+11. Confirm no content was generated
+12. Confirm nothing was published
+13. Report exact external request count and estimated provider cost if a live test ran
+
+Deliverables:
+
+1. Provider-selection audit
+2. Provider chosen and rationale
+3. Files created or modified
+4. Configuration variables required
+5. Query-planning rules
+6. Rate and cost controls
+7. Provider error taxonomy
+8. Health reporting behavior
+9. Normalization mapping
+10. Competitor-evidence rules
+11. Manual execution path
+12. Test counts and results
+13. TypeScript results
+14. Live-test result, request count, and cost, or confirmation that no live test ran
+15. Confirmation that no UI, scheduler, publishing, outreach, or autopilot changes were made
+16. Any deviations from C1–C3 architecture and why
+17. Recommended Phase C5 scope
+
+Stop after Phase C4 validation.
+
+Do not connect a second provider.
+Do not begin C5 automatically.

@@ -1,0 +1,1232 @@
+[1mdiff --cc artifacts/api-server/src/routes/social-posts.ts[m
+[1mindex d816839,9e3d9da..0000000[m
+[1m--- a/artifacts/api-server/src/routes/social-posts.ts[m
+[1m+++ b/artifacts/api-server/src/routes/social-posts.ts[m
+[36m@@@ -1,1178 -1,60 +1,1174 @@@[m
+  import { Router } from "express";[m
+[32m++<<<<<<< HEAD[m
+[32m +import { db } from "@workspace/db";[m
+[32m +import { socialPostsTable, socialConnectionsTable, imageAssetsTable, platformDeliveriesTable } from "@workspace/db/schema";[m
+[32m +import { eq, and, desc } from "drizzle-orm";[m
+[32m +import { bootstrapPlatformDeliveries, publishingService } from "../lib/publishing-service";[m
+[32m +import { getAuth } from "@clerk/express";[m
+[32m +import { SCHEDULER_SECRET } from "../lib/scheduler-secret";[m
+[32m +import {[m
+[32m +  readGbpCooldown, buildGbpCooldownRecord,[m
+[32m +  stripLegacyCooldownFields,[m
+[32m +} from "../lib/gbp-cooldown.js";[m
+[32m +import type { GbpEndpointCategory } from "../lib/gbp-cooldown.js";[m
+[32m +import multer from "multer";[m
+[32m +import path from "path";[m
+[32m +import fs from "fs";[m
+[32m +import { ObjectStorageService } from "../lib/objectStorage";[m
+[32m++=======[m
+[32m+ import { eq, and, desc } from "drizzle-orm";[m
+[32m+ import { db } from "@workspace/db";[m
+[32m+ import { socialPostsTable } from "@workspace/db/schema";[m
+[32m+ import { getAuth } from "@clerk/express";[m
+[32m++>>>>>>> origin/main[m
+  [m
+  const router = Router();[m
+[32m +const objectStorageService = new ObjectStorageService();[m
+[32m +[m
+[32m +// Bootstrap platform_deliveries table + V6 columns on startup (idempotent)[m
+[32m +bootstrapPlatformDeliveries().catch(e =>[m
+[32m +  console.error("[PLATFORM-DELIVERIES] bootstrap failed:", e)[m
+[32m +);[m
+[32m +[m
+[32m +// ── POST /social-posts/bulk/publish ──────────────────────────────────────────[m
+[32m +// Approve + immediately publish one or more draft posts.[m
+[32m +// This is the "Send / Publish Selected" action from the Content Autopilot.[m
+[32m +// Each post must already exist in the DB; the route auto-approves then delegates[m
+[32m +// to PublishingService which enforces idempotency and delivery tracking.[m
+[32m +router.post("/social-posts/bulk/publish", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +[m
+[32m +  const b = req.body as { postIds?: string[] };[m
+[32m +  const postIds: string[] = Array.isArray(b.postIds) ? b.postIds : [];[m
+[32m +  if (!postIds.length) {[m
+[32m +    res.status(400).json({ error: "postIds array is required and must not be empty" });[m
+[32m +    return;[m
+[32m +  }[m
+[32m +[m
+[32m +  const port        = parseInt(process.env.PORT ?? "8080", 10);[m
+[32m +  const internalBase = `http://127.0.0.1:${port}`;[m
+[32m +[m
+[32m +  const results = [];[m
+[32m +  for (const id of postIds) {[m
+[32m +    // Auto-approve: clicking "Confirm & Publish" constitutes approval[m
+[32m +    await db.update(socialPostsTable).set({[m
+[32m +      approvalStatus: "approved",[m
+[32m +      approvedAt:     new Date(),[m
+[32m +      approvedBy:     userId,[m
+[32m +      status:         "approved",[m
+[32m +      updatedAt:      new Date(),[m
+[32m +    }).where(and(eq(socialPostsTable.id, id), eq(socialPostsTable.userId, userId)));[m
+[32m +[m
+[32m +    const result = await publishingService.publishPost(id, userId, userId, internalBase, SCHEDULER_SECRET);[m
+[32m +    results.push(result);[m
+[32m +  }[m
+[32m +[m
+[32m +  const totalPublished = results.filter(r => r.postStatus === "published").length;[m
+[32m +  const totalFailed    = results.filter(r => r.postStatus === "failed").length;[m
+[32m +  const summary = `${totalPublished} of ${results.length} post${results.length !== 1 ? "s" : ""} published successfully${totalFailed ? `; ${totalFailed} failed` : ""}.`;[m
+[32m +[m
+[32m +  res.json({ ok: totalFailed === 0, results, summary });[m
+[32m +});[m
+  [m
+[31m- const UPLOADS_DIR = path.join(process.cwd(), "uploads", "social-posts");[m
+[31m- fs.mkdirSync(UPLOADS_DIR, { recursive: true });[m
+[31m- [m
+[31m- const ALLOWED_MIME = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);[m
+[31m- [m
+[31m- const upload = multer({[m
+[31m-   limits: { fileSize: 10 * 1024 * 1024 },[m
+[31m-   fileFilter: (_req, file, cb) => {[m
+[31m-     if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);[m
+[31m-     else cb(new Error("Only JPG, PNG, WEBP, or GIF files are allowed."));[m
+[31m-   },[m
+[31m-   storage: multer.diskStorage({[m
+[31m-     destination: UPLOADS_DIR,[m
+[31m-     filename: (_req, file, cb) => {[m
+[31m-       const ext = path.extname(file.originalname).toLowerCase() || ".jpg";[m
+[31m-       cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);[m
+[31m-     },[m
+[31m-   }),[m
+[31m- });[m
+[32m+ type SocialPostRow = typeof socialPostsTable.$inferSelect;[m
+  [m
+[31m- function rowToDto(r: typeof socialPostsTable.$inferSelect) {[m
+[32m+ function rowToDto(r: SocialPostRow) {[m
+    return {[m
+[32m++<<<<<<< HEAD[m
+[32m +    id:              r.id,[m
+[32m +    clientName:      r.clientName,[m
+[32m +    platforms:       JSON.parse(r.platforms || "[]") as string[],[m
+[32m +    imageUrl:        r.imageData,[m
+[32m +    videoUrl:        r.videoUrl ?? null,[m
+[32m +    youtubeTitle:    r.youtubeTitle   ?? null,[m
+[32m +    youtubePrivacy:  r.youtubePrivacy ?? null,[m
+[32m +    youtubeVideoId:  r.youtubeVideoId ?? null,[m
+[32m +    youtubeTags:     r.youtubeTags    ? (JSON.parse(r.youtubeTags) as string[]) : null,[m
+[32m +    audioUrl:        r.audioUrl ?? null,[m
+[32m +    caption:         r.caption,[m
+[32m +    captionFacebook: r.captionFacebook ?? null,[m
+[32m +    captionGoogle:   r.captionGoogle ?? null,[m
+[32m +    ctaType:         r.ctaType,[m
+[32m +    ctaValue:        r.ctaValue,[m
+[32m +    scheduledAt:     r.scheduledAt?.toISOString() ?? null,[m
+[32m +    status:          r.status,[m
+[32m +    publishedAt:     r.publishedAt?.toISOString() ?? null,[m
+[32m +    errorMessage:    r.errorMessage,[m
+[32m +    aiCity:          r.aiCity ?? null,[m
+[32m +    aiTopic:         r.aiTopic ?? null,[m
+[32m +    aiAngle:         r.aiAngle ?? null,[m
+[32m +    contentScore:    r.contentScore ? parseInt(r.contentScore, 10) : null,[m
+[32m +    bestPlatform:    r.bestPlatform ?? null,[m
+[32m +    matchedImageId:    r.matchedImageId ?? null,[m
+[32m +    matchedImageUrl:   r.matchedImageUrl ?? null,[m
+[32m +    matchedImageScore: r.matchedImageScore ? parseInt(r.matchedImageScore, 10) : null,[m
+[32m +    impressions:     r.impressions ? parseInt(r.impressions, 10) : null,[m
+[32m +    reach:           r.reach      ? parseInt(r.reach,       10) : null,[m
+[32m +    clicks:          r.clicks     ? parseInt(r.clicks,      10) : null,[m
+[32m +    likes:           r.likes      ? parseInt(r.likes,       10) : null,[m
+[32m +    comments:        r.comments   ? parseInt(r.comments,    10) : null,[m
+[32m +    shares:          r.shares     ? parseInt(r.shares,      10) : null,[m
+[32m +    engagementScore: r.engagementScore ? parseFloat(r.engagementScore) : null,[m
+[32m +    createdAt:       r.createdAt.toISOString(),[m
+[32m +    updatedAt:       r.updatedAt.toISOString(),[m
+[32m++=======[m
+[32m+     ...r,[m
+[32m+     scheduledAt: r.scheduledAt?.toISOString() ?? null,[m
+[32m+     publishedAt: r.publishedAt?.toISOString() ?? null,[m
+[32m+     createdAt: r.createdAt?.toISOString() ?? null,[m
+[32m+     updatedAt: r.updatedAt?.toISOString() ?? null,[m
+[32m++>>>>>>> origin/main[m
+    };[m
+  }[m
+  [m
+[31m- // ── Image upload ──────────────────────────────────────────────────────────────[m
+[31m- router.post("/social-posts/upload-image", (req, res) => {[m
+[32m+ router.get("/", async (req, res) => {[m
+    const { userId } = getAuth(req);[m
+[31m-   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+  [m
+[31m-   upload.single("image")(req, res, (err: any) => {[m
+[31m-     if (err) {[m
+[31m-       const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;[m
+[31m-       const msg = err.code === "LIMIT_FILE_SIZE"[m
+[31m-         ? "Image too large. Maximum size is 10 MB."[m
+[31m-         : err.message ?? "Upload failed.";[m
+[31m-       res.status(status).json({ error: msg });[m
+[31m-       return;[m
+[31m-     }[m
+[31m-     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }[m
+[31m-     const imageUrl = `/api/uploads/social-posts/${req.file.filename}`;[m
+[31m-     res.json({ imageUrl });[m
+[31m-   });[m
+[31m- });[m
+[32m+   if (!userId) {[m
+[32m+     res.status(401).json({ error: "Unauthorized" });[m
+[32m+     return;[m
+[32m+   }[m
+  [m
+[31m- // ── CRUD ─────────────────────────────────────────────────────────────────────[m
+[31m- router.get("/social-posts", async (req, res) => {[m
+[31m-   const { userId } = getAuth(req);[m
+[31m-   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[31m-   const rows = await db.select().from(socialPostsTable)[m
+[32m+   const rows = await db[m
+[32m+     .select()[m
+[32m+     .from(socialPostsTable)[m
+      .where(eq(socialPostsTable.userId, userId))[m
+      .orderBy(desc(socialPostsTable.createdAt));[m
+[31m-   res.json(rows.map(rowToDto));[m
+[32m+ [m
+[32m+   res.json(rows.map((r: SocialPostRow) => rowToDto(r)));[m
+  });[m
+  [m
+[31m- router.post("/social-posts", async (req, res) => {[m
+[32m+ router.get("/:id", async (req, res) => {[m
+    const { userId } = getAuth(req);[m
+[32m++<<<<<<< HEAD[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  const b = req.body as any;[m
+[32m +  const [row] = await db.insert(socialPostsTable).values({[m
+[32m +    userId,[m
+[32m +    clientName:  b.clientName  ?? "Bed Bugs & Beyond",[m
+[32m +    platforms:   JSON.stringify(b.platforms ?? []),[m
+[32m +    imageData:   b.imageUrl    ?? null,[m
+[32m +    videoUrl:       b.videoUrl       ?? null,[m
+[32m +    audioUrl:       b.audioUrl       ?? null,[m
+[32m +    youtubeTitle:   b.youtubeTitle   ?? null,[m
+[32m +    youtubePrivacy: b.youtubePrivacy ?? null,[m
+[32m +    youtubeTags:    Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : (b.youtubeTags ?? null),[m
+[32m +    caption:     b.caption     ?? "",[m
+[32m +    ctaType:     b.ctaType     ?? "none",[m
+[32m +    ctaValue:    b.ctaValue    ?? null,[m
+[32m +    scheduledAt: b.scheduledAt ? new Date(b.scheduledAt) : null,[m
+[32m +    status:      b.status      ?? "draft",[m
+[32m +  }).returning();[m
+[32m +  res.status(201).json(rowToDto(row));[m
+[32m +});[m
+[32m +[m
+[32m +router.patch("/social-posts/:id", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  const b = req.body as any;[m
+[32m +  const [row] = await db.update(socialPostsTable).set({[m
+[32m +    ...(b.clientName      !== undefined && { clientName:      b.clientName }),[m
+[32m +    ...(b.platforms       !== undefined && { platforms:       JSON.stringify(b.platforms) }),[m
+[32m +    ...(b.imageUrl        !== undefined && { imageData:       b.imageUrl }),[m
+[32m +    ...(b.videoUrl        !== undefined && { videoUrl:        b.videoUrl }),[m
+[32m +    ...(b.audioUrl        !== undefined && { audioUrl:        b.audioUrl }),[m
+[32m +    ...(b.youtubeTitle    !== undefined && { youtubeTitle:    b.youtubeTitle }),[m
+[32m +    ...(b.youtubePrivacy  !== undefined && { youtubePrivacy:  b.youtubePrivacy }),[m
+[32m +    ...(b.youtubeTags     !== undefined && { youtubeTags:     Array.isArray(b.youtubeTags) ? JSON.stringify(b.youtubeTags) : b.youtubeTags }),[m
+[32m +    ...(b.caption         !== undefined && { caption:         b.caption }),[m
+[32m +    ...(b.captionFacebook !== undefined && { captionFacebook: b.captionFacebook }),[m
+[32m +    ...(b.captionGoogle   !== undefined && { captionGoogle:   b.captionGoogle }),[m
+[32m +    ...(b.ctaType         !== undefined && { ctaType:         b.ctaType }),[m
+[32m +    ...(b.ctaValue        !== undefined && { ctaValue:        b.ctaValue }),[m
+[32m +    ...(b.scheduledAt     !== undefined && { scheduledAt:     b.scheduledAt ? new Date(b.scheduledAt) : null }),[m
+[32m +    ...(b.status          !== undefined && { status:          b.status }),[m
+[32m +    updatedAt: new Date(),[m
+[32m +  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +  if (!row) { res.status(404).send(); return; }[m
+[32m +  res.json(rowToDto(row));[m
+[32m +});[m
+[32m++=======[m
+  [m
+[31m- router.delete("/social-posts/:id", async (req, res) => {[m
+[31m-   const { userId } = getAuth(req);[m
+[31m-   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[31m-   const [deleted] = await db.delete(socialPostsTable)[m
+[32m+   if (!userId) {[m
+[32m+     res.status(401).json({ error: "Unauthorized" });[m
+[32m+     return;[m
+[32m+   }[m
+[32m++>>>>>>> origin/main[m
+[32m+ [m
+[32m+   const post = await db[m
+[32m+     .select()[m
+[32m+     .from(socialPostsTable)[m
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))[m
+[31m-     .returning();[m
+[31m-   if (deleted?.imageData && deleted.imageData.startsWith("/api/uploads/")) {[m
+[31m-     const filePath = path.join(process.cwd(), deleted.imageData.replace("/api/", ""));[m
+[31m-     fs.unlink(filePath, () => {});[m
+[32m+     .then((r: Array<SocialPostRow>) => r[0] ?? null);[m
+[32m+ [m
+[32m+   if (!post) {[m
+[32m+     res.status(404).json({ error: "Post not found" });[m
+[32m+     return;[m
+    }[m
+[31m-   res.status(204).send();[m
+[32m+ [m
+[32m+   res.json(rowToDto(post));[m
+  });[m
+  [m
+[32m++<<<<<<< HEAD[m
+[32m +// ── Publish ───────────────────────────────────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/publish", async (req, res) => {[m
+[32m +  // Internal scheduler bypass — lets the scheduler call this route without a[m
+[32m +  // Clerk session. Validated via the shared in-process SCHEDULER_SECRET.[m
+[32m +  const isScheduler =[m
+[32m +    !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;[m
+[32m +[m
+[32m +  let userId: string;[m
+[32m +  if (isScheduler) {[m
+[32m +    const [p] = await db[m
+[32m +      .select({ userId: socialPostsTable.userId })[m
+[32m +      .from(socialPostsTable)[m
+[32m +      .where(eq(socialPostsTable.id, req.params.id));[m
+[32m +    if (!p) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +    userId = p.userId;[m
+[32m +  } else {[m
+[32m +    const auth = getAuth(req);[m
+[32m +    if (!auth.userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +    userId = auth.userId;[m
+[32m +  }[m
+[32m +[m
+[32m +  const post = await db.select().from(socialPostsTable)[m
+[32m +    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))[m
+[32m +    .then(r => r[0]);[m
+[32m +  if (!post) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +[m
+[32m +  const platforms: string[] = JSON.parse(post.platforms || "[]");[m
+[32m +  const results: Record<string, { ok: boolean; error?: string; postId?: string }> = {};[m
+[32m +  const errors: string[] = [];[m
+[32m +[m
+[32m +  const getConnection = async (provider: string) => {[m
+[32m +    const [conn] = await db.select().from(socialConnectionsTable)[m
+[32m +      .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider)));[m
+[32m +    return conn;[m
+[32m +  };[m
+[32m +[m
+[32m +  const getFbPages = async (userToken: string) => {[m
+[32m +    const r = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${userToken}`);[m
+[32m +    if (!r.ok) throw new Error(`Failed to get pages: ${await r.text()}`);[m
+[32m +    const data = await r.json() as { data: { id: string; name: string; access_token: string }[] };[m
+[32m +    return data.data;[m
+[32m +  };[m
+[32m +[m
+[32m +  // Converts any stored image path to a public HTTPS URL usable by Facebook/Instagram/GBP.[m
+[32m +  // /objects/{id}  → https://aiedgesolutions.online/api/storage/objects/{id}[m
+[32m +  // http(s)://...  → returned as-is[m
+[32m +  // anything else  → null (e.g. local /api/uploads/ paths are handled by buildImageForm, not here)[m
+[32m +  function resolveImageUrl(val: string | null | undefined): string | null {[m
+[32m +    if (!val) return null;[m
+[32m +    if (val.startsWith("http")) return val;[m
+[32m +    if (val.startsWith("/objects/")) return `https://aiedgesolutions.online/api/storage${val}`;[m
+[32m +    return null;[m
+[32m +  }[m
+[32m +[m
+[32m +  const buildImageForm = async (imageData: string | null): Promise<{ blob: Blob; filename: string } | null> => {[m
+[32m +    if (!imageData) return null;[m
+[32m +    if (imageData.startsWith("/api/uploads/")) {[m
+[32m +      const filePath = path.join(process.cwd(), imageData.replace("/api/", ""));[m
+[32m +      const buf = await fs.promises.readFile(filePath);[m
+[32m +      const ext = path.extname(filePath).toLowerCase();[m
+[32m +      const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";[m
+[32m +      return { blob: new Blob([buf], { type: mime }), filename: path.basename(filePath) };[m
+[32m +    }[m
+[32m +    if (imageData.startsWith("data:")) {[m
+[32m +      const base64 = imageData.replace(/^data:image\/[a-z+]+;base64,/, "");[m
+[32m +      const buf = Buffer.from(base64, "base64");[m
+[32m +      return { blob: new Blob([buf], { type: "image/jpeg" }), filename: "photo.jpg" };[m
+[32m +    }[m
+[32m +    return null;[m
+[32m +  };[m
+[32m +[m
+[32m +  const uploadPhotoToFacebook = async ([m
+[32m +    pageId: string, pageToken: string, caption: string, imageData: string | null[m
+[32m +  ) => {[m
+[32m +    const imgFile = await buildImageForm(imageData);[m
+[32m +    if (imgFile) {[m
+[32m +      const form = new FormData();[m
+[32m +      form.append("caption", caption);[m
+[32m +      form.append("access_token", pageToken);[m
+[32m +      form.append("source", imgFile.blob, imgFile.filename);[m
+[32m +      const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, { method: "POST", body: form });[m
+[32m +      const data = await r.json() as any;[m
+[32m +      if (!r.ok) throw new Error(data.error?.message ?? "Photo upload failed");[m
+[32m +      return data as { id: string; post_id?: string };[m
+[32m +    }[m
+[32m +    if (imageData?.startsWith("http")) {[m
+[32m +      const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/photos`, {[m
+[32m +        method: "POST",[m
+[32m +        headers: { "Content-Type": "application/json" },[m
+[32m +        body: JSON.stringify({ caption, url: imageData, access_token: pageToken }),[m
+[32m +      });[m
+[32m +      const data = await r.json() as any;[m
+[32m +      if (!r.ok) throw new Error(data.error?.message ?? "Photo URL post failed");[m
+[32m +      return data as { id: string; post_id?: string };[m
+[32m +    }[m
+[32m +    const r = await fetch(`https://graph.facebook.com/v19.0/${pageId}/feed`, {[m
+[32m +      method: "POST",[m
+[32m +      headers: { "Content-Type": "application/json" },[m
+[32m +      body: JSON.stringify({ message: caption, access_token: pageToken }),[m
+[32m +    });[m
+[32m +    const data = await r.json() as any;[m
+[32m +    if (!r.ok) throw new Error(data.error?.message ?? "Feed post failed");[m
+[32m +    return { id: data.id as string };[m
+[32m +  };[m
+[32m +[m
+[32m +  const getPhotoUrl = async (photoId: string, pageToken: string): Promise<string | null> => {[m
+[32m +    const r = await fetch(`https://graph.facebook.com/v19.0/${photoId}?fields=images&access_token=${pageToken}`);[m
+[32m +    if (!r.ok) return null;[m
+[32m +    const data = await r.json() as any;[m
+[32m +    return data.images?.[0]?.source ?? null;[m
+[32m +  };[m
+[32m +[m
+[32m +  let fbPhotoUrl: string | null = null;[m
+[32m +  let fbPages: { id: string; name: string; access_token: string }[] = [];[m
+[32m +[m
+[32m +  if (platforms.includes("facebook") || platforms.includes("instagram")) {[m
+[32m +    const fbConn = await getConnection("facebook");[m
+[32m +    if (!fbConn?.accessToken) {[m
+[32m +      errors.push("Facebook not connected");[m
+[32m +    } else {[m
+[32m +      try {[m
+[32m +        fbPages = await getFbPages(fbConn.accessToken);[m
+[32m +        if (!fbPages.length) throw new Error("No Facebook Pages found. Make sure a Page is linked to your account.");[m
+[32m +      } catch (e: any) {[m
+[32m +        errors.push(`Facebook: ${e.message}`);[m
+[32m +      }[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  if (platforms.includes("facebook") && fbPages.length) {[m
+[32m +    const page = fbPages[0];[m
+[32m +    try {[m
+[32m +      const fbCaption = post.captionFacebook ?? post.caption;[m
+[32m +      const fullCaption = buildCaption(fbCaption, post.ctaType, post.ctaValue);[m
+[32m +      const fbImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;[m
+[32m +      const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, fbImageSource);[m
+[32m +      results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };[m
+[32m +      fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);[m
+[32m +    } catch (e: any) {[m
+[32m +      results.facebook = { ok: false, error: e.message };[m
+[32m +      errors.push(`Facebook: ${e.message}`);[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  if (platforms.includes("instagram") && fbPages.length) {[m
+[32m +    const page = fbPages[0];[m
+[32m +    try {[m
+[32m +      const igRes = await fetch(`https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`);[m
+[32m +      const igData = await igRes.json() as any;[m
+[32m +      const igAccountId = igData.instagram_business_account?.id;[m
+[32m +      if (!igAccountId) throw new Error("No Instagram Business Account linked to this Facebook Page.");[m
+[32m +[m
+[32m +      const imageUrl =[m
+[32m +        fbPhotoUrl ??[m
+[32m +        (post.imageData?.startsWith("http") ? post.imageData : null) ??[m
+[32m +        resolveImageUrl(post.matchedImageUrl);[m
+[32m +      if (!imageUrl) throw new Error("Instagram requires a public image URL. Upload an image to the post or add images to the Image Assets library.");[m
+[32m +[m
+[32m +      const igCaption = post.captionFacebook ?? post.caption;[m
+[32m +      const fullCaption = buildCaption(igCaption, post.ctaType, post.ctaValue);[m
+[32m +      const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}/media`, {[m
+[32m +        method: "POST",[m
+[32m +        headers: { "Content-Type": "application/json" },[m
+[32m +        body: JSON.stringify({ caption: fullCaption, image_url: imageUrl, access_token: page.access_token }),[m
+[32m +      });[m
+[32m +      const containerData = await containerRes.json() as any;[m
+[32m +      if (!containerRes.ok) throw new Error(containerData.error?.message ?? "Failed to create IG media container");[m
+[32m +[m
+[32m +      const publishRes = await fetch(`https://graph.facebook.com/v19.0/${igAccountId}/media_publish`, {[m
+[32m +        method: "POST",[m
+[32m +        headers: { "Content-Type": "application/json" },[m
+[32m +        body: JSON.stringify({ creation_id: containerData.id, access_token: page.access_token }),[m
+[32m +      });[m
+[32m +      const publishData = await publishRes.json() as any;[m
+[32m +      if (!publishRes.ok) throw new Error(publishData.error?.message ?? "Failed to publish IG media");[m
+[32m +[m
+[32m +      results.instagram = { ok: true, postId: publishData.id };[m
+[32m +    } catch (e: any) {[m
+[32m +      results.instagram = { ok: false, error: e.message };[m
+[32m +      errors.push(`Instagram: ${e.message}`);[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  // ── Google Business Profile ──[m
+[32m +  if (platforms.includes("google")) {[m
+[32m +    const gbpConn = await getConnection("google_business");[m
+[32m +    console.log("[GBP-PUBLISH]", JSON.stringify({[m
+[32m +      provider: "google_business",[m
+[32m +      hasAccessToken: !!gbpConn?.accessToken,[m
+[32m +      hasRefreshToken: !!gbpConn?.refreshToken,[m
+[32m +      accessTokenLength: gbpConn?.accessToken?.length ?? 0,[m
+[32m +      refreshTokenLength: gbpConn?.refreshToken?.length ?? 0,[m
+[32m +      expiresAt: gbpConn?.expiresAt ?? null,[m
+[32m +      tokenExpired: gbpConn?.expiresAt ? new Date(gbpConn.expiresAt) < new Date() : null,[m
+[32m +    }));[m
+[32m +    if (!gbpConn?.accessToken) {[m
+[32m +      errors.push("Google Business Profile not connected");[m
+[32m +      results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };[m
+[32m +    } else {[m
+[32m +      try {[m
+[32m +        const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });[m
+[32m +        const googleCaption = post.captionGoogle ?? post.caption;[m
+[32m +        const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;[m
+[32m +        const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);[m
+[32m +        results.google = { ok: true, postId: gbpResult.id };[m
+[32m +      } catch (e: any) {[m
+[32m +        results.google = { ok: false, error: e.message };[m
+[32m +        errors.push(`Google: ${e.message}`);[m
+[32m +      }[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  // ── TikTok ────────────────────────────────────────────────────────────────[m
+[32m +  // TikTok Content Posting API only accepts video content.[m
+[32m +  // Posts with no videoUrl are skipped with a clear message rather than failing[m
+[32m +  // silently. When video support is added to the schema, remove the skip guard.[m
+[32m +  if (platforms.includes("tiktok")) {[m
+[32m +    const ttConn = await getConnection("tiktok");[m
+[32m +    console.log("[TIKTOK-PUBLISH]", JSON.stringify({[m
+[32m +      hasConnection: !!ttConn,[m
+[32m +      hasAccessToken: !!ttConn?.accessToken,[m
+[32m +      expiresAt: ttConn?.expiresAt ?? null,[m
+[32m +      tokenExpired: ttConn?.expiresAt ? new Date(ttConn.expiresAt) < new Date() : null,[m
+[32m +    }));[m
+[32m +[m
+[32m +    if (!ttConn?.accessToken) {[m
+[32m +      results.tiktok = { ok: false, error: "TikTok not connected — link your account in Connected Accounts." };[m
+[32m +      errors.push("TikTok: Not connected");[m
+[32m +    } else {[m
+[32m +      // Current post schema has no videoUrl field — all posts are text/image only.[m
+[32m +      const videoUrl: string | null = (post as any).videoUrl ?? null;[m
+[32m +[m
+[32m +      if (!videoUrl) {[m
+[32m +        // Skip gracefully — this is not a connection error, just an unsupported post type.[m
+[32m +        console.log("[TIKTOK-PUBLISH] Skipped — post has no video content (TikTok requires video)");[m
+[32m +        results.tiktok = {[m
+[32m +          ok: false,[m
+[32m +          error: "TikTok publishing requires video content. This post was skipped for TikTok.",[m
+[32m +        };[m
+[32m +        errors.push("TikTok: Video required — post has no video content");[m
+[32m +      } else {[m
+[32m +        // ── Video posting via TikTok Content Posting API ──────────────────[m
+[32m +        // Uses PULL_FROM_URL source: TikTok fetches the video from our URL.[m
+[32m +        // Requires video.publish scope approved in TikTok Developer Portal.[m
+[32m +        // Sandbox mode: token exchange succeeds but Content Posting API returns[m
+[32m +        // error_code 2061 (permission denied) until app review is approved.[m
+[32m +        try {[m
+[32m +          const titleText = (post.caption ?? "").slice(0, 150).replace(/\n/g, " ").trim();[m
+[32m +          const initRes = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {[m
+[32m +            method: "POST",[m
+[32m +            headers: {[m
+[32m +              Authorization: `Bearer ${ttConn.accessToken}`,[m
+[32m +              "Content-Type": "application/json; charset=UTF-8",[m
+[32m +            },[m
+[32m +            body: JSON.stringify({[m
+[32m +              post_info: {[m
+[32m +                title: titleText || "New post",[m
+[32m +                privacy_level: "PUBLIC_TO_EVERYONE",[m
+[32m +                disable_duet: false,[m
+[32m +                disable_comment: false,[m
+[32m +                disable_stitch: false,[m
+[32m +                video_cover_timestamp_ms: 1000,[m
+[32m +              },[m
+[32m +              source_info: {[m
+[32m +                source: "PULL_FROM_URL",[m
+[32m +                video_url: videoUrl,[m
+[32m +              },[m
+[32m +            }),[m
+[32m +          });[m
+[32m +[m
+[32m +          const initData = await initRes.json() as any;[m
+[32m +          console.log("[TIKTOK-PUBLISH] API response:", JSON.stringify(initData));[m
+[32m +[m
+[32m +          // TikTok wraps success in { data: {...}, error: { code: "ok" } }[m
+[32m +          if (!initRes.ok || (initData.error?.code && initData.error.code !== "ok")) {[m
+[32m +            const code    = initData.error?.code ?? initRes.status;[m
+[32m +            const message = initData.error?.message ?? `TikTok API error ${initRes.status}`;[m
+[32m +            // Translate common error codes to actionable messages[m
+[32m +            const hint =[m
+[32m +              code === 2061 ? " (App lacks video.publish permission — request approval in TikTok Developer Portal)" :[m
+[32m +              code === 2200 ? " (Invalid access token — reconnect TikTok)" :[m
+[32m +              code === 2100 ? " (Video URL unreachable — must be a public HTTPS URL)" :[m
+[32m +              "";[m
+[32m +            throw new Error(`${message}${hint} [code: ${code}]`);[m
+[32m +          }[m
+[32m +[m
+[32m +          const publishId = initData.data?.publish_id ?? null;[m
+[32m +          results.tiktok = { ok: true, postId: publishId ?? undefined };[m
+[32m +        } catch (e: any) {[m
+[32m +          console.error("[TIKTOK-PUBLISH] Error:", e.message);[m
+[32m +          results.tiktok = { ok: false, error: e.message };[m
+[32m +          errors.push(`TikTok: ${e.message}`);[m
+[32m +        }[m
+[32m +      }[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  // ── YouTube ────────────────────────────────────────────────────────────────[m
+[32m +  // YouTube Data API v3 requires video content — image posts are skipped.[m
+[32m +  // When a videoUrl is present the upload uses the resumable upload protocol.[m
+[32m +  // Capture provider video ID for persistence after the platforms block[m
+[32m +  let capturedYoutubeVideoId: string | null = null;[m
+[32m +[m
+[32m +  if (platforms.includes("youtube")) {[m
+[32m +    const ytConn = await getConnection("youtube");[m
+[32m +    console.log("[YOUTUBE-PUBLISH]", JSON.stringify({[m
+[32m +      hasConnection: !!ytConn,[m
+[32m +      hasAccessToken: !!ytConn?.accessToken,[m
+[32m +      expiresAt: ytConn?.expiresAt ?? null,[m
+[32m +      tokenExpired: ytConn?.expiresAt ? new Date(ytConn.expiresAt) < new Date() : null,[m
+[32m +    }));[m
+[32m +[m
+[32m +    if (!ytConn?.accessToken) {[m
+[32m +      results.youtube = { ok: false, error: "YouTube not connected — link your channel in Connected Accounts." };[m
+[32m +      errors.push("YouTube: Not connected");[m
+[32m +    } else {[m
+[32m +      const videoUrl: string | null = (post as any).videoUrl ?? null;[m
+[32m +[m
+[32m +      if (!videoUrl) {[m
+[32m +        console.log("[YOUTUBE-PUBLISH] Skipped — post has no video content (YouTube requires video)");[m
+[32m +        results.youtube = {[m
+[32m +          ok: false,[m
+[32m +          error: "YouTube publishing requires video content. This post was skipped for YouTube — add a video URL to publish.",[m
+[32m +        };[m
+[32m +        errors.push("YouTube: Video required — post has no video content");[m
+[32m +      } else {[m
+[32m +        try {[m
+[32m +          let accessToken = ytConn.accessToken;[m
+[32m +[m
+[32m +          // Refresh if: refresh token present AND (expiresAt unknown/null OR confirmed expired).[m
+[32m +          // expiresAt is NULL when synced via dev-sync — must not gate refresh on it being set.[m
+[32m +          if (ytConn.refreshToken && (!ytConn.expiresAt || ytConn.expiresAt < new Date())) {[m
+[32m +            const refreshRes = await fetch("https://oauth2.googleapis.com/token", {[m
+[32m +              method: "POST",[m
+[32m +              headers: { "Content-Type": "application/x-www-form-urlencoded" },[m
+[32m +              body: new URLSearchParams({[m
+[32m +                client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",[m
+[32m +                client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",[m
+[32m +                refresh_token: ytConn.refreshToken,[m
+[32m +                grant_type:    "refresh_token",[m
+[32m +              }),[m
+[32m +            });[m
+[32m +            if (refreshRes.ok) {[m
+[32m +              const refreshData = await refreshRes.json() as { access_token: string; expires_in?: number };[m
+[32m +              accessToken = refreshData.access_token;[m
+[32m +              await db.update(socialConnectionsTable).set({[m
+[32m +                accessToken,[m
+[32m +                expiresAt: refreshData.expires_in ? new Date(Date.now() + refreshData.expires_in * 1000) : null,[m
+[32m +                updatedAt: new Date(),[m
+[32m +              }).where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));[m
+[32m +            }[m
+[32m +          }[m
+[32m +[m
+[32m +          const title   = (post.youtubeTitle?.trim()) ||[m
+[32m +                          (post.caption ?? "").slice(0, 100).replace(/\n/g, " ").trim() ||[m
+[32m +                          "New video";[m
+[32m +          const desc    = post.caption ?? "";[m
+[32m +          const privacy = post.youtubePrivacy === "private" || post.youtubePrivacy === "unlisted"[m
+[32m +                          ? post.youtubePrivacy : "public";[m
+[32m +          console.log("[YOUTUBE-PUBLISH] metadata", JSON.stringify({ title, privacy, descLen: desc.length }));[m
+[32m +          const rawTags: string[] = (() => {[m
+[32m +            try { return JSON.parse(post.youtubeTags ?? "[]") as string[]; } catch { return []; }[m
+[32m +          })();[m
+[32m +          const tags = rawTags.length ? rawTags : undefined;[m
+[32m +          const metaBody = {[m
+[32m +            snippet: { title, description: desc, categoryId: "22", ...(tags ? { tags } : {}) },[m
+[32m +            status:  { privacyStatus: privacy },[m
+[32m +          };[m
+[32m +[m
+[32m +          // Step 1: Initiate resumable upload session[m
+[32m +          const initRes = await fetch([m
+[32m +            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",[m
+[32m +            {[m
+[32m +              method: "POST",[m
+[32m +              headers: {[m
+[32m +                Authorization:             `Bearer ${accessToken}`,[m
+[32m +                "Content-Type":            "application/json",[m
+[32m +                "X-Upload-Content-Type":   "video/mp4",[m
+[32m +              },[m
+[32m +              body: JSON.stringify(metaBody),[m
+[32m +            }[m
+[32m +          );[m
+[32m +[m
+[32m +          if (!initRes.ok) {[m
+[32m +            const body = await initRes.text().catch(() => "");[m
+[32m +            let errMsg = `YouTube upload initiation failed (${initRes.status})`;[m
+[32m +            try {[m
+[32m +              const json = JSON.parse(body);[m
+[32m +              errMsg = json?.error?.message ?? errMsg;[m
+[32m +            } catch { /* use default */ }[m
+[32m +            const hint =[m
+[32m +              initRes.status === 403 ? " — upload permission denied. Reconnect YouTube to grant youtube.upload scope." :[m
+[32m +              initRes.status === 401 ? " — token expired or invalid. Reconnect YouTube in Connected Accounts." :[m
+[32m +              "";[m
+[32m +            throw new Error(`${errMsg}${hint}`);[m
+[32m +          }[m
+[32m +[m
+[32m +          const uploadUrl = initRes.headers.get("location");[m
+[32m +          if (!uploadUrl) throw new Error("YouTube did not return an upload URL — check YouTube Data API v3 is enabled.");[m
+[32m +[m
+[32m +          // Step 2: Fetch video — object storage path (/objects/...) or external URL[m
+[32m +          let videoBlob: Blob;[m
+[32m +          let contentType: string;[m
+[32m +          if (videoUrl.startsWith("/objects/")) {[m
+[32m +            // Private object storage — download via ObjectStorageService (no HTTP needed)[m
+[32m +            const objectFile = await objectStorageService.getObjectEntityFile(videoUrl);[m
+[32m +            const storageRes = await objectStorageService.downloadObject(objectFile);[m
+[32m +            videoBlob  = await storageRes.blob();[m
+[32m +            contentType = storageRes.headers.get("content-type") ?? "video/mp4";[m
+[32m +          } else {[m
+[32m +            const videoRes = await fetch(videoUrl, { signal: AbortSignal.timeout(60000) });[m
+[32m +            if (!videoRes.ok) throw new Error(`Cannot fetch video source (${videoRes.status}): ${videoUrl.slice(0, 80)}`);[m
+[32m +            videoBlob   = await videoRes.blob();[m
+[32m +            contentType = videoRes.headers.get("content-type") ?? "video/mp4";[m
+[32m +          }[m
+[32m +[m
+[32m +          const uploadRes = await fetch(uploadUrl, {[m
+[32m +            method:  "PUT",[m
+[32m +            headers: { "Content-Type": contentType, "Content-Length": String(videoBlob.size) },[m
+[32m +            body:    videoBlob,[m
+[32m +            signal:  AbortSignal.timeout(120000),[m
+[32m +          });[m
+[32m +[m
+[32m +          if (!uploadRes.ok && uploadRes.status !== 200 && uploadRes.status !== 201) {[m
+[32m +            const body = await uploadRes.text().catch(() => "");[m
+[32m +            throw new Error(`YouTube upload failed (${uploadRes.status}): ${body.slice(0, 200)}`);[m
+[32m +          }[m
+[32m +[m
+[32m +          const uploadData = await uploadRes.json() as { id?: string };[m
+[32m +          const videoId = uploadData.id ?? null;[m
+[32m +          console.log("[YOUTUBE-PUBLISH] ✓ uploaded:", JSON.stringify({ videoId, title, privacy }));[m
+[32m +          // Store provider video ID for immediate retrieval — persisted to DB below[m
+[32m +          capturedYoutubeVideoId = videoId;[m
+[32m +          results.youtube = { ok: true, postId: videoId ?? undefined };[m
+[32m +        } catch (e: any) {[m
+[32m +          console.error("[YOUTUBE-PUBLISH] Error:", e.message);[m
+[32m +          results.youtube = { ok: false, error: e.message };[m
+[32m +          errors.push(`YouTube: ${e.message}`);[m
+[32m +        }[m
+[32m +      }[m
+[32m +    }[m
+[32m +  }[m
+[32m +[m
+[32m +  const allOk = platforms.every(p => results[p]?.ok === true);[m
+[32m +  const anyOk = platforms.some(p => results[p]?.ok === true);[m
+[32m +  const newStatus = allOk ? "published" : anyOk ? "published_with_warning" : "failed";[m
+[32m +[m
+[32m +  const [updated] = await db.update(socialPostsTable).set({[m
+[32m +    status:       newStatus,[m
+[32m +    publishedAt:  anyOk ? new Date() : null,[m
+[32m +    errorMessage: errors.length ? errors.join("; ") : null,[m
+[32m +    ...(capturedYoutubeVideoId ? { youtubeVideoId: capturedYoutubeVideoId } : {}),[m
+[32m +    updatedAt:    new Date(),[m
+[32m +  }).where(eq(socialPostsTable.id, post.id)).returning();[m
+[32m +[m
+[32m +  res.json({ ok: allOk, results, status: newStatus, post: rowToDto(updated) });[m
+[32m +});[m
+[32m +[m
+[32m +// ── Google Business Profile ───────────────────────────────────────────────────[m
+[32m +[m
+[32m +[m
+[32m +/** Extract diagnostically useful headers from a Google API error response. */[m
+[32m +function captureGbpResponseHeaders(res: Response): Record<string, string> {[m
+[32m +  const names = [[m
+[32m +    "retry-after", "x-ratelimit-limit", "x-ratelimit-remaining",[m
+[32m +    "x-quota-limit", "x-quota-remaining", "content-type", "date",[m
+[32m +  ];[m
+[32m +  const out: Record<string, string> = {};[m
+[32m +  for (const name of names) {[m
+[32m +    const val = res.headers.get(name);[m
+[32m +    if (val) out[name] = val;[m
+[32m +  }[m
+[32m +  return out;[m
+[32m +}[m
+[32m +[m
+[32m +async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {[m
+[32m +  const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;[m
+[32m +  const needsRefresh = isExpired && !!conn.refreshToken;[m
+[32m +  console.log("[GOOGLE-REFRESH]", JSON.stringify({[m
+[32m +    attempt: needsRefresh,[m
+[32m +    reason: !conn.expiresAt ? "no_expiry_stored" : isExpired ? "token_expired" : "token_still_valid",[m
+[32m +    expiresAt: conn.expiresAt ?? null,[m
+[32m +    hasRefreshToken: !!conn.refreshToken,[m
+[32m +  }));[m
+[32m +  if (!conn.expiresAt || conn.expiresAt > new Date()) return conn.accessToken;[m
+[32m +  if (!conn.refreshToken) {[m
+[32m +    console.warn("[GOOGLE-REFRESH] skipping — no refresh token stored");[m
+[32m +    return conn.accessToken;[m
+[32m +  }[m
+[32m +  try {[m
+[32m +    const r = await fetch("https://oauth2.googleapis.com/token", {[m
+[32m +      method: "POST",[m
+[32m +      headers: { "Content-Type": "application/x-www-form-urlencoded" },[m
+[32m +      body: new URLSearchParams({[m
+[32m +        client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",[m
+[32m +        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",[m
+[32m +        refresh_token: conn.refreshToken,[m
+[32m +        grant_type:    "refresh_token",[m
+[32m +      }),[m
+[32m +    });[m
+[32m +    const refreshBody = await r.text();[m
+[32m +    if (!r.ok) {[m
+[32m +      console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, status: r.status, error: refreshBody.slice(0, 300) }));[m
+[32m +      return conn.accessToken;[m
+[32m +    }[m
+[32m +    const data = JSON.parse(refreshBody) as { access_token: string; expires_in?: number; scope?: string };[m
+[32m +    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;[m
+[32m +    console.log("[GOOGLE-REFRESH]", JSON.stringify({[m
+[32m +      success: true,[m
+[32m +      newAccessTokenLength: data.access_token?.length ?? 0,[m
+[32m +      scope: data.scope ?? "(not returned)",[m
+[32m +      expiresAt,[m
+[32m +    }));[m
+[32m +    await db.update(socialConnectionsTable).set({ accessToken: data.access_token, expiresAt, updatedAt: new Date() })[m
+[32m +      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +    return data.access_token;[m
+[32m +  } catch (e: any) {[m
+[32m +    console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, error: e?.message }));[m
+[32m +    return conn.accessToken;[m
+[32m +  }[m
+[32m +}[m
+[32m +[m
+[32m +async function publishToGBP([m
+[32m +  token: string,[m
+[32m +  conn: { userId: string; provider: string },[m
+[32m +  caption: string,[m
+[32m +  ctaType: string,[m
+[32m +  ctaValue: string | null,[m
+[32m +  imageData: string | null,[m
+[32m +): Promise<{ id: string }> {[m
+[32m +  // 0 — verify token via tokeninfo[m
+[32m +  try {[m
+[32m +    const tiR = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${token}`, { signal: AbortSignal.timeout(5000) });[m
+[32m +    const tiBody = await tiR.text();[m
+[32m +    const ti = tiR.ok ? JSON.parse(tiBody) as { scope?: string; email?: string; expires_in?: number; error?: string } : null;[m
+[32m +    console.log("[TOKENINFO]", JSON.stringify({[m
+[32m +      status: tiR.status,[m
+[32m +      scope: ti?.scope ?? null,[m
+[32m +      hasBusinessManage: ti?.scope ? ti.scope.includes("business.manage") : false,[m
+[32m +      expiresIn: ti?.expires_in ?? null,[m
+[32m +      email: ti?.email ?? null,[m
+[32m +      tokenError: ti?.error ?? null,[m
+[32m +    }));[m
+[32m +  } catch (tiErr: any) {[m
+[32m +    console.warn("[TOKENINFO] fetch failed:", tiErr?.message);[m
+[32m +  }[m
+[32m +[m
+[32m +  // 1 — resolve account + location (use DB cache if verified; run discovery otherwise)[m
+[32m +  let metadata: Record<string, unknown> = {};[m
+[32m +  try {[m
+[32m +    const [row] = await db.select().from(socialConnectionsTable)[m
+[32m +      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +    if (row?.metadata) metadata = JSON.parse(row.metadata);[m
+[32m +  } catch {}[m
+[32m +[m
+[32m +  // Auto-clear expired cooldown on read[m
+[32m +  const activeCooldown = readGbpCooldown(metadata);[m
+[32m +[m
+[32m +  let locationResourceName: string | null = (metadata.locationName as string) ?? null;[m
+[32m +  let accountResourceName: string | null  = (metadata.accountName  as string) ?? null;[m
+[32m +  let locationTitle: string | null        = (metadata.locationTitle as string) ?? (metadata.primaryLocationTitle as string) ?? null;[m
+[32m +[m
+[32m +  // Only trust cache entries that were written by a successful API response[m
+[32m +  if ((accountResourceName || locationResourceName) && !metadata.verifiedByApi) {[m
+[32m +    console.warn("[GBP-PUBLISH] cached account/location missing verifiedByApi flag — clearing for safe rediscovery");[m
+[32m +    accountResourceName = null;[m
+[32m +    locationResourceName = null;[m
+[32m +    locationTitle = null;[m
+[32m +  }[m
+[32m +[m
+[32m +  if (!locationResourceName || !accountResourceName) {[m
+[32m +    if (activeCooldown) {[m
+[32m +      const minsLeft = Math.ceil((new Date(activeCooldown.expiresAt).getTime() - Date.now()) / 60000);[m
+[32m +      throw new Error([m
+[32m +        `GBP ${activeCooldown.errorType.replace(/_/g, " ")} cooldown active` +[m
+[32m +        ` (${minsLeft}m remaining, attempt ${activeCooldown.attemptCount})` +[m
+[32m +        ` — ${activeCooldown.endpoint}.`,[m
+[32m +      );[m
+[32m +    }[m
+[32m +[m
+[32m +    // Save structured cooldown and throw — honors Retry-After, preserves existing deadline[m
+[32m +    const saveCooldownAndThrow = async ([m
+[32m +      res: Response,[m
+[32m +      body: string,[m
+[32m +      endpoint: GbpEndpointCategory,[m
+[32m +      service: string,[m
+[32m +    ): Promise<never> => {[m
+[32m +      const record = buildGbpCooldownRecord({[m
+[32m +        existing:         activeCooldown,[m
+[32m +        responseBody:     body,[m
+[32m +        retryAfterHeader: res.headers.get("retry-after"),[m
+[32m +        httpStatus:       res.status,[m
+[32m +        endpoint,[m
+[32m +        service,[m
+[32m +      });[m
+[32m +      const cleanMeta = stripLegacyCooldownFields(metadata);[m
+[32m +      try {[m
+[32m +        await db.update(socialConnectionsTable)[m
+[32m +          .set({ metadata: JSON.stringify({ ...cleanMeta, gbpCooldown: record }), updatedAt: new Date() })[m
+[32m +          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +      } catch {}[m
+[32m +      const minsLeft = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / 60000);[m
+[32m +      throw new Error([m
+[32m +        `GBP ${record.errorType.replace(/_/g, " ")} (${res.status}) on ${record.endpoint}` +[m
+[32m +        ` — cooldown ${minsLeft}m, attempt ${record.attemptCount}.`,[m
+[32m +      );[m
+[32m +    };[m
+[32m +[m
+[32m +    // Account discovery — skip if a verified cache entry exists[m
+[32m +    if (!accountResourceName) {[m
+[32m +      console.log("[GBP-PUBLISH] no verified account cached — calling Account Management API");[m
+[32m +      const acctRes  = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {[m
+[32m +        headers: { Authorization: `Bearer ${token}` },[m
+[32m +        signal:  AbortSignal.timeout(10000),[m
+[32m +      });[m
+[32m +      const acctBody = await acctRes.text();[m
+[32m +      if (!acctRes.ok) {[m
+[32m +        console.error("[GBP-PUBLISH] Account Management API error", JSON.stringify({[m
+[32m +          status:  acctRes.status,[m
+[32m +          headers: captureGbpResponseHeaders(acctRes),[m
+[32m +          body:    acctBody.slice(0, 1000),[m
+[32m +        }));[m
+[32m +        await saveCooldownAndThrow(acctRes, acctBody, "Account Management API", "mybusinessaccountmanagement.googleapis.com");[m
+[32m +      }[m
+[32m +      const acctData = JSON.parse(acctBody) as { accounts?: { name: string; accountName: string }[] };[m
+[32m +      const account  = acctData.accounts?.[0];[m
+[32m +      if (!account) throw new Error("No GBP account found — verify the connected Google account manages a Business Profile.");[m
+[32m +      accountResourceName = account.name;[m
+[32m +      console.log("[GBP-PUBLISH] account resolved:", accountResourceName);[m
+[32m +    } else {[m
+[32m +      console.log("[GBP-PUBLISH] using verified cached account:", accountResourceName);[m
+[32m +    }[m
+[32m +[m
+[32m +    // Location discovery[m
+[32m +    console.log("[GBP-PUBLISH] calling Business Information API for account:", accountResourceName);[m
+[32m +    const locRes  = await fetch([m
+[32m +      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountResourceName}/locations?readMask=name,title`,[m
+[32m +      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) },[m
+[32m +    );[m
+[32m +    const locBody = await locRes.text();[m
+[32m +    if (!locRes.ok) {[m
+[32m +      console.error("[GBP-PUBLISH] Business Information API error", JSON.stringify({[m
+[32m +        status:  locRes.status,[m
+[32m +        headers: captureGbpResponseHeaders(locRes),[m
+[32m +        body:    locBody.slice(0, 1000),[m
+[32m +      }));[m
+[32m +      await saveCooldownAndThrow(locRes, locBody, "Business Information API", "mybusinessbusinessinformation.googleapis.com");[m
+[32m +    }[m
+[32m +    const locData  = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };[m
+[32m +    const location = locData.locations?.[0];[m
+[32m +    if (!location) throw new Error("No GBP location found — verify the account has at least one verified location.");[m
+[32m +[m
+[32m +    // Verify location title matches the expected business before caching[m
+[32m +    const EXPECTED_TITLE_RE = /bed\s+bugs.{0,10}beyond/i;[m
+[32m +    if (!EXPECTED_TITLE_RE.test(location.title)) {[m
+[32m +      throw new Error([m
+[32m +        `GBP location title mismatch: got "${location.title}" — ` +[m
+[32m +        `expected title matching "Bed Bugs & Beyond". ` +[m
+[32m +        `Refusing to cache unverified location (account: ${accountResourceName}).`,[m
+[32m +      );[m
+[32m +    }[m
+[32m +    console.log("[GBP-PUBLISH] location title verified: %s", location.title);[m
+[32m +    locationResourceName = location.name;[m
+[32m +    locationTitle        = location.title;[m
+[32m +[m
+[32m +    // Persist verified cache — verifiedByApi: true required for future reads[m
+[32m +    const accountId  = accountResourceName?.split("/").pop() ?? null;[m
+[32m +    const locationId = locationResourceName?.split("/").pop() ?? null;[m
+[32m +    const cleanMeta  = stripLegacyCooldownFields(metadata);[m
+[32m +    try {[m
+[32m +      await db.update(socialConnectionsTable)[m
+[32m +        .set({[m
+[32m +          metadata: JSON.stringify({[m
+[32m +            ...cleanMeta,[m
+[32m +            accountName:          accountResourceName,[m
+[32m +            accountId,[m
+[32m +            locationName:         locationResourceName,[m
+[32m +            locationId,[m
+[32m +            locationTitle,[m
+[32m +            primaryLocationTitle: locationTitle,[m
+[32m +            verifiedByApi:        true,[m
+[32m +            cachedAt:             new Date().toISOString(),[m
+[32m +          }),[m
+[32m +          updatedAt: new Date(),[m
+[32m +        })[m
+[32m +        .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +      console.log("[GBP-PUBLISH] cached accountName=%s locationName=%s locationTitle=%s verifiedByApi=true",[m
+[32m +        accountResourceName, locationResourceName, locationTitle);[m
+[32m +    } catch (cacheErr: any) {[m
+[32m +      console.warn("[GBP-PUBLISH] cache save failed:", cacheErr?.message);[m
+[32m +    }[m
+[32m +  } else {[m
+[32m +    const cachedAt = metadata.cachedAt ? new Date(metadata.cachedAt as string).toLocaleString() : "unknown";[m
+[32m +    console.log("[GBP-PUBLISH] using verified cached location: %s (%s) — cached %s",[m
+[32m +      locationResourceName, locationTitle, cachedAt);[m
+[32m +  }[m
+[32m +[m
+[32m +  // 2 — build post body[m
+[32m +  const GBP_CTA: Record<string, string> = {[m
+[32m +    call_now:   "CALL",[m
+[32m +    learn_more: "LEARN_MORE",[m
+[32m +    book_now:   "BOOK",[m
+[32m +    sign_up:    "SIGN_UP",[m
+[32m +    contact_us: "LEARN_MORE",[m
+[32m +  };[m
+[32m +[m
+[32m +  const body: Record<string, any> = {[m
+[32m +    languageCode: "en-US",[m
+[32m +    summary: caption,[m
+[32m +    topicType: "STANDARD",[m
+[32m +  };[m
+[32m +[m
+[32m +  const gbpAction = ctaType && ctaType !== "none" ? GBP_CTA[ctaType] : null;[m
+[32m +  if (gbpAction) {[m
+[32m +    body.callToAction = { actionType: gbpAction };[m
+[32m +    if (gbpAction !== "CALL" && ctaValue) body.callToAction.url = ctaValue;[m
+[32m +  }[m
+[32m +[m
+[32m +  if (imageData) {[m
+[32m +    const appBase = process.env.PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN}`;[m
+[32m +    const imageUrl = imageData.startsWith("http") ? imageData : `${appBase}${imageData}`;[m
+[32m +    body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];[m
+[32m +  }[m
+[32m +[m
+[32m +  // 3 — create local post (direct fetch — no silent retry on 429)[m
+[32m +  const postUrl = `https://mybusinessposts.googleapis.com/v1/${locationResourceName}/localPosts`;[m
+[32m +  console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));[m
+[32m +  const postRes = await fetch(postUrl, {[m
+[32m +    method:  "POST",[m
+[32m +    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },[m
+[32m +    body:    JSON.stringify(body),[m
+[32m +    signal:  AbortSignal.timeout(15000),[m
+[32m +  });[m
+[32m +  const postBody = await postRes.text();[m
+[32m +  if (!postRes.ok) {[m
+[32m +    console.error("[GBP-PUBLISH] post failed", JSON.stringify({[m
+[32m +      status:  postRes.status,[m
+[32m +      headers: captureGbpResponseHeaders(postRes),[m
+[32m +      body:    postBody.slice(0, 1000),[m
+[32m +    }));[m
+[32m +    if (postRes.status === 429) {[m
+[32m +      const record = buildGbpCooldownRecord({[m
+[32m +        existing:         readGbpCooldown(metadata),[m
+[32m +        responseBody:     postBody,[m
+[32m +        retryAfterHeader: postRes.headers.get("retry-after"),[m
+[32m +        httpStatus:       postRes.status,[m
+[32m +        endpoint:         "Local Posts API",[m
+[32m +        service:          "mybusinessposts.googleapis.com",[m
+[32m +      });[m
+[32m +      const cleanMeta = stripLegacyCooldownFields(metadata);[m
+[32m +      try {[m
+[32m +        await db.update(socialConnectionsTable)[m
+[32m +          .set({ metadata: JSON.stringify({ ...cleanMeta, gbpCooldown: record }), updatedAt: new Date() })[m
+[32m +          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +      } catch {}[m
+[32m +      const minsLeft = Math.ceil((new Date(record.expiresAt).getTime() - Date.now()) / 60000);[m
+[32m +      throw new Error(`GBP ${record.errorType.replace(/_/g, " ")} (429) on Local Posts API — cooldown ${minsLeft}m.`);[m
+[32m +    }[m
+[32m +    // 404 = stale cached location — clear for safe rediscovery[m
+[32m +    if (postRes.status === 404) {[m
+[32m +      const cleanMeta = stripLegacyCooldownFields(metadata);[m
+[32m +      const {[m
+[32m +        accountName, accountId, locationName, locationId,[m
+[32m +        locationTitle: _lt, address, cachedAt, verifiedByApi, primaryLocationTitle,[m
+[32m +        ...keepMeta[m
+[32m +      } = cleanMeta as Record<string, unknown>;[m
+[32m +      void accountName; void accountId; void locationName; void locationId;[m
+[32m +      void _lt; void address; void cachedAt; void verifiedByApi; void primaryLocationTitle;[m
+[32m +      try {[m
+[32m +        await db.update(socialConnectionsTable)[m
+[32m +          .set({ metadata: JSON.stringify(keepMeta), updatedAt: new Date() })[m
+[32m +          .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));[m
+[32m +        console.log("[GBP-PUBLISH] invalidated stale location cache after 404 — next publish will re-fetch");[m
+[32m +      } catch {}[m
+[32m +    }[m
+[32m +    throw new Error(`GBP post error (${postRes.status}): ${postBody.slice(0, 300)}`);[m
+[32m +  }[m
+[32m +  const postData = JSON.parse(postBody) as { name: string };[m
+[32m +  console.log("[GBP-PUBLISH] success name=", postData.name);[m
+[32m +  return { id: postData.name };[m
+[32m +}[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/image-match ───────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/image-match", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +[m
+[32m +  const post = await db.select().from(socialPostsTable)[m
+[32m +    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))[m
+[32m +    .then(r => r[0]);[m
+[32m +  if (!post) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +[m
+[32m +  const assets = await db.select().from(imageAssetsTable)[m
+[32m +    .where(eq(imageAssetsTable.userId, userId));[m
+[32m +  if (!assets.length) { res.json({ matched: false, message: "No images in library" }); return; }[m
+[32m +[m
+[32m +  const cityLow  = (post.aiCity  ?? "").split(",")[0].trim().toLowerCase();[m
+[32m +  const topicLow = (post.aiTopic ?? "").toLowerCase();[m
+[32m +  const angle    = post.aiAngle ?? "";[m
+[32m +  const ANGLE_TO_CAT: Record<string, string> = {[m
+[32m +    educational: "educational", warning: "warning", promotional: "treatment",[m
+[32m +    seasonal: "seasonal", faq: "educational", testimonial: "branding",[m
+[32m +    prevention: "prevention", emergency: "warning",[m
+[32m +  };[m
+[32m +  const wantedCat = ANGLE_TO_CAT[angle] ?? "";[m
+[32m +[m
+[32m +  let bestAsset: typeof assets[0] | null = null;[m
+[32m +  let bestScore = 0;[m
+[32m +  for (const asset of assets) {[m
+[32m +    const tArr = (JSON.parse(asset.topicTags || "[]") as string[]).map(t => t.toLowerCase());[m
+[32m +    const cArr = (JSON.parse(asset.cityTags  || "[]") as string[]).map(c => c.toLowerCase());[m
+[32m +    let s = 0;[m
+[32m +    if (topicLow && tArr.includes(topicLow)) s += 50;[m
+[32m +    if (wantedCat && asset.category.toLowerCase() === wantedCat) s += 30;[m
+[32m +    if (cityLow  && cArr.includes(cityLow))  s += 20;[m
+[32m +    if (s > bestScore) { bestScore = s; bestAsset = asset; }[m
+[32m +  }[m
+[32m +[m
+[32m +  if (bestAsset) {[m
+[32m +    const [updated] = await db.update(socialPostsTable).set({[m
+[32m +      matchedImageId:    bestAsset.id,[m
+[32m +      matchedImageUrl:   bestAsset.fileUrl,[m
+[32m +      matchedImageScore: String(bestScore),[m
+[32m +    }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +    res.json({ matched: true, score: bestScore, imageUrl: bestAsset.fileUrl, post: rowToDto(updated) });[m
+[32m +  } else {[m
+[32m +    res.json({ matched: false, message: "No matching image found in library" });[m
+[32m +  }[m
+[32m +});[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/performance ───────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/performance", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +[m
+[32m +  const { impressions, reach, clicks, likes, comments, shares } = req.body as {[m
+[32m +    impressions?: number; reach?: number; clicks?: number;[m
+[32m +    likes?: number; comments?: number; shares?: number;[m
+[32m +  };[m
+[32m +[m
+[32m +  const r = Math.max(reach ?? impressions ?? 1, 1);[m
+[32m +  const engScore = Math.min(100, Math.round([m
+[32m +    ((likes ?? 0) + (comments ?? 0) * 3 + (shares ?? 0) * 5 + (clicks ?? 0) * 2) / r * 100[m
+[32m +  ));[m
+[32m +[m
+[32m +  const updates: Partial<typeof socialPostsTable.$inferInsert> = { engagementScore: String(engScore) };[m
+[32m +  if (impressions != null) updates.impressions = String(impressions);[m
+[32m +  if (reach       != null) updates.reach       = String(reach);[m
+[32m +  if (clicks      != null) updates.clicks      = String(clicks);[m
+[32m +  if (likes       != null) updates.likes       = String(likes);[m
+[32m +  if (comments    != null) updates.comments    = String(comments);[m
+[32m +  if (shares      != null) updates.shares      = String(shares);[m
+[32m +[m
+[32m +  const [updated] = await db.update(socialPostsTable).set(updates)[m
+[32m +    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +  if (!updated) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +  res.json({ ok: true, engagementScore: engScore, post: rowToDto(updated) });[m
+[32m +});[m
+[32m +[m
+[32m +[m
+[32m +function buildCaption(caption: string, ctaType: string, ctaValue: string | null): string {[m
+[32m +  const ctaLabels: Record<string, string> = {[m
+[32m +    call_now:   "📞 Call Now",[m
+[32m +    learn_more: "🔗 Learn More",[m
+[32m +    book_now:   "📅 Book Now",[m
+[32m +    contact_us: "✉️ Contact Us",[m
+[32m +  };[m
+[32m +  if (ctaType === "none" || !ctaType) return caption;[m
+[32m +  const label = ctaLabels[ctaType] ?? ctaType;[m
+[32m +  return ctaValue ? `${caption}\n\n${label}: ${ctaValue}` : `${caption}\n\n${label}`;[m
+[32m +}[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/approve ───────────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/approve", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  const [row] = await db.update(socialPostsTable).set({[m
+[32m +    approvalStatus: "approved",[m
+[32m +    approvedAt:     new Date(),[m
+[32m +    approvedBy:     userId,[m
+[32m +    status:         "approved",[m
+[32m +    updatedAt:      new Date(),[m
+[32m +  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +  if (!row) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +  res.json({ ok: true, post: rowToDto(row) });[m
+[32m +});[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/queue ─────────────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/queue", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  const [row] = await db.update(socialPostsTable).set({[m
+[32m +    status:    "queued",[m
+[32m +    updatedAt: new Date(),[m
+[32m +  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +  if (!row) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +  res.json({ ok: true, post: rowToDto(row) });[m
+[32m +});[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/cancel ────────────────────────────────────────────[m
+[32m +router.post("/social-posts/:id/cancel", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  const b = req.body as { reason?: string };[m
+[32m +  const [row] = await db.update(socialPostsTable).set({[m
+[32m +    status:       "cancelled",[m
+[32m +    cancelledAt:  new Date(),[m
+[32m +    cancelledBy:  userId,[m
+[32m +    cancelReason: b.reason ?? null,[m
+[32m +    updatedAt:    new Date(),[m
+[32m +  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();[m
+[32m +  if (!row) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +  res.json({ ok: true, post: rowToDto(row) });[m
+[32m +});[m
+[32m +[m
+[32m +// ── GET /social-posts/:id/deliveries ─────────────────────────────────────────[m
+[32m +router.get("/social-posts/:id/deliveries", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +  // Verify post ownership before returning delivery records[m
+[32m +  const [post] = await db.select({ id: socialPostsTable.id })[m
+[32m +    .from(socialPostsTable)[m
+[32m +    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));[m
+[32m +  if (!post) { res.status(404).json({ error: "Post not found" }); return; }[m
+[32m +  const deliveries = await db.select()[m
+[32m +    .from(platformDeliveriesTable)[m
+[32m +    .where(and([m
+[32m +      eq(platformDeliveriesTable.postId, req.params.id),[m
+[32m +      eq(platformDeliveriesTable.userId, userId),[m
+[32m +    ))[m
+[32m +    .orderBy(platformDeliveriesTable.createdAt);[m
+[32m +  res.json(deliveries);[m
+[32m +});[m
+[32m +[m
+[32m +// ── POST /social-posts/:id/retry ─────────────────────────────────────────────[m
+[32m +// Re-approve and republish a failed post. Creates new delivery records with[m
+[32m +// incremented attempt_number — prior attempts are preserved for audit.[m
+[32m +router.post("/social-posts/:id/retry", async (req, res) => {[m
+[32m +  const { userId } = getAuth(req);[m
+[32m +  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }[m
+[32m +[m
+[32m +  // Re-approve for retry[m
+[32m +  await db.update(socialPostsTable).set({[m
+[32m +    approvalStatus: "approved",[m
+[32m +    approvedAt:     new Date(),[m
+[32m +    approvedBy:     userId,[m
+[32m +    status:         "approved",[m
+[32m +    updatedAt:      new Date(),[m
+[32m +  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));[m
+[32m +[m
+[32m +  const port         = parseInt(process.env.PORT ?? "8080", 10);[m
+[32m +  const internalBase = `http://127.0.0.1:${port}`;[m
+[32m +  const result = await publishingService.publishPost([m
+[32m +    req.params.id, userId, userId, internalBase, SCHEDULER_SECRET[m
+[32m +  );[m
+[32m +  res.json(result);[m
+[32m +});[m
+[32m +[m
+[32m++=======[m
+[32m++>>>>>>> origin/main[m
+  export default router;[m

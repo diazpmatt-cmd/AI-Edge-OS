@@ -50,3 +50,12 @@ Thumbs.db
 
 # Database backups (large data files — download via the Diagnostics UI)
 artifacts/api-server/backups/*.json
+
+# User-uploaded files — stored in object storage, not source control
+artifacts/api-server/uploads/
+
+# Agent working memory — internal development notes, not for repository consumers
+.agents/
+
+# Raw AI prompt pastes — development session artifacts, no value to collaborators
+attached_assets/Pasted-*.txt

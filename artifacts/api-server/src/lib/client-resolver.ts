@@ -180,6 +180,76 @@ export async function resolveClientContentContextFromDb(
   return buildContextFromRecords(clientRow, snapshot, provider);
 }
 
+// ── Scheduler context resolver (by clientId, not userId) ──────────────────────
+
+/**
+ * Resolves a full DiscoveryContext for the C7 scheduler given a clientId.
+ *
+ * The HTTP route uses resolveClientContentContextFromDb(userId) — this variant
+ * looks up the client by primary key (id) so the scheduler, which has no Clerk
+ * userId, can still build a fresh context at dispatch time.
+ *
+ * Returns null when:
+ *   - Client does not exist
+ *   - Client is inactive
+ *   - Registry is not configured, invalid, or unavailable
+ *
+ * Callers should treat null as a non-retryable skip for this tick.
+ */
+export async function resolveDiscoveryContextByClientId(
+  clientId: string,
+  now:      Date = new Date(),
+): Promise<import("@workspace/db").DiscoveryContext | null> {
+  const { buildDiscoveryContext, buildContextFromRecords } = await import("@workspace/db");
+
+  const [clientRow] = await db
+    .select()
+    .from(clientsTable)
+    .where(eq(clientsTable.id, clientId));
+
+  if (!clientRow || !clientRow.isActive) return null;
+
+  const [settingsRow] = await db
+    .select({
+      approvalMode:  autoContentSettingsTable.approvalMode,
+      frequency:     autoContentSettingsTable.frequency,
+      postingTimes:  autoContentSettingsTable.postingTimes,
+      platforms:     autoContentSettingsTable.platforms,
+      toneStyle:     autoContentSettingsTable.toneStyle,
+      postAngles:    autoContentSettingsTable.postAngles,
+      topics:        autoContentSettingsTable.topics,
+      ctaText:       autoContentSettingsTable.ctaText,
+      ctaPreference: autoContentSettingsTable.ctaPreference,
+    })
+    .from(autoContentSettingsTable)
+    .where(eq(autoContentSettingsTable.userId, clientRow.userId));
+
+  const snapshot: SettingsSnapshot | null = settingsRow ?? null;
+
+  const registryLoad = await loadClientServiceRegistry(clientRow.id);
+  if (!registryLoad.ok) {
+    console.warn(
+      `[CLIENT-RESOLVER] resolveDiscoveryContextByClientId: registry not available for clientId=${clientId} reason=${registryLoad.reason}`,
+    );
+    return null;
+  }
+
+  const provider = createDbServiceRegistryProvider(
+    registryLoad.services,
+    registryLoad.systemBusinessRules,
+  );
+
+  const resolved = buildContextFromRecords(clientRow, snapshot, provider);
+  if (!resolved.found) return null;
+
+  return buildDiscoveryContext({
+    contentContext:   resolved.context,
+    clientId:         clientRow.id,
+    now,
+    aiSearchGapScore: 50,
+  });
+}
+
 // ── Lightweight active-check resolver ─────────────────────────────────────────
 
 /**

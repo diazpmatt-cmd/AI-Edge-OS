@@ -296,7 +296,41 @@ export async function updateScheduleNextRun(
   );
 }
 
-// ── Due-schedule polling ──────────────────────────────────────────────────────
+// ── Due-schedule polling + atomic claiming ────────────────────────────────────
+
+/**
+ * Atomically advance a schedule's next_run_at to a new value.
+ *
+ * Multi-instance safety: uses an optimistic lock on the CURRENT next_run_at value.
+ * Only ONE concurrent caller wins — the others receive null and must skip dispatch.
+ *
+ * Algorithm:
+ *   UPDATE discovery_schedules
+ *   SET    next_run_at = $newNextRunAt, updated_at = now(), version = version + 1
+ *   WHERE  id = $id AND client_id = $clientId
+ *          AND next_run_at = $expectedNextRunAt   -- optimistic lock
+ *          AND status = 'active'
+ *   RETURNING *
+ *
+ * Returns the updated schedule row if this caller won the race, null otherwise.
+ * The caller MUST NOT proceed to dispatch if null is returned.
+ */
+export async function atomicAdvanceScheduleNextRun(
+  pool:              Pool,
+  clientId:          string,
+  id:                string,
+  expectedNextRunAt: Date,
+  newNextRunAt:      Date | null,
+): Promise<DiscoverySchedule | null> {
+  const res = await pool.query(
+    `UPDATE discovery_schedules
+     SET next_run_at = $4, updated_at = now(), version = version + 1
+     WHERE id = $1 AND client_id = $2 AND next_run_at = $3 AND status = 'active'
+     RETURNING *`,
+    [id, clientId, expectedNextRunAt, newNextRunAt],
+  );
+  return res.rows.length > 0 ? rowToSchedule(res.rows[0] as Record<string, unknown>) : null;
+}
 
 export async function findDueSchedules(
   pool:  Pool,
@@ -342,22 +376,23 @@ export async function insertOccurrence(
 }
 
 export async function updateOccurrenceStatus(
-  pool:   Pool,
-  id:     string,
-  status: ScheduleOccurrence["status"],
+  pool:     Pool,
+  id:       string,
+  clientId: string,
+  status:   ScheduleOccurrence["status"],
   extras?: {
-    runId?:    string | null;
+    runId?:      string | null;
     skipReason?: string | null;
   },
 ): Promise<void> {
   await pool.query(
     `UPDATE discovery_schedule_occurrences
-     SET status = $2,
-         run_id = COALESCE($3, run_id),
-         skip_reason = COALESCE($4, skip_reason),
+     SET status = $3,
+         run_id = COALESCE($4, run_id),
+         skip_reason = COALESCE($5, skip_reason),
          updated_at = now()
-     WHERE id = $1`,
-    [id, status, extras?.runId ?? null, extras?.skipReason ?? null],
+     WHERE id = $1 AND client_id = $2`,
+    [id, clientId, status, extras?.runId ?? null, extras?.skipReason ?? null],
   );
 }
 
@@ -541,7 +576,7 @@ export async function releaseSchedulerLeadership(
 ): Promise<boolean> {
   const res = await pool.query(
     `UPDATE discovery_scheduler_leadership
-     SET released_at = $2, updated_at = $2
+     SET released_at = $2
      WHERE leader_id = $1 AND owner_id = $3 AND released_at IS NULL`,
     [SCHEDULER_LEADER_ID, now, ownerId],
   );

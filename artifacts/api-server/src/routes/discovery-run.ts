@@ -76,6 +76,10 @@ import { discoveryRateLimiter }               from "../lib/discovery-rate-limite
 import { DiscoveryExecutionService }          from "../lib/discovery-execution-service.js";
 
 // ── Table bootstrap (idempotent, runs once on server start) ───────────────────
+import {
+  bootstrapC7Tables,
+} from "@workspace/db";
+
 bootstrapDiscoveryTables(pool).catch(err =>
   console.error("[DISCOVERY-RUN] Discovery table bootstrap failed:", err),
 );
@@ -84,6 +88,9 @@ bootstrapCostTable(pool).catch(err =>
 );
 bootstrapC6Tables(pool).catch(err =>
   console.error("[DISCOVERY-RUN] C6 table bootstrap failed:", err),
+);
+bootstrapC7Tables(pool).catch(err =>
+  console.error("[DISCOVERY-RUN] C7 table bootstrap failed:", err),
 );
 
 const router = Router();

@@ -414,6 +414,7 @@ export {
   updateScheduleStatus,
   updateScheduleAfterRun,
   updateScheduleNextRun,
+  atomicAdvanceScheduleNextRun,
   findDueSchedules,
   insertOccurrence,
   updateOccurrenceStatus,

@@ -1,0 +1,444 @@
+Continue AI Edge OS with Phase C6 — Discovery Execution Governance, Run Observability, and Operational Readiness.
+
+Phase C5 is complete and validated:
+
+* Provider capability registry implemented
+* Deterministic orchestration supports primary_only, fallback, and merge
+* Cross-provider signal merging and provenance preservation implemented
+* Site-coverage boundary established
+* Opportunity enrichment added with backward-compatible scorecard extensions
+* Provider cost ledger and budget guard implemented
+* Manual-run route hardened with Zod validation, execution mode, dry-run support, cost ceilings, and safe diagnostics
+* lib/db TypeScript build is clean
+* api-server TypeScript check is clean
+* Phase C5 tests: 104 passing and 1 intentionally skipped live test
+* Phase C4 regression tests: 74 passing and 1 intentionally skipped live test
+* No live HTTP calls occur in automated tests
+* BB&B service definitions and autopilot safety behavior remain unchanged
+
+Primary objective
+
+Build the operational governance and observability layer required to run canonical discovery safely in production.
+
+Phase C6 ensures discovery runs are inspectable, cancellable where technically safe, rate-limited, concurrency-controlled, auditable, and recoverable without introducing autonomous scheduling, user-facing dashboards, content generation, or publishing.
+
+The system must remain deterministic, tenant-isolated, provider-agnostic, cost-aware, and safe under retries, duplicate requests, partial failures, and concurrent execution.
+
+Begin with an audit-first workflow. Before editing code:
+
+1. Read the Phase C1 architecture document.
+2. Read all Phase C2–C5 discovery source files and tests.
+3. Audit the current discovery-run persistence schema and repository methods.
+4. Audit API-server authentication, tenant resolution, request tracing, logging, rate limiting, error middleware, and route conventions.
+5. Search for existing job, execution, lock, idempotency, audit-log, activity-log, diagnostics, health, and cancellation abstractions.
+6. Inspect database transaction and advisory-lock patterns already used in the monorepo.
+7. Identify current gaps in run visibility, lifecycle transitions, concurrency control, duplicate manual requests, and operational recovery.
+8. Produce a concise implementation plan and proposed file changes before writing code.
+
+Reuse existing infrastructure where possible. Do not create a second job system, logging framework, or lock abstraction if one already exists.
+
+Required implementation
+
+1. Canonical run lifecycle
+
+Define and enforce a canonical lifecycle for discovery runs.
+
+At minimum, support explicit states equivalent to:
+
+* planned
+* queued
+* running
+* partial
+* completed
+* failed
+* cancel_requested
+* cancelled
+
+Adapt names only if equivalent states already exist.
+
+Create a centralized transition policy so invalid state changes are rejected deterministically.
+
+Examples:
+
+* planned → running may be allowed for synchronous manual runs.
+* running → completed may be allowed.
+* running → partial may be allowed.
+* running → cancel_requested may be allowed.
+* completed → running must not be allowed.
+* cancelled → completed must not be allowed.
+* Replaying a completed deterministic run must not silently restart it.
+
+Lifecycle rules must not be duplicated across routes and repositories.
+
+2. Run transition history
+
+Persist an append-only transition history for every discovery run.
+
+Each transition record must include:
+
+* Deterministic transition ID
+* Discovery run ID
+* Client ID
+* Previous state
+* New state
+* Reason code
+* Safe human-readable message
+* Actor type
+* Actor identifier when available
+* Correlation/request ID
+* Timestamp
+* Structured metadata
+* Version or sequence number
+
+Actor types may include:
+
+* system
+* user
+* provider
+* recovery
+* test
+
+Do not persist secrets, authorization headers, provider credentials, or raw provider responses.
+
+Transition records must be tenant-scoped and append-only.
+
+3. Execution lease and concurrency control
+
+Implement a canonical execution-lease boundary to prevent unsafe duplicate execution.
+
+Requirements:
+
+* At most one active execution lease per deterministic run identity.
+* Optionally enforce a configurable maximum number of active runs per client.
+* Lease acquisition must be atomic.
+* Lease renewal must be supported if required.
+* Expired leases must be safely recoverable.
+* Lease release must occur on terminal completion where possible.
+* A crashed process must not permanently block recovery.
+* Lease ownership must be explicit.
+* A caller must not release another process’s lease without authorization.
+
+Prefer existing PostgreSQL locking or transactional patterns if available.
+
+Do not introduce Redis unless already used and justified by the audit.
+
+4. Idempotent manual execution requests
+
+Ensure duplicate requests do not create duplicate runs or provider charges.
+
+Support idempotency keys via approved headers or body fields.
+
+Requirements:
+
+* Scoped by client and operation.
+* Same key + equivalent request returns original result.
+* Same key + different input is rejected.
+* Records include retention/expiry.
+* Concurrent identical requests resolve atomically.
+* Dry-run and live-run requests remain distinct.
+* Keys must not collide across tenants.
+
+Do not trust client-supplied run IDs as idempotency.
+
+5. Cancellation boundary
+
+Add a safe cancellation boundary.
+
+Requirements:
+
+* Authorized users can cancel their own active runs.
+* Persist cancel_requested.
+* Check cancellation between stages and before provider calls.
+* Do not start new provider calls after cancellation is observed.
+* Preserve persisted data.
+* Record cancellation timing context.
+* End in cancelled when honored.
+* Do not falsely claim interruption of in-flight external calls.
+* Terminal runs reject cancellation safely.
+
+Use an injectable cancellation token interface.
+
+6. Run progress model
+
+Define a canonical progress snapshot.
+
+Include:
+
+* Current stage
+* Completed stages
+* Total stages
+* Percent complete
+* Current capability
+* Current provider
+* Signals collected
+* Clusters built
+* Opportunities created
+* Provider calls attempted/completed
+* Estimated and actual cost
+* Last transition
+* Last updated timestamp
+
+Progress must derive from canonical pipeline stages.
+
+Avoid excessive persistence writes.
+
+7. Structured diagnostics
+
+Create a canonical diagnostic-event model.
+
+Each event includes:
+
+* Severity (info, warning, error)
+* Stable diagnostic code
+* Safe message
+* Stage
+* Provider
+* Capability
+* Retryability
+* Tenant/client ID
+* Run ID
+* Correlation ID
+* Timestamp
+* Structured safe metadata
+
+Ensure redaction of:
+
+* Credentials
+* Auth headers
+* Tokens
+* Cookies
+* Database URLs
+* Raw payloads
+* Customer content
+* Stack traces in API responses
+
+Internal logs may retain stack traces per policy.
+
+8. Correlation and request tracing
+
+Add correlation identifiers across:
+
+* Requests
+* Runs
+* Provider executions
+* Cost records
+* Transitions
+* Diagnostics
+* API responses
+
+Use existing request IDs or deterministic ID utilities.
+
+Do not use Math.random().
+
+Prevent spoofing of trusted metadata.
+
+9. Per-client concurrency policy
+
+Implement an injectable governance policy supporting:
+
+* Max active runs per client
+* Max provider operations per run/client
+* Merge-mode concurrency rules
+* Serial execution for expensive capabilities
+* Client pause state
+* Authorized overrides
+
+Maintain deterministic ordering.
+
+10. Rate limiting
+
+Apply rate limiting to discovery operations.
+
+Distinguish:
+
+* Health checks
+* Dry runs
+* Live runs
+* Cancellation
+* Inspection
+
+Scope limits by authenticated actor and client.
+
+When limited:
+
+* Do not call providers
+* Do not acquire leases unnecessarily
+* Return safe structured errors
+* Record diagnostics/audit events
+
+11. Run inspection API
+
+Provide authenticated tenant-safe endpoints:
+
+* List runs
+* Read run details
+* Read progress
+* Read provider outcomes
+* Read cost summary
+* Read diagnostics
+* Read transitions
+* Request cancellation
+
+All queries must enforce clientId ownership.
+
+No UI.
+
+12. Recovery boundary
+
+Implement recovery for stale runs.
+
+Detect:
+
+* Expired leases
+* Running runs without leases
+* Abandoned cancellations
+* Persistence interruptions
+* Incomplete finalization
+* Invalid transitions
+
+Recovery actions:
+
+* Resume safely
+* Mark partial/failed
+* Honor cancellation
+* Release leases
+* Require manual intervention
+
+Do not repeat provider calls unless safe.
+
+Prefer conservative reconciliation.
+
+13. Audit boundary
+
+Extend append-only audit logging for:
+
+* Run requests (live/dry)
+* Overrides
+* Cancellation
+* Recovery
+* Inspection (if required)
+* Denials (auth, budget, rate, concurrency)
+
+Reuse existing audit systems.
+
+Never store credentials or raw payloads.
+
+14. Persistence compatibility
+
+Extend persistence minimally for:
+
+* Transitions
+* Leases
+* Idempotency
+* Progress
+* Diagnostics
+* Cancellation
+* Recovery metadata
+* Correlation IDs
+* Audit references
+
+Requirements:
+
+* Backward compatibility with C2–C5
+* No destructive migrations
+* Safe defaults
+* Tenant isolation preserved
+* Historical data integrity maintained
+
+Document all schema changes.
+
+Required tests
+
+Add comprehensive Phase C6 tests covering A–Z.
+
+A–Z Coverage
+
+* Lifecycle transitions
+* Completed-run immutability
+* Transition history integrity
+* Tenant isolation
+* Lease acquisition/ownership/expiry
+* Concurrency limits
+* Idempotency correctness
+* Cancellation behavior
+* Progress accuracy
+* Diagnostic sanitization
+* Correlation propagation
+* Rate limiting
+* Inspection authorization
+* Recovery correctness
+* Audit logging
+* Full regression protection
+
+Additional focused tests
+
+Include:
+
+* Invalid transitions
+* Lease race conditions
+* Idempotency edge cases
+* Cancellation timing scenarios
+* Diagnostic redaction depth
+* Correlation validation
+* Unauthorized access attempts
+* Recovery safety
+* Duplicate prevention
+* Service safety constraints
+
+Constraints
+
+Do not build:
+
+* UI or dashboards
+* Scheduling systems
+* Autonomous discovery
+* Background job systems (unless reusing existing)
+* Content generation or publishing
+* Credential management UI
+* Billing systems
+* OAuth integrations
+* Notifications
+
+Do not:
+
+* Modify BB&B safety rules
+* Enable termite services
+* Misrepresent bed bug treatments
+* Remove fumigation
+* Hardcode tenant logic
+* Use Math.random()
+* Use live APIs in tests
+* Store secrets in logs or metadata
+* Trust client-supplied IDs
+* Restart completed runs
+* Repeat chargeable operations unsafely
+* Leak stack traces
+* Duplicate infrastructure systems
+* Introduce Redis unnecessarily
+* Add hidden global state
+
+Validation process
+
+After implementation:
+
+1. Run lib/db TypeScript build.
+2. Run API-server TypeScript check.
+3. Run Phase C6 tests.
+4. Run Phase C5 tests.
+5. Run Phase C4 tests.
+6. Run Phase C3 tests.
+7. Run Phase C2 tests.
+8. Run BB&B safety tests.
+9. Run API authorization tests.
+10. Run full regression suite.
+11. Inspect diff for unrelated changes.
+12. Report pass/fail/skip counts.
+13. Document migrations.
+14. List file changes.
+15. Document governance decisions.
+16. Verify no secret leakage.
+17. Define Phase C7 boundary.
+
+Do not declare Phase C6 complete unless all tests pass or failures are fully explained.
+
+Work autonomously. Deliver the smallest cohesive implementation that ensures safe, observable, and governed discovery execution without expanding scope.

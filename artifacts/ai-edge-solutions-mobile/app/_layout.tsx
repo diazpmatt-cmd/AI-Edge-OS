@@ -19,7 +19,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Set the API base URL at module load time so all generated hooks resolve correctly.
-setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+// Guard against missing env var — avoids invalid "https://undefined" base URL.
+const domain = process.env.EXPO_PUBLIC_DOMAIN;
+if (domain) setBaseUrl(`https://${domain}`);
 
 SplashScreen.preventAutoHideAsync();
 

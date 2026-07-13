@@ -415,6 +415,9 @@ export * from "./backlink-persistence-types";
 export * from "./backlink-lifecycle";
 export * from "./backlink-repository";
 export * from "./schema/backlinks";
+export * from "./backlink-provider-fixtures";
+export * from "./backlink-fixture-provider";
+export * from "./backlink-ingestion";
 
 // C7 repository (schedule CRUD + leadership + claiming)
 export {

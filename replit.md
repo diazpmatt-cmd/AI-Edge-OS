@@ -32,8 +32,17 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - `AGENTS.md` provides compact repository safeguards and routes agents to this handbook, `ROADMAP.md`, `CHANGELOG.md`, `SESSION_HANDOFF.md`, and `docs/adr/`; it must not duplicate or conflict with them.
 - A mutable issue field, agent statement, proposal, or assignment is not approval. Matthew Diaz must provide an attributable decision tied to the exact specification revision, expected `origin/main` SHA, and authorization category.
 - Scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions are independent authorization categories. Verified Git and deployment milestones remain factual records.
-- DAB-1 is contractual governance only. Machine-enforced task state, stale-SHA rejection, claims, and approvals are deferred to DAB-2; direct ChatGPT/Codex communication through a bounded MCP interface is deferred to DAB-3.
+- DAB-1 remains contractual governance only. DAB-2A now supplies pure, in-memory enforcement contracts for task state, stale-SHA rejection, claims, and approvals; durable integration remains deferred to DAB-2B, and direct ChatGPT/Codex communication remains deferred to DAB-3.
 - DAB-1 adds no ledger, persistence, runtime, network, integration, credential, API, UI, scheduler, webhook, GitHub Action, MCP server, Growth Engine behavior, or customer-facing capability. See `docs/adr/ADR-008-development-agent-bridge.md`.
+
+### DAB-2A: pure development coordination state machine
+
+- `lib/development-control` is the provider-independent development-control package. It is operationally separate from customer tenants and from Discovery, backlinks, Content Autopilot, Local Presence, reviews, AI Visibility, and other customer-facing systems.
+- Task specifications have deterministic hashes, immutable revisions, expected `origin/main` SHAs, explicit branch/no-branch modes, and bounded scopes, files, exclusions, criteria, verification, documentation, and references. A revision or hash change invalidates prior approval.
+- Human authority, architect/reviewer, Codex implementer, bounded sub-agent, and read-only automation are distinct trusted actor contracts. Matthew Diaz remains the sole material-action authority in DAB-2A fixtures and policy.
+- Scope, editing, committing, pushing, pull-request creation, merging, deployment, credentials, paid providers, and external actions are independent categories. Task lifecycle state remains separate from approval state.
+- The test-only in-memory state machine provides fail-closed transitions, atomic claims, bounded leases, explicit expired-claim recovery, deterministic append-only events, verified/not-verified/not-applicable milestones, stale-state rejection, and bounded completion reports.
+- DAB-2A is a pure machine-enforcement foundation only. It adds no persistence, database, migration, API, UI, GitHub integration, MCP, network/environment access, credentials, shell/filesystem execution, automation, or live messaging. DAB-2B and DAB-3 remain deferred. See `docs/adr/ADR-009-dab2a-coordination-state-machine.md`.
 
 ### C8R-5: AI Visibility read model
 

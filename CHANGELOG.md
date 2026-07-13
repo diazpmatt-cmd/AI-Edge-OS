@@ -6,6 +6,29 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-1 — GitHub-Backed Development Task Contract (2026-07-13)
+
+#### Added
+
+- Compact root `AGENTS.md` routing agents to canonical project documents and defining clean/stale Git-state checks, one-task/one-branch isolation, bounded scope, category-specific authorization, verified factual milestones, focused verification, and sensitive-data exclusions.
+- GitHub Issue Form requiring task ID, specification revision, expected `origin/main` SHA, intended branch, status, priority, dependencies, origin, proposed agent, scope/files, exclusions, acceptance criteria, verification, authorization state, requested approval categories, attributable decision evidence, documentation, and related links.
+- Pull-request handoff template covering starting/final Git state, exact files, exclusions, verification, limitations, canonical documentation, separate authorization categories, and factual commit/push/PR/merge/deployment milestones.
+- ADR-008 defining GitHub Issues and pull requests as the initial operational coordination surface while existing repository documents remain the durable architecture and project-history surface.
+
+#### Security and architecture
+
+- Issue selections, assignments, proposals, plans, and agent statements are explicitly not approval evidence. Approval must be an attributable decision from Matthew Diaz's verified identity tied to the exact specification revision, expected SHA, and named categories.
+- Scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions remain independent authorization categories.
+- Credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, and unbounded shell output are prohibited from tasks and handoffs.
+- DAB-1 is contractual governance only. DAB-2 machine enforcement and a DAB-3 bounded MCP interface remain deferred and unimplemented.
+- No live task-ledger file, persistence, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine, or customer-facing behavior was added.
+
+#### Verification
+
+- GitHub Issue Form YAML parsed successfully and required structure was validated locally.
+- Markdown structure and all required task, handoff, Git-state, authorization, and phase-boundary language were validated locally.
+- `git diff --check`, sensitive-data scan, forbidden-scope scan, and complete diff review passed.
+
 ### C8R-5 — Tenant-Safe AI Visibility Read Model (2026-07-13)
 
 #### Added

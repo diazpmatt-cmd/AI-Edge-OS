@@ -4,6 +4,29 @@ Last updated: 2026-07-13
 
 ---
 
+## Development Agent Bridge Status
+
+### DAB-1 — GitHub-Backed Development Task Contract (implemented and verified)
+
+Completed scope:
+
+- Compact root agent guidance that routes to the canonical Engineering Handbook, Roadmap, Changelog, Session Handoff, and ADRs.
+- A structured GitHub Issue Form for task identity, specification revision, expected `origin/main` SHA, intended branch, bounded scope, exclusions, acceptance criteria, verification, authorization state, category-specific approval requests, and attributable approval evidence.
+- A pull-request handoff template for starting and final Git state, exact files, verification, limitations, documentation, independently recorded authorization categories, and verified factual milestones.
+- ADR-008 documenting GitHub as the initial operational coordination surface, Matthew's final authority, proposal/approval separation, stale-state safeguards, one-task/one-branch isolation, and the DAB phase boundaries.
+- Explicit prohibition of credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, and unbounded shell output.
+
+DAB-1 provides contractual governance and reviewable templates only. It does not machine-enforce approvals, task transitions, claims, concurrency, or stale-SHA rejection, and it does not provide direct ChatGPT/Codex communication.
+
+Deferred bounded phases:
+
+1. **DAB-2 — Durable Coordination Ledger:** machine-enforced task revisions, expected-SHA compare-and-swap, claims, approvals, transitions, and append-only audit events. Not implemented or approved for implementation.
+2. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
+
+No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.
+
+---
+
 ## Growth Engine C8R Status
 
 ### C8R-5 — Tenant-Safe AI Visibility Read Model (implemented and verified)
@@ -21,9 +44,9 @@ Completed scope:
 
 This phase does **not** add persistence, API routes, UI, schedulers, providers, live collection, network access, or external execution. Google Business Profile collection, Search Console, GA4, local-rank tracking, tenant-safe review ingestion, Gemini, ChatGPT, Perplexity, and live AI prompt monitoring remain future bounded phases and must not be represented as implemented.
 
-### Approved next architecture audit
+### Completed architecture audit
 
-- **AI Edge Development Agent Bridge Feasibility Audit** — approved as a read-only architecture mission after the C8R-5 pull request is created. The bridge is not implemented. No MCP server, shared ledger, integration, credential, port, or external service has been added.
+- **AI Edge Development Agent Bridge Feasibility Audit** — completed read-only after C8R-5 merged. It recommended the staged GitHub contract → durable ledger → bounded MCP architecture recorded above. Only DAB-1 governance contracts are now implemented; the direct bridge is not operational.
 
 ### Preserved Google Local and AI Visibility priority order
 

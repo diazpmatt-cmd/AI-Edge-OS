@@ -26,6 +26,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
+### DAB-1: GitHub-backed development task contract
+
+- GitHub Issues and pull requests are the initial operational surface for proposed tasks, attributable approvals, implementation evidence, and factual Git milestones. No live task-ledger file is stored in the repository.
+- `AGENTS.md` provides compact repository safeguards and routes agents to this handbook, `ROADMAP.md`, `CHANGELOG.md`, `SESSION_HANDOFF.md`, and `docs/adr/`; it must not duplicate or conflict with them.
+- A mutable issue field, agent statement, proposal, or assignment is not approval. Matthew Diaz must provide an attributable decision tied to the exact specification revision, expected `origin/main` SHA, and authorization category.
+- Scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions are independent authorization categories. Verified Git and deployment milestones remain factual records.
+- DAB-1 is contractual governance only. Machine-enforced task state, stale-SHA rejection, claims, and approvals are deferred to DAB-2; direct ChatGPT/Codex communication through a bounded MCP interface is deferred to DAB-3.
+- DAB-1 adds no ledger, persistence, runtime, network, integration, credential, API, UI, scheduler, webhook, GitHub Action, MCP server, Growth Engine behavior, or customer-facing capability. See `docs/adr/ADR-008-development-agent-bridge.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.
@@ -58,6 +67,7 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 - Durable phase completion belongs in `CHANGELOG.md`, `ROADMAP.md`, and `SESSION_HANDOFF.md`.
 - Non-obvious architecture decisions require an ADR under `docs/adr/`.
+- Operational development tasks and pull-request handoffs use the GitHub templates; the canonical repository documents retain durable architecture and project history.
 - Historical phase handoffs remain historical; do not rewrite them for later phases.
 - Documentation, verification evidence, code, and tests should ship together in the approved phase commit so architecture does not depend on chat memory.
 

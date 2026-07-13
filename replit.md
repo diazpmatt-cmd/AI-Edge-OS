@@ -44,6 +44,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - The test-only in-memory state machine provides fail-closed transitions, atomic claims, bounded leases, explicit expired-claim recovery, deterministic append-only events, verified/not-verified/not-applicable milestones, stale-state rejection, and bounded completion reports.
 - DAB-2A is a pure machine-enforcement foundation only. It adds no persistence, database, migration, API, UI, GitHub integration, MCP, network/environment access, credentials, shell/filesystem execution, automation, or live messaging. DAB-2B and DAB-3 remain deferred. See `docs/adr/ADR-009-dab2a-coordination-state-machine.md`.
 
+### DAB-2B1: tenant-independent durable coordination store
+
+- `lib/development-control` remains the pure canonical DAB-2A model. Its `DevelopmentCoordinationStore` contract permits the synchronous in-memory reference store and an asynchronous durable implementation without duplicating task, authorization, lifecycle, event, milestone, or report semantics.
+- `lib/development-control-store` owns PostgreSQL/Drizzle persistence for development-control records only. It must use a dedicated control-plane database boundary and must never import `lib/db`, use customer `DATABASE_URL`, carry `clientId`, or share customer schemas, credentials, or retention rules.
+- Importing the store package reads no environment variable and opens no connection. Database configuration is explicit caller input, and errors, fixtures, reports, logs, and committed files must never contain a supplied connection value.
+- Durable mutations atomically write the versioned projection, append-only audit event, and operation/task-scoped idempotency result. PostgreSQL server time governs leases; task and lease versions reject stale writers; active leases cannot be stolen.
+- Specification revisions, authorization decisions, audit events, milestone observations, and completion-report submissions retain immutable history. Current projections remain deterministic and bounded.
+- DAB-2B1 defines code, schema, and one additive migration only. It does not provision a database, execute a live migration, host a service, reconcile GitHub, or automate an external action. DAB-2B2 GitHub reconciliation and DAB-3 direct ChatGPT/Codex communication remain deferred. See `docs/adr/ADR-010-dab2b1-durable-coordination-store.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.

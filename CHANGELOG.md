@@ -6,6 +6,35 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-2B1 — Tenant-Independent Durable Coordination Store (2026-07-13)
+
+#### Added
+
+- Canonical `DevelopmentCoordinationStore` interface covering all DAB-2A mutations and deterministic history reads while preserving the synchronous in-memory reference behavior.
+- Immutable in-memory specification-revision and completion-report histories plus operation/task-scoped idempotency.
+- Separate `@workspace/development-control-store` PostgreSQL/Drizzle package with explicit caller-supplied configuration and no environment access at import time.
+- Nine-table tenant-independent schema for current task projections, immutable specifications, actor snapshots, append-only authorization decisions, current leases, sequenced audit events, milestone history, completion-report history, and idempotency results.
+- One additive unapplied migration with bounded checks, foreign keys, unique current projections, history indexes, lease chronology, and no destructive operation or global delete blocker.
+- PostgreSQL transaction boundaries that atomically persist projection changes, audit events, and operation/task-scoped idempotency results; transaction-scoped advisory locks serialize duplicate keys.
+- Row locking, optimistic task/lease versions, PostgreSQL-clock claims and recovery, active-lease protection, deterministic history ordering, and bounded fail-closed errors.
+- Cross-adapter contract tests, schema/migration boundary tests, configuration-redaction tests, and PostgreSQL store surface tests.
+
+#### Security and architecture
+
+- DAB-2A remains the pure canonical model; the durable store persists it without creating competing task, authorization, lifecycle, event, milestone, or report semantics.
+- Development-control storage is separate from `lib/db`, customer `DATABASE_URL`, `clientId`, customer schemas, customer credentials, Growth Engine data, and customer retention rules.
+- Connection configuration is caller-supplied. Importing the package never opens a connection, and bounded errors do not echo supplied values.
+- Sensitive values, customer identity, unrestricted payloads, raw environment values, stack traces, transcripts, and unbounded output remain prohibited.
+- DAB-2B1 does not provision a database, execute a live migration, host a service, reconcile GitHub, expose API/UI/scheduler/webhook behavior, automate Git/deployment, or establish direct agent communication.
+- GitHub reconciliation remains DAB-2B2; direct ChatGPT/Codex communication remains DAB-3.
+
+#### Verification
+
+- Focused DAB-2A and DAB-2B1 tests: 39/39 passed.
+- `lib/development-control` and `lib/development-control-store` TypeScript checks passed without a live database credential.
+- PostgreSQL-backed integration execution remains an accepted environment-only limitation pending a separately authorized disposable test database; no credential was requested, guessed, or accessed.
+- Full application suite and production build were intentionally excluded from this bounded control-plane phase.
+
 ### DAB-2A — Pure Development Coordination Contracts and State Machine (2026-07-13)
 
 #### Added

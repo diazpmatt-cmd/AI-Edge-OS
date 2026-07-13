@@ -23,7 +23,7 @@ Verified preservation and operational validation:
 - The pilot verified that DAB-1 is usable as a manual governance contract while exposing concrete enforcement gaps: mutable/free-form specification state, manual remote-SHA and approval matching, non-atomic claims, no independent agent identity, ambiguous coordination-action classification, implementation-oriented milestone assumptions, and durable-document drift.
 - The three failed API-server Vercel deployments remain a separate, documented, pre-existing blocker unrelated to DAB-1.
 
-DAB-1 provides contractual governance and reviewable templates only. DAB-2A now supplies the pure, in-memory machine-enforcement foundation described below, but no persistent coordination service or direct ChatGPT/Codex communication exists.
+DAB-1 provides contractual governance and reviewable templates only. DAB-2A supplies the pure machine-enforcement foundation, and DAB-2B1 now supplies its tenant-independent PostgreSQL persistence boundary. No hosted coordination service, GitHub reconciliation, or direct ChatGPT/Codex communication exists.
 
 ### DAB-2A — Pure Coordination Contracts and State Machine (implemented and verified)
 
@@ -37,11 +37,24 @@ Completed scope:
 - Deterministic append-only audit events, idempotent replay, factual Git/deployment milestones, stale-state invalidation, and sensitive-data-safe completion reports.
 - Fixture coverage based on DAB-1-PILOT-001 and DAB-1-PILOT-002; 26 focused tests and the package TypeScript check pass.
 
-DAB-2A is not the complete DAB-2 bridge. It adds no persistence, repository implementation, GitHub integration, API, UI, webhook, GitHub Action, MCP, network/environment access, credential use, shell/filesystem execution, automated Git/deployment action, or live agent messaging.
+DAB-2A remains canonical and provider-independent. Its original phase added no persistence or integration; DAB-2B1 adds the separate bounded persistence implementation below.
+
+### DAB-2B1 — Tenant-Independent Durable Coordination Store (implemented and verified)
+
+Completed scope:
+
+- A `DevelopmentCoordinationStore` contract shared by the synchronous in-memory reference implementation and asynchronous durable implementations.
+- A separate `lib/development-control-store` PostgreSQL/Drizzle package that never imports `lib/db` or carries customer tenant identity.
+- One additive migration defining nine development-control tables for task projections, immutable specification revisions, actor snapshots, authorization decisions, claims, sequenced audit events, milestone history, completion-report history, and operation/task-scoped idempotency.
+- Atomic projection + event + idempotency transaction boundaries, row locking/optimistic versions, transaction-scoped idempotency locks, PostgreSQL-clock leases, active-lease protection, deterministic ordering, and fail-closed conflict handling.
+- Caller-supplied configuration with no environment access at import time and no sensitive value in errors, fixtures, reports, logs, or committed files.
+- Cross-adapter contract tests, schema/migration boundary tests, DAB-2A regression tests, and separate package TypeScript checks without a live database credential.
+
+DAB-2B1 implements code, schema, and an unapplied migration only. It does not provision or connect to a hosted database, execute a live migration, reconcile GitHub, expose an API/UI, run a scheduler/worker/webhook, automate Git or deployment, or establish direct agent communication.
 
 Deferred bounded phases:
 
-1. **DAB-2B — Durable Coordination Persistence and Integration:** separately design tenant-independent persistence, repository transactions, authoritative identity binding, and any bounded GitHub coordination integration around the DAB-2A contracts. Not implemented or approved for implementation.
+1. **DAB-2B2 — Read-Only GitHub Reconciliation:** stable GitHub identity evidence, signed webhook inbox and/or polling recovery, replay, rate limits, stale-SHA handling, and reconciliation diagnostics around the durable store. Not implemented or approved for implementation.
 2. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.

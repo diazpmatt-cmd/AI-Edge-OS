@@ -1,6 +1,51 @@
 # Session Handoff
 
-## Latest session: DAB-2A Pure Development Coordination State Machine (2026-07-13)
+## Latest session: DAB-2B1 Tenant-Independent Durable Coordination Store (2026-07-13)
+
+**Status:** Implemented and bounded verification passed on `feature/dab2b1-durable-coordination-store`; not committed or pushed.
+
+### Starting Git state and authorization
+
+- Starting local and live `origin/main`: `97fa8cabf013cc51d7c84a386ca0366cd356d747`.
+- Starting working tree was clean and synchronized on `main`.
+- Feature branch: `feature/dab2b1-durable-coordination-store`.
+- Operational task: [Issue #16](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/16), task `DAB-2B1`, specification revision 1.
+- Matthew's attributable Issue #16 decision authorized scope and editing for exactly 21 files. Commit, push, pull-request, merge, deployment, credentials, paid providers, and other external actions remain separately unauthorized.
+
+### Implemented architecture
+
+- `lib/development-control` remains the pure canonical DAB-2A package and now exports `DevelopmentCoordinationStore`, bounded input contracts, and the canonical transition-to-authorization mapping.
+- `InMemoryDevelopmentCoordinationStore` implements the shared contract, scopes idempotency by operation/task/key, and retains immutable specification and completion-report histories.
+- New `lib/development-control-store` package contains caller-supplied configuration, Drizzle schema, persistence mappers, a PostgreSQL store, and a connection factory that performs no work at import time.
+- One additive unapplied migration defines nine tenant-independent development-control tables. No `lib/db`, customer schema, customer `DATABASE_URL`, `clientId`, customer credential, or Growth Engine data is used.
+- Each durable mutation atomically combines its current projection, append-only sequenced event, and idempotency result. Task locks, optimistic task/lease versions, transaction-scoped idempotency locks, and PostgreSQL server time provide concurrency and lease safety.
+- Specifications, authorization decisions, events, milestone observations, and report submissions retain history. Current task, claim, milestone, and report projections remain bounded and deterministic.
+- Configuration is explicit caller input; supplied sensitive values are never placed in errors, fixtures, reports, logs, or committed files.
+
+### Verification
+
+- Existing DAB-2A plus new DAB-2B1 focused tests: 39/39 passed across three files.
+- `lib/development-control` TypeScript check: passed.
+- `lib/development-control-store` TypeScript check: passed.
+- Schema/migration boundary tests confirm nine approved tables, no customer identity columns, one additive migration, and no destructive operation, GitHub inbox, webhook, outbox, reconciliation table, or global delete trigger.
+- No live database credential was required or accessed, and the migration was not executed.
+- A real PostgreSQL integration run remains an accepted environment-only limitation until a separately authorized disposable development-control test database is supplied.
+- Full application suite and production build were intentionally not run.
+
+### Explicit boundaries and deferred work
+
+- DAB-2B1 is durable storage code and schema only. It does not provision or host a database, execute a live migration, expose an API/UI, run a scheduler/worker, install a webhook/GitHub App/Action, or automate any Git, deployment, credential, paid-provider, or external action.
+- DAB-2B2 read-only GitHub identity/evidence reconciliation remains unimplemented and unapproved.
+- DAB-3 direct ChatGPT/Codex communication and MCP remain unimplemented and unapproved.
+- Actor/recovery/transition policy remains the DAB-2A behavior; identity hardening is not silently introduced by persistence.
+
+### Next action
+
+Complete final bounded verification, post the implementation report to Issue #16, and request separate preservation authorization. Do not commit, push, open a pull request, run the migration, provision a database, begin DAB-2B2, or begin DAB-3 without attributable approval.
+
+---
+
+## Previous session: DAB-2A Pure Development Coordination State Machine (2026-07-13)
 
 **Status:** Implemented and focused verification passed on `feature/dab2a-coordination-state-machine`; not committed or pushed.
 

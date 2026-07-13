@@ -6,4 +6,5 @@ export * from "./claims";
 export * from "./events";
 export * from "./milestones";
 export * from "./completion-report";
+export * from "./repository";
 export * from "./in-memory-coordination-store";

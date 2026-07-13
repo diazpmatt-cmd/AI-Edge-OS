@@ -10,6 +10,12 @@ import { assertValidTransition } from "./lifecycle";
 import { createMilestoneRecord, initialMilestones } from "./milestones";
 import { deterministicHash } from "./specification";
 import {
+  TRANSITION_AUTHORIZATION_CATEGORY,
+  type DevelopmentCoordinationStore,
+  type CoordinationHistoryPageOptions,
+  normalizeCoordinationHistoryPage,
+} from "./repository";
+import {
   DevelopmentControlError,
   type ApprovalDecision,
   type ApprovalRecord,
@@ -40,39 +46,38 @@ interface IdempotentResult {
   readonly value: unknown;
 }
 
-const TRANSITION_CATEGORY: Partial<
-  Record<`${TaskState}->${TaskState}`, AuthorizationCategory>
-> = {
-  "proposed->approved": "scope",
-  "claimed->in_progress": "editing",
-  "in_progress->review_requested": "editing",
-  "review_requested->in_progress": "editing",
-  "review_requested->verified": "scope",
-  "verified->in_progress": "editing",
-  "verified->completed": "scope",
-  "blocked->approved": "scope",
-  "blocked->in_progress": "editing",
-};
-
-export class InMemoryDevelopmentCoordinationStore {
+export class InMemoryDevelopmentCoordinationStore
+  implements DevelopmentCoordinationStore
+{
   private readonly tasks = new Map<string, MutableTask>();
+  private readonly specifications = new Map<string, TaskSpecification[]>();
   private readonly approvals = new Map<string, ApprovalRecord[]>();
   private readonly events = new Map<string, AuditEvent[]>();
-  private readonly reports = new Map<string, Readonly<CompletionReportInput>>();
+  private readonly reports = new Map<
+    string,
+    Readonly<CompletionReportInput>[]
+  >();
   private readonly idempotency = new Map<string, IdempotentResult>();
 
   constructor(
     private readonly authorityPolicy: DevelopmentAuthorityPolicy = DAB2A_AUTHORITY_POLICY,
   ) {}
 
-  private idempotent<T>(key: string, input: unknown, operation: () => T): T {
+  private idempotent<T>(
+    operationName: string,
+    taskId: string,
+    key: string,
+    input: unknown,
+    operation: () => T,
+  ): T {
     if (!key.trim() || key.length > 200)
       throw new DevelopmentControlError(
         "INVALID_IDEMPOTENCY_KEY",
         "bounded idempotency key is required",
       );
     const fingerprint = deterministicHash(input, "request");
-    const existing = this.idempotency.get(key);
+    const scopedKey = `${operationName}|${taskId}|${key}`;
+    const existing = this.idempotency.get(scopedKey);
     if (existing) {
       if (existing.fingerprint !== fingerprint)
         throw new DevelopmentControlError(
@@ -82,7 +87,7 @@ export class InMemoryDevelopmentCoordinationStore {
       return existing.value as T;
     }
     const value = operation();
-    this.idempotency.set(key, { fingerprint, value });
+    this.idempotency.set(scopedKey, { fingerprint, value });
     return value;
   }
 
@@ -165,7 +170,12 @@ export class InMemoryDevelopmentCoordinationStore {
     timestamp: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "register_task",
+      input.specification.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       if (this.tasks.has(input.specification.taskId))
         throw new DevelopmentControlError(
@@ -182,6 +192,9 @@ export class InMemoryDevelopmentCoordinationStore {
         ],
       };
       this.tasks.set(input.specification.taskId, task);
+      this.specifications.set(input.specification.taskId, [
+        input.specification,
+      ]);
       this.appendEvent(task, {
         priorState: null,
         newState: "proposed",
@@ -192,8 +205,9 @@ export class InMemoryDevelopmentCoordinationStore {
         correlationKey: input.idempotencyKey,
         timestamp: input.timestamp,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   reviseTask(input: {
@@ -203,7 +217,12 @@ export class InMemoryDevelopmentCoordinationStore {
     timestamp: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "revise_task",
+      input.specification.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       if (input.actor.actorType !== "human_authority")
         throw new DevelopmentControlError(
@@ -224,6 +243,9 @@ export class InMemoryDevelopmentCoordinationStore {
       }
       const prior = task.state;
       task.specification = input.specification;
+      const revisions = this.specifications.get(input.specification.taskId) ?? [];
+      revisions.push(input.specification);
+      this.specifications.set(input.specification.taskId, revisions);
       task.state = "proposed";
       task.claim = null;
       task.milestones = [
@@ -240,8 +262,9 @@ export class InMemoryDevelopmentCoordinationStore {
         correlationKey: input.idempotencyKey,
         timestamp: input.timestamp,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   decideApproval(input: {
@@ -257,7 +280,12 @@ export class InMemoryDevelopmentCoordinationStore {
     expectedTaskVersion: number;
     idempotencyKey: string;
   }): ApprovalRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "decide_approval",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
       if (input.observedGitSha !== task.specification.expectedOriginMainSha)
@@ -292,8 +320,9 @@ export class InMemoryDevelopmentCoordinationStore {
         metadata: { categories: [...approval.categories].join(",") },
         timestamp: input.decidedAt,
       });
-      return approval;
-    });
+        return approval;
+      },
+    );
   }
 
   transitionTask(input: {
@@ -306,7 +335,12 @@ export class InMemoryDevelopmentCoordinationStore {
     timestamp: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "transition_task",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
@@ -316,7 +350,10 @@ export class InMemoryDevelopmentCoordinationStore {
           "STALE_GIT_SHA",
           "transition observed the wrong origin/main SHA",
         );
-      const category = TRANSITION_CATEGORY[`${task.state}->${input.nextState}`];
+      const category =
+        TRANSITION_AUTHORIZATION_CATEGORY[
+          `${task.state}->${input.nextState}`
+        ];
       if (category)
         this.assertAuthorized(
           task,
@@ -346,8 +383,9 @@ export class InMemoryDevelopmentCoordinationStore {
         correlationKey: input.idempotencyKey,
         timestamp: input.timestamp,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   claimTask(input: {
@@ -359,7 +397,12 @@ export class InMemoryDevelopmentCoordinationStore {
     leaseDurationMs: number;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "claim_task",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
       if (task.state !== "approved")
@@ -407,8 +450,9 @@ export class InMemoryDevelopmentCoordinationStore {
         },
         timestamp: input.claimedAt,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   renewClaim(input: {
@@ -420,7 +464,12 @@ export class InMemoryDevelopmentCoordinationStore {
     leaseDurationMs: number;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "renew_claim",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
       if (!task.claim)
@@ -448,8 +497,9 @@ export class InMemoryDevelopmentCoordinationStore {
         },
         timestamp: input.renewedAt,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   recoverExpiredClaim(input: {
@@ -459,7 +509,12 @@ export class InMemoryDevelopmentCoordinationStore {
     recoveredAt: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "recover_expired_claim",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
@@ -485,8 +540,9 @@ export class InMemoryDevelopmentCoordinationStore {
         correlationKey: input.idempotencyKey,
         timestamp: input.recoveredAt,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   releaseClaim(input: {
@@ -496,7 +552,12 @@ export class InMemoryDevelopmentCoordinationStore {
     releasedAt: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "release_claim",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
@@ -522,8 +583,9 @@ export class InMemoryDevelopmentCoordinationStore {
         correlationKey: input.idempotencyKey,
         timestamp: input.releasedAt,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   recordMilestone(input: {
@@ -536,7 +598,12 @@ export class InMemoryDevelopmentCoordinationStore {
     recordedAt: string;
     idempotencyKey: string;
   }): TaskRecord {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "record_milestone",
+      input.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       const task = this.mutableTask(input.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
       const milestone = createMilestoneRecord({
@@ -560,8 +627,9 @@ export class InMemoryDevelopmentCoordinationStore {
         metadata: { milestone: input.kind, status: input.status },
         timestamp: input.recordedAt,
       });
-      return this.snapshot(task);
-    });
+        return this.snapshot(task);
+      },
+    );
   }
 
   submitCompletionReport(input: {
@@ -571,7 +639,12 @@ export class InMemoryDevelopmentCoordinationStore {
     submittedAt: string;
     idempotencyKey: string;
   }): Readonly<CompletionReportInput> {
-    return this.idempotent(input.idempotencyKey, input, () => {
+    return this.idempotent(
+      "submit_completion_report",
+      input.report.taskId,
+      input.idempotencyKey,
+      input,
+      () => {
       validateActor(input.actor);
       const task = this.mutableTask(input.report.taskId);
       this.assertVersion(task, input.expectedTaskVersion);
@@ -592,7 +665,9 @@ export class InMemoryDevelopmentCoordinationStore {
           `completion report contains unauthorized files: ${unauthorized.join(", ")}`,
         );
       const report = validateCompletionReport(input.report);
-      this.reports.set(input.report.taskId, report);
+      const reports = this.reports.get(input.report.taskId) ?? [];
+      reports.push(report);
+      this.reports.set(input.report.taskId, reports);
       task.version += 1;
       this.appendEvent(task, {
         priorState: task.state,
@@ -606,23 +681,70 @@ export class InMemoryDevelopmentCoordinationStore {
         },
         timestamp: input.submittedAt,
       });
-      return report;
-    });
+        return report;
+      },
+    );
   }
 
   getTask(taskId: string): TaskRecord {
     return this.snapshot(this.mutableTask(taskId));
   }
 
-  getApprovals(taskId: string): readonly ApprovalRecord[] {
-    return Object.freeze([...(this.approvals.get(taskId) ?? [])]);
+  getApprovals(
+    taskId: string,
+    options?: CoordinationHistoryPageOptions,
+  ): readonly ApprovalRecord[] {
+    const page = normalizeCoordinationHistoryPage(options);
+    return Object.freeze(
+      (this.approvals.get(taskId) ?? []).slice(
+        page.offset,
+        page.offset + page.limit,
+      ),
+    );
   }
 
-  getEvents(taskId: string): readonly AuditEvent[] {
-    return Object.freeze([...(this.events.get(taskId) ?? [])]);
+  getEvents(
+    taskId: string,
+    options?: CoordinationHistoryPageOptions,
+  ): readonly AuditEvent[] {
+    const page = normalizeCoordinationHistoryPage(options);
+    return Object.freeze(
+      (this.events.get(taskId) ?? []).slice(
+        page.offset,
+        page.offset + page.limit,
+      ),
+    );
   }
 
   getCompletionReport(taskId: string): Readonly<CompletionReportInput> | null {
-    return this.reports.get(taskId) ?? null;
+    return this.reports.get(taskId)?.at(-1) ?? null;
+  }
+
+  getSpecificationRevisions(
+    taskId: string,
+    options?: CoordinationHistoryPageOptions,
+  ): readonly TaskSpecification[] {
+    this.mutableTask(taskId);
+    const page = normalizeCoordinationHistoryPage(options);
+    return Object.freeze(
+      (this.specifications.get(taskId) ?? []).slice(
+        page.offset,
+        page.offset + page.limit,
+      ),
+    );
+  }
+
+  getCompletionReports(
+    taskId: string,
+    options?: CoordinationHistoryPageOptions,
+  ): readonly Readonly<CompletionReportInput>[] {
+    this.mutableTask(taskId);
+    const page = normalizeCoordinationHistoryPage(options);
+    return Object.freeze(
+      (this.reports.get(taskId) ?? []).slice(
+        page.offset,
+        page.offset + page.limit,
+      ),
+    );
   }
 }

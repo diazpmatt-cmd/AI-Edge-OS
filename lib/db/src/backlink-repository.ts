@@ -3,17 +3,22 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type * as schema from "./schema";
 import {
   backlinkEvidenceTable, backlinkOpportunitiesTable, backlinkProspectsTable,
-  backlinkWorkflowEventsTable, backlinkWorkflowsTable,
+  backlinkWorkflowEventsTable, backlinkWorkflowsTable, backlinkIngestionRunsTable,
   type BacklinkEvidenceRow, type BacklinkOpportunityRow, type BacklinkProspectRow,
-  type BacklinkWorkflowEventRow, type BacklinkWorkflowRow,
+  type BacklinkWorkflowEventRow, type BacklinkWorkflowRow, type BacklinkIngestionRunRow,
 } from "./schema/backlinks";
 import { assertBacklinkWorkflowTransition, isTerminalBacklinkWorkflowStatus } from "./backlink-lifecycle";
 import type {
   BacklinkEvidenceRecord, BacklinkOpportunity, BacklinkOpportunityListOptions, BacklinkOpportunityListResult,
   BacklinkProspect, BacklinkRepository, BacklinkWorkflow, BacklinkWorkflowEvent,
-  BacklinkWorkflowTransitionInput, PersistBacklinkEvidenceInput,
+  BacklinkWorkflowTransitionInput, PersistBacklinkEvidenceInput, ClaimBacklinkIngestionRunInput,
+  CommitBacklinkIngestionRunInput, FailBacklinkIngestionRunInput,
 } from "./backlink-persistence-types";
 import { BACKLINK_MAX_PAGE_SIZE, BACKLINK_TEXT_LIMITS } from "./backlink-persistence-types";
+import type { BacklinkCapability } from "./backlink-types";
+import { BacklinkIngestionPersistenceError, deriveBacklinkIngestionRunId, validateBacklinkIngestionClaim, validateBacklinkPersistencePlan,
+  validateBacklinkIngestionCounts, validateBacklinkIngestionFailure, validateBacklinkRunChronology, validateStoredBacklinkReplaySummary } from "./backlink-ingestion-run";
+import type { BacklinkIngestionResultSummary, BacklinkIngestionRun, BacklinkIngestionFailureStage } from "./backlink-ingestion-run";
 
 type Db = NodePgDatabase<typeof schema>;
 const key = (clientId: string, id: string) => `${clientId}|${id}`;
@@ -76,14 +81,104 @@ const opportunityFromRow = (r: BacklinkOpportunityRow): BacklinkOpportunity => (
 const workflowFromRow = (r: BacklinkWorkflowRow): BacklinkWorkflow => ({ ...r, status: r.status as BacklinkWorkflow["status"] });
 const eventFromRow = (r: BacklinkWorkflowEventRow): BacklinkWorkflowEvent => ({ ...r,
   fromStatus: r.fromStatus as BacklinkWorkflowEvent["fromStatus"], toStatus: r.toStatus as BacklinkWorkflowEvent["toStatus"] });
+const emptyCounts = () => ({ observed: 0, accepted: 0, rejected: 0, mergedEvidence: 0, prospectCount: null, evidenceCount: null, opportunityCount: null, workflowCount: null });
+const runFromRow = (r: BacklinkIngestionRunRow): BacklinkIngestionRun => {
+  const claim = validateBacklinkIngestionClaim({ id: r.id, clientId: r.clientId, providerId: r.providerId, providerRevision: r.providerRevision,
+    mode: r.mode, capabilities: r.capabilities as string[], inputFingerprint: r.inputFingerprint, now: r.attemptStartedAt });
+  if (!Number.isInteger(r.attemptCount) || r.attemptCount < 1 || !["running", "succeeded", "failed"].includes(r.status)) throw new Error("malformed stored ingestion run");
+  validateBacklinkRunChronology(r.startedAt, r.attemptStartedAt, r.completedAt);
+  const resultSummary = r.resultSummary == null ? null : validateStoredBacklinkReplaySummary(r.resultSummary);
+  const terminal = r.status !== "running";
+  if (terminal !== Boolean(r.completedAt) || (r.status === "succeeded") !== Boolean(resultSummary)
+    || (r.status === "failed") !== Boolean(r.failureStage && r.failureCode)) throw new Error("contradictory stored ingestion run state");
+  const counts = validateBacklinkIngestionCounts({ observed: r.observedCount ?? 0, accepted: r.acceptedCount ?? 0, rejected: r.rejectedCount ?? 0,
+    mergedEvidence: r.mergedEvidenceCount ?? 0, prospectCount: r.prospectCount, evidenceCount: r.evidenceCount,
+    opportunityCount: r.opportunityCount, workflowCount: r.workflowCount }, r.status === "succeeded");
+  return {
+  id: r.id, clientId: r.clientId, providerId: r.providerId, providerRevision: r.providerRevision, mode: claim.mode,
+  status: r.status as BacklinkIngestionRun["status"], capabilities: claim.capabilities,
+  inputFingerprint: r.inputFingerprint, attemptCount: r.attemptCount, startedAt: r.startedAt, attemptStartedAt: r.attemptStartedAt,
+  completedAt: r.completedAt, counts,
+  resultSummary, failureStage: r.failureStage as BacklinkIngestionRun["failureStage"],
+  failureCode: r.failureCode as BacklinkIngestionRun["failureCode"],
+}; };
 
 /** Deterministic credential-free implementation used by the contract suite. */
 export class InMemoryBacklinkRepository implements BacklinkRepository {
-  private prospects = new Map<string, BacklinkProspect>();
-  private evidence = new Map<string, BacklinkEvidenceRecord>();
-  private opportunities = new Map<string, BacklinkOpportunity>();
-  private workflows = new Map<string, BacklinkWorkflow>();
-  private events = new Map<string, BacklinkWorkflowEvent>();
+  protected prospects = new Map<string, BacklinkProspect>();
+  protected evidence = new Map<string, BacklinkEvidenceRecord>();
+  protected opportunities = new Map<string, BacklinkOpportunity>();
+  protected workflows = new Map<string, BacklinkWorkflow>();
+  protected events = new Map<string, BacklinkWorkflowEvent>();
+  protected runs = new Map<string, BacklinkIngestionRun>();
+
+  protected failTransactionalStage(_stage: string): void {}
+
+  async claimIngestionRun(input: ClaimBacklinkIngestionRunInput) {
+    const valid = validateBacklinkIngestionClaim(input); input = valid;
+    const k = key(input.clientId, input.id); const existing = this.runs.get(k);
+    if (!existing) {
+      if ([...this.runs.values()].some(value => value.id === input.id && value.clientId !== input.clientId)) throw new Error("cross-tenant ingestion run ID collision");
+      const run: BacklinkIngestionRun = { id: input.id, clientId: input.clientId, providerId: input.providerId, providerRevision: input.providerRevision,
+        mode: input.mode, status: "running", capabilities: Object.freeze([...input.capabilities].sort() as BacklinkCapability[]), inputFingerprint: input.inputFingerprint,
+        attemptCount: 1, startedAt: input.now, attemptStartedAt: input.now, completedAt: null, counts: emptyCounts(), resultSummary: null, failureStage: null, failureCode: null };
+      this.runs.set(k, structuredClone(run)); return { outcome: "started" as const, run: structuredClone(run) };
+    }
+    if (existing.inputFingerprint !== input.inputFingerprint || existing.providerId !== input.providerId || existing.providerRevision !== input.providerRevision) throw new Error("ingestion run identity mismatch");
+    if (existing.status === "succeeded") return { outcome: "replayed" as const, run: structuredClone(existing) };
+    if (existing.status === "running") return { outcome: "in_progress" as const, run: structuredClone(existing) };
+    validateBacklinkRunChronology(existing.startedAt, input.now, null);
+    const reclaimed = { ...existing, status: "running" as const, attemptCount: existing.attemptCount + 1, attemptStartedAt: input.now,
+      completedAt: null, counts: emptyCounts(), resultSummary: null, failureStage: null, failureCode: null };
+    this.runs.set(k, structuredClone(reclaimed)); return { outcome: "reclaimed" as const, run: structuredClone(reclaimed) };
+  }
+
+  async getIngestionRun(runId: string, clientId: string) { return structuredClone(this.runs.get(key(clientId, runId)) ?? null); }
+
+  async commitIngestionRun(input: CommitBacklinkIngestionRunInput) {
+    const current = this.runs.get(key(input.clientId, input.runId)); if (!current || current.status !== "running") throw new Error("running ingestion run not found for client");
+    validateBacklinkRunChronology(current.startedAt, current.attemptStartedAt, input.completedAt);
+    const canonicalSummary = validateBacklinkPersistencePlan(input.runId, input.clientId, input.plan);
+    const draft = new InMemoryBacklinkRepository();
+    draft.prospects = structuredClone(this.prospects); draft.evidence = structuredClone(this.evidence); draft.opportunities = structuredClone(this.opportunities);
+    draft.workflows = structuredClone(this.workflows); draft.events = structuredClone(this.events); draft.runs = structuredClone(this.runs);
+    this.failTransactionalStage("prospect"); for (const prospect of input.plan.prospects) await draft.upsertProspect(prospect);
+    this.failTransactionalStage("evidence"); for (const evidence of input.plan.evidence) await draft.persistEvidence(evidence);
+    this.failTransactionalStage("opportunity"); for (const opportunity of input.plan.opportunities) await draft.upsertOpportunity(opportunity);
+    this.failTransactionalStage("workflow"); for (const workflow of input.plan.workflows) {
+      if (workflow.clientId !== input.clientId) throw new Error("cross-tenant workflow denied");
+      if (!draft.opportunities.has(key(input.clientId, workflow.opportunityId))) throw new Error("opportunity not found for client");
+      const k = key(input.clientId, workflow.id); if (!draft.workflows.has(k)) draft.workflows.set(k, structuredClone(workflow));
+    }
+    this.failTransactionalStage("initial_event"); for (const event of input.plan.initialEvents) {
+      const workflow = draft.workflows.get(key(input.clientId, event.workflowId));
+      if (event.clientId !== input.clientId || !workflow || !draft.opportunities.has(key(input.clientId, event.opportunityId)) || workflow.opportunityId !== event.opportunityId)
+        throw new Error("cross-tenant workflow event association denied");
+      const k = key(input.clientId, event.id); if (!draft.events.has(k)) draft.events.set(k, structuredClone(event));
+    }
+    this.failTransactionalStage("finalization");
+    const succeeded: BacklinkIngestionRun = { ...current, status: "succeeded", completedAt: input.completedAt, counts: {
+      observed: canonicalSummary.observed, accepted: canonicalSummary.accepted, rejected: canonicalSummary.rejected,
+      mergedEvidence: canonicalSummary.mergedEvidence, prospectCount: canonicalSummary.prospectCount, evidenceCount: canonicalSummary.evidenceCount,
+      opportunityCount: canonicalSummary.opportunityCount, workflowCount: canonicalSummary.workflowCount },
+      resultSummary: canonicalSummary, failureStage: null, failureCode: null };
+    draft.runs.set(key(input.clientId, input.runId), structuredClone(succeeded));
+    this.prospects = draft.prospects; this.evidence = draft.evidence; this.opportunities = draft.opportunities;
+    this.workflows = draft.workflows; this.events = draft.events; this.runs = draft.runs;
+    return structuredClone(succeeded);
+  }
+
+  async failIngestionRun(input: FailBacklinkIngestionRunInput) {
+    const k = key(input.clientId, input.runId); const current = this.runs.get(k); if (!current) throw new Error("ingestion run not found for client");
+    if (current.status === "succeeded") throw new Error("succeeded ingestion run is terminal");
+    if (current.status === "failed") return structuredClone(current);
+    validateBacklinkIngestionFailure(input.stage, input.code); validateBacklinkRunChronology(current.startedAt, current.attemptStartedAt, input.failedAt);
+    const failedCounts = validateBacklinkIngestionCounts(input.counts, false);
+    const failed: BacklinkIngestionRun = { ...current, status: "failed", completedAt: input.failedAt,
+      counts: failedCounts, resultSummary: null,
+      failureStage: input.stage, failureCode: input.code };
+    this.runs.set(k, structuredClone(failed)); return structuredClone(failed);
+  }
 
   async upsertProspect(input: BacklinkProspect) {
     const value = validateProspect(input); const k = key(value.clientId, value.id);
@@ -155,6 +250,80 @@ export class InMemoryBacklinkRepository implements BacklinkRepository {
 /** Production Drizzle implementation. Every predicate includes record ID and clientId. */
 export class DrizzleBacklinkRepository implements BacklinkRepository {
   constructor(private readonly db: Db) {}
+
+  async claimIngestionRun(input: ClaimBacklinkIngestionRunInput) {
+    const valid = validateBacklinkIngestionClaim(input); input = valid;
+    const [inserted] = await this.db.insert(backlinkIngestionRunsTable).values({ id: input.id, clientId: input.clientId, providerId: input.providerId,
+      providerRevision: input.providerRevision, mode: input.mode, status: "running", capabilities: [...input.capabilities].sort(),
+      inputFingerprint: input.inputFingerprint, attemptCount: 1, startedAt: input.now, attemptStartedAt: input.now }).onConflictDoNothing().returning();
+    if (inserted) return { outcome: "started" as const, run: runFromRow(inserted) };
+    let [row] = await this.db.select().from(backlinkIngestionRunsTable).where(and(eq(backlinkIngestionRunsTable.id, input.id), eq(backlinkIngestionRunsTable.clientId, input.clientId))).limit(1);
+    if (!row) throw new Error("cross-tenant ingestion run ID collision");
+    if (row.inputFingerprint !== input.inputFingerprint || row.providerId !== input.providerId || row.providerRevision !== input.providerRevision) throw new Error("ingestion run identity mismatch");
+    if (row.status === "succeeded") return { outcome: "replayed" as const, run: runFromRow(row) };
+    if (row.status === "failed") {
+      validateBacklinkRunChronology(row.startedAt, input.now, null);
+      const [reclaimed] = await this.db.update(backlinkIngestionRunsTable).set({ status: "running", attemptCount: sql`${backlinkIngestionRunsTable.attemptCount} + 1`,
+        attemptStartedAt: input.now, completedAt: null, observedCount: null, acceptedCount: null, rejectedCount: null, mergedEvidenceCount: null,
+        prospectCount: null, evidenceCount: null, opportunityCount: null, workflowCount: null, resultSummary: null, failureStage: null, failureCode: null })
+        .where(and(eq(backlinkIngestionRunsTable.id, input.id), eq(backlinkIngestionRunsTable.clientId, input.clientId), eq(backlinkIngestionRunsTable.status, "failed"))).returning();
+      if (reclaimed) return { outcome: "reclaimed" as const, run: runFromRow(reclaimed) };
+      [row] = await this.db.select().from(backlinkIngestionRunsTable).where(and(eq(backlinkIngestionRunsTable.id, input.id), eq(backlinkIngestionRunsTable.clientId, input.clientId))).limit(1);
+    }
+    return { outcome: "in_progress" as const, run: runFromRow(row) };
+  }
+
+  async getIngestionRun(runId: string, clientId: string) { const [row] = await this.db.select().from(backlinkIngestionRunsTable)
+    .where(and(eq(backlinkIngestionRunsTable.id, runId), eq(backlinkIngestionRunsTable.clientId, clientId))).limit(1); return row ? runFromRow(row) : null; }
+
+  async commitIngestionRun(input: CommitBacklinkIngestionRunInput) {
+    const run = await this.getIngestionRun(input.runId, input.clientId); if (!run || run.status !== "running") throw new Error("running ingestion run not found for client");
+    validateBacklinkRunChronology(run.startedAt, run.attemptStartedAt, input.completedAt);
+    const canonicalSummary = validateBacklinkPersistencePlan(input.runId, input.clientId, input.plan);
+    let stage: Exclude<BacklinkIngestionFailureStage, "provider" | "preparation"> = "prospect";
+    try { return await this.db.transaction(async tx => {
+      stage = "prospect";
+      for (const raw of input.plan.prospects) { const value = validateProspect(raw); if (value.clientId !== input.clientId) throw new Error("cross-tenant prospect denied");
+        await tx.insert(backlinkProspectsTable).values(value).onConflictDoNothing({ target: backlinkProspectsTable.id });
+        await tx.update(backlinkProspectsTable).set({ prospectType: value.prospectType, domain: value.domain, pageUrl: value.pageUrl, displayName: value.displayName, updatedAt: value.updatedAt })
+          .where(and(eq(backlinkProspectsTable.id, value.id), eq(backlinkProspectsTable.clientId, input.clientId))); }
+      stage = "evidence"; for (const { prospectId, evidence } of input.plan.evidence) { if (evidence.clientId !== input.clientId) throw new Error("cross-tenant evidence denied");
+        const [prospect] = await tx.select({ id: backlinkProspectsTable.id }).from(backlinkProspectsTable).where(and(eq(backlinkProspectsTable.id, prospectId), eq(backlinkProspectsTable.clientId, input.clientId))).limit(1);
+        if (!prospect) throw new Error("prospect not found for client");
+        await tx.insert(backlinkEvidenceTable).values({ ...evidence, prospectId, providers: [...evidence.providers].sort(), providerMetadata: evidence.providerMetadata, discoveredAt: new Date(evidence.discoveredAt) }).onConflictDoNothing({ target: backlinkEvidenceTable.id }); }
+      stage = "opportunity"; for (const raw of input.plan.opportunities) { const value = validateOpportunity(raw); if (value.clientId !== input.clientId) throw new Error("cross-tenant opportunity denied");
+        for (const evidenceId of value.evidenceIds) { const [evidence] = await tx.select({ id: backlinkEvidenceTable.id }).from(backlinkEvidenceTable)
+          .where(and(eq(backlinkEvidenceTable.id, evidenceId), eq(backlinkEvidenceTable.clientId, input.clientId))).limit(1);
+          if (!evidence) throw new Error("evidence not found for client"); }
+        await tx.insert(backlinkOpportunitiesTable).values({ ...value, evidenceIds: [...value.evidenceIds] }).onConflictDoNothing({ target: backlinkOpportunitiesTable.id });
+        await tx.update(backlinkOpportunitiesTable).set({ category: value.category, serviceId: value.serviceId, potentialValue: value.potentialValue, attainability: value.attainability,
+          rationale: value.rationale, recommendedAction: value.recommendedAction, evidenceIds: [...value.evidenceIds], updatedAt: value.updatedAt })
+          .where(and(eq(backlinkOpportunitiesTable.id, value.id), eq(backlinkOpportunitiesTable.clientId, input.clientId))); }
+      stage = "workflow"; for (const workflow of input.plan.workflows) { if (workflow.clientId !== input.clientId) throw new Error("cross-tenant workflow denied");
+        await tx.insert(backlinkWorkflowsTable).values(workflow).onConflictDoNothing({ target: backlinkWorkflowsTable.id }); }
+      stage = "initial_event"; for (const event of input.plan.initialEvents) { if (event.clientId !== input.clientId) throw new Error("cross-tenant event denied");
+        await tx.insert(backlinkWorkflowEventsTable).values(event).onConflictDoNothing({ target: backlinkWorkflowEventsTable.id }); }
+      stage = "finalization"; const summary = canonicalSummary;
+      const [finalized] = await tx.update(backlinkIngestionRunsTable).set({ status: "succeeded", completedAt: input.completedAt,
+        observedCount: summary.observed, acceptedCount: summary.accepted, rejectedCount: summary.rejected, mergedEvidenceCount: summary.mergedEvidence,
+        prospectCount: summary.prospectCount, evidenceCount: summary.evidenceCount, opportunityCount: summary.opportunityCount, workflowCount: summary.workflowCount,
+        resultSummary: summary, failureStage: null, failureCode: null })
+        .where(and(eq(backlinkIngestionRunsTable.id, input.runId), eq(backlinkIngestionRunsTable.clientId, input.clientId), eq(backlinkIngestionRunsTable.status, "running"))).returning();
+      if (!finalized) throw new Error("running ingestion run finalization failed"); return runFromRow(finalized);
+    }); } catch (error) { if (error instanceof BacklinkIngestionPersistenceError) throw error; throw new BacklinkIngestionPersistenceError(stage); }
+  }
+
+  async failIngestionRun(input: FailBacklinkIngestionRunInput) {
+    const current = await this.getIngestionRun(input.runId, input.clientId); if (!current) throw new Error("ingestion run not found for client");
+    validateBacklinkIngestionFailure(input.stage, input.code); validateBacklinkRunChronology(current.startedAt, current.attemptStartedAt, input.failedAt);
+    const failedCounts = validateBacklinkIngestionCounts(input.counts, false);
+    const [row] = await this.db.update(backlinkIngestionRunsTable).set({ status: "failed", completedAt: input.failedAt,
+      observedCount: failedCounts.observed, acceptedCount: failedCounts.accepted, rejectedCount: failedCounts.rejected, mergedEvidenceCount: failedCounts.mergedEvidence,
+      prospectCount: null, evidenceCount: null, opportunityCount: null, workflowCount: null, resultSummary: null, failureStage: input.stage, failureCode: input.code })
+      .where(and(eq(backlinkIngestionRunsTable.id, input.runId), eq(backlinkIngestionRunsTable.clientId, input.clientId), eq(backlinkIngestionRunsTable.status, "running"))).returning();
+    if (row) return runFromRow(row); const existing = await this.getIngestionRun(input.runId, input.clientId);
+    if (!existing) throw new Error("ingestion run not found for client"); if (existing.status === "failed") return existing; throw new Error("failed ingestion run transition denied");
+  }
 
   async upsertProspect(input: BacklinkProspect) {
     const value = validateProspect(input);

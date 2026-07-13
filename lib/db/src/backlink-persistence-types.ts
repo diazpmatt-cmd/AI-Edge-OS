@@ -3,6 +3,10 @@ import type {
   BacklinkOpportunityCategory,
   CanonicalBacklinkEvidence,
 } from "./backlink-types";
+import type {
+  BacklinkIngestionCounts, BacklinkIngestionFailureCode, BacklinkIngestionFailureStage,
+  BacklinkIngestionMode, BacklinkIngestionResultSummary, BacklinkIngestionRun,
+} from "./backlink-ingestion-run";
 
 export type BacklinkProspectType = "domain" | "page" | "directory" | "organization" | "partnership" | "other";
 export type BacklinkWorkflowStatus = "discovered" | "reviewing" | "approved" | "pursuing" | "won" | "rejected" | "expired";
@@ -114,7 +118,51 @@ export interface PersistBacklinkEvidenceInput {
   evidence: CanonicalBacklinkEvidence;
 }
 
+export interface BacklinkIngestionPersistencePlan {
+  prospects: readonly BacklinkProspect[];
+  evidence: readonly PersistBacklinkEvidenceInput[];
+  opportunities: readonly BacklinkOpportunity[];
+  workflows: readonly BacklinkWorkflow[];
+  initialEvents: readonly BacklinkWorkflowEvent[];
+  summary: BacklinkIngestionResultSummary;
+}
+
+export interface ClaimBacklinkIngestionRunInput {
+  id: string;
+  clientId: string;
+  providerId: string;
+  providerRevision: string;
+  mode: BacklinkIngestionMode;
+  capabilities: readonly string[];
+  inputFingerprint: string;
+  now: Date;
+}
+
+export type ClaimBacklinkIngestionRunResult =
+  | { outcome: "started" | "reclaimed"; run: BacklinkIngestionRun }
+  | { outcome: "in_progress" | "replayed"; run: BacklinkIngestionRun };
+
+export interface CommitBacklinkIngestionRunInput {
+  runId: string;
+  clientId: string;
+  plan: BacklinkIngestionPersistencePlan;
+  completedAt: Date;
+}
+
+export interface FailBacklinkIngestionRunInput {
+  runId: string;
+  clientId: string;
+  stage: BacklinkIngestionFailureStage;
+  code: BacklinkIngestionFailureCode;
+  counts: BacklinkIngestionCounts;
+  failedAt: Date;
+}
+
 export interface BacklinkRepository {
+  claimIngestionRun(input: ClaimBacklinkIngestionRunInput): Promise<ClaimBacklinkIngestionRunResult>;
+  commitIngestionRun(input: CommitBacklinkIngestionRunInput): Promise<BacklinkIngestionRun>;
+  failIngestionRun(input: FailBacklinkIngestionRunInput): Promise<BacklinkIngestionRun>;
+  getIngestionRun(runId: string, clientId: string): Promise<BacklinkIngestionRun | null>;
   upsertProspect(prospect: BacklinkProspect): Promise<BacklinkProspect>;
   persistEvidence(input: PersistBacklinkEvidenceInput): Promise<BacklinkEvidenceRecord>;
   upsertOpportunity(opportunity: BacklinkOpportunity): Promise<BacklinkOpportunity>;

@@ -16,11 +16,18 @@ Completed scope:
 - ADR-008 documenting GitHub as the initial operational coordination surface, Matthew's final authority, proposal/approval separation, stale-state safeguards, one-task/one-branch isolation, and the DAB phase boundaries.
 - Explicit prohibition of credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, and unbounded shell output.
 
+Verified preservation and operational validation:
+
+- DAB-1 was merged through [PR #9](https://github.com/diazpmatt-cmd/AI-Edge-OS/pull/9) at merge commit `7ba2348e128469df5ae30ba0f6276ca0e4b1d4e7`.
+- DAB-1-PILOT-001 completed successfully. [Issue #10](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/10) is the authoritative proposal, approval, claim, and completion history.
+- The pilot verified that DAB-1 is usable as a manual governance contract while exposing concrete enforcement gaps: mutable/free-form specification state, manual remote-SHA and approval matching, non-atomic claims, no independent agent identity, ambiguous coordination-action classification, implementation-oriented milestone assumptions, and durable-document drift.
+- The three failed API-server Vercel deployments remain a separate, documented, pre-existing blocker unrelated to DAB-1.
+
 DAB-1 provides contractual governance and reviewable templates only. It does not machine-enforce approvals, task transitions, claims, concurrency, or stale-SHA rejection, and it does not provide direct ChatGPT/Codex communication.
 
 Deferred bounded phases:
 
-1. **DAB-2 — Durable Coordination Ledger:** machine-enforced task revisions, expected-SHA compare-and-swap, claims, approvals, transitions, and append-only audit events. Not implemented or approved for implementation.
+1. **DAB-2 — Durable Coordination Ledger:** recommended future requirements now include immutable specification hashes and revisions, authoritative expected-SHA compare-and-swap, structured category-bound approvals, atomic claims and leases, validated transitions, independent actor identities, a defined coordination-action boundary, task-type-aware Git milestones, verified factual events, stale-state rejection, bounded reports, durable-document reconciliation prompts, and idempotent append-only audit events. These recommendations come from DAB-1-PILOT-001; DAB-2 is not implemented or approved for implementation.
 2. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.

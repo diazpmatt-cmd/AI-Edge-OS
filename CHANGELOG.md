@@ -6,6 +6,36 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### C8R-5 — Tenant-Safe AI Visibility Read Model (2026-07-13)
+
+#### Added
+
+- Provider-independent AI Visibility contracts with bounded normalized evidence, canonical source references, coverage diagnostics, workflow destinations, rejection reasons, and separate lifecycle facets.
+- Pure source adapters for Local Presence, canonical Discovery opportunities, canonical backlink opportunities/workflows/evidence, Content Autopilot records, bounded tenant-safe review summaries, and bounded connected-Google status.
+- Deterministic composer with tenant and reference validation, geography normalization, stable IDs and ordering, deduplication, bounded provenance merging, and canonical workflow precedence.
+- Transparent prioritizer with separate potential-value and attainability outputs. Potential value weights business impact (30%), evidence strength (25%), local impact (20%), service priority (15%), and urgency (10%). Attainability weights relationship access (25%), workflow readiness (20%), effort ease (20%), freshness (15%), local relevance (10%), and service relevance (10%).
+- Fixture-backed Bed Bugs & Beyond examples covering Baldwin County, Alabama; phone `251-324-9090`; furniture/item-level bed-bug treatment; active fumigation; and rejection of termite, whole-home heat-treatment, unsupported-service, out-of-area, malformed, and mixed-tenant inputs.
+- Independent lifecycle projections and assertions for generated/not-approved, pending approval, approved/not-queued, queued/not-scheduled, scheduled/not-published, published, and failed content.
+
+#### Corrected
+
+- Generated content with no approval record now maps to `not_approved`, not `not_required`. Preparation, approval, dispatch, and delivery remain separate, and no pre-publication state is interpreted as actually published.
+
+#### Security and architecture
+
+- Local Presence, Discovery, backlinks, and Content Autopilot retain ownership of their canonical records and workflow state; AI Visibility is read-only composition over those sources.
+- Legacy `ai_visibility_audits` is explicitly noncanonical and is excluded from all C8R-5 contracts and adapters.
+- Invalid services, prohibited claims, unauthorized geography, tenant mismatches, unsupported evidence, and malformed inputs are rejected before scoring.
+- Missing sources use explicit coverage diagnostics and never reduce a score through fabricated zero values.
+- No credentials, secrets, tokens, persistence, migrations, schemas, API routes, UI, scheduler, provider, Similarweb adapter, network collection, OAuth access, live prompt monitoring, or external execution was added.
+
+#### Verification
+
+- Focused C8R-5 tests: 32/32 passed.
+- Bounded C8R-1 through C8R-5 and Discovery regression set: 629 passed, 2 skipped.
+- DB TypeScript check passed.
+- `git diff --check`, credential scan, network/environment scan, tenant-safety scan, lifecycle-collapse scan, legacy-AI-Visibility scan, and forbidden-file scan passed.
+
 ### C6 Discovery Lifecycle Governance — Production Baseline (2026-07-12)
 
 **Baseline locked:** 191 tests passing, 0 failures. Both TypeScript builds clean.

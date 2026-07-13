@@ -420,6 +420,13 @@ export * from "./backlink-fixture-provider";
 export * from "./backlink-ingestion";
 export * from "./backlink-ingestion-run";
 
+// Phase C8R-5: tenant-safe, pure AI Visibility read model (legacy audits remain noncanonical)
+export * from "./ai-visibility-read-model-types";
+export * from "./ai-visibility-prioritizer";
+export * from "./ai-visibility-read-model-adapters";
+export * from "./ai-visibility-read-model";
+export * from "./ai-visibility-fixtures";
+
 // C7 repository (schedule CRUD + leadership + claiming)
 export {
   bootstrapC7Tables,

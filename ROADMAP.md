@@ -1,6 +1,36 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-11
+Last updated: 2026-07-13
+
+---
+
+## Growth Engine C8R Status
+
+### C8R-5 — Tenant-Safe AI Visibility Read Model (implemented and verified)
+
+Completed scope:
+
+- Provider-independent normalized read-model contracts and bounded canonical references.
+- Separate source adapters for Local Presence, Discovery, backlinks, tenant-safe reviews, Content Autopilot lifecycle, and bounded connected-Google status.
+- Pure deterministic composition, deduplication, provenance merging, stable ordering, and pre-prioritization rejection gates.
+- Transparent potential-value and attainability scores that remain separate; no generic SEO score.
+- Coverage diagnostics for unavailable, unimplemented, unconnected, unsafe, or unobserved sources without manufacturing zero values.
+- BB&B fixtures enforcing Baldwin County geography, active services, furniture/item-level bed-bug treatment, active fumigation, no termites, and no whole-home heat positioning.
+- Separate content preparation, approval, dispatch, and delivery facets covering generated/not-approved, pending approval, approved/not-queued, queued/not-scheduled, scheduled/not-published, published, and failed states.
+- Pure focused coverage: 32 C8R-5 tests; bounded C8R/Discovery regression baseline: 629 passed and 2 skipped; DB TypeScript clean.
+
+This phase does **not** add persistence, API routes, UI, schedulers, providers, live collection, network access, or external execution. Google Business Profile collection, Search Console, GA4, local-rank tracking, tenant-safe review ingestion, Gemini, ChatGPT, Perplexity, and live AI prompt monitoring remain future bounded phases and must not be represented as implemented.
+
+### Approved next architecture audit
+
+- **AI Edge Development Agent Bridge Feasibility Audit** — approved as a read-only architecture mission after the C8R-5 pull request is created. The bridge is not implemented. No MCP server, shared ledger, integration, credential, port, or external service has been added.
+
+### Preserved Google Local and AI Visibility priority order
+
+1. Reuse canonical Local Presence, Discovery, backlink, review, content, and connected-Google records.
+2. Add bounded tenant-safe source adapters only when the underlying canonical integration exists.
+3. Add persisted or visible AI Visibility behavior only in separately approved phases.
+4. Defer live provider collection, prompt monitoring, rank tracking, and external execution until their security and tenant boundaries are approved.
 
 ---
 

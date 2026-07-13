@@ -1,5 +1,65 @@
 # Session Handoff
 
+## Latest session: C8R-5 Tenant-Safe AI Visibility Read Model (2026-07-13)
+
+**Status:** Implemented, accepted, verified, and ready for preservation on `feature/c8r-ai-visibility-read-model`.
+
+### Starting Git state
+
+- Branch created from: `main`
+- Starting commit: `d528fa0d3ac8f47783560221ebcdd2744d6ad6f0`
+- Feature branch: `feature/c8r-ai-visibility-read-model`
+
+### Implemented files
+
+- `lib/db/src/ai-visibility-read-model-types.ts` — bounded contracts, coverage diagnostics, canonical references, lifecycle facets, rejection reasons, and read-model outputs.
+- `lib/db/src/ai-visibility-prioritizer.ts` — deterministic potential-value and attainability scoring with exported weights and thresholds.
+- `lib/db/src/ai-visibility-read-model.ts` — pure validation, rejection, composition, deduplication, provenance merge, IDs, and stable ordering.
+- `lib/db/src/ai-visibility-read-model-adapters.ts` — separate canonical-source adapters with no database, route, environment, OAuth, network, or provider-client access.
+- `lib/db/src/ai-visibility-fixtures.ts` — bounded BB&B examples and all seven content lifecycle conditions.
+- `lib/db/src/index.ts` — C8R-5 exports.
+- `artifacts/ai-edge-solutions/src/lib/__tests__/ai-visibility-c8r5.test.ts` — 32 pure focused tests.
+
+### Architecture decisions
+
+- AI Visibility is a tenant-safe read model, not a source of truth. Local Presence, Discovery, backlinks, and Content Autopilot retain ownership.
+- Legacy `ai_visibility_audits` is noncanonical and cannot supply evidence.
+- Adapters translate canonical records into bounded inputs; the composer remains pure and provider-independent.
+- Potential value and attainability remain separate. Missing sources produce coverage diagnostics, not zero-valued evidence.
+- Preparation, approval, dispatch, and delivery remain distinct. Generated content without an approval record is `not_approved`; queued or scheduled content is not published.
+- Invalid BB&B services, prohibited claims, unauthorized geography, mixed tenants, unsupported evidence, and malformed records are rejected before prioritization.
+- See `docs/adr/ADR-007-c8r5-ai-visibility-read-model.md`.
+
+### BB&B invariants
+
+- Primary geography: Baldwin County, Alabama.
+- Main phone: `251-324-9090`.
+- No active termite service or termite opportunities.
+- No whole-home bed-bug heat-treatment positioning.
+- Furniture/item-level bed-bug treatment is the differentiator.
+- Fumigation is active.
+
+### Verification baseline
+
+- C8R-5: 32/32 passed.
+- Bounded C8R/Discovery regressions: 629 passed, 2 skipped.
+- DB TypeScript: passed without `DATABASE_URL`.
+- `git diff --check`: passed.
+- Credential, network/environment, tenant-safety, lifecycle-collapse, legacy-AI-Visibility, and forbidden-file scans: passed.
+- Full application suite and production build were intentionally not run for this bounded phase.
+
+### Explicit exclusions and deferred work
+
+- No persistence, migration, schema, API, UI, scheduler, provider, Similarweb integration, network collection, credentials, OAuth access, live AI prompt monitoring, automated outreach, or external execution.
+- GBP collection, Search Console, GA4, local-rank tracking, tenant-safe review ingestion, Gemini, ChatGPT, Perplexity, and live answer-engine monitoring remain future bounded phases.
+- Preserve the Google Local and AI Visibility order: canonical sources first, bounded adapters second, separately approved persistence/UI/live integrations later.
+
+### Next approved mission
+
+After this branch is documented, committed, pushed, and its pull request is created, perform the **read-only AI Edge Development Agent Bridge Feasibility Audit**. The bridge is not implemented and must not interrupt or expand C8R-5.
+
+---
+
 ## Last session completed: YouTube Pilot — Security Cleanup + Phase 8 Tests (2026-07-11)
 
 ### What was done

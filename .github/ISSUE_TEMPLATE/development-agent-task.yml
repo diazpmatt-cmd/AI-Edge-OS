@@ -1,0 +1,215 @@
+name: Development agent task
+description: Propose a bounded, reviewable AI Edge OS development task for explicit approval.
+title: "[TASK] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Governance boundary
+        Submitting or editing this form does not approve work. A valid approval must be an attributable GitHub comment, review, or other explicit decision record from Matthew Diaz's verified identity and must name the exact specification revision, expected `origin/main` SHA, and authorization category.
+
+        GitHub supplies the attributable actor and creation/update timestamps; do not manually recreate or overwrite that history.
+
+        Do not include credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, or unbounded shell output.
+
+  - type: input
+    id: task_id
+    attributes:
+      label: Task ID
+      description: Stable identifier, for example DAB-1 or C8R-6.
+      placeholder: DAB-1
+    validations:
+      required: true
+
+  - type: input
+    id: task_title
+    attributes:
+      label: Task title
+      description: Concise human-readable task name.
+    validations:
+      required: true
+
+  - type: input
+    id: specification_revision
+    attributes:
+      label: Specification revision
+      description: Immutable revision label to which any later approval must apply.
+      placeholder: "1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: specification
+    attributes:
+      label: Complete specification
+      description: State the objective, required deliverables, and bounded implementation details.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task_status
+    attributes:
+      label: Current task status
+      description: This is descriptive task state, not approval evidence.
+      options:
+        - proposed
+        - approved — explicit evidence must be linked below
+        - claimed
+        - in progress
+        - review requested
+        - verified
+        - blocked
+        - rejected
+        - cancelled
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - critical
+        - high
+        - normal
+        - low
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List prerequisite tasks, decisions, issues, or `None`.
+    validations:
+      required: true
+
+  - type: input
+    id: origin
+    attributes:
+      label: Origin
+      description: Person, audit, ADR, roadmap entry, issue, or other source of this proposal.
+    validations:
+      required: true
+
+  - type: input
+    id: assigned_agent
+    attributes:
+      label: Proposed or assigned agent
+      description: Assignment remains proposed until supported by an explicit decision record.
+      placeholder: Codex / Alex
+    validations:
+      required: true
+
+  - type: input
+    id: expected_main_sha
+    attributes:
+      label: Expected origin/main SHA
+      description: Full 40-character commit SHA that must be verified before work begins.
+      placeholder: 0123456789abcdef0123456789abcdef01234567
+    validations:
+      required: true
+
+  - type: input
+    id: intended_branch
+    attributes:
+      label: Intended branch
+      description: One dedicated feature branch for this task.
+      placeholder: feature/example-task
+    validations:
+      required: true
+
+  - type: textarea
+    id: authorized_scope
+    attributes:
+      label: Proposed scope and authorized files
+      description: List the exact bounded behavior and files proposed for authorization.
+    validations:
+      required: true
+
+  - type: textarea
+    id: exclusions
+    attributes:
+      label: Explicit exclusions
+      description: List actions, systems, and files that must remain untouched.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: State independently verifiable completion conditions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification requirements
+      description: List the exact checks to run and checks explicitly prohibited.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: current_authorization_state
+    attributes:
+      label: Current authorization state
+      description: Declarative only. This selection is never proof of approval.
+      options:
+        - proposed — no action authorized
+        - decision recorded — evidence must be verified below
+        - rejected or withdrawn
+    validations:
+      required: true
+
+  - type: dropdown
+    id: requested_approval_categories
+    attributes:
+      label: Requested approval categories
+      description: Select every category requested. Approval of one never implies another.
+      multiple: true
+      options:
+        - scope
+        - editing
+        - committing
+        - pushing
+        - merging
+        - deployment
+        - credentials
+        - paid providers
+        - external actions
+    validations:
+      required: true
+
+  - type: textarea
+    id: approval_evidence
+    attributes:
+      label: Attributable approval evidence
+      description: Link Matthew's verified GitHub comment, review, or other explicit decision and identify its specification revision, expected SHA, and categories. Enter `None — proposed only` when no approval exists.
+    validations:
+      required: true
+
+  - type: textarea
+    id: documentation
+    attributes:
+      label: Documentation requirements
+      description: Identify canonical documents that may require an approved update, or `None`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: related_links
+    attributes:
+      label: Related issue, commit, pull request, or report links
+      description: Use repository links or `None`; do not paste full transcripts or raw logs.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: data_safety
+    attributes:
+      label: Data-safety acknowledgement
+      options:
+        - label: I confirm this task contains no credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, or unbounded shell output.
+          required: true

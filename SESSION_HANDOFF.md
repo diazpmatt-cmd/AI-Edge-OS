@@ -1,6 +1,58 @@
 # Session Handoff
 
-## Latest session: C8R-5 Tenant-Safe AI Visibility Read Model (2026-07-13)
+## Latest session: DAB-1 GitHub-Backed Development Task Contract (2026-07-13)
+
+**Status:** Implemented and verified on `feature/dab1-github-task-contract`; not committed or pushed.
+
+### Starting Git state
+
+- Branch created from: `main`
+- Starting commit: `6235cf0b33e850c3bfec76b78d77253021e710d1`
+- Verified local `main` and `origin/main` both matched the starting commit.
+- Starting working tree was clean.
+- Feature branch: `feature/dab1-github-task-contract`
+
+### Implemented files
+
+- `AGENTS.md` — compact canonical-document routing and mandatory repository, authorization, verification, sensitive-data, and DAB phase safeguards.
+- `.github/ISSUE_TEMPLATE/development-agent-task.yml` — structured proposed-task and attributable-approval contract.
+- `.github/pull_request_template.md` — implementation, verification, authorization, factual-milestone, and completion handoff contract.
+- `docs/adr/ADR-008-development-agent-bridge.md` — staged GitHub → DAB-2 ledger → DAB-3 MCP architecture decision.
+- `replit.md`, `ROADMAP.md`, `CHANGELOG.md`, and `SESSION_HANDOFF.md` — canonical durable guidance and project-history updates.
+
+### Architecture decisions
+
+- GitHub Issues and pull requests are the initial operational coordination surface. No mutable live task-ledger file is stored in the repository.
+- Existing canonical repository documents retain durable engineering guidance, priorities, history, handoff, and architecture decisions.
+- An issue field, assignment, proposal, plan, or agent statement is not approval. Only an attributable decision from Matthew Diaz's verified identity is evidence.
+- Approval is bound to the exact task specification revision, expected `origin/main` SHA, and named authorization categories.
+- Scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions are separate categories.
+- Committed, pushed, pull-request-opened, merged, and deployed are factual milestones recorded only after verification.
+- DAB-1 is contractual governance, not technical enforcement or direct agent communication. See `docs/adr/ADR-008-development-agent-bridge.md`.
+
+### Verification
+
+- GitHub Issue Form YAML parsed successfully and required form structure was validated using existing local tooling.
+- Markdown structure and required task, handoff, Git-state, authorization, sensitive-data, and DAB-boundary language were validated.
+- `git diff --check` passed.
+- Sensitive-data, credential, environment, runtime, network, schema, migration, database, API, UI, scheduler, webhook, GitHub Action, MCP, Growth Engine, customer-facing, and forbidden-file scans passed.
+- Complete diff review confirmed only the eight approved DAB-1 files changed.
+- Full application tests and production build were intentionally not run because DAB-1 changes documentation and GitHub templates only.
+
+### Deferred work
+
+- DAB-2 may add a separately approved durable internal ledger with machine-enforced revisions, SHA checks, claims, transitions, approvals, idempotency, and append-only events.
+- DAB-3 may add a separately approved authenticated, allowlisted MCP interface for bounded ChatGPT/Codex coordination.
+- Neither DAB-2 nor DAB-3 is implemented, approved for implementation, or operational.
+- No autonomous commit, push, merge, deployment, credential use, paid-provider call, or external action was introduced.
+
+### Next action
+
+Review the complete DAB-1 diff and verification report. Commit, push, pull-request creation, DAB-2, and DAB-3 require separate explicit authorization.
+
+---
+
+## Previous session: C8R-5 Tenant-Safe AI Visibility Read Model (2026-07-13)
 
 **Status:** Implemented, accepted, verified, and ready for preservation on `feature/c8r-ai-visibility-read-model`.
 

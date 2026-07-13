@@ -418,6 +418,7 @@ export * from "./schema/backlinks";
 export * from "./backlink-provider-fixtures";
 export * from "./backlink-fixture-provider";
 export * from "./backlink-ingestion";
+export * from "./backlink-ingestion-run";
 
 // C7 repository (schedule CRUD + leadership + claiming)
 export {

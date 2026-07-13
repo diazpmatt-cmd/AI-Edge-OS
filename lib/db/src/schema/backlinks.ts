@@ -76,8 +76,68 @@ export const backlinkWorkflowEventsTable = pgTable("backlink_workflow_events", {
   check("ck_backlink_event_reason_length", sql`${table.reason} IS NULL OR char_length(${table.reason}) <= 1000`),
 ]);
 
+export const backlinkIngestionRunsTable = pgTable("backlink_ingestion_runs", {
+  id: text("id").primaryKey(), clientId: text("client_id").notNull(), providerId: text("provider_id").notNull(),
+  providerRevision: text("provider_revision").notNull(), mode: text("mode").notNull(), status: text("status").notNull(),
+  capabilities: jsonb("capabilities").notNull().default([]), inputFingerprint: text("input_fingerprint").notNull(),
+  attemptCount: integer("attempt_count").notNull().default(1), startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  attemptStartedAt: timestamp("attempt_started_at", { withTimezone: true }).notNull(), completedAt: timestamp("completed_at", { withTimezone: true }),
+  observedCount: integer("observed_count"), acceptedCount: integer("accepted_count"), rejectedCount: integer("rejected_count"),
+  mergedEvidenceCount: integer("merged_evidence_count"), prospectCount: integer("prospect_count"), evidenceCount: integer("evidence_count"),
+  opportunityCount: integer("opportunity_count"), workflowCount: integer("workflow_count"), resultSummary: jsonb("result_summary"),
+  failureStage: text("failure_stage"), failureCode: text("failure_code"),
+}, table => [
+  uniqueIndex("uq_backlink_ingestion_runs_id_client").on(table.id, table.clientId),
+  uniqueIndex("uq_backlink_ingestion_runs_identity").on(table.clientId, table.providerId, table.providerRevision, table.mode, table.inputFingerprint),
+  index("idx_backlink_ingestion_runs_client_started").on(table.clientId, table.startedAt.desc(), table.id),
+  index("idx_backlink_ingestion_runs_client_status").on(table.clientId, table.status, table.startedAt),
+  check("ck_backlink_ingestion_provider_id", sql`char_length(${table.providerId}) BETWEEN 1 AND 100`),
+  check("ck_backlink_ingestion_provider_revision", sql`char_length(${table.providerRevision}) BETWEEN 1 AND 100`),
+  check("ck_backlink_ingestion_mode", sql`${table.mode} = 'manual'`),
+  check("ck_backlink_ingestion_status", sql`${table.status} IN ('running','succeeded','failed')`),
+  check("ck_backlink_ingestion_capabilities", sql`jsonb_typeof(${table.capabilities}) = 'array' AND jsonb_array_length(${table.capabilities}) <= 8 AND
+    ${table.capabilities} <@ '["referring_domains","link_intersections","brand_mentions","broken_links","authority_metrics","resource_page_discovery","citation_directory_discovery","partnership_organization_discovery"]'::jsonb`),
+  check("ck_backlink_ingestion_result_summary_bound", sql`${table.resultSummary} IS NULL OR (
+    jsonb_typeof(${table.resultSummary}) = 'object' AND octet_length(${table.resultSummary}::text) <= 65536 AND
+    ${table.resultSummary} ?& ARRAY['observed','accepted','rejected','mergedEvidence','prospectCount','evidenceCount','opportunityCount','workflowCount','prospectIds','evidenceIds','opportunityIds','workflowIds'] AND
+    (${table.resultSummary} - ARRAY['observed','accepted','rejected','mergedEvidence','prospectCount','evidenceCount','opportunityCount','workflowCount','prospectIds','evidenceIds','opportunityIds','workflowIds']) = '{}'::jsonb AND
+    (${table.resultSummary}->>'observed') ~ '^\d+$' AND (${table.resultSummary}->>'accepted') ~ '^\d+$' AND (${table.resultSummary}->>'rejected') ~ '^\d+$' AND
+    (${table.resultSummary}->>'mergedEvidence') ~ '^\d+$' AND (${table.resultSummary}->>'prospectCount') ~ '^\d+$' AND (${table.resultSummary}->>'evidenceCount') ~ '^\d+$' AND
+    (${table.resultSummary}->>'opportunityCount') ~ '^\d+$' AND (${table.resultSummary}->>'workflowCount') ~ '^\d+$' AND
+    jsonb_typeof(${table.resultSummary}->'prospectIds') = 'array' AND jsonb_array_length(${table.resultSummary}->'prospectIds') <= 100 AND
+    jsonb_typeof(${table.resultSummary}->'evidenceIds') = 'array' AND jsonb_array_length(${table.resultSummary}->'evidenceIds') <= 100 AND
+    jsonb_typeof(${table.resultSummary}->'opportunityIds') = 'array' AND jsonb_array_length(${table.resultSummary}->'opportunityIds') <= 100 AND
+    jsonb_typeof(${table.resultSummary}->'workflowIds') = 'array' AND jsonb_array_length(${table.resultSummary}->'workflowIds') <= 100 AND
+    NOT jsonb_path_exists(${table.resultSummary}, '$.prospectIds[*] ? (@.type() != "string")') AND
+    NOT jsonb_path_exists(${table.resultSummary}, '$.evidenceIds[*] ? (@.type() != "string")') AND
+    NOT jsonb_path_exists(${table.resultSummary}, '$.opportunityIds[*] ? (@.type() != "string")') AND
+    NOT jsonb_path_exists(${table.resultSummary}, '$.workflowIds[*] ? (@.type() != "string")') AND
+    (${table.resultSummary}->>'prospectCount')::integer = jsonb_array_length(${table.resultSummary}->'prospectIds') AND
+    (${table.resultSummary}->>'evidenceCount')::integer = jsonb_array_length(${table.resultSummary}->'evidenceIds') AND
+    (${table.resultSummary}->>'opportunityCount')::integer = jsonb_array_length(${table.resultSummary}->'opportunityIds') AND
+    (${table.resultSummary}->>'workflowCount')::integer = jsonb_array_length(${table.resultSummary}->'workflowIds'))`),
+  check("ck_backlink_ingestion_fingerprint", sql`${table.inputFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check("ck_backlink_ingestion_attempt", sql`${table.attemptCount} > 0`),
+  check("ck_backlink_ingestion_failure_stage", sql`${table.failureStage} IS NULL OR ${table.failureStage} IN ('provider','preparation','prospect','evidence','opportunity','workflow','initial_event','finalization')`),
+  check("ck_backlink_ingestion_failure_code", sql`${table.failureCode} IS NULL OR ${table.failureCode} IN ('provider_failed','validation_failed','persistence_failed','finalization_failed')`),
+  check("ck_backlink_ingestion_nonnegative_counts", sql`
+    (${table.observedCount} IS NULL OR ${table.observedCount} >= 0) AND
+    (${table.acceptedCount} IS NULL OR ${table.acceptedCount} >= 0) AND
+    (${table.rejectedCount} IS NULL OR ${table.rejectedCount} >= 0) AND
+    (${table.mergedEvidenceCount} IS NULL OR ${table.mergedEvidenceCount} >= 0) AND
+    (${table.prospectCount} IS NULL OR ${table.prospectCount} >= 0) AND
+    (${table.evidenceCount} IS NULL OR ${table.evidenceCount} >= 0) AND
+    (${table.opportunityCount} IS NULL OR ${table.opportunityCount} >= 0) AND
+    (${table.workflowCount} IS NULL OR ${table.workflowCount} >= 0)`),
+  check("ck_backlink_ingestion_terminal_time", sql`(${table.status} = 'running' AND ${table.completedAt} IS NULL) OR (${table.status} IN ('succeeded','failed') AND ${table.completedAt} IS NOT NULL)`),
+  check("ck_backlink_ingestion_timestamps", sql`${table.attemptStartedAt} >= ${table.startedAt} AND (${table.completedAt} IS NULL OR ${table.completedAt} >= ${table.attemptStartedAt})`),
+  check("ck_backlink_ingestion_failure", sql`(${table.status} = 'failed' AND ${table.failureStage} IS NOT NULL AND ${table.failureCode} IS NOT NULL) OR (${table.status} <> 'failed' AND ${table.failureStage} IS NULL AND ${table.failureCode} IS NULL)`),
+  check("ck_backlink_ingestion_result_counts", sql`(${table.status} = 'succeeded' AND ${table.prospectCount} IS NOT NULL AND ${table.evidenceCount} IS NOT NULL AND ${table.opportunityCount} IS NOT NULL AND ${table.workflowCount} IS NOT NULL AND ${table.resultSummary} IS NOT NULL) OR (${table.status} <> 'succeeded' AND ${table.prospectCount} IS NULL AND ${table.evidenceCount} IS NULL AND ${table.opportunityCount} IS NULL AND ${table.workflowCount} IS NULL AND ${table.resultSummary} IS NULL)`),
+]);
+
 export type BacklinkProspectRow = typeof backlinkProspectsTable.$inferSelect;
 export type BacklinkEvidenceRow = typeof backlinkEvidenceTable.$inferSelect;
 export type BacklinkOpportunityRow = typeof backlinkOpportunitiesTable.$inferSelect;
 export type BacklinkWorkflowRow = typeof backlinkWorkflowsTable.$inferSelect;
 export type BacklinkWorkflowEventRow = typeof backlinkWorkflowEventsTable.$inferSelect;
+export type BacklinkIngestionRunRow = typeof backlinkIngestionRunsTable.$inferSelect;

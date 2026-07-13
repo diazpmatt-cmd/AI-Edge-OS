@@ -3,8 +3,10 @@ import type { BacklinkNormalizationPolicy } from "./backlink-normalizer";
 import { mergeBacklinkEvidence, normalizeBacklinkEvidence } from "./backlink-normalizer";
 import { scoreBacklinkEvidence } from "./backlink-scorer";
 import type { CanonicalBacklinkEvidence, BacklinkOpportunityCategory } from "./backlink-types";
-import type { BacklinkOpportunity, BacklinkProspect, BacklinkProspectType, BacklinkRepository } from "./backlink-persistence-types";
-import { deriveBacklinkOpportunityId, deriveBacklinkProspectId } from "./backlink-repository";
+import type { BacklinkIngestionPersistencePlan, BacklinkOpportunity, BacklinkProspect, BacklinkProspectType, BacklinkRepository, BacklinkWorkflow, BacklinkWorkflowEvent } from "./backlink-persistence-types";
+import { deriveBacklinkOpportunityId, deriveBacklinkProspectId, deriveBacklinkWorkflowEventId, deriveBacklinkWorkflowId } from "./backlink-repository";
+import { BacklinkIngestionPersistenceError, deriveBacklinkIngestionFingerprint, deriveBacklinkIngestionRunId, normalizeBacklinkProviderId, normalizeBacklinkProviderRevision } from "./backlink-ingestion-run";
+import type { BacklinkIngestionCounts, BacklinkIngestionFailureStage } from "./backlink-ingestion-run";
 
 export interface ManualBacklinkIngestionInput {
   trustedClientId: string;
@@ -13,6 +15,7 @@ export interface ManualBacklinkIngestionInput {
   normalizationPolicy: BacklinkNormalizationPolicy;
   repository: BacklinkRepository;
   now: Date;
+  providerRevision?: string;
 }
 
 export interface ManualBacklinkIngestionSummary {
@@ -26,6 +29,13 @@ export interface ManualBacklinkIngestionSummary {
   evidenceIds: readonly string[];
   opportunityIds: readonly string[];
   workflowIds: readonly string[];
+}
+
+export interface ManualBacklinkIngestionInProgress {
+  outcome: "in_progress";
+  runId: string;
+  clientId: string;
+  provider: string;
 }
 
 /**
@@ -63,13 +73,38 @@ const opportunityTemplate = (category: BacklinkOpportunityCategory): { rationale
 const groupKey = (clientId: string, prospectId: string, category: string, serviceId: string | null) =>
   `${clientId}|${prospectId}|${category}|${serviceId ?? ""}`;
 
-export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput): Promise<ManualBacklinkIngestionSummary> {
+export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput): Promise<ManualBacklinkIngestionSummary | ManualBacklinkIngestionInProgress> {
   if (!input.trustedClientId.trim()) throw new Error("trustedClientId is required");
   if (input.discovery.clientId !== input.trustedClientId) throw new Error("discovery tenant does not match trusted client");
+  const providerId = normalizeBacklinkProviderId(input.provider.name);
+  const providerRevision = normalizeBacklinkProviderRevision(input.providerRevision ?? "c8r3-fixture-v1");
+  if (!providerId || providerId.length > 100 || !providerRevision || providerRevision.length > 100) throw new Error("invalid provider identity");
+  const fingerprint = deriveBacklinkIngestionFingerprint({ trustedClientId: input.trustedClientId, providerId, providerRevision, mode: "manual",
+    capabilities: [...input.provider.capabilities], clientDomain: input.discovery.clientDomain, competitorDomains: input.discovery.competitorDomains,
+    serviceIds: input.discovery.serviceIds, city: input.discovery.city, region: input.discovery.region, limit: input.discovery.limit,
+    allowedServiceIds: input.normalizationPolicy.allowedServiceIds, blockedPhrases: input.normalizationPolicy.blockedPhrases });
+  const runId = deriveBacklinkIngestionRunId(fingerprint);
+  const claim = await input.repository.claimIngestionRun({ id: runId, clientId: input.trustedClientId, providerId, providerRevision, mode: "manual",
+    capabilities: [...input.provider.capabilities].sort(), inputFingerprint: fingerprint, now: input.now });
+  if (claim.outcome === "in_progress") return { outcome: "in_progress", runId, clientId: input.trustedClientId, provider: providerId };
+  if (claim.outcome === "replayed") {
+    if (!claim.run.resultSummary) throw new Error("succeeded ingestion run is missing its bounded summary");
+    const result = claim.run.resultSummary;
+    return { clientId: input.trustedClientId, provider: providerId, observed: result.observed, accepted: result.accepted, rejected: result.rejected,
+      mergedEvidence: result.mergedEvidence, prospectIds: result.prospectIds, evidenceIds: result.evidenceIds,
+      opportunityIds: result.opportunityIds, workflowIds: result.workflowIds };
+  }
+
+  let counts: BacklinkIngestionCounts = { observed: 0, accepted: 0, rejected: 0, mergedEvidence: 0, prospectCount: null, evidenceCount: null, opportunityCount: null, workflowCount: null };
+  let failureStage: BacklinkIngestionFailureStage = "provider";
+  try {
   const raw = await input.provider.discover(input.discovery);
-  const normalized = raw.map(item => normalizeBacklinkEvidence(item, input.provider.name, input.trustedClientId, input.normalizationPolicy));
+  failureStage = "preparation";
+  const stablePolicy = { ...input.normalizationPolicy, now: claim.run.startedAt };
+  const normalized = raw.map(item => normalizeBacklinkEvidence(item, providerId, input.trustedClientId, stablePolicy));
   const accepted = normalized.filter((item): item is CanonicalBacklinkEvidence => item !== null);
   const merged = mergeBacklinkEvidence(accepted);
+  counts = { ...counts, observed: raw.length, accepted: accepted.length, rejected: raw.length - accepted.length, mergedEvidence: merged.length };
 
   const prospectById = new Map<string, BacklinkProspect>();
   const evidenceByProspect = new Map<string, CanonicalBacklinkEvidence[]>();
@@ -88,11 +123,11 @@ export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput
     group.evidence.push(evidence); groups.set(key, group);
   }
 
-  const workflowIds: string[] = [];
+  const workflows: BacklinkWorkflow[] = [];
+  const initialEvents: BacklinkWorkflowEvent[] = [];
   const opportunityIds: string[] = [];
+  const opportunities: BacklinkOpportunity[] = [];
   for (const [, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    await input.repository.upsertProspect(group.prospect);
-    for (const evidence of [...group.evidence].sort((a, b) => a.id.localeCompare(b.id))) await input.repository.persistEvidence({ prospectId: group.prospect.id, evidence });
     const scores = group.evidence.map(scoreBacklinkEvidence);
     const potentialValue = Math.max(...scores.map(value => value.potentialValue));
     const attainability = Math.max(...scores.map(value => value.attainability));
@@ -101,15 +136,39 @@ export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput
     const opportunity: BacklinkOpportunity = { id: opportunityId, clientId: input.trustedClientId, prospectId: group.prospect.id, category: group.category,
       serviceId: group.serviceId, potentialValue, attainability, rationale: template.rationale, recommendedAction: template.action,
       evidenceIds: Object.freeze(group.evidence.map(value => value.id).sort()), createdAt: input.now, updatedAt: input.now };
-    await input.repository.upsertOpportunity(opportunity);
-    const workflow = await input.repository.createInitialWorkflow(opportunityId, input.trustedClientId, input.now);
-    opportunityIds.push(opportunityId); workflowIds.push(workflow.id);
+    opportunities.push(opportunity);
+    const workflowId = deriveBacklinkWorkflowId(input.trustedClientId, opportunityId);
+    workflows.push({ id: workflowId, clientId: input.trustedClientId, opportunityId, status: "discovered", ownerId: null, nextAction: null,
+      dueAt: null, outcomeSummary: null, version: 1, createdAt: input.now, updatedAt: input.now, completedAt: null });
+    initialEvents.push({ id: deriveBacklinkWorkflowEventId(workflowId, 1), clientId: input.trustedClientId, workflowId, opportunityId, sequence: 1,
+      fromStatus: null, toStatus: "discovered", actorId: null, reason: "workflow_created", createdAt: input.now });
+    opportunityIds.push(opportunityId);
   }
 
-  return {
+  const summary = {
     clientId: input.trustedClientId, provider: input.provider.name, observed: raw.length, accepted: accepted.length,
     rejected: raw.length - accepted.length, mergedEvidence: merged.length,
     prospectIds: Object.freeze([...prospectById.keys()].sort()), evidenceIds: Object.freeze(merged.map(value => value.id).sort()),
-    opportunityIds: Object.freeze(opportunityIds.sort()), workflowIds: Object.freeze(workflowIds.sort()),
+    opportunityIds: Object.freeze(opportunityIds.sort()), workflowIds: Object.freeze(workflows.map(value => value.id).sort()),
   };
+  const plan: BacklinkIngestionPersistencePlan = Object.freeze({ prospects: Object.freeze([...prospectById.values()].sort((a,b) => a.id.localeCompare(b.id))),
+    evidence: Object.freeze(merged.map(evidence => ({ prospectId: deriveBacklinkProspectId(input.trustedClientId, evidence.sourceDomain,
+      evidence.category === "referring_domain" || evidence.category === "link_intersection" ? null : evidence.sourceUrl), evidence })).sort((a,b) => a.evidence.id.localeCompare(b.evidence.id))),
+    opportunities: Object.freeze(opportunities.sort((a,b) => a.id.localeCompare(b.id))), workflows: Object.freeze(workflows.sort((a,b) => a.id.localeCompare(b.id))),
+    initialEvents: Object.freeze(initialEvents.sort((a,b) => a.id.localeCompare(b.id))), summary: {
+      observed: summary.observed, accepted: summary.accepted, rejected: summary.rejected, mergedEvidence: summary.mergedEvidence,
+      prospectCount: summary.prospectIds.length, evidenceCount: summary.evidenceIds.length, opportunityCount: summary.opportunityIds.length, workflowCount: summary.workflowIds.length,
+      prospectIds: summary.prospectIds, evidenceIds: summary.evidenceIds, opportunityIds: summary.opportunityIds, workflowIds: summary.workflowIds } });
+  counts = plan.summary;
+  failureStage = "finalization";
+  await input.repository.commitIngestionRun({ runId, clientId: input.trustedClientId, plan, completedAt: input.now });
+  return summary;
+  } catch (error) {
+    if (error instanceof BacklinkIngestionPersistenceError) failureStage = error.stage;
+    const code = failureStage === "provider" ? "provider_failed" : failureStage === "preparation" ? "validation_failed"
+      : failureStage === "finalization" ? "finalization_failed" : "persistence_failed";
+    try { await input.repository.failIngestionRun({ runId, clientId: input.trustedClientId, stage: failureStage, code, counts, failedAt: input.now }); }
+    catch { throw new Error(`backlink ingestion failed at ${failureStage}; failed run could not be recorded and may remain running`); }
+    throw new Error(`backlink ingestion failed at ${failureStage}`);
+  }
 }

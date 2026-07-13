@@ -6,6 +6,29 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-2B2 — Read-Only GitHub Reconciliation (2026-07-13)
+
+#### Added
+
+- Pure `@workspace/development-control-github` contracts for caller-supplied read-only observations, stable normalization, immutable evidence versions, attribution, diagnostics, rate limits, and deterministic reconciliation.
+- Exact approval binding to task, revision, specification hash, full expected SHA, independently authorized categories, numeric repository identity, and numeric approving-actor identity.
+- Four-table tenant-independent Drizzle/SQL persistence boundary for bounded identities, evidence, cursors, and reconciliation runs, with atomic cursor/evidence/run writes and idempotent replay.
+- Deterministic fixture client and focused coverage for ordering, deduplication, edited/deleted evidence, actor rename/impersonation, mutable-field rejection, stale/force-pushed refs, ETags, rate limits, rollback, replay conflicts, and customer-identity rejection.
+
+#### Security and architecture
+
+- DAB-2A remains the canonical pure model and DAB-2B1 its canonical durable store. GitHub is authoritative only for GitHub-owned observations.
+- Raw GitHub bodies, payloads, headers, transcripts, credentials, environment values, stack traces, arbitrary errors, unrestricted metadata, and customer identity are excluded from persistence.
+- DAB-2B2 exposes no GitHub mutation surface and adds no installed integration, webhook, App, Action, scheduler, worker, API, UI, hosted runtime, MCP, or automated approval/execution.
+- No live GitHub credential, database credential, database provisioning, or migration execution is required. DAB-3 remains deferred.
+
+#### Verification
+
+- Focused DAB-2A, DAB-2B1, and DAB-2B2 tests: 74/74 passed across five files; 35 tests specifically cover the new reconciliation and storage boundary.
+- TypeScript checks passed for `lib/development-control`, `lib/development-control-github`, and `lib/development-control-store`.
+- SQL/Drizzle parity, additive migration scope, exact-file boundary, diff formatting, credential, customer identity, network/import, GitHub write-surface, and forbidden-runtime scans passed.
+- No live GitHub call, database connection, credential access, migration execution, full application suite, or production build was used.
+
 ### DAB-2B1 — Tenant-Independent Durable Coordination Store (2026-07-13)
 
 #### Added

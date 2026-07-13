@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@workspace/development-control": "workspace:*",
+    "@workspace/development-control-github": "workspace:*",
     "drizzle-orm": "catalog:",
     "pg": "^8.20.0"
   },

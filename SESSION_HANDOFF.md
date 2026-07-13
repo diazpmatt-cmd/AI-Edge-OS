@@ -1,5 +1,41 @@
 # Session Handoff
 
+## Latest session: DAB-2B2 Read-Only GitHub Reconciliation (2026-07-13)
+
+**Status:** Implemented and bounded verification passed on `feature/dab2b2-github-reconciliation`; not committed or pushed.
+
+### Starting state and authorization
+
+- Started from clean synchronized `main` and live `origin/main` at `9496ea93b1e39213192e687347b4a8625569a658`.
+- Operational task: [Issue #18](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/18), Task DAB-2B2, specification revision 1, hash `spec_357fe57f1a4e18638be773033c10152a23a4807847ca51c9c8d1626fb27987c7`.
+- Matthew's attributable repository-owner comment binds the exact branch, base SHA, 24 files, numeric actor identity, Scope, Editing, architecture boundaries, verification, exclusions, and fail-closed conditions.
+- Commit, push, pull-request, merge, deployment, credentials, paid providers, and unrelated external actions remain unauthorized.
+
+### Implemented architecture
+
+- New pure `lib/development-control-github` package with caller-supplied read-only client, bounded normalized observations, immutable evidence, numeric identity policy, exact approval evaluation, deterministic backoff, fixtures, and reconciliation.
+- DAB-2A remains canonical for task/control semantics; DAB-2B1 remains canonical for durable development-control state.
+- Four additive tenant-independent tables persist bounded GitHub identities, evidence, reconciliation cursors, and runs. Evidence/run/cursor writes are atomic and replay-safe.
+- Mutable issue fields cannot authorize work. Comments/reviews must bind exact task, revision, hash, SHA, categories, repository, and stable numeric actor.
+- No customer identity, customer database, raw GitHub content, credentials, environment access, live network client, or live database is introduced.
+
+### Verification
+
+- Focused DAB-2A/DAB-2B1/DAB-2B2 tests: 74/74 passed across five files, including 35 new DAB-2B2 tests.
+- TypeScript passed for `lib/development-control`, `lib/development-control-github`, and `lib/development-control-store`.
+- SQL and Drizzle declare the same four additive tables; no destructive statement, existing-table operation, customer identity, or global trigger is present.
+- `git diff --check`, exact 24-file review, credential/environment, customer/tenant, raw-payload, GitHub-write, import-time network, runtime/API/UI/scheduler/webhook/MCP, and forbidden-file scans passed.
+- No live GitHub call, database connection, credential, provisioning, or migration execution occurred. The full application suite and production build were intentionally excluded.
+
+### Boundaries and next action
+
+- DAB-2B2 is read-only evidence reconciliation, not an installed integration or automated bridge. It adds no GitHub write, webhook, App, Action, scheduler, worker, API, UI, hosted runtime, MCP, or automatic DAB mutation.
+- The migration remains unapplied. No database was provisioned or contacted.
+- DAB-3 direct ChatGPT/Codex communication remains deferred and unstarted.
+- Post the complete bounded verification report to Issue #18 and request separate preservation authorization. Do not commit or push without it.
+
+---
+
 ## Latest session: DAB-2B1 Tenant-Independent Durable Coordination Store (2026-07-13)
 
 **Status:** Implemented and bounded verification passed on `feature/dab2b1-durable-coordination-store`; not committed or pushed.

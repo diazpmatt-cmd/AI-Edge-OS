@@ -52,10 +52,20 @@ Completed scope:
 
 DAB-2B1 implements code, schema, and an unapplied migration only. It does not provision or connect to a hosted database, execute a live migration, reconcile GitHub, expose an API/UI, run a scheduler/worker/webhook, automate Git or deployment, or establish direct agent communication.
 
-Deferred bounded phases:
+### DAB-2B2 — Read-Only GitHub Reconciliation (implemented and verified)
 
-1. **DAB-2B2 — Read-Only GitHub Reconciliation:** stable GitHub identity evidence, signed webhook inbox and/or polling recovery, replay, rate limits, stale-SHA handling, and reconciliation diagnostics around the durable store. Not implemented or approved for implementation.
-2. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
+Completed scope:
+
+- Pure caller-supplied read-only GitHub observation contracts and deterministic bounded normalization.
+- Stable numeric repository/actor attribution, exact approval-binding diagnostics, immutable evidence versions, idempotent replay, conditional-read/rate-limit behavior, and atomic evidence/run/cursor persistence.
+- One additive unapplied four-table tenant-independent migration with no customer identity, customer database, destructive operation, or existing-table rewrite.
+- Fixture-backed ordering, deduplication, conflicts, edited/deleted evidence, impersonation, stale/force-pushed SHA, ETag, rate-limit, rollback, replay, and customer-boundary verification.
+
+DAB-2B2 adds no installed GitHub integration, webhook, App, Action, scheduler, worker, hosted runtime, API, UI, MCP, GitHub write, automatic DAB mutation, database provisioning, or live migration execution.
+
+Deferred bounded phase:
+
+1. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.
 

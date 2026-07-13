@@ -53,6 +53,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - Specification revisions, authorization decisions, audit events, milestone observations, and completion-report submissions retain immutable history. Current projections remain deterministic and bounded.
 - DAB-2B1 defines code, schema, and one additive migration only. It does not provision a database, execute a live migration, host a service, reconcile GitHub, or automate an external action. DAB-2B2 GitHub reconciliation and DAB-3 direct ChatGPT/Codex communication remain deferred. See `docs/adr/ADR-010-dab2b1-durable-coordination-store.md`.
 
+### DAB-2B2: read-only GitHub reconciliation
+
+- `lib/development-control-github` is a pure caller-driven adapter over bounded GitHub-owned observations. Importing it must not access environment variables, credentials, or the network.
+- DAB-2A and DAB-2B1 retain canonical ownership. Reconciliation validates and diagnoses evidence but never performs approval, lifecycle, claim, milestone, completion-report, Git, deployment, or external-action mutations.
+- Attribution uses an allowlisted numeric repository ID and stable numeric actor ID. Login is display context only; issue forms, bodies, labels, assignees, state, mutable selections, and agent claims are never approval evidence.
+- Persist only normalized identifiers, timestamps, hashes, bounded approval bindings, source references, diagnostics, cursors, and summaries. Never retain raw bodies, payloads, headers, transcripts, tokens, environment values, stack traces, arbitrary errors, or customer identity.
+- Evidence, runs, and cursor advancement are atomic and idempotent. Rate limits, unavailable sources, stale SHAs, force pushes, conflicts, and lag fail closed with bounded diagnostics.
+- DAB-2B2 adds no installed integration, webhook, App, Action, scheduler, worker, API, UI, hosted runtime, MCP, GitHub write surface, or automated execution. DAB-3 remains deferred. See `docs/adr/ADR-011-dab2b2-read-only-github-reconciliation.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.

@@ -7,6 +7,11 @@ import type {
   TaskSpecification,
   TrustedDevelopmentActor,
 } from "@workspace/development-control";
+import type {
+  GitHubApprovalBinding,
+  GitHubDiagnostic,
+  GitHubReconciliationSummary,
+} from "@workspace/development-control-github";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -379,5 +384,96 @@ export const developmentIdempotencyRecordsTable = pgTable(
       "ck_development_idempotency_result_bound",
       sql`octet_length(${table.result}::text) <= 131072`,
     ),
+  ],
+);
+
+export const developmentGitHubIdentitiesTable = pgTable(
+  "development_github_identities",
+  {
+    repositoryId: text("repository_id").notNull(),
+    actorId: text("actor_id").notNull(),
+    displayLogin: text("display_login").notNull(),
+    firstObservedAt: timestamp("first_observed_at", { withTimezone: true }).notNull(),
+    lastObservedAt: timestamp("last_observed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.repositoryId, table.actorId] }),
+    check("ck_development_github_identity_ids", sql`${table.repositoryId} ~ '^[1-9][0-9]{0,19}$' AND ${table.actorId} ~ '^[1-9][0-9]{0,19}$'`),
+    check("ck_development_github_identity_login", sql`char_length(${table.displayLogin}) BETWEEN 1 AND 100`),
+  ],
+);
+
+export const developmentGitHubEvidenceTable = pgTable(
+  "development_github_evidence",
+  {
+    evidenceId: text("evidence_id").primaryKey(),
+    fingerprint: text("fingerprint").notNull(),
+    repositoryId: text("repository_id").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    objectType: text("object_type").notNull(),
+    objectId: text("object_id").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    actorId: text("actor_id"),
+    actorLogin: text("actor_login"),
+    sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }).notNull(),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }).notNull(),
+    contentHash: text("content_hash").notNull(),
+    deleted: boolean("deleted").notNull(),
+    approvalBinding: jsonb("approval_binding").$type<GitHubApprovalBinding | null>(),
+    headSha: text("head_sha"),
+    previousHeadSha: text("previous_head_sha"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_development_github_evidence_fingerprint").on(table.repositoryId, table.fingerprint),
+    index("idx_development_github_evidence_object").on(table.repositoryId, table.objectType, table.objectId, table.sourceUpdatedAt),
+    check("ck_development_github_evidence_id", sql`${table.evidenceId} ~ '^github_evidence_[0-9a-f]{64}$'`),
+    check("ck_development_github_evidence_fingerprint", sql`${table.fingerprint} ~ '^github_observation_[0-9a-f]{64}$'`),
+    check("ck_development_github_evidence_content_hash", sql`${table.contentHash} ~ '^content_[0-9a-f]{64}$'`),
+    check("ck_development_github_evidence_ids", sql`${table.repositoryId} ~ '^[1-9][0-9]{0,19}$' AND ${table.objectId} ~ '^[1-9][0-9]{0,19}$'`),
+    check("ck_development_github_evidence_binding_bound", sql`${table.approvalBinding} IS NULL OR octet_length(${table.approvalBinding}::text) <= 4096`),
+  ],
+);
+
+export const developmentGitHubReconciliationCursorsTable = pgTable(
+  "development_github_reconciliation_cursors",
+  {
+    repositoryId: text("repository_id").notNull(),
+    stream: text("stream").notNull(),
+    cursor: text("cursor"),
+    etag: text("etag"),
+    lastObservedAt: timestamp("last_observed_at", { withTimezone: true }),
+    retryAt: timestamp("retry_at", { withTimezone: true }),
+    version: integer("version").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.repositoryId, table.stream] }),
+    index("idx_development_github_cursor_retry").on(table.retryAt, table.repositoryId, table.stream),
+    check("ck_development_github_cursor_version", sql`${table.version} > 0`),
+    check("ck_development_github_cursor_bounds", sql`char_length(${table.stream}) BETWEEN 1 AND 100 AND (${table.cursor} IS NULL OR char_length(${table.cursor}) <= 500) AND (${table.etag} IS NULL OR char_length(${table.etag}) <= 500)`),
+  ],
+);
+
+export const developmentGitHubReconciliationRunsTable = pgTable(
+  "development_github_reconciliation_runs",
+  {
+    runId: text("run_id").primaryKey(),
+    repositoryId: text("repository_id").notNull(),
+    stream: text("stream").notNull(),
+    operationKey: text("operation_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    status: text("status").notNull(),
+    diagnostics: jsonb("diagnostics").$type<readonly GitHubDiagnostic[]>().notNull(),
+    summary: jsonb("summary").$type<GitHubReconciliationSummary>().notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_development_github_run_operation").on(table.operationKey, table.requestFingerprint),
+    index("idx_development_github_run_repository").on(table.repositoryId, table.stream, table.recordedAt),
+    check("ck_development_github_run_id", sql`${table.runId} ~ '^github_run_[0-9a-f]{64}$'`),
+    check("ck_development_github_request_fingerprint", sql`${table.requestFingerprint} ~ '^github_request_[0-9a-f]{64}$'`),
+    check("ck_development_github_run_status", sql`${table.status} IN ('succeeded','not_modified','rate_limited','unavailable')`),
+    check("ck_development_github_run_bounds", sql`octet_length(${table.diagnostics}::text) <= 32768 AND octet_length(${table.summary}::text) <= 65536`),
   ],
 );

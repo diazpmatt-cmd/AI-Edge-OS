@@ -2,7 +2,7 @@
 
 ## Latest session: DAB-1 GitHub-Backed Development Task Contract (2026-07-13)
 
-**Status:** Implemented and verified on `feature/dab1-github-task-contract`; not committed or pushed.
+**Status:** Implemented, verified, merged through PR #9, and synchronized on `main` at `7ba2348e128469df5ae30ba0f6276ca0e4b1d4e7`. DAB-1-PILOT-001 is complete; the DAB-1-PILOT-002 documentation reconciliation is implemented and verified on `docs/dab1-post-merge-reconciliation` without commit or push authorization.
 
 ### Starting Git state
 
@@ -11,6 +11,14 @@
 - Verified local `main` and `origin/main` both matched the starting commit.
 - Starting working tree was clean.
 - Feature branch: `feature/dab1-github-task-contract`
+
+### Verified preservation state
+
+- DAB-1 feature commit: `e81dc9ad1646cced7aeda99a40a90e64b6f49986`.
+- Pull request: [PR #9](https://github.com/diazpmatt-cmd/AI-Edge-OS/pull/9), merged through GitHub's normal merge procedure.
+- Merge commit: `7ba2348e128469df5ae30ba0f6276ca0e4b1d4e7`.
+- Local `main` and `origin/main` were fast-forwarded and verified equal to the merge commit with a clean working tree.
+- The three failed API-server Vercel deployments remain documented, pre-existing, unrelated failures. They were not repaired or incorporated into DAB scope.
 
 ### Implemented files
 
@@ -39,16 +47,23 @@
 - Complete diff review confirmed only the eight approved DAB-1 files changed.
 - Full application tests and production build were intentionally not run because DAB-1 changes documentation and GitHub templates only.
 
+### DAB-1-PILOT-001 operational validation
+
+- [Issue #10](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/10) is the authoritative history for task `DAB-1-PILOT-001`, including the proposal, Matthew's attributable approval, the agent claim, and the completion report.
+- The pilot confirmed that DAB-1 works as a manual, reviewable governance contract for task identity, specification revision, expected SHA, proposal/approval separation, authorization categories, exclusions, sensitive-data boundaries, and documentation routing.
+- Observed friction is manual rather than hypothetical: free-form revisions lack specification hashes; issue-body state can diverge from approval and completion comments; live SHA checks are manual; claims have no lock or lease; agent comments lack independent agent identity; coordination comments need a defined authorization boundary; read-only tasks need `not_applicable` Git milestones; and durable handoffs can become stale after verified Git events.
+- No repository mutation occurred during DAB-1-PILOT-001.
+
 ### Deferred work
 
-- DAB-2 may add a separately approved durable internal ledger with machine-enforced revisions, SHA checks, claims, transitions, approvals, idempotency, and append-only events.
-- DAB-3 may add a separately approved authenticated, allowlisted MCP interface for bounded ChatGPT/Codex coordination.
-- Neither DAB-2 nor DAB-3 is implemented, approved for implementation, or operational.
+- DAB-2 is recommended to add immutable specification hashes and revisions, authoritative expected-SHA compare-and-swap, structured category-bound approvals, atomic claims and leases, validated lifecycle transitions, independent actor identities, a defined coordination-action boundary, task-type-aware Git milestones, verified factual Git events, stale-state rejection, bounded reports, durable-document reconciliation prompts, and idempotent append-only audit events.
+- These are recommendations derived from DAB-1-PILOT-001; DAB-2 remains unimplemented and is not approved for implementation.
+- DAB-3 may add a separately approved authenticated, allowlisted MCP interface for bounded ChatGPT/Codex coordination. Direct ChatGPT/Codex communication is not operational and remains deferred.
 - No autonomous commit, push, merge, deployment, credential use, paid-provider call, or external action was introduced.
 
 ### Next action
 
-Review the complete DAB-1 diff and verification report. Commit, push, pull-request creation, DAB-2, and DAB-3 require separate explicit authorization.
+Complete DAB-1-PILOT-002 verification on `docs/dab1-post-merge-reconciliation`, report the bounded documentation diff on [Issue #11](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/11), and request separate commit and push authorization. Do not begin DAB-2 or DAB-3 implementation.
 
 ---
 

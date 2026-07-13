@@ -6,6 +6,34 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-2A — Pure Development Coordination Contracts and State Machine (2026-07-13)
+
+#### Added
+
+- Separate `@workspace/development-control` pure TypeScript package with bounded task, actor, authorization, lifecycle, claim, event, milestone, and completion-report contracts.
+- Deterministic canonical specification hashes and immutable revisions; changed revisions or hashes invalidate existing approvals.
+- Ten independent authorization categories: scope, editing, committing, pushing, pull-request creation, merging, deployment, credentials, paid providers, and external actions.
+- Structured approval records bound to exact task ID, revision, hash, expected Git SHA, categories, actor, decision, timestamps, optional expiration, constraints, rationale, and idempotency key.
+- Test-only in-memory coordination store with fail-closed transitions, task and lease versions, atomic claims, bounded renewal, explicit expiration recovery, and no automatic claim stealing.
+- Deterministic append-only events with idempotent replay, bounded metadata, expected/observed Git state, and immutable actor/specification provenance.
+- Verified/not-verified/not-applicable Git and deployment milestones, including correct read-only and no-branch behavior.
+- Bounded completion reports that reject sensitive fields, credential-shaped values, raw environment values, conversation transcripts, raw shell output, unauthorized files, and customer tenant identity.
+- DAB-1-PILOT-001 and DAB-1-PILOT-002 fixtures plus 26 focused pure tests.
+
+#### Security and architecture
+
+- Development-control actors are operationally separate from customer tenant identity and customer-facing AI Edge schemas.
+- Matthew Diaz is the only human authority allowed to grant material-action approval in DAB-2A fixtures and policy.
+- Approval state remains separate from task lifecycle state; one authorization category never implies another.
+- Wrong SHA, stale revision/hash, expired/revoked/rejected approval, unauthorized actor, foreign active claim, and stale task/lease versions fail closed.
+- DAB-2A is only the pure machine-enforcement foundation. It does not complete DAB-2 and adds no persistence, database, migration, API, UI, GitHub integration, webhook, GitHub Action, MCP, network/environment access, credential use, shell/filesystem execution, automated Git/deployment behavior, live agent messaging, Growth Engine behavior, or customer-facing functionality.
+
+#### Verification
+
+- Focused DAB-2A tests: 26/26 passed.
+- `lib/development-control` TypeScript check passed.
+- Full application suite and production build were intentionally excluded from this bounded phase.
+
 ### DAB-1 — GitHub-Backed Development Task Contract (2026-07-13)
 
 #### Added
@@ -81,12 +109,12 @@ All notable changes to the AI Edge Solutions platform.
 
 #### Four execution invariants — verified and permanent
 
-| # | Invariant | Result |
-|---|-----------|--------|
-| I1 | No provider fetch before lease is held | ✓ Enforced by service step ordering |
-| I2 | Exactly one lease holder per deterministic run | ✓ DB-atomic `INSERT ON CONFLICT DO NOTHING` |
-| I3 | Failed lease leaves no orphaned running snapshot | ✓ Fixed — `persistRunResult` moved after `acquireLease` |
-| I4 | No new provider call after cancellation observed | ✓ 10 `shouldCancel()` checkpoints in pipeline |
+| #   | Invariant                                        | Result                                                  |
+| --- | ------------------------------------------------ | ------------------------------------------------------- |
+| I1  | No provider fetch before lease is held           | ✓ Enforced by service step ordering                     |
+| I2  | Exactly one lease holder per deterministic run   | ✓ DB-atomic `INSERT ON CONFLICT DO NOTHING`             |
+| I3  | Failed lease leaves no orphaned running snapshot | ✓ Fixed — `persistRunResult` moved after `acquireLease` |
+| I4  | No new provider call after cancellation observed | ✓ 10 `shouldCancel()` checkpoints in pipeline           |
 
 **I3 was violated in the previous implementation** (`persistRunResult` ran before `acquireLease`). Fixed by enforcing `acquireLease → persistRunResult → pipeline.run()` order inside the service. Two new tests demonstrate the invariant at the function level.
 
@@ -102,6 +130,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
 ---
 
 ### Changed (2026-07-11 — YouTube Pilot — Security Cleanup + Phase 8 Tests)
+
 - **Security cleanup (Phase 1):** Removed scheduler-secret bypass from
   `GET /social-connections/youtube/channel-info`. The bypass was added solely for the
   one-time staging audit (2026-07-11) and is now removed. Route is back to Clerk-only
@@ -123,6 +152,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
 - **133 total tests passing** across 3 test files (0 failures).
 
 ### Added (2026-07-11 — YouTube Live Pilot — Phases 1–6)
+
 - **`social_posts` DB columns** — `youtube_title TEXT`, `youtube_privacy TEXT`, `youtube_video_id TEXT`
   added via raw SQL migration; Drizzle schema updated to match
 - **`youtubeTitle` / `youtubePrivacy` / `youtubeVideoId` fields** throughout the backend stack:
@@ -141,12 +171,13 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   standard classification, no-provider-call-before-approval
 
 ### Added (2026-07-11 — GBP Pilot Audit & Cleanup)
+
 - **`artifacts/api-server/src/lib/gbp-cooldown.ts`** — pure, exportable GBP cooldown
   helpers (no DB dependency, fully testable):
   - `GbpCooldown` interface: `startedAt / expiresAt / reason / endpoint / service /
-    attemptCount / retryAfterSec / errorType`
+attemptCount / retryAfterSec / errorType`
   - `GbpErrorType`: `rate_limit | daily_quota | project_quota_zero | access_denied |
-    api_disabled | unknown`
+api_disabled | unknown`
   - `GBP_COOLDOWN_DEFAULTS` map (per errorType, in seconds)
   - `readGbpCooldown(metadata)` — reads structured or legacy flat fields; returns
     null for expired records (auto-clears on read)
@@ -160,6 +191,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   discovery-gate logic, admin endpoint absence
 
 ### Removed (2026-07-11 — GBP Pilot Audit & Cleanup)
+
 - **`artifacts/api-server/scripts/publish-gbp-pilot.ts`** — one-time pilot publish
   script (disposable, never used successfully)
 - **`artifacts/api-server/scripts/publish-gbp-pilot.mjs`** — same
@@ -171,6 +203,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   the temp scripts; catalog entry retained for other workspace packages)
 
 ### Changed (2026-07-11 — GBP Pilot Audit & Cleanup)
+
 - **`publishToGBP`** in `social-posts.ts` rewritten:
   - Cooldown: flat `cooldownUntil` → structured `gbpCooldown` object (via new helpers)
   - All 429 responses now log full response body before setting cooldown
@@ -185,6 +218,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   (that ID is the Google OAuth user ID, not a GBP business account resource ID)
 
 ### Added (2026-07-11 — BB&B Pilot Baseline)
+
 - **`src/lib/bbb-pilot.ts`** — versioned BB&B pilot config module:
   - `BBB_PILOT_PLATFORM_IDS`: `["facebook","instagram","google_business","youtube"]`
   - `BBB_DEFERRED_PLATFORM_IDS`: `["tiktok","linkedin","pinterest","nextdoor"]`
@@ -208,6 +242,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   manual acceptance test checklist for Matthew
 
 ### Changed (2026-07-11 — BB&B Pilot Baseline)
+
 - **`BBBContentAutopilotPage.tsx`** — default platform selection:
   - Previously: ALL queueable providers (8 platforms including deferred ones)
   - Now: 4 active pilot platforms only (Facebook, Instagram, Google Business, YouTube)
@@ -218,16 +253,19 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
   (fixes pre-existing TypeScript `Record<SocialProviderId, ContentProfile>` error)
 
 ### Fixed (previous session)
+
 - **Content Autopilot YouTube status** (`/admin/bbb-autopilot`): YouTube platform note
   now accurately states a video file is required; the previous note incorrectly implied
   an OAuth scope-approval gate.
 - **Zero-selection guard**: Generate button disabled when no platforms are selected.
 
 ### Changed (previous session)
+
 - `BBBContentAutopilotPage.tsx` Generate button shows live `{N} platforms` badge.
 - `BBBContentAutopilotPage.tsx` uses "template library" terminology (not AI generation).
 
 ### Added (previous session)
+
 - `src/lib/__tests__/autopilot-selection.test.ts`: 4 describe blocks — YouTube/TikTok
   canonical audit, media profile invariant, zero-selection behavior.
 
@@ -236,6 +274,7 @@ Three prematurely committed C7 files are permanently deleted: `discovery-schedul
 ## Previous sessions (summary)
 
 ### Command Center drag-and-drop
+
 `DashboardPage.tsx` + `app-shell.tsx`: Framer Motion Reorder `axis="y"` failed
 inside CSS 2-column grid because items in the same row share identical
 y-coordinates. Fix: edit mode switches to `flex-direction: column` for unique
@@ -243,36 +282,43 @@ y-offsets. Auto-saves on every reorder event. Sidebar nav edit mode fixed with
 same pattern. Storage key renamed to `ai-edge:command-center-layout:v1`.
 
 ### Content Autopilot registry refactor
+
 `BBBContentAutopilotPage.tsx` now derives all platform metadata from
 `social-providers.ts` canonical registry. Removed `QueueablePlatform`,
 `AllPlatformId`, `QUEUE_PLATFORM_META`, `ALL_PLATFORM_TABS`, `INFO_PLATFORMS`,
 `QUEUEABLE_PLATFORMS` local constants.
 
 ### Social publishing & Meta OAuth
+
 Facebook + Instagram publishing pipeline, OAuth flow, draft queue, Publishing
 Center, Meta status checks.
 
 ### Call Intelligence
+
 `/admin/call-intelligence` — calls + sms_conversations tables, Telnyx
 analytics, live call log.
 
 ### GorillaDesk analytics
+
 `/admin/dashboard` GorillaDesk sync widget with live customer/revenue data.
 
 ### Added (2026-07-11 — BB&B Content Autopilot Foundation — Phases 1–12)
 
 #### Phase 1: Status Colors
+
 - **Termites panel**: Fixed from gold/yellow → silver/neutral (`#94A3B8`) matching PENDING canonical state
 - **Approval Required chip**: Fixed from blue → yellow/amber (`#F59E0B`) matching ACTION_REQUIRED canonical state
 - All status-bearing elements now derive colors from `PLATFORM_STATUS_COLORS` map only — never from brand/service colors
 
 #### Phase 3: DB Schema
+
 - `social_posts`: Added `generation_run_id TEXT`, `revenue_weight TEXT`, `urgency TEXT`
 - `auto_content_settings`: Added `autopilot_enabled TEXT DEFAULT 'false'`, `generation_day TEXT`, `generation_time TEXT`
 - All migrations ran via raw SQL (drizzle push blocked by pre-existing constraint conflicts)
 - Drizzle schema files updated: `lib/db/src/schema/social-posts.ts`, `lib/db/src/schema/auto-content.ts`
 
 #### Phase 4: Autonomous Scheduler
+
 - Added `runAutonomousContentGeneration()` to `scheduler.ts` — runs every 30 minutes
 - Queries `WHERE autopilot_enabled='true' AND engine_paused IS DISTINCT FROM 'true' AND next_generation_at <= now()`
 - Full idempotency: `createWeeklyPlanId(userId)` is deterministic per ISO week — duplicate ticks produce no duplicate plan
@@ -281,6 +327,7 @@ analytics, live call log.
 - BB&B pilot: `autopilot_enabled='false'` by default — scheduler exists but fires for zero tenants during pilot
 
 #### Phase 5: Revenue-First Plan Logic
+
 - Added `selectWeeklyServices(count, recentTopics?)` to `bbb-services.ts`
   - 60/25/15 revenue/education/trust bucket split using `BBB_DEFAULT_CAMPAIGN_MIX`
   - Weighted random selection: `revenueWeight × contentFrequencyWeight`
@@ -292,6 +339,7 @@ analytics, live call log.
 - Added `WeeklyServiceSlot` interface for type-safe slot data
 
 #### Phase 6: Campaign Goals on Every Post
+
 - `POST /api/auto-content/generate` now stores on every post:
   - `weeklyPlanId` (body-provided or auto-generated via `createWeeklyPlanId`)
   - `generationRunId` (fresh UUID per invocation — distinguishes multiple runs in same week)
@@ -303,12 +351,14 @@ analytics, live call log.
 - Added scheduler auth bypass to generate route: `x-scheduler-secret` + `x-scheduler-user-id` headers
 
 #### Phase 7: Platform Behavior Rules (documented in code)
+
 - Google Business Profile: manual publish only during pilot (not in autonomous schedule)
 - YouTube: requires real MP4 (`videoUrl`) before publish — draft created, awaiting video
 - Facebook + Instagram: approval_required → pending_review → approve → scheduled → published
 - No platform uses auto_schedule during BB&B pilot
 
 #### Phase 8: First Proposed July Weekly Plan
+
 - Added static "First Proposed Weekly Plan" section to `BBBContentAutopilotPage`
 - Shows week of July 14–20, 2026 with 7 daily slots
 - Displays service, campaign goal, audience, bucket (revenue/education/trust), area, and editorial note
@@ -316,6 +366,7 @@ analytics, live call log.
 - Yellow pilot warning banner: approval required, autopilot off until Matthew enables it
 
 #### Phase 11: Tests (52 new tests, 404 total)
+
 - New file: `src/lib/__tests__/bbb-autopilot-engine.test.ts`
 - Coverage:
   - Status colors 1–8: PLATFORM_STATUS_COLORS canonical map, serviceStatusToOperationalState adapter

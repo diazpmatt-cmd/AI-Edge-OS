@@ -23,11 +23,25 @@ Verified preservation and operational validation:
 - The pilot verified that DAB-1 is usable as a manual governance contract while exposing concrete enforcement gaps: mutable/free-form specification state, manual remote-SHA and approval matching, non-atomic claims, no independent agent identity, ambiguous coordination-action classification, implementation-oriented milestone assumptions, and durable-document drift.
 - The three failed API-server Vercel deployments remain a separate, documented, pre-existing blocker unrelated to DAB-1.
 
-DAB-1 provides contractual governance and reviewable templates only. It does not machine-enforce approvals, task transitions, claims, concurrency, or stale-SHA rejection, and it does not provide direct ChatGPT/Codex communication.
+DAB-1 provides contractual governance and reviewable templates only. DAB-2A now supplies the pure, in-memory machine-enforcement foundation described below, but no persistent coordination service or direct ChatGPT/Codex communication exists.
+
+### DAB-2A — Pure Coordination Contracts and State Machine (implemented and verified)
+
+Completed scope:
+
+- A separate `lib/development-control` TypeScript package with deterministic specification hashing, immutable revisions, expected-SHA binding, branch/no-branch modes, and bounded task contracts.
+- Independent development actor identities and ten non-transitive authorization categories, including pull-request creation as distinct from pushing and merging.
+- Structured approval decisions bound to task, revision, hash, SHA, categories, actor, timestamps, expiration, constraints, rationale, and idempotency keys.
+- A fail-closed task lifecycle that keeps approval decisions separate from lifecycle state.
+- Atomic in-memory claims, bounded renewable leases, explicit recovery after expiration, active-claim protection, task/lease versions, and no automatic stealing.
+- Deterministic append-only audit events, idempotent replay, factual Git/deployment milestones, stale-state invalidation, and sensitive-data-safe completion reports.
+- Fixture coverage based on DAB-1-PILOT-001 and DAB-1-PILOT-002; 26 focused tests and the package TypeScript check pass.
+
+DAB-2A is not the complete DAB-2 bridge. It adds no persistence, repository implementation, GitHub integration, API, UI, webhook, GitHub Action, MCP, network/environment access, credential use, shell/filesystem execution, automated Git/deployment action, or live agent messaging.
 
 Deferred bounded phases:
 
-1. **DAB-2 — Durable Coordination Ledger:** recommended future requirements now include immutable specification hashes and revisions, authoritative expected-SHA compare-and-swap, structured category-bound approvals, atomic claims and leases, validated transitions, independent actor identities, a defined coordination-action boundary, task-type-aware Git milestones, verified factual events, stale-state rejection, bounded reports, durable-document reconciliation prompts, and idempotent append-only audit events. These recommendations come from DAB-1-PILOT-001; DAB-2 is not implemented or approved for implementation.
+1. **DAB-2B — Durable Coordination Persistence and Integration:** separately design tenant-independent persistence, repository transactions, authoritative identity binding, and any bounded GitHub coordination integration around the DAB-2A contracts. Not implemented or approved for implementation.
 2. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.
@@ -68,21 +82,21 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 
 ### Active Platforms (BB&B Pilot v1)
 
-| Platform | Connected | Content Ready | Image Ready | Queue Ready | Direct Publish | Next Step |
-|----------|-----------|--------------|-------------|-------------|----------------|-----------|
-| **Facebook** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ Graph API | Integrate image upload |
-| **Instagram** | ✅ Matthew Diaz | ✅ Template-based | ❌ Not integrated | ✅ | ✅ via FB Page | Requires public image URL |
-| **Google Business** | ✅ diaz.p.matt@gmail.com | ✅ Local copy + template | ❌ Not integrated | ✅ | ⚠️ BLOCKED — GCP API access unconfirmed | Verify APIs enabled in GCP Console (project 474786012895) |
-| **YouTube** | ✅ BedBugsand_Beyond (`UCGCZ49VYvCIff8rM-VU2eqA`) | ✅ Title + description + 13 tags + privacy | ❌ | ✅ Draft `34b0a41b` staged | ⏸ AWAITING MP4 — Phase 2 stop | Matthew must attach real MP4 to draft `34b0a41b`; upload will be private |
+| Platform            | Connected                                         | Content Ready                              | Image Ready       | Queue Ready                | Direct Publish                          | Next Step                                                                |
+| ------------------- | ------------------------------------------------- | ------------------------------------------ | ----------------- | -------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| **Facebook**        | ✅ Matthew Diaz                                   | ✅ Template-based                          | ❌ Not integrated | ✅                         | ✅ Graph API                            | Integrate image upload                                                   |
+| **Instagram**       | ✅ Matthew Diaz                                   | ✅ Template-based                          | ❌ Not integrated | ✅                         | ✅ via FB Page                          | Requires public image URL                                                |
+| **Google Business** | ✅ diaz.p.matt@gmail.com                          | ✅ Local copy + template                   | ❌ Not integrated | ✅                         | ⚠️ BLOCKED — GCP API access unconfirmed | Verify APIs enabled in GCP Console (project 474786012895)                |
+| **YouTube**         | ✅ BedBugsand_Beyond (`UCGCZ49VYvCIff8rM-VU2eqA`) | ✅ Title + description + 13 tags + privacy | ❌                | ✅ Draft `34b0a41b` staged | ⏸ AWAITING MP4 — Phase 2 stop           | Matthew must attach real MP4 to draft `34b0a41b`; upload will be private |
 
 ### Deferred Platforms (Not in v1 Pilot)
 
-| Platform | Registry Status | Reason Deferred | Estimated Next Phase |
-|----------|----------------|-----------------|---------------------|
-| **TikTok** | `pending_approval` | Awaiting TikTok app review | Phase 2 |
-| **LinkedIn** | `coming_soon` | No direct publish backend | Phase 3 |
-| **Pinterest** | `coming_soon` | No OAuth or publish backend | Phase 3 |
-| **Nextdoor** | `coming_soon` | No API; manual copy-paste only | Phase 4 |
+| Platform      | Registry Status    | Reason Deferred                | Estimated Next Phase |
+| ------------- | ------------------ | ------------------------------ | -------------------- |
+| **TikTok**    | `pending_approval` | Awaiting TikTok app review     | Phase 2              |
+| **LinkedIn**  | `coming_soon`      | No direct publish backend      | Phase 3              |
+| **Pinterest** | `coming_soon`      | No OAuth or publish backend    | Phase 3              |
+| **Nextdoor**  | `coming_soon`      | No API; manual copy-paste only | Phase 4              |
 
 ---
 
@@ -144,6 +158,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 ## BB&B Pilot Readiness by Provider
 
 ### Facebook
+
 - **Connected**: ✅ Matthew Diaz account, Facebook Page linked
 - **Content ready**: ✅ Template-based captions (400–500 chars, photo + text)
 - **Image ready**: ❌ No image generation yet (manual attach)
@@ -155,6 +170,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - **Manual action**: Attach image in Publishing Center before publish
 
 ### Instagram
+
 - **Connected**: ✅ Matthew Diaz, linked via Facebook Business
 - **Content ready**: ✅ Template-based captions (125–220 chars)
 - **Image ready**: ❌ Requires public image URL (no generation yet)
@@ -166,6 +182,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - **Manual action**: Supply image URL in Publishing Center
 
 ### Google Business Profile
+
 - **Connected**: ✅ diaz.p.matt@gmail.com, Baldwin County location
 - **Content ready**: ✅ Local-targeted captions (Foley, Gulf Shores, Orange Beach, Fairhope)
 - **Image ready**: ❌ No generation yet
@@ -181,6 +198,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - **Manual action**: Check GCP Console before any retry
 
 ### YouTube
+
 - **Connected**: ✅ Matthew Diaz, youtube.upload + youtube.readonly scopes
 - **Content ready**: ✅ Title + description generation
 - **Image/Thumbnail**: ❌ Not implemented
@@ -192,6 +210,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - **Manual action**: Matthew must attach a video file in Publishing Center, then publish
 
 ### Nextdoor
+
 - **Connected**: ❌ No OAuth, no API connection
 - **Registry status**: `coming_soon`
 - **Implementation**: Manual-only — setup checklist in Local Presence Engine
@@ -207,6 +226,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 ## Manual Acceptance Test Checklist (Matthew — Authenticated Browser)
 
 ### Facebook
+
 - [ ] Navigate to `/admin/bbb-autopilot`
 - [ ] Select Facebook only
 - [ ] Generate weekly content (template-based)
@@ -218,6 +238,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - [ ] Confirm success status stored in Publishing Center
 
 ### Instagram
+
 - [ ] Select Instagram only in Content Autopilot
 - [ ] Generate and queue Instagram post
 - [ ] Navigate to Publishing Center
@@ -227,9 +248,10 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - [ ] Confirm success status stored
 
 ### Google Business Profile
+
 - [ ] **Matthew: verify GCP Console** — project 474786012895 → APIs & Services → confirm
-  "My Business Account Management API" and "My Business Business Information API" are
-  enabled with non-zero quotas (or request access if not visible)
+      "My Business Account Management API" and "My Business Business Information API" are
+      enabled with non-zero quotas (or request access if not visible)
 - [ ] Confirm token still valid at `/auth/google-business` (re-authorize if expired)
 - [ ] Select Google Business only in Content Autopilot
 - [ ] Generate and queue GBP post (local copy: Foley/Gulf Shores/Orange Beach)
@@ -240,6 +262,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - [ ] Confirm success status stored (first `verifiedByApi: true` cache entry)
 
 ### YouTube
+
 - [ ] Select YouTube only in Content Autopilot
 - [ ] Generate and queue YouTube description
 - [ ] Navigate to Publishing Center
@@ -249,6 +272,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - [ ] Confirm success status stored
 
 ### Nextdoor
+
 - [ ] Navigate to Local Presence Engine (`/admin/local-presence`)
 - [ ] Open Nextdoor Business card
 - [ ] Confirm linked business page URL (if any)

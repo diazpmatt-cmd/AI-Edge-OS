@@ -13,6 +13,9 @@
       "path": "./lib/api-zod"
     },
     {
+      "path": "./lib/development-control-github"
+    },
+    {
       "path": "./lib/development-control-store"
     }
   ]

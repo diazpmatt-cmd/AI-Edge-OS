@@ -523,3 +523,36 @@ export const developmentBridgeRequestLedgerTable = pgTable(
     ),
   ],
 );
+
+export const developmentBridgeRateLimitsTable = pgTable(
+  "development_bridge_rate_limits",
+  {
+    principalReferenceHash: text("principal_reference_hash").notNull(),
+    windowStartedAt: timestamp("window_started_at", {
+      withTimezone: true,
+    }).notNull(),
+    requestCount: integer("request_count").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.principalReferenceHash, table.windowStartedAt],
+    }),
+    index("idx_development_bridge_rate_limit_expiry").on(
+      table.expiresAt,
+      table.principalReferenceHash,
+    ),
+    check(
+      "ck_development_bridge_rate_limit_principal",
+      sql`${table.principalReferenceHash} ~ '^bridge_principal_hash_[0-9a-f]{64}$'`,
+    ),
+    check(
+      "ck_development_bridge_rate_limit_count",
+      sql`${table.requestCount} > 0 AND ${table.requestCount} <= 1000`,
+    ),
+    check(
+      "ck_development_bridge_rate_limit_expiry_order",
+      sql`${table.expiresAt} > ${table.windowStartedAt}`,
+    ),
+  ],
+);

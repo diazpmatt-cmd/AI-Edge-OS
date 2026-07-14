@@ -6,6 +6,28 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-3C — Isolated Private Bridge Activation Composition (2026-07-14)
+
+#### Added
+
+- Lazy request-boundary composition connecting the existing DAB-3B entrypoint to canonical DAB-2A coordination, DAB-2B1 PostgreSQL storage, DAB-2B2 Git evidence, DAB-3A policy, and the unchanged five-tool read-only runtime.
+- Exact isolated configuration validation for the control-plane database, HTTPS resource and documentation URLs, OAuth issuer, authorized party, subject, key ID, public RS256 key, revocation generation, numeric repository identity, Matthew's stable actor identity, enable flag, and kill switch.
+- One additive unapplied tenant-independent rate-limit table and atomic repository using hashed principal references, bounded counters, fixed windows, and bounded cleanup.
+- A bounded Node-to-Web request adapter, focused activation and store tests, ADR-014, and a configuration-name-only activation runbook.
+
+#### Security and architecture
+
+- Disabled, killed, missing, malformed, or inconsistent configuration fails closed with a redacted `503` before a database pool is created. Importing the package performs no environment read, connection, network call, or activation.
+- The existing five tool names, schemas, policy gates, replay ledger, and read-only semantics are unchanged. No customer database, generic `DATABASE_URL`, private key, token, credential, raw environment value, request/result payload, customer identity, or unrestricted metadata is accepted or persisted.
+- The empty isolated control plane fabricates no canonical data. Task/approval/event and Git-evidence population or reconciliation remains a separate future authorization.
+- No Vercel or Supabase change, migration execution, OAuth configuration, credential insertion, deployment, ChatGPT Work plugin installation, workspace change, runtime activation, write tool, customer action, or Growth Engine behavior is included.
+
+#### Verification
+
+- New DAB-3C/store tests passed 19/19; directly affected DAB-3B, DAB-3A, coordination-store, and Git-evidence regressions passed 124/124.
+- TypeScript passed for the MCP, development-control store, and bridge packages. SQL/Drizzle parity, `git diff --check`, exact sixteen-file review, and security/scope scans passed.
+- The full application suite, production build, live database, migration, OAuth flow, network service, deployment, plugin, and paid or rate-limited service remain excluded.
+
 ### DAB-3B — Private Read-Only Remote MCP Foundation (2026-07-13)
 
 #### Added

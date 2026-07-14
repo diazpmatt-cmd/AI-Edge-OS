@@ -80,6 +80,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - The committed entrypoint remains inactive until separately authorized infrastructure supplies the store, OAuth configuration, public keys, rate limiter, kill switch, hosting, plugin, workspace approval, and credentials.
 - Do not represent DAB-3B as deployed, configured, installed, connected, or operational. Do not add write tools, unrestricted shell/Git/filesystem/database/network access, application API behavior, customer data, Growth Engine behavior, or DAB-3C under this phase. See `docs/adr/ADR-013-dab3b-private-read-only-remote-bridge.md`.
 
+### DAB-3C: isolated private bridge activation composition
+
+- DAB-3C composes the existing DAB-3B entrypoint lazily from exact `DAB3C_` caller configuration. Importable modules must not read environment values, open a database pool, contact a network, or activate a runtime.
+- Use only the dedicated tenant-independent development-control database. Never read generic or customer `DATABASE_URL`, customer identity, customer schemas, application credentials, or customer retention state.
+- Keep the exact five DAB-3B tools and DAB-3A policy boundaries unchanged. Missing identity, authorization, canonical state, Git evidence, freshness, replay protection, rate capacity, or configuration must fail closed.
+- Shared serverless rate limits persist only hashed principal references, bounded counters, and timestamps. Never persist tokens, private keys, credentials, raw environment values, request bodies, tool results, nonces, customer identity, or unrestricted metadata.
+- An empty control plane is unavailable, not successful. Canonical task/approval/event and Git-evidence population or reconciliation requires a separate attributable operational authorization.
+- DAB-3C implementation does not authorize or perform Vercel/Supabase changes, migration execution, OAuth configuration, credentials, deployment, ChatGPT Work app/plugin installation, workspace policy, or runtime activation. Follow `docs/runbooks/dab3c-private-bridge-activation.md` only under separate authorization. See `docs/adr/ADR-014-dab3c-private-bridge-activation.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.

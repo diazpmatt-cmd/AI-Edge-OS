@@ -1,5 +1,32 @@
 # Session Handoff
 
+## Latest session: DAB-3C Isolated Private Bridge Activation Composition (2026-07-14)
+
+**Status:** Implemented and bounded verification passed on `feature/dab3c-private-bridge-activation`. Not staged, committed, pushed, deployed, configured, migrated, installed, or activated.
+
+### Starting state and authorization
+
+- Started from clean synchronized `main` and `origin/main` at `2e46987932e454ac9457456d3522378d1f53d033`.
+- Operational task: [Issue #25](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/25), Task DAB-3C, specification revision 1, hash `spec_5e71ac8396ab88c115d234292c4032db6d73e886936a16411c66290889c5231c`.
+- Matthew's attributable repository-owner authorization binds actor ID `256463127`, Scope, Editing, the approved branch, expected SHA, and exact sixteen-file specification boundary.
+- Staging, committing, pushing, pull-request creation, merging, migrations, credentials, Vercel, Supabase, OAuth, deployment, plugin installation, workspace changes, runtime activation, and other external actions remain unauthorized.
+
+### Implemented architecture
+
+- The isolated entrypoint now composes DAB-2A, DAB-2B1, DAB-2B2, DAB-3A, and DAB-3B lazily after exact `DAB3C_` configuration validation. Importing it performs no configuration read, pool creation, network call, or activation.
+- Disabled, invalid, missing, killed, or unavailable configuration returns a bounded redacted `503`. Only a public RS256 verification key and exact identity/resource claims are accepted.
+- One additive unapplied rate-limit migration provides shared atomic counters using hashed principal references only. The five existing tools and DAB-3A fail-closed policy remain unchanged.
+- ADR-014 and the runbook separate implemented composition from later provisioning, migration, OAuth, credential, deployment, plugin, and activation actions.
+
+### Boundaries and next action
+
+- The empty control plane cannot produce positive task results until canonical DAB records and verified Git evidence are separately populated or reconciled. No seed, bypass, arbitrary SQL, or write tool was added.
+- New DAB-3C/store tests passed 19/19 and directly affected DAB-3B/DAB-3A/coordination-store/Git-evidence regressions passed 124/124. TypeScript passed for the MCP, store, and bridge packages; SQL/Drizzle parity, `git diff --check`, exact-file review, and security/scope scans passed.
+- Post the bounded implementation report to Issue #25 and request separate preservation authorization if desired.
+- Do not stage, commit, push, open a PR, merge, run a migration, access credentials, configure Vercel/Supabase/OAuth, deploy, install a plugin, activate the runtime, or begin a later phase without separate attributable authorization.
+
+---
+
 ## Latest session: DAB-3B Private Read-Only Remote MCP Foundation (2026-07-13)
 
 **Status:** Implemented offline and bounded verification passed on `feature/dab3b-remote-readonly-bridge`. Not staged, committed, pushed, deployed, configured, installed, or activated.

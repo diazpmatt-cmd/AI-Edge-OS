@@ -6,6 +6,8 @@ import {
   type DevelopmentControlDatabaseConfig,
 } from "./config";
 import { PostgresDevelopmentCoordinationStore } from "./postgres-coordination-store";
+import { PostgresBridgeRuntimeRepository } from "./bridge-runtime-repository";
+import { PostgresBridgeRateLimitRepository } from "./bridge-rate-limit-repository";
 import * as schema from "./schema";
 
 const { Pool } = pg;
@@ -13,6 +15,12 @@ const { Pool } = pg;
 export interface DevelopmentControlStoreRuntime {
   readonly store: PostgresDevelopmentCoordinationStore;
   close(): Promise<void>;
+}
+
+export interface DevelopmentControlBridgeStoreRuntime
+  extends DevelopmentControlStoreRuntime {
+  readonly bridge: PostgresBridgeRuntimeRepository;
+  readonly rateLimits: PostgresBridgeRateLimitRepository;
 }
 
 /**
@@ -38,6 +46,31 @@ export function createDevelopmentControlStoreRuntime(input: {
   });
 }
 
+/**
+ * Creates the isolated bridge composition from one caller-supplied control-plane
+ * database. Importing this package still performs no environment or network IO.
+ */
+export function createDevelopmentControlBridgeStoreRuntime(input: {
+  readonly database: DevelopmentControlDatabaseConfig;
+  readonly authorityPolicy?: DevelopmentAuthorityPolicy;
+}): DevelopmentControlBridgeStoreRuntime {
+  const pool = new Pool({
+    connectionString: input.database.connectionString,
+    application_name: input.database.applicationName,
+    max: input.database.maxConnections,
+  });
+  const database = drizzle(pool, { schema });
+  return Object.freeze({
+    store: new PostgresDevelopmentCoordinationStore(
+      database,
+      input.authorityPolicy,
+    ),
+    bridge: new PostgresBridgeRuntimeRepository(database),
+    rateLimits: new PostgresBridgeRateLimitRepository(database),
+    close: () => pool.end(),
+  });
+}
+
 export { createDevelopmentControlDatabaseConfig };
 export type { DevelopmentControlDatabaseConfig };
 export * from "./schema";
@@ -45,3 +78,4 @@ export * from "./mappers";
 export * from "./postgres-coordination-store";
 export * from "./github-reconciliation-repository";
 export * from "./bridge-runtime-repository";
+export * from "./bridge-rate-limit-repository";

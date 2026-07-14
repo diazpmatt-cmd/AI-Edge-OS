@@ -62,6 +62,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - Evidence, runs, and cursor advancement are atomic and idempotent. Rate limits, unavailable sources, stale SHAs, force pushes, conflicts, and lag fail closed with bounded diagnostics.
 - DAB-2B2 adds no installed integration, webhook, App, Action, scheduler, worker, API, UI, hosted runtime, MCP, GitHub write surface, or automated execution. DAB-3 remains deferred. See `docs/adr/ADR-011-dab2b2-read-only-github-reconciliation.md`.
 
+### DAB-3A: pure offline bridge contracts
+
+- `lib/development-control-bridge` is a pure, protocol-independent policy package. It imports only the canonical DAB-2A contracts; DAB-2B1 persistence and DAB-2B2 GitHub reconciliation remain untouched adapter boundaries.
+- `BridgePrincipal` represents an already-verified workload identity, never human approval. It contains bounded identity references and explicit expiry/revocation state but no token, secret, OAuth state, environment value, customer identity, or unrestricted metadata.
+- Every request binds repository, task, revision, specification hash, expected SHA, operation, authorization category, principal, nonce, issued/expiry times, correlation ID, and idempotency key into a deterministic fingerprint.
+- The immutable operation catalog separates read-only, modeled-write, and deferred operations. An `allowed` decision means only that offline policy evidence passed; no operation executes.
+- Scope, Editing, Committing, Pushing, Pull-request creation, Merging, Deployment, Credentials, Paid providers, and External actions remain independent. Missing, stale, revoked, expired, ambiguous, or unavailable evidence fails closed.
+- DAB-3A adds no authentication transport, MCP server, API, UI, hosted runtime, network, credential access, database, migration, GitHub write, Git operation, deployment, scheduler, worker, Growth Engine behavior, or customer-facing capability. DAB-3B and all live behavior remain deferred. See `docs/adr/ADR-012-dab3a-pure-bridge-contracts.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.

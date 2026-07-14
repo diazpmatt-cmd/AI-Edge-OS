@@ -23,4 +23,4 @@ Keep this file compact. Do not duplicate or contradict those documents; update t
 
 ## DAB phase boundary
 
-DAB-1 provides governance contracts and templates only; it does not machine-enforce approvals or transitions and does not create direct agent communication. Machine-enforced coordination is deferred to DAB-2, and a bounded ChatGPT/Codex MCP bridge is deferred to DAB-3.
+DAB-1 provides governance contracts and templates. DAB-2 provides canonical machine-enforced coordination, durable tenant-independent storage, and read-only GitHub evidence. DAB-3A adds pure offline bridge contracts and policy evaluation only; no authenticated runtime, MCP server, direct ChatGPT/Codex communication, or live operation exists. DAB-3B and later live phases remain deferred.

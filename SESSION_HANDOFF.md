@@ -1,5 +1,62 @@
 # Session Handoff
 
+## Latest session: DAB-3A Pure Offline Bridge Contracts (2026-07-13)
+
+**Status:** Implemented and bounded verification passed on `feature/dab3a-bridge-contracts`; not staged, committed, or pushed.
+
+### Starting state and authorization
+
+- Started from clean synchronized `main` and live `origin/main` at `4c8e04e0f0fa97631d266b37fc17117766de8013`.
+- Operational task: [Issue #21](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/21), Task DAB-3A, specification revision 1, hash `spec_6161652da2185a25b4b121f12e4e26ed63cf90c19609d89a9fc6c9133c3a9d34`.
+- Matthew's attributable repository-owner comment binds stable numeric actor ID `256463127`, the exact branch, expected SHA, 18 files, Scope, Editing, architecture, verification, exclusions, and fail-closed conditions.
+- Committing, pushing, pull-request creation, merging, deployment, credentials, paid providers, External actions, and GitHub reporting remain separately unauthorized.
+
+### Exact implementation files
+
+- `lib/development-control-bridge/package.json`
+- `lib/development-control-bridge/tsconfig.json`
+- `lib/development-control-bridge/src/types.ts`
+- `lib/development-control-bridge/src/principal.ts`
+- `lib/development-control-bridge/src/request-envelope.ts`
+- `lib/development-control-bridge/src/operation-catalog.ts`
+- `lib/development-control-bridge/src/policy.ts`
+- `lib/development-control-bridge/src/fixtures.ts`
+- `lib/development-control-bridge/src/index.ts`
+- `lib/development-control-bridge/src/__tests__/dab3a-bridge-policy.test.ts`
+- `docs/adr/ADR-012-dab3a-pure-bridge-contracts.md`
+- `AGENTS.md`
+- `replit.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `SESSION_HANDOFF.md`
+- `pnpm-lock.yaml`
+- `tsconfig.json`
+
+### Implemented architecture
+
+- New pure `@workspace/development-control-bridge` package importing only canonical DAB-2A contracts. DAB-2B1 and DAB-2B2 remain untouched future adapter boundaries.
+- Bounded already-verified workload principals with explicit issuer, subject, audience, credential reference, actor type, verification, expiry, and revocation status; no credential value or human approval.
+- Deterministic request envelopes binding repository, task, revision, specification hash, expected SHA, operation, category, principal, nonce, fifteen-minute validity window, correlation ID, and idempotency key.
+- Immutable 20-operation catalog with exported authorization matrix and explicit `read_only`, `modeled_write`, or `deferred` classification.
+- Pure fail-closed policy evaluation with sorted bounded reason codes. Offline `allowed` never means execution.
+- Exact rejection of stale/missing Git evidence, authorization mismatch, self-approval, revoked/unknown/expired principal, invalid request time, nonce replay, and idempotency conflicts.
+
+### Verification
+
+- Focused DAB-3A tests: 66/66 passed.
+- Combined DAB-3A and directly affected DAB-2A tests: 92/92 passed across two files.
+- TypeScript passed for `lib/development-control-bridge` and `lib/development-control`.
+- `git diff --check`, exact 18-file review, credential/environment, network, database/migration, customer identity, GitHub write, Git/deployment, live MCP/runtime, and forbidden-scope scans passed.
+- No credential, network, database, migration, GitHub write, Git operation, deployment, integration, full application suite, or production build was used.
+
+### Boundaries and next action
+
+- DAB-3A is an offline contract and policy foundation, not an authenticated bridge. It exposes no MCP server, API, UI, hosted runtime, direct ChatGPT/Codex communication, persistence, or executable operation.
+- DAB-3B workload authentication, private hosting, transport, rate limiting, kill switch, audit retention, and read-only adapters remain deferred and unapproved.
+- Review the complete diff and request separate preservation authorization if desired. Do not stage, commit, push, open a pull request, merge, deploy, install an integration, post to GitHub, or begin DAB-3B without attributable authorization.
+
+---
+
 ## Latest session: DAB-2B2 Read-Only GitHub Reconciliation (2026-07-13)
 
 **Status:** Implemented and bounded verification passed on `feature/dab2b2-github-reconciliation`; not committed or pushed.

@@ -3,7 +3,7 @@ import {
   type DevelopmentReference,
   type TaskSpecification,
   type TaskSpecificationInput,
-} from "./types";
+} from "./types.js";
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_ITEM_LENGTH = 1_000;

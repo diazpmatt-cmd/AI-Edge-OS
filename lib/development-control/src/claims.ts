@@ -2,8 +2,8 @@ import {
   DevelopmentControlError,
   type ClaimLease,
   type TrustedDevelopmentActor,
-} from "./types";
-import { validateActor } from "./events";
+} from "./types.js";
+import { validateActor } from "./events.js";
 
 export const MIN_LEASE_MS = 1_000;
 export const MAX_LEASE_MS = 60 * 60 * 1_000;

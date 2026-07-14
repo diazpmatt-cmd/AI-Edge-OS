@@ -5,9 +5,9 @@ import {
   type BridgePolicyDecision,
 } from "@workspace/development-control-bridge";
 import type { BridgeRequestLedgerRepository } from "@workspace/development-control-store";
-import { CanonicalBridgeReadAdapter, projectApprovals, projectProgress, projectSpecifications, projectTask } from "./adapters";
-import { extractBearerToken, RemoteBridgeError, verifyWorkloadAccessToken, type RemoteBridgeAuthConfig, type VerifiedWorkloadIdentity } from "./auth";
-import { assertToolName, canonicalOperation, parseToolInput, REMOTE_BRIDGE_TOOLS, type RemoteBridgeToolName } from "./tools";
+import { CanonicalBridgeReadAdapter, projectApprovals, projectProgress, projectSpecifications, projectTask } from "./adapters.js";
+import { extractBearerToken, RemoteBridgeError, verifyWorkloadAccessToken, type RemoteBridgeAuthConfig, type VerifiedWorkloadIdentity } from "./auth.js";
+import { assertToolName, canonicalOperation, parseToolInput, REMOTE_BRIDGE_TOOLS, type RemoteBridgeToolName } from "./tools.js";
 
 export interface RemoteBridgeClock { now(): string }
 export interface RemoteBridgeRateLimiter { consume(principalId: string, now: string): boolean | Promise<boolean> }

@@ -1,8 +1,8 @@
 import { deterministicHash } from "@workspace/development-control";
-import { evaluateApprovalEvidence, diagnoseRef } from "./identity";
-import { diagnoseObservationConflicts, normalizeGitHubObservations } from "./normalizer";
-import { calculateBackoff, diagnoseReconciliationLag } from "./rate-limit";
-import { GitHubReconciliationError, type GitHubApprovalExpectation, type GitHubClock, type GitHubDiagnostic, type GitHubIdentityPolicy, type GitHubReconciliationCursor, type GitHubReconciliationStore, type GitHubReconciliationSummary, type ReadOnlyGitHubClient } from "./types";
+import { evaluateApprovalEvidence, diagnoseRef } from "./identity.js";
+import { diagnoseObservationConflicts, normalizeGitHubObservations } from "./normalizer.js";
+import { calculateBackoff, diagnoseReconciliationLag } from "./rate-limit.js";
+import { GitHubReconciliationError, type GitHubApprovalExpectation, type GitHubClock, type GitHubDiagnostic, type GitHubIdentityPolicy, type GitHubReconciliationCursor, type GitHubReconciliationStore, type GitHubReconciliationSummary, type ReadOnlyGitHubClient } from "./types.js";
 
 function cursor(input: Partial<GitHubReconciliationCursor> & Pick<GitHubReconciliationCursor, "repositoryId" | "stream">): GitHubReconciliationCursor {
   return Object.freeze({ repositoryId: input.repositoryId, stream: input.stream, cursor: input.cursor ?? null, etag: input.etag ?? null, lastObservedAt: input.lastObservedAt ?? null, retryAt: input.retryAt ?? null, version: input.version ?? 1 });

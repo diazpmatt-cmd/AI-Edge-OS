@@ -6,9 +6,9 @@ import {
   type DevelopmentAuthorityPolicy,
   type TaskSpecification,
   type TrustedDevelopmentActor,
-} from "./types";
-import { deterministicHash } from "./specification";
-import { validateActor } from "./events";
+} from "./types.js";
+import { deterministicHash } from "./specification.js";
+import { validateActor } from "./events.js";
 
 const MAX_RATIONALE = 1_000;
 const MAX_CONSTRAINTS = 50;

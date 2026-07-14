@@ -1,0 +1,15 @@
+{
+  "name": "@workspace/development-control-mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": {
+    "@workspace/development-control": "workspace:*",
+    "@workspace/development-control-bridge": "workspace:*",
+    "@workspace/development-control-github": "workspace:*",
+    "@workspace/development-control-store": "workspace:*"
+  },
+  "devDependencies": { "@types/node": "catalog:" }
+}

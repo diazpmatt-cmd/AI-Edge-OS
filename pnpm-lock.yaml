@@ -158,6 +158,25 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
+  artifacts/development-control-mcp:
+    dependencies:
+      '@workspace/development-control':
+        specifier: workspace:*
+        version: link:../../lib/development-control
+      '@workspace/development-control-bridge':
+        specifier: workspace:*
+        version: link:../../lib/development-control-bridge
+      '@workspace/development-control-github':
+        specifier: workspace:*
+        version: link:../../lib/development-control-github
+      '@workspace/development-control-store':
+        specifier: workspace:*
+        version: link:../../lib/development-control-store
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
+
   artifacts/ai-edge-solutions:
     dependencies:
       '@clerk/react':

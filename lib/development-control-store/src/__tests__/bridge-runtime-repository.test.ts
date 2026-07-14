@@ -7,7 +7,11 @@ import {
   normalizeGitHubObservation,
 } from "@workspace/development-control-github";
 import { InMemoryBridgeRuntimeRepository } from "../bridge-runtime-repository";
-import { developmentBridgeRequestLedgerTable } from "../schema";
+import { InMemoryBridgeRateLimitRepository } from "../bridge-rate-limit-repository";
+import {
+  developmentBridgeRateLimitsTable,
+  developmentBridgeRequestLedgerTable,
+} from "../schema";
 
 const HASH = "1".repeat(64);
 const baseClaim = Object.freeze({
@@ -63,6 +67,51 @@ describe("DAB-3B bridge runtime repository", () => {
     expect(JSON.stringify(Object.keys(getTableColumns(developmentBridgeRequestLedgerTable)))).not.toMatch(
       /token$|nonce$|credential|payload|result|metadata|client|tenant|customer/i,
     );
+  });
+
+  it("keeps the DAB-3C rate-limit migration and schema additive", () => {
+    expect(getTableName(developmentBridgeRateLimitsTable)).toBe(
+      "development_bridge_rate_limits",
+    );
+    const sql = readFileSync(
+      path.join(
+        process.cwd(),
+        "lib/development-control-store/migrations/0004_dab3c_bridge_rate_limits.sql",
+      ),
+      "utf8",
+    );
+    for (const column of Object.values(
+      getTableColumns(developmentBridgeRateLimitsTable),
+    )) {
+      expect(sql).toMatch(new RegExp(`(?:^|\\n)\\s*${column.name}\\s`, "m"));
+    }
+    expect(sql).not.toMatch(
+      /\b(?:DROP|TRUNCATE|ALTER TABLE|CREATE TRIGGER|client_id|tenant_id|customer_id|database_url|token|credential|payload|result|metadata)\b/i,
+    );
+  });
+
+  it("enforces deterministic cross-instance rate-limit semantics", async () => {
+    const repository = new InMemoryBridgeRateLimitRepository();
+    const input = {
+      principalReferenceHash: `bridge_principal_hash_${"9".repeat(64)}`,
+      now: "2026-07-14T05:00:10.000Z",
+      windowSeconds: 60,
+      limit: 2,
+    };
+    await expect(repository.consume(input)).resolves.toBe(true);
+    await expect(repository.consume(input)).resolves.toBe(true);
+    await expect(repository.consume(input)).resolves.toBe(false);
+    expect(repository.listRecords()).toEqual([
+      {
+        principalReferenceHash: input.principalReferenceHash,
+        windowStartedAt: "2026-07-14T05:00:00.000Z",
+        requestCount: 2,
+        expiresAt: "2026-07-14T05:02:00.000Z",
+      },
+    ]);
+    await expect(
+      repository.cleanupExpired("2026-07-14T05:02:01.000Z", 10),
+    ).resolves.toBe(1);
   });
 
   it("atomically claims first use and converges matching retries", async () => {

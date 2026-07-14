@@ -1,5 +1,5 @@
 import type { BridgeOperation } from "@workspace/development-control-bridge";
-import { RemoteBridgeError } from "./auth";
+import { RemoteBridgeError } from "./auth.js";
 
 export const REMOTE_BRIDGE_TOOL_NAMES = [
   "get_task", "get_specification_revisions", "get_authorization_decisions",

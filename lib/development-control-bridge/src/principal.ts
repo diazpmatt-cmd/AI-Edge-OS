@@ -7,7 +7,7 @@ import {
   type BridgePrincipal,
   type BridgePrincipalInput,
   type BridgeWorkloadActorType,
-} from "./types";
+} from "./types.js";
 
 const MAX_IDENTITY_FIELD = 300;
 const WORKLOAD_ACTOR_TYPES = new Set<ActorType>([

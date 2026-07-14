@@ -6,15 +6,15 @@ import {
   type TaskSpecification,
   type TrustedDevelopmentActor,
 } from "@workspace/development-control";
-import { getBridgeOperationPolicy } from "./operation-catalog";
-import { createBridgePrincipal } from "./principal";
-import { createBridgeRequestEnvelope } from "./request-envelope";
+import { getBridgeOperationPolicy } from "./operation-catalog.js";
+import { createBridgePrincipal } from "./principal.js";
+import { createBridgeRequestEnvelope } from "./request-envelope.js";
 import type {
   BridgeOperation,
   BridgePolicyInput,
   BridgePrincipal,
   BridgeRequestEnvelope,
-} from "./types";
+} from "./types.js";
 
 export const DAB3A_FIXTURE_REPOSITORY_ID = "1000000001";
 export const DAB3A_FIXTURE_SHA = "4c8e04e0f0fa97631d266b37fc17117766de8013";

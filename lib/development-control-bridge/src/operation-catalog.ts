@@ -4,7 +4,7 @@ import {
   DevelopmentControlBridgeError,
   type BridgeOperation,
   type BridgeOperationPolicy,
-} from "./types";
+} from "./types.js";
 
 function policy(
   operation: BridgeOperation,

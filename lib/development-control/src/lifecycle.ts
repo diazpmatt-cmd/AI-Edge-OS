@@ -1,4 +1,4 @@
-import { DevelopmentControlError, type TaskState } from "./types";
+import { DevelopmentControlError, type TaskState } from "./types.js";
 
 export const TASK_TRANSITIONS = Object.freeze({
   proposed: Object.freeze(["approved", "rejected", "cancelled"]),

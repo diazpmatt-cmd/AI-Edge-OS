@@ -1,4 +1,4 @@
-import { GitHubReconciliationError, type GitHubReadPage, type GitHubReadRequest, type ReadOnlyGitHubClient } from "./types";
+import { GitHubReconciliationError, type GitHubReadPage, type GitHubReadRequest, type ReadOnlyGitHubClient } from "./types.js";
 
 const BOUNDED_STREAM = /^[a-z0-9_:-]{1,100}$/;
 const NUMERIC_ID = /^[1-9][0-9]{0,19}$/;

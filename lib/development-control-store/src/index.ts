@@ -4,11 +4,11 @@ import type { DevelopmentAuthorityPolicy } from "@workspace/development-control"
 import {
   createDevelopmentControlDatabaseConfig,
   type DevelopmentControlDatabaseConfig,
-} from "./config";
-import { PostgresDevelopmentCoordinationStore } from "./postgres-coordination-store";
-import { PostgresBridgeRuntimeRepository } from "./bridge-runtime-repository";
-import { PostgresBridgeRateLimitRepository } from "./bridge-rate-limit-repository";
-import * as schema from "./schema";
+} from "./config.js";
+import { PostgresDevelopmentCoordinationStore } from "./postgres-coordination-store.js";
+import { PostgresBridgeRuntimeRepository } from "./bridge-runtime-repository.js";
+import { PostgresBridgeRateLimitRepository } from "./bridge-rate-limit-repository.js";
+import * as schema from "./schema.js";
 
 const { Pool } = pg;
 
@@ -73,9 +73,9 @@ export function createDevelopmentControlBridgeStoreRuntime(input: {
 
 export { createDevelopmentControlDatabaseConfig };
 export type { DevelopmentControlDatabaseConfig };
-export * from "./schema";
-export * from "./mappers";
-export * from "./postgres-coordination-store";
-export * from "./github-reconciliation-repository";
-export * from "./bridge-runtime-repository";
-export * from "./bridge-rate-limit-repository";
+export * from "./schema.js";
+export * from "./mappers.js";
+export * from "./postgres-coordination-store.js";
+export * from "./github-reconciliation-repository.js";
+export * from "./bridge-runtime-repository.js";
+export * from "./bridge-rate-limit-repository.js";

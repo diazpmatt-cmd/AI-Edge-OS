@@ -5,8 +5,8 @@ import {
   type MilestoneStatus,
   type TaskSpecification,
   type TrustedDevelopmentActor,
-} from "./types";
-import { validateActor } from "./events";
+} from "./types.js";
+import { validateActor } from "./events.js";
 
 export const MILESTONE_KINDS: readonly MilestoneKind[] = Object.freeze([
   "committed",

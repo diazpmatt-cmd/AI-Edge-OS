@@ -10,8 +10,8 @@ import type {
   TaskSpecification,
   TaskState,
   TrustedDevelopmentActor,
-} from "./types";
-import { DevelopmentControlError } from "./types";
+} from "./types.js";
+import { DevelopmentControlError } from "./types.js";
 
 export type CoordinationResult<T> = T | Promise<T>;
 export const MAX_COORDINATION_HISTORY_PAGE_SIZE = 100;

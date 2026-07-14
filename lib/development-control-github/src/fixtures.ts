@@ -1,4 +1,4 @@
-import type { GitHubReadPage, GitHubReadRequest, GitHubSourceObservation, ReadOnlyGitHubClient } from "./types";
+import type { GitHubReadPage, GitHubReadRequest, GitHubSourceObservation, ReadOnlyGitHubClient } from "./types.js";
 
 export const DAB2B2_REPOSITORY_ID = "123456789";
 export const DAB2B2_MATTHEW_ACTOR_ID = "256463127";

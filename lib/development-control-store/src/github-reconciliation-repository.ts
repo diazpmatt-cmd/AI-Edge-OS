@@ -1,7 +1,7 @@
 import { GitHubReconciliationError, type GitHubEvidence, type GitHubReconciliationCursor, type GitHubReconciliationStore, type GitHubReconciliationSummary } from "@workspace/development-control-github";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import * as schema from "./schema";
+import * as schema from "./schema.js";
 
 type Database = NodePgDatabase<typeof schema>;
 

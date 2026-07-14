@@ -2,19 +2,19 @@ import {
   DAB2A_AUTHORITY_POLICY,
   assertApprovalUsable,
   createApprovalRecord,
-} from "./authorization";
-import { createClaimLease, isLeaseExpired, renewClaimLease } from "./claims";
-import { validateCompletionReport } from "./completion-report";
-import { createAuditEvent, validateActor } from "./events";
-import { assertValidTransition } from "./lifecycle";
-import { createMilestoneRecord, initialMilestones } from "./milestones";
-import { deterministicHash } from "./specification";
+} from "./authorization.js";
+import { createClaimLease, isLeaseExpired, renewClaimLease } from "./claims.js";
+import { validateCompletionReport } from "./completion-report.js";
+import { createAuditEvent, validateActor } from "./events.js";
+import { assertValidTransition } from "./lifecycle.js";
+import { createMilestoneRecord, initialMilestones } from "./milestones.js";
+import { deterministicHash } from "./specification.js";
 import {
   TRANSITION_AUTHORIZATION_CATEGORY,
   type DevelopmentCoordinationStore,
   type CoordinationHistoryPageOptions,
   normalizeCoordinationHistoryPage,
-} from "./repository";
+} from "./repository.js";
 import {
   DevelopmentControlError,
   type ApprovalDecision,
@@ -31,7 +31,7 @@ import {
   type TaskSpecification,
   type TaskState,
   type TrustedDevelopmentActor,
-} from "./types";
+} from "./types.js";
 
 interface MutableTask {
   specification: TaskSpecification;

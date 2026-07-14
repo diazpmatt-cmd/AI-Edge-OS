@@ -1,5 +1,5 @@
 import { deterministicHash } from "@workspace/development-control";
-import { GitHubReconciliationError, type GitHubApprovalBinding, type GitHubDiagnostic, type GitHubEvidence, type GitHubSourceObservation } from "./types";
+import { GitHubReconciliationError, type GitHubApprovalBinding, type GitHubDiagnostic, type GitHubEvidence, type GitHubSourceObservation } from "./types.js";
 
 const NUMERIC_ID = /^[1-9][0-9]{0,19}$/;
 const SHA = /^[0-9a-f]{40}$/;

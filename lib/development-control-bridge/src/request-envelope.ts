@@ -9,8 +9,8 @@ import {
   type BridgeOperation,
   type BridgeRequestEnvelope,
   type BridgeRequestEnvelopeInput,
-} from "./types";
-import { assertBridgePrincipal } from "./principal";
+} from "./types.js";
+import { assertBridgePrincipal } from "./principal.js";
 
 export const MAX_BRIDGE_REQUEST_LIFETIME_MS = 15 * 60 * 1_000;
 const MAX_REFERENCE_FIELD = 300;

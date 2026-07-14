@@ -45,8 +45,8 @@ import {
   freezeReport,
   freezeSpecification,
   taskRecordFromPersistence,
-} from "./mappers";
-import * as schema from "./schema";
+} from "./mappers.js";
+import * as schema from "./schema.js";
 
 type Database = NodePgDatabase<typeof schema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];

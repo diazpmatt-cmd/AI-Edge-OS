@@ -1,4 +1,4 @@
-import type { GitHubClock, GitHubDiagnostic, GitHubDiagnosticCode, GitHubRateLimitObservation } from "./types";
+import type { GitHubClock, GitHubDiagnostic, GitHubDiagnosticCode, GitHubRateLimitObservation } from "./types.js";
 
 export interface GitHubBackoff { readonly diagnostic: GitHubDiagnosticCode; readonly retryAt: string; readonly delayMs: number; }
 

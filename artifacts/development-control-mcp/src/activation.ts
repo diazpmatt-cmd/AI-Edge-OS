@@ -13,13 +13,13 @@ import {
   type BridgeRequestLedgerRepository,
   type DevelopmentControlDatabaseConfig,
 } from "@workspace/development-control-store";
-import { CanonicalBridgeReadAdapter } from "./adapters";
-import type { RemoteBridgeAuthConfig } from "./auth";
+import { CanonicalBridgeReadAdapter } from "./adapters.js";
+import type { RemoteBridgeAuthConfig } from "./auth.js";
 import {
   RemoteBridgeRuntime,
   createRemoteMcpHttpHandler,
   type RemoteBridgeClock,
-} from "./runtime";
+} from "./runtime.js";
 
 export type Dab3cEnvironment = Readonly<Record<string, string | undefined>>;
 

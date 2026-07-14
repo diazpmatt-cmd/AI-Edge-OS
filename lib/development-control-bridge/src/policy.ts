@@ -3,12 +3,12 @@ import {
   assertApprovalUsable,
   type ApprovalRecord,
 } from "@workspace/development-control";
-import { getBridgeOperationPolicy } from "./operation-catalog";
+import { getBridgeOperationPolicy } from "./operation-catalog.js";
 import type {
   BridgePolicyDecision,
   BridgePolicyInput,
   BridgePolicyReasonCode,
-} from "./types";
+} from "./types.js";
 
 const GIT_STATUS_REASON: Readonly<
   Record<Exclude<BridgePolicyInput["gitEvidenceStatus"], "verified">, BridgePolicyReasonCode>

@@ -1,5 +1,5 @@
 import type { AuthorizationCategory } from "@workspace/development-control";
-import { type GitHubApprovalExpectation, type GitHubDiagnostic, type GitHubEvidence, type GitHubIdentityPolicy } from "./types";
+import { type GitHubApprovalExpectation, type GitHubDiagnostic, type GitHubEvidence, type GitHubIdentityPolicy } from "./types.js";
 
 function diagnostic(code: GitHubDiagnostic["code"], evidence: GitHubEvidence, detail: string): GitHubDiagnostic { return Object.freeze({ code, evidenceId: evidence.evidenceId, detail }); }
 

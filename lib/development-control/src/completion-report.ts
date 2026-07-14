@@ -1,4 +1,4 @@
-import { DevelopmentControlError, type CompletionReportInput } from "./types";
+import { DevelopmentControlError, type CompletionReportInput } from "./types.js";
 
 const MAX_ITEMS = 100;
 const MAX_TEXT = 2_000;

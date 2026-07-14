@@ -3,8 +3,8 @@ import {
   type AuditEvent,
   type TaskRecord,
   type TrustedDevelopmentActor,
-} from "./types";
-import { deterministicHash } from "./specification";
+} from "./types.js";
+import { deterministicHash } from "./specification.js";
 
 const MAX_METADATA_KEYS = 20;
 const MAX_METADATA_STRING = 500;

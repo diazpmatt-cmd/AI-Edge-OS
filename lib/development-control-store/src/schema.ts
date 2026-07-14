@@ -477,3 +477,49 @@ export const developmentGitHubReconciliationRunsTable = pgTable(
     check("ck_development_github_run_bounds", sql`octet_length(${table.diagnostics}::text) <= 32768 AND octet_length(${table.summary}::text) <= 65536`),
   ],
 );
+
+export const developmentBridgeRequestLedgerTable = pgTable(
+  "development_bridge_request_ledger",
+  {
+    requestFingerprintHash: text("request_fingerprint_hash").primaryKey(),
+    principalReferenceHash: text("principal_reference_hash").notNull(),
+    tokenIdHash: text("token_id_hash").notNull(),
+    nonceHash: text("nonce_hash").notNull(),
+    idempotencyKeyHash: text("idempotency_key_hash").notNull(),
+    correlationReference: text("correlation_reference").notNull(),
+    operation: text("operation").notNull(),
+    outcome: text("outcome").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_development_bridge_request_idempotency").on(
+      table.principalReferenceHash,
+      table.idempotencyKeyHash,
+    ),
+    uniqueIndex("uq_development_bridge_request_nonce").on(
+      table.principalReferenceHash,
+      table.nonceHash,
+    ),
+    index("idx_development_bridge_request_expiry").on(
+      table.expiresAt,
+      table.requestFingerprintHash,
+    ),
+    check(
+      "ck_development_bridge_request_hashes",
+      sql`${table.requestFingerprintHash} ~ '^bridge_request_hash_[0-9a-f]{64}$' AND ${table.principalReferenceHash} ~ '^bridge_principal_hash_[0-9a-f]{64}$' AND ${table.tokenIdHash} ~ '^bridge_token_hash_[0-9a-f]{64}$' AND ${table.nonceHash} ~ '^bridge_nonce_hash_[0-9a-f]{64}$' AND ${table.idempotencyKeyHash} ~ '^bridge_idempotency_hash_[0-9a-f]{64}$'`,
+    ),
+    check(
+      "ck_development_bridge_request_bounds",
+      sql`char_length(${table.correlationReference}) BETWEEN 1 AND 200 AND char_length(${table.operation}) BETWEEN 1 AND 100`,
+    ),
+    check(
+      "ck_development_bridge_request_outcome",
+      sql`${table.outcome} IN ('claimed','allowed','denied','failed')`,
+    ),
+    check(
+      "ck_development_bridge_request_expiry_order",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);

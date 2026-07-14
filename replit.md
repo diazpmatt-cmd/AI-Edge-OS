@@ -71,6 +71,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - Scope, Editing, Committing, Pushing, Pull-request creation, Merging, Deployment, Credentials, Paid providers, and External actions remain independent. Missing, stale, revoked, expired, ambiguous, or unavailable evidence fails closed.
 - DAB-3A adds no authentication transport, MCP server, API, UI, hosted runtime, network, credential access, database, migration, GitHub write, Git operation, deployment, scheduler, worker, Growth Engine behavior, or customer-facing capability. DAB-3B and all live behavior remain deferred. See `docs/adr/ADR-012-dab3a-pure-bridge-contracts.md`.
 
+### DAB-3B: private read-only remote MCP foundation
+
+- `artifacts/development-control-mcp` is an isolated Streamable HTTP resource-server foundation for browser-based ChatGPT Work. It exposes exactly five read-only tools and routes every call through DAB-3A request and policy evaluation.
+- DAB-2A continues to own tasks, specifications, approvals, states, and events. DAB-2B1 owns tenant-independent persistence. DAB-2B2 owns verified GitHub evidence. DAB-3A owns principals, envelopes, operations, and policy. DAB-3B authenticates, adapts, rate-limits, and transports bounded projections only.
+- Importable modules receive configuration explicitly and do not read environment variables. OAuth JWT validation requires exact issuer, resource audience, authorized party, subject, `dab:read` scope, token ID, short lifetime, pinned public key, and revocation generation.
+- The bridge request ledger stores only bounded hashes and security outcomes. Never add raw tokens, credentials, nonces, request payloads, results, arbitrary JSON, customer identity, or general-purpose database access.
+- The committed entrypoint remains inactive until separately authorized infrastructure supplies the store, OAuth configuration, public keys, rate limiter, kill switch, hosting, plugin, workspace approval, and credentials.
+- Do not represent DAB-3B as deployed, configured, installed, connected, or operational. Do not add write tools, unrestricted shell/Git/filesystem/database/network access, application API behavior, customer data, Growth Engine behavior, or DAB-3C under this phase. See `docs/adr/ADR-013-dab3b-private-read-only-remote-bridge.md`.
+
 ### C8R-5: AI Visibility read model
 
 - AI Visibility is a tenant-safe, deterministic read model over canonical systems. It does not own source records or workflow state.

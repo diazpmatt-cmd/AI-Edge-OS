@@ -6,6 +6,29 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-3B — Private Read-Only Remote MCP Foundation (2026-07-13)
+
+#### Added
+
+- An isolated `@workspace/development-control-mcp` Streamable HTTP resource-server foundation with OAuth protected-resource metadata and exactly five read-only tools: task, specification revisions, authorization decisions, verified Git evidence, and harmless task progress.
+- Strict caller-configured RS256 JWT validation for exact issuer, audience, authorized party, subject, `dab:read` scope, token ID, issue/not-before/expiry times, pinned public key, and revocation generation, mapped to a DAB-3A `read_only_automation` workload principal.
+- Canonical adapters over DAB-2A task state, DAB-2B1 storage, DAB-2B2 Git evidence, and DAB-3A request/policy evaluation without competing ownership or write behavior.
+- One additive unapplied tenant-independent bridge request ledger storing only bounded hashes, operation/outcome, correlation reference, and timestamps for atomic replay and idempotency protection.
+- An inactive Vercel-compatible entrypoint and configuration, focused offline tests, ADR-013, and durable operational boundaries.
+
+#### Security and architecture
+
+- Every tool requires an exact active human Scope approval, verified Git evidence, and an allowed DAB-3A policy decision. Human authority and workload identity remain separate; tool arguments cannot inject identity.
+- Missing/stale/edited/deleted/ambiguous evidence, invalid or revoked identity, expiry, nonce replay, idempotency conflict, rate exhaustion, kill switch, or unavailable canonical data fails closed.
+- No raw token, credential, nonce, request payload, result, arbitrary JSON, customer identity, customer database, unrestricted metadata, or general database capability is persisted.
+- No hosting, deployment, database provisioning, migration execution, OAuth configuration, credential activation, ChatGPT app/plugin installation, workspace-policy change, runtime activation, write tool, Growth Engine behavior, or customer-facing capability is included.
+
+#### Verification
+
+- Focused DAB-3B/store tests passed 31/31, and directly affected DAB-2A/2B1/2B2/3A regressions passed 140/140.
+- TypeScript checks passed for the MCP, bridge, and store packages. SQL/Drizzle parity, exact-file review, `git diff --check`, and security/forbidden-capability scans passed.
+- The full application suite, production build, live server, network OAuth flow, live GitHub collection, database, migration execution, plugin installation, and deployment remain excluded.
+
 ### DAB-3A — Pure Offline Bridge Contracts and Policy Evaluation (2026-07-13)
 
 #### Added

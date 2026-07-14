@@ -1,5 +1,35 @@
 # Session Handoff
 
+## Latest session: DAB-3B Private Read-Only Remote MCP Foundation (2026-07-13)
+
+**Status:** Implemented offline and bounded verification passed on `feature/dab3b-remote-readonly-bridge`. Not staged, committed, pushed, deployed, configured, installed, or activated.
+
+### Starting state and authorization
+
+- Started from clean synchronized `main`/`origin/main` at `c5dcd2e431297550cbd96a9eafad7479d16149c0`.
+- Operational task: [Issue #23](https://github.com/diazpmatt-cmd/AI-Edge-OS/issues/23), Task DAB-3B, specification revision 1, hash `spec_1669e3677614ef529ee7b47c4022a0ad5aa34c0064f6084c8766090bf2c822de`.
+- Matthew's attributable repository-owner authorization binds stable actor ID `256463127`, Scope, Editing, bounded Issue reporting, the branch, expected SHA, exact 22-file boundary, remote OAuth-protected Streamable HTTP architecture, verification, exclusions, and fail-closed conditions.
+- Staging, committing, pushing, pull-request creation, merging, infrastructure, migration execution, OAuth/credential configuration, deployment, plugin installation, workspace changes, activation, paid providers, writes, and DAB-3C remain unauthorized.
+
+### Implemented architecture
+
+- New isolated `@workspace/development-control-mcp` package with protected-resource metadata, sessionless Streamable HTTP JSON-RPC handling, and exactly five closed-schema read-only tools.
+- Strict caller-supplied RS256 JWT validation maps only verified claims to a DAB-3A `read_only_automation` principal. Workload identity cannot become or replace Matthew's human approval.
+- Canonical adapters read DAB-2A task/specification/approval/event records and DAB-2B2 Git evidence; every tool requires exact Scope authorization, verified Git evidence, and an allowed DAB-3A decision.
+- One additive unapplied tenant-independent request-ledger migration and repository provide atomic first-use claim, matching replay, conflict/replay rejection, bounded cleanup, and hashed-only persistence.
+- The Vercel-compatible entrypoint is intentionally inactive and reads no environment configuration. Runtime activation requires a later explicit dependency-injection and infrastructure authorization.
+
+### Verification and boundaries
+
+- Focused DAB-3B/store tests passed: 31/31 across two files.
+- Directly affected DAB-2A/2B1/2B2/3A regressions passed: 140/140 across six files.
+- TypeScript checks passed for the MCP, bridge, and store packages; SQL/Drizzle parity, `git diff --check`, exact-file, credential/environment/customer/network/write/deployment, and forbidden-capability scans passed.
+- Do not run the full application suite, production build, live MCP server, tunnel, database, migration, OAuth flow, plugin, live GitHub collection, paid service, or deployment.
+- Remaining activation prerequisites are separately authorized database provisioning/migration, OAuth provider and non-secret identifiers, credentials/public keys, Vercel project/domain/TLS/deployment, ChatGPT Work app/plugin creation/installation, workspace-admin policy, and runtime activation.
+- Post the implementation report to Issue #23 and request separate preservation authorization. Do not stage, commit, push, open a PR, merge, provision, configure, install, deploy, activate, or begin DAB-3C.
+
+---
+
 ## Latest session: DAB-3A Pure Offline Bridge Contracts (2026-07-13)
 
 **Status:** Implemented and bounded verification passed on `feature/dab3a-bridge-contracts`; not staged, committed, or pushed.

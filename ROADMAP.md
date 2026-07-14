@@ -75,10 +75,22 @@ Completed scope:
 
 DAB-3A adds no authenticated runtime, MCP server, API, UI, network, credentials, database, migration, GitHub write, Git operation, deployment, scheduler, worker, Growth Engine behavior, or customer-facing capability.
 
-Deferred bounded phases:
+### DAB-3B — Private Read-Only Remote MCP Foundation (implemented offline; activation deferred)
 
-1. **DAB-3B — Private Read-Only Bridge Runtime:** separately approved workload authentication, private hosting, transport, rate limits, kill switch, audit retention, and read-only adapters. Not implemented or approved.
-2. **Later DAB-3 write phases:** separately approved bounded claim/report behavior only after the DAB-3B security boundary is verified. No Git, deployment, credential, paid-provider, or unrestricted external-action tools.
+Completed code scope:
+
+- Isolated OAuth-protected Streamable HTTP MCP resource-server foundation with exactly five schema-bounded read-only operations.
+- Strict short-lived JWT-to-DAB-3A workload-principal mapping from explicitly supplied issuer, audience, authorized party, subject, scope, token ID, pinned public key, time, and revocation configuration.
+- Canonical read adapters for DAB-2A task/specification/approval/event records and DAB-2B2 verified Git evidence, with DAB-3A policy gating on every tool call.
+- One additive unapplied tenant-independent request-ledger migration for cross-instance replay and idempotency hashes; no raw token, request, result, customer identity, or arbitrary JSON.
+- Rate-limit and kill-switch boundaries, bounded/redacted output, inactive Vercel-compatible entrypoint, focused offline tests, and ADR-013.
+
+DAB-3B is not operational. No database is provisioned, no migration is executed, no OAuth provider or credential is configured, no server is hosted or deployed, no ChatGPT app/plugin exists or is installed, no workspace approval is recorded, and no runtime is activated.
+
+Deferred bounded phases and activation work:
+
+1. **DAB-3B activation:** separate approvals for database provisioning, migration execution, OAuth provider/configuration, credentials, Vercel project/domain/TLS/deployment, ChatGPT Work app/plugin creation and installation, workspace policy, and runtime activation.
+2. **DAB-3C and later write phases:** separately approved bounded behavior only after the read-only operational boundary is activated and verified. No Git, deployment, credential, paid-provider, or unrestricted external-action tools are implied.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.
 

@@ -23,4 +23,4 @@ Keep this file compact. Do not duplicate or contradict those documents; update t
 
 ## DAB phase boundary
 
-DAB-1 provides governance contracts and templates. DAB-2 provides canonical machine-enforced coordination, durable tenant-independent storage, and read-only GitHub evidence. DAB-3A adds pure offline bridge contracts and policy evaluation only; no authenticated runtime, MCP server, direct ChatGPT/Codex communication, or live operation exists. DAB-3B and later live phases remain deferred.
+DAB-1 provides governance contracts and templates. DAB-2 provides canonical machine-enforced coordination, durable tenant-independent storage, and read-only GitHub evidence. DAB-3A owns pure bridge contracts and policy. DAB-3B adds an isolated, offline-tested, read-only remote MCP resource-server foundation only. It must remain tenant-independent, exact-tool allowlisted, OAuth claim validated, policy gated, and fail closed. Hosting, database provisioning/migration, OAuth configuration, credentials, ChatGPT plugin installation, workspace approval, runtime activation, write operations, and DAB-3C require separate authorization.

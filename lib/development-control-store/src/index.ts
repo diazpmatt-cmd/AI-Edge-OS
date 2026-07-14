@@ -44,3 +44,4 @@ export * from "./schema";
 export * from "./mappers";
 export * from "./postgres-coordination-store";
 export * from "./github-reconciliation-repository";
+export * from "./bridge-runtime-repository";

@@ -6,6 +6,31 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### DAB-3A — Pure Offline Bridge Contracts and Policy Evaluation (2026-07-13)
+
+#### Added
+
+- Pure `@workspace/development-control-bridge` contracts for already-verified workload principals, deterministic request envelopes, immutable operation policy, bounded decisions, and credential-free fixtures.
+- An explicit 20-operation catalog and independent authorization matrix covering read-only, modeled-write, and deferred operations without executing any operation.
+- Fail-closed validation for repository, task, specification revision/hash, expected SHA, authorization category, human/workload identity, approval, Git evidence, request validity, principal expiry/revocation, nonce state, and idempotency observations.
+- ADR-012 and durable guidance distinguishing the offline policy foundation from any future authenticated runtime or direct ChatGPT/Codex communication.
+
+#### Security and architecture
+
+- DAB-2A remains canonical for task and authorization semantics; DAB-2B1 and DAB-2B2 remain untouched persistence and GitHub-evidence adapter boundaries.
+- Human approval and workload identity remain distinct. A workload cannot self-approve, and Scope, Editing, Git, deployment, credential, paid-provider, and external-action categories are never inferred from one another.
+- Policy output is deterministic, bounded, credential-safe, and stably ordered. Missing, stale, ambiguous, edited, deleted, expired, revoked, replayed, or conflicting evidence fails closed.
+- An `allowed` decision means only that offline policy evidence passed. No repository, GitHub, Git, deployment, network, database, credential, or external action executes.
+- No live MCP server, authentication transport, API, UI, hosted runtime, network, credential access, database, schema, migration, integration, scheduler, worker, Growth Engine behavior, or customer-facing capability was added.
+
+#### Verification
+
+- Focused DAB-3A tests: 66/66 passed.
+- Combined DAB-3A and directly affected DAB-2A tests: 92/92 passed across two files.
+- TypeScript checks passed for `lib/development-control-bridge` and `lib/development-control`.
+- Exact-file, diff-formatting, credential/environment, network, database/migration, customer-identity, GitHub-write, Git/deployment, live-MCP/runtime, and forbidden-scope scans passed.
+- The full application suite and production build were intentionally excluded.
+
 ### DAB-2B2 — Read-Only GitHub Reconciliation (2026-07-13)
 
 #### Added

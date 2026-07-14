@@ -23,7 +23,7 @@ Verified preservation and operational validation:
 - The pilot verified that DAB-1 is usable as a manual governance contract while exposing concrete enforcement gaps: mutable/free-form specification state, manual remote-SHA and approval matching, non-atomic claims, no independent agent identity, ambiguous coordination-action classification, implementation-oriented milestone assumptions, and durable-document drift.
 - The three failed API-server Vercel deployments remain a separate, documented, pre-existing blocker unrelated to DAB-1.
 
-DAB-1 provides contractual governance and reviewable templates only. DAB-2A supplies the pure machine-enforcement foundation, and DAB-2B1 now supplies its tenant-independent PostgreSQL persistence boundary. No hosted coordination service, GitHub reconciliation, or direct ChatGPT/Codex communication exists.
+DAB-1 provides contractual governance and reviewable templates. DAB-2A supplies the pure machine-enforcement foundation, DAB-2B1 supplies its tenant-independent PostgreSQL persistence boundary, and DAB-2B2 supplies read-only GitHub evidence reconciliation. No hosted coordination service or direct ChatGPT/Codex communication exists.
 
 ### DAB-2A — Pure Coordination Contracts and State Machine (implemented and verified)
 
@@ -63,9 +63,22 @@ Completed scope:
 
 DAB-2B2 adds no installed GitHub integration, webhook, App, Action, scheduler, worker, hosted runtime, API, UI, MCP, GitHub write, automatic DAB mutation, database provisioning, or live migration execution.
 
-Deferred bounded phase:
+### DAB-3A — Pure Offline Bridge Contracts and Policy Evaluation (implemented and verified)
 
-1. **DAB-3 — Bounded MCP Interface:** authenticated, allowlisted ChatGPT/Codex access to approved coordination operations. No unrestricted shell, filesystem, database, network, credential, Git, deployment, paid-provider, or external-action tools. Not implemented or approved for implementation.
+Completed scope:
+
+- A pure `@workspace/development-control-bridge` package that imports only the canonical DAB-2A contracts and leaves DAB-2B1 persistence and DAB-2B2 GitHub evidence as untouched future adapter boundaries.
+- Bounded already-verified workload principals, deterministic fifteen-minute request envelopes, immutable operation allowlists, and an exported per-operation authorization matrix.
+- Pure fail-closed policy evaluation for repository/task/revision/hash/SHA/category/identity/evidence/time/nonce/idempotency bindings, with stable bounded decisions and reason codes.
+- Explicit `read_only`, `modeled_write`, and `deferred` operation classifications. Offline `allowed` decisions never represent execution.
+- Credential-free fixtures and 66 focused tests; combined DAB-3A/DAB-2A regression coverage is 92/92 with both package TypeScript checks passing.
+
+DAB-3A adds no authenticated runtime, MCP server, API, UI, network, credentials, database, migration, GitHub write, Git operation, deployment, scheduler, worker, Growth Engine behavior, or customer-facing capability.
+
+Deferred bounded phases:
+
+1. **DAB-3B — Private Read-Only Bridge Runtime:** separately approved workload authentication, private hosting, transport, rate limits, kill switch, audit retention, and read-only adapters. Not implemented or approved.
+2. **Later DAB-3 write phases:** separately approved bounded claim/report behavior only after the DAB-3B security boundary is verified. No Git, deployment, credential, paid-provider, or unrestricted external-action tools.
 
 No live task-ledger file, database, migration, schema, API, UI, scheduler, webhook, GitHub Action, MCP server, project MCP configuration, integration, port, credential, runtime, Growth Engine behavior, or customer-facing capability was added in DAB-1.
 
@@ -90,7 +103,7 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 
 ### Completed architecture audit
 
-- **AI Edge Development Agent Bridge Feasibility Audit** — completed read-only after C8R-5 merged. It recommended the staged GitHub contract → durable ledger → bounded MCP architecture recorded above. Only DAB-1 governance contracts are now implemented; the direct bridge is not operational.
+- **AI Edge Development Agent Bridge Feasibility Audit** — completed read-only after C8R-5 merged. It recommended the staged GitHub contract → durable ledger → bounded bridge architecture recorded above. DAB-1, DAB-2A, DAB-2B1, DAB-2B2, and the pure offline DAB-3A policy foundation are implemented; the direct bridge remains non-operational.
 
 ### Preserved Google Local and AI Visibility priority order
 

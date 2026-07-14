@@ -1,0 +1,9 @@
+{
+  "name": "@workspace/development-control-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": { "@workspace/development-control": "workspace:*" }
+}

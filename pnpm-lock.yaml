@@ -854,6 +854,12 @@ importers:
 
   lib/development-control: {}
 
+  lib/development-control-bridge:
+    dependencies:
+      '@workspace/development-control':
+        specifier: workspace:*
+        version: link:../development-control
+
   lib/development-control-github:
     dependencies:
       '@workspace/development-control':

@@ -172,6 +172,9 @@ importers:
       '@workspace/development-control-store':
         specifier: workspace:*
         version: link:../../lib/development-control-store
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

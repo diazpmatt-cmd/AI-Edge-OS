@@ -24,3 +24,4 @@ export * from "./service-registry";
 export * from "./discovery";
 export * from "./discovery-schedules";
 export * from "./platform-deliveries";
+export * from "./agent-tasks";

@@ -30,6 +30,7 @@ import adminAssetsRouter from "./admin-assets";
 import apollosRouter from "./apollos";
 import discoveryRunRouter from "./discovery-run";
 import discoveryInspectRouter from "./discovery-inspect";
+import agentTasksRouter from "./agent-tasks";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(adminAssetsRouter);
 router.use(apollosRouter);
 router.use(discoveryRunRouter);
 router.use(discoveryInspectRouter);
+router.use(agentTasksRouter);
 
 export default router;

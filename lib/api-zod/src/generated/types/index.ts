@@ -6,6 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './agentTask';
+export * from './agentTaskListResponse';
+export * from './agentTaskRejectRequest';
+export * from './agentTaskSubmit';
+export * from './agentTaskSubmitPayload';
 export * from './articleAsset';
 export * from './articleAssetsBulkInput';
 export * from './articleAssetsBulkInputAssetsItem';
@@ -28,6 +33,7 @@ export * from './keywordGenInput';
 export * from './keywordGenResult';
 export * from './keywordsBulkInput';
 export * from './keywordsBulkInputItemsItem';
+export * from './listAgentTasksParams';
 export * from './repurposeInput';
 export * from './repurposeResult';
 export * from './repurposeResultAssetsItem';

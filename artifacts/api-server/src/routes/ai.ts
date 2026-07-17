@@ -18,7 +18,7 @@ function getAiModel() {
     baseURL,
     headers: { Authorization: `Bearer ${key}` },
   });
-  return gw(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
+  return gw(process.env.OPENAI_MODEL ?? "gpt-5-mini");
 }
 
 router.post("/ai/keywords", async (req, res) => {

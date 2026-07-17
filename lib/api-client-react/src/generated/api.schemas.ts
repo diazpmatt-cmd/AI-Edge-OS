@@ -5,6 +5,70 @@
  * AI Edge Solutions API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Task-specific parameters (structure varies by taskType)
+ */
+export type AgentTaskSubmitPayload = { [key: string]: unknown };
+
+export interface AgentTaskSubmit {
+  /** Task type identifier. Known types: generate_content, schedule_post, publish_post, update_auto_content_settings, update_client_settings, pause_autopilot, resume_autopilot.
+   */
+  taskType: string;
+  /** Task-specific parameters (structure varies by taskType) */
+  payload?: AgentTaskSubmitPayload;
+}
+
+export interface AgentTask {
+  id: string;
+  userId: string;
+  taskType: string;
+  /** JSON-encoded task parameters */
+  payload: string;
+  /** pending_review | approved | rejected | executed | failed */
+  status: string;
+  /**
+     * Immutable engine evaluation: auto_approved | requires_review | rejected
+     * @nullable
+     */
+  decision?: string | null;
+  /**
+     * Clerk userId of human approver, or 'system' for engine decisions
+     * @nullable
+     */
+  decisionBy?: string | null;
+  /** @nullable */
+  decisionAt?: string | null;
+  /**
+     * Optional rejection reason from human reviewer
+     * @nullable
+     */
+  decisionNote?: string | null;
+  /**
+     * Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status.
+     *
+     * @nullable
+     */
+  resolution?: string | null;
+  /**
+     * Identifier of the rule that fired in the approval engine
+     * @nullable
+     */
+  ruleId?: string | null;
+  /** Version of the rule set applied (e.g. v1) */
+  ruleSetVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentTaskListResponse {
+  tasks: AgentTask[];
+}
+
+export interface AgentTaskRejectRequest {
+  /** Optional human-readable reason for rejection */
+  note?: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -242,5 +306,12 @@ provider?: string;
  * @maximum 500
  */
 limit?: number;
+};
+
+export type ListAgentTasksParams = {
+/**
+ * Filter by task status (pending_review, approved, rejected, executed, failed)
+ */
+status?: string;
 };
 

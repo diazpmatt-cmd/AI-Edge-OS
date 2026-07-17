@@ -387,3 +387,120 @@ export const GenerateContentPackageResponse = zod.object({
 })
 
 
+/**
+ * Submits a task to the deterministic approval engine. Low-risk tasks (generate_content, schedule_post with valid payloads) are auto-approved immediately. High-stakes tasks (publish_post, update_* settings, pause/resume autopilot) are placed in pending_review for human decision. Invalid task types or malformed payloads are rejected.
+
+ * @summary Submit a task for approval
+ */
+export const SubmitAgentTaskBody = zod.object({
+  "taskType": zod.string().describe('Task type identifier. Known types: generate_content, schedule_post, publish_post, update_auto_content_settings, update_client_settings, pause_autopilot, resume_autopilot.\n'),
+  "payload": zod.record(zod.string(), zod.unknown()).optional().describe('Task-specific parameters (structure varies by taskType)')
+})
+
+
+/**
+ * @summary List agent tasks for the authenticated user
+ */
+export const ListAgentTasksQueryParams = zod.object({
+  "status": zod.coerce.string().optional().describe('Filter by task status (pending_review, approved, rejected, executed, failed)')
+})
+
+export const ListAgentTasksResponse = zod.object({
+  "tasks": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string(),
+  "taskType": zod.string(),
+  "payload": zod.string().describe('JSON-encoded task parameters'),
+  "status": zod.string().describe('pending_review | approved | rejected | executed | failed'),
+  "decision": zod.string().nullish().describe('Immutable engine evaluation: auto_approved | requires_review | rejected'),
+  "decisionBy": zod.string().nullish().describe('Clerk userId of human approver, or \'system\' for engine decisions'),
+  "decisionAt": zod.coerce.date().nullish(),
+  "decisionNote": zod.string().nullish().describe('Optional rejection reason from human reviewer'),
+  "resolution": zod.string().nullish().describe("Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status."),
+  "ruleId": zod.string().nullish().describe('Identifier of the rule that fired in the approval engine'),
+  "ruleSetVersion": zod.string().describe('Version of the rule set applied (e.g. v1)'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get a single agent task
+ */
+export const GetAgentTaskParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetAgentTaskResponse = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string(),
+  "taskType": zod.string(),
+  "payload": zod.string().describe('JSON-encoded task parameters'),
+  "status": zod.string().describe('pending_review | approved | rejected | executed | failed'),
+  "decision": zod.string().nullish().describe('Immutable engine evaluation: auto_approved | requires_review | rejected'),
+  "decisionBy": zod.string().nullish().describe('Clerk userId of human approver, or \'system\' for engine decisions'),
+  "decisionAt": zod.coerce.date().nullish(),
+  "decisionNote": zod.string().nullish().describe('Optional rejection reason from human reviewer'),
+  "resolution": zod.string().nullish().describe("Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status."),
+  "ruleId": zod.string().nullish().describe('Identifier of the rule that fired in the approval engine'),
+  "ruleSetVersion": zod.string().describe('Version of the rule set applied (e.g. v1)'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Approve a pending_review task
+ */
+export const ApproveAgentTaskParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ApproveAgentTaskResponse = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string(),
+  "taskType": zod.string(),
+  "payload": zod.string().describe('JSON-encoded task parameters'),
+  "status": zod.string().describe('pending_review | approved | rejected | executed | failed'),
+  "decision": zod.string().nullish().describe('Immutable engine evaluation: auto_approved | requires_review | rejected'),
+  "decisionBy": zod.string().nullish().describe('Clerk userId of human approver, or \'system\' for engine decisions'),
+  "decisionAt": zod.coerce.date().nullish(),
+  "decisionNote": zod.string().nullish().describe('Optional rejection reason from human reviewer'),
+  "resolution": zod.string().nullish().describe("Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status."),
+  "ruleId": zod.string().nullish().describe('Identifier of the rule that fired in the approval engine'),
+  "ruleSetVersion": zod.string().describe('Version of the rule set applied (e.g. v1)'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reject a pending_review task
+ */
+export const RejectAgentTaskParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RejectAgentTaskBody = zod.object({
+  "note": zod.string().optional().describe('Optional human-readable reason for rejection')
+})
+
+export const RejectAgentTaskResponse = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string(),
+  "taskType": zod.string(),
+  "payload": zod.string().describe('JSON-encoded task parameters'),
+  "status": zod.string().describe('pending_review | approved | rejected | executed | failed'),
+  "decision": zod.string().nullish().describe('Immutable engine evaluation: auto_approved | requires_review | rejected'),
+  "decisionBy": zod.string().nullish().describe('Clerk userId of human approver, or \'system\' for engine decisions'),
+  "decisionAt": zod.coerce.date().nullish(),
+  "decisionNote": zod.string().nullish().describe('Optional rejection reason from human reviewer'),
+  "resolution": zod.string().nullish().describe("Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status."),
+  "ruleId": zod.string().nullish().describe('Identifier of the rule that fired in the approval engine'),
+  "ruleSetVersion": zod.string().describe('Version of the rule set applied (e.g. v1)'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+

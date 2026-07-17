@@ -21,6 +21,8 @@ tags:
     description: Content package management
   - name: content-assets
     description: Content asset management
+  - name: agent-tasks
+    description: Bounded autonomy approval layer — submit and review agent task requests
 paths:
   /diagnostics/health-history:
     get:
@@ -359,8 +361,215 @@ paths:
               schema:
                 $ref: "#/components/schemas/RepurposeResult"
 
+  /agent-tasks:
+    post:
+      operationId: submitAgentTask
+      tags: [agent-tasks]
+      summary: Submit a task for approval
+      description: >
+        Submits a task to the deterministic approval engine. Low-risk tasks
+        (generate_content, schedule_post with valid payloads) are auto-approved
+        immediately. High-stakes tasks (publish_post, update_* settings, pause/resume
+        autopilot) are placed in pending_review for human decision. Invalid task
+        types or malformed payloads are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentTaskSubmit"
+      responses:
+        "201":
+          description: Task created with engine decision applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTask"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Unauthorized
+    get:
+      operationId: listAgentTasks
+      tags: [agent-tasks]
+      summary: List agent tasks for the authenticated user
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by task status (pending_review, approved, rejected, executed, failed)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of agent tasks newest-first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTaskListResponse"
+        "401":
+          description: Unauthorized
+
+  /agent-tasks/{id}:
+    get:
+      operationId: getAgentTask
+      tags: [agent-tasks]
+      summary: Get a single agent task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The agent task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTask"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+
+  /agent-tasks/{id}/approve:
+    post:
+      operationId: approveAgentTask
+      tags: [agent-tasks]
+      summary: Approve a pending_review task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTask"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+        "409":
+          description: Task is not in pending_review status
+
+  /agent-tasks/{id}/reject:
+    post:
+      operationId: rejectAgentTask
+      tags: [agent-tasks]
+      summary: Reject a pending_review task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentTaskRejectRequest"
+      responses:
+        "200":
+          description: Task rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTask"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+        "409":
+          description: Task is not in pending_review status
+
 components:
   schemas:
+    AgentTaskSubmit:
+      type: object
+      required: [taskType]
+      properties:
+        taskType:
+          type: string
+          description: >
+            Task type identifier. Known types: generate_content, schedule_post,
+            publish_post, update_auto_content_settings, update_client_settings,
+            pause_autopilot, resume_autopilot.
+        payload:
+          type: object
+          additionalProperties: true
+          description: Task-specific parameters (structure varies by taskType)
+
+    AgentTask:
+      type: object
+      required: [id, userId, taskType, payload, status, ruleSetVersion, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        taskType:
+          type: string
+        payload:
+          type: string
+          description: JSON-encoded task parameters
+        status:
+          type: string
+          description: "pending_review | approved | rejected | executed | failed"
+        decision:
+          type: ["string", "null"]
+          description: "Immutable engine evaluation: auto_approved | requires_review | rejected"
+        resolution:
+          type: ["string", "null"]
+          description: >
+            Terminal outcome: 'approved' or 'rejected'. Null while status is
+            pending_review. Set at creation for auto-decided tasks; set when a
+            human acts on requires_review tasks. Always consistent with status.
+        decisionBy:
+          type: ["string", "null"]
+          description: Clerk userId of human approver, or 'system' for engine decisions
+        decisionAt:
+          type: ["string", "null"]
+          format: date-time
+        decisionNote:
+          type: ["string", "null"]
+          description: Optional rejection reason from human reviewer
+        ruleId:
+          type: ["string", "null"]
+          description: Identifier of the rule that fired in the approval engine
+        ruleSetVersion:
+          type: string
+          description: Version of the rule set applied (e.g. v1)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AgentTaskListResponse:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentTask"
+
+    AgentTaskRejectRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          description: Optional human-readable reason for rejection
+
     HealthStatus:
       type: object
       required: [status]

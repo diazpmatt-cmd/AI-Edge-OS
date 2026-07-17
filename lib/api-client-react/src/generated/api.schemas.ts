@@ -27,7 +27,7 @@ export interface AgentTask {
   /** pending_review | approved | rejected | executed | failed */
   status: string;
   /**
-     * Engine decision: auto_approved | requires_review | rejected
+     * Immutable engine evaluation: auto_approved | requires_review | rejected
      * @nullable
      */
   decision?: string | null;
@@ -43,6 +43,12 @@ export interface AgentTask {
      * @nullable
      */
   decisionNote?: string | null;
+  /**
+     * Terminal outcome: 'approved' or 'rejected'. Null while status is pending_review. Set at creation for auto-decided tasks; set when a human acts on requires_review tasks. Always consistent with status.
+     *
+     * @nullable
+     */
+  resolution?: string | null;
   /**
      * Identifier of the rule that fired in the approval engine
      * @nullable

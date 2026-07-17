@@ -1,44 +1,100 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db, pool } from "@workspace/db";
+import { db } from "@workspace/db";
 import { agentTasksTable } from "@workspace/db/schema";
+import type { AgentTask } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 
-// ── Table bootstrap ───────────────────────────────────────────────────────────
-// drizzle-kit push is blocked by a pre-existing constraint conflict in this DB,
-// so we bootstrap agent_tasks via pool.query on startup.
-(async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS agent_tasks (
-        id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id          TEXT        NOT NULL,
-        task_type        TEXT        NOT NULL,
-        payload          TEXT        NOT NULL DEFAULT '{}',
-        status           TEXT        NOT NULL DEFAULT 'pending_review',
-        decision         TEXT,
-        decision_by      TEXT,
-        decision_at      TIMESTAMPTZ,
-        decision_note    TEXT,
-        rule_id          TEXT,
-        rule_set_version TEXT        NOT NULL DEFAULT 'v1',
-        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_agent_tasks_user_created
-        ON agent_tasks(user_id, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_agent_tasks_user_status
-        ON agent_tasks(user_id, status);
-    `);
-    console.log("[AGENT-TASKS] Table and indexes ready");
-  } catch (err) {
-    console.error("[AGENT-TASKS] Bootstrap failed:", err);
-  }
-})();
-
 const router = Router();
+
+// ── Atomic helpers ─────────────────────────────────────────────────────────────
+//
+// Both approve and reject use a single conditional UPDATE whose WHERE clause
+// enforces three invariants atomically at the DB level:
+//   1. id matches the requested task
+//   2. user_id matches the authenticated caller (tenant isolation)
+//   3. status is pending_review (prevents double-processing)
+//
+// If the UPDATE touches 0 rows, a read-only probe on (id, user_id) safely
+// distinguishes "task not found" (404) from "task already processed" (409).
+// Exported for unit testing.
+
+type ApproveResult =
+  | { task: AgentTask }
+  | { notFound: true }
+  | { conflict: string };
+
+export async function atomicApprove(
+  taskId: string,
+  userId: string,
+): Promise<ApproveResult> {
+  const [updated] = await db
+    .update(agentTasksTable)
+    .set({
+      status:     "approved",
+      resolution: "approved",
+      decisionBy: userId,
+      decisionAt: new Date(),
+    })
+    .where(
+      and(
+        eq(agentTasksTable.id, taskId),
+        eq(agentTasksTable.userId, userId),
+        eq(agentTasksTable.status, "pending_review"),
+      ),
+    )
+    .returning();
+
+  if (updated) return { task: updated };
+
+  const [probe] = await db
+    .select({ id: agentTasksTable.id, status: agentTasksTable.status })
+    .from(agentTasksTable)
+    .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
+
+  if (!probe) return { notFound: true };
+  return { conflict: probe.status };
+}
+
+type RejectResult =
+  | { task: AgentTask }
+  | { notFound: true }
+  | { conflict: string };
+
+export async function atomicReject(
+  taskId: string,
+  userId: string,
+  note: string | null,
+): Promise<RejectResult> {
+  const [updated] = await db
+    .update(agentTasksTable)
+    .set({
+      status:       "rejected",
+      resolution:   "rejected",
+      decisionBy:   userId,
+      decisionAt:   new Date(),
+      decisionNote: note,
+    })
+    .where(
+      and(
+        eq(agentTasksTable.id, taskId),
+        eq(agentTasksTable.userId, userId),
+        eq(agentTasksTable.status, "pending_review"),
+      ),
+    )
+    .returning();
+
+  if (updated) return { task: updated };
+
+  const [probe] = await db
+    .select({ id: agentTasksTable.id, status: agentTasksTable.status })
+    .from(agentTasksTable)
+    .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
+
+  if (!probe) return { notFound: true };
+  return { conflict: probe.status };
+}
 
 // ── POST /agent-tasks — submit a task for approval ────────────────────────────
 router.post("/agent-tasks", async (req, res) => {
@@ -54,7 +110,6 @@ router.post("/agent-tasks", async (req, res) => {
     return res.status(400).json({ error: "taskType is required and must be a non-empty string" });
   }
 
-  // payload may arrive as an already-parsed object (JSON middleware) or a string
   let parsedPayload: unknown = rawPayload ?? {};
   if (typeof rawPayload === "string") {
     try {
@@ -66,21 +121,28 @@ router.post("/agent-tasks", async (req, res) => {
 
   const result = evaluateTask(taskType, parsedPayload);
 
-  // Determine initial status from engine decision
   const status =
     result.decision === "auto_approved" ? "approved" :
     result.decision === "rejected"      ? "rejected" :
     "pending_review";
 
-  const decisionBy   = result.decision !== "requires_review" ? "system" : null;
-  const decisionAt   = result.decision !== "requires_review" ? new Date() : null;
+  // resolution is the terminal outcome. For auto-decided tasks it is set
+  // immediately; for requires_review tasks it remains null until a human acts.
+  const resolution: string | null =
+    result.decision === "auto_approved" ? "approved" :
+    result.decision === "rejected"      ? "rejected" :
+    null;
+
+  const decisionBy = result.decision !== "requires_review" ? "system" : null;
+  const decisionAt = result.decision !== "requires_review" ? new Date()  : null;
 
   const [inserted] = await db.insert(agentTasksTable).values({
     userId,
-    taskType: taskType.trim(),
-    payload:  JSON.stringify(parsedPayload),
+    taskType:        taskType.trim(),
+    payload:         JSON.stringify(parsedPayload),
     status,
     decision:        result.decision,
+    resolution,
     decisionBy,
     decisionAt,
     decisionNote:    null,
@@ -131,29 +193,17 @@ router.post("/agent-tasks/:id/approve", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const [existing] = await db
-    .select()
-    .from(agentTasksTable)
-    .where(and(eq(agentTasksTable.id, req.params.id), eq(agentTasksTable.userId, userId)));
+  const result = await atomicApprove(req.params.id, userId);
 
-  if (!existing) return res.status(404).json({ error: "Task not found" });
-  if (existing.status !== "pending_review") {
+  if ("notFound" in result) {
+    return res.status(404).json({ error: "Task not found" });
+  }
+  if ("conflict" in result) {
     return res.status(409).json({
-      error: `Cannot approve a task with status "${existing.status}". Only pending_review tasks can be approved.`,
+      error: `Cannot approve a task with status "${result.conflict}". Only pending_review tasks can be approved.`,
     });
   }
-
-  const [updated] = await db
-    .update(agentTasksTable)
-    .set({
-      status:     "approved",
-      decisionBy: userId,
-      decisionAt: new Date(),
-    })
-    .where(eq(agentTasksTable.id, req.params.id))
-    .returning();
-
-  return res.json(updated);
+  return res.json(result.task);
 });
 
 // ── POST /agent-tasks/:id/reject — human rejects a pending task ───────────────
@@ -161,32 +211,20 @@ router.post("/agent-tasks/:id/reject", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const [existing] = await db
-    .select()
-    .from(agentTasksTable)
-    .where(and(eq(agentTasksTable.id, req.params.id), eq(agentTasksTable.userId, userId)));
+  const { note } = req.body as { note?: string };
+  const parsedNote = typeof note === "string" ? note.trim() || null : null;
 
-  if (!existing) return res.status(404).json({ error: "Task not found" });
-  if (existing.status !== "pending_review") {
+  const result = await atomicReject(req.params.id, userId, parsedNote);
+
+  if ("notFound" in result) {
+    return res.status(404).json({ error: "Task not found" });
+  }
+  if ("conflict" in result) {
     return res.status(409).json({
-      error: `Cannot reject a task with status "${existing.status}". Only pending_review tasks can be rejected.`,
+      error: `Cannot reject a task with status "${result.conflict}". Only pending_review tasks can be rejected.`,
     });
   }
-
-  const { note } = req.body as { note?: string };
-
-  const [updated] = await db
-    .update(agentTasksTable)
-    .set({
-      status:       "rejected",
-      decisionBy:   userId,
-      decisionAt:   new Date(),
-      decisionNote: typeof note === "string" ? note.trim() || null : null,
-    })
-    .where(eq(agentTasksTable.id, req.params.id))
-    .returning();
-
-  return res.json(updated);
+  return res.json(result.task);
 });
 
 export default router;

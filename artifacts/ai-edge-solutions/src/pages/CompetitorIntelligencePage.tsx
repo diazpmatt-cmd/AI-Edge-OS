@@ -807,9 +807,11 @@ function OverviewTab({
   summary: SummaryData;
   apiFetch: ReturnType<typeof useApiFetch>;
 }) {
+  const [selectedCompetitor, setSelectedCompetitor] = useState<string | null>(null);
+
   const { data: gaps }  = useQuery<GapsData>({
     queryKey: ["ci-gaps"],
-    queryFn:  () => apiFetch("/api/competitor-intelligence/gaps?limit=5"),
+    queryFn:  () => apiFetch("/api/competitor-intelligence/gaps?limit=100"),
   });
   const { data: opps } = useQuery<OpportunitiesData>({
     queryKey: ["ci-opportunities"],
@@ -912,107 +914,160 @@ function OverviewTab({
         </div>
       )}
 
-      {/* Top 5 gaps preview */}
+      {/* Top gaps preview with competitor filter */}
       <div>
         <SectionHeader emoji="🎯" title="Top Keyword Gaps" sub="Keywords your competitors rank for — you don't" />
         {!gaps?.hasData || !gaps.gaps.length ? (
           <div style={{ fontSize: 11, color: "rgba(148,163,184,0.45)", padding: "16px 0" }}>
             No gaps found yet. Run a discovery scan to detect competitor keyword gaps.
           </div>
-        ) : (
-          <>
-          <div style={{
-            background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
-            borderRadius: 12, overflow: "hidden",
-          }}>
-            {gaps.gaps.slice(0, 5).map((g, i) => (
-              <div key={g.id} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 14px",
-                borderBottom: i < 4 ? `1px solid rgba(139,92,246,0.07)` : "none",
-              }}>
-                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.3)", width: 16, flexShrink: 0 }}>
-                  {i + 1}
+        ) : (() => {
+          const namedGaps = gaps.gaps.filter(g => g.competitorName != null);
+          const competitorNames = Array.from(new Set(namedGaps.map(g => g.competitorName as string))).sort();
+          const filteredGaps = selectedCompetitor
+            ? gaps.gaps.filter(g => g.competitorName === selectedCompetitor)
+            : gaps.gaps.slice(0, 5);
+          const isFiltered = selectedCompetitor !== null;
+
+          return (
+            <>
+            {/* Competitor filter chips */}
+            {competitorNames.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.4)", letterSpacing: "0.4px", marginRight: 2 }}>
+                  FILTER BY:
                 </span>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0", minWidth: 0 }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    {g.keyword}
-                    <a
-                      href={`https://www.google.com/search?q=${encodeURIComponent(g.keyword)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`Search Google for "${g.keyword}"`}
-                      style={{ color: "rgba(148,163,184,0.35)", lineHeight: 1, flexShrink: 0, textDecoration: "none" }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = ACCENT; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(148,163,184,0.35)"; }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M8 1h3v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M5 7L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                      </svg>
-                    </a>
-                    {g.status === "baseline" ? (
+                <button
+                  onClick={() => setSelectedCompetitor(null)}
+                  style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.3px",
+                    padding: "4px 10px", borderRadius: 16, cursor: "pointer",
+                    background: !isFiltered ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${!isFiltered ? ACCENT_BORDER : "rgba(255,255,255,0.08)"}`,
+                    color: !isFiltered ? ACCENT : "rgba(148,163,184,0.55)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  All
+                </button>
+                {competitorNames.map(name => (
+                  <button
+                    key={name}
+                    onClick={() => setSelectedCompetitor(selectedCompetitor === name ? null : name)}
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: "0.3px",
+                      padding: "4px 10px", borderRadius: 16, cursor: "pointer",
+                      background: selectedCompetitor === name ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${selectedCompetitor === name ? ACCENT_BORDER : "rgba(255,255,255,0.08)"}`,
+                      color: selectedCompetitor === name ? ACCENT : "rgba(148,163,184,0.55)",
+                      transition: "all 0.15s",
+                      maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}
+                    title={name}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{
+              background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+              borderRadius: 12, overflow: "hidden",
+            }}>
+              {filteredGaps.length === 0 ? (
+                <div style={{ padding: "24px 16px", textAlign: "center", color: "rgba(148,163,184,0.4)", fontSize: 12 }}>
+                  No keyword gaps found for this competitor.
+                </div>
+              ) : filteredGaps.map((g, i) => (
+                <div key={g.id} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 14px",
+                  borderBottom: i < filteredGaps.length - 1 ? `1px solid rgba(139,92,246,0.07)` : "none",
+                }}>
+                  <span style={{ fontSize: 11, color: "rgba(148,163,184,0.3)", width: 16, flexShrink: 0 }}>
+                    {i + 1}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0", minWidth: 0 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      {g.keyword}
+                      <a
+                        href={`https://www.google.com/search?q=${encodeURIComponent(g.keyword)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Search Google for "${g.keyword}"`}
+                        style={{ color: "rgba(148,163,184,0.35)", lineHeight: 1, flexShrink: 0, textDecoration: "none" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = ACCENT; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(148,163,184,0.35)"; }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M8 1h3v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M5 7L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                      </a>
+                      {g.status === "baseline" ? (
+                        <span style={{
+                          fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
+                          background: "rgba(139,92,246,0.12)", color: "#A78BFA",
+                          border: "1px solid rgba(139,92,246,0.25)", letterSpacing: "0.4px",
+                          flexShrink: 0,
+                        }}>
+                          BASELINE
+                        </span>
+                      ) : g.status === "new" && (
+                        <span style={{
+                          fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
+                          background: "rgba(34,197,94,0.15)", color: "#22C55E",
+                          border: "1px solid rgba(34,197,94,0.3)", letterSpacing: "0.4px",
+                          flexShrink: 0,
+                        }}>
+                          NEW
+                        </span>
+                      )}
+                    </span>
+                    {!isFiltered && g.competitorName && (
                       <span style={{
-                        fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
-                        background: "rgba(139,92,246,0.12)", color: "#A78BFA",
-                        border: "1px solid rgba(139,92,246,0.25)", letterSpacing: "0.4px",
-                        flexShrink: 0,
-                      }}>
-                        BASELINE
-                      </span>
-                    ) : g.status === "new" && (
-                      <span style={{
-                        fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
-                        background: "rgba(34,197,94,0.15)", color: "#22C55E",
-                        border: "1px solid rgba(34,197,94,0.3)", letterSpacing: "0.4px",
-                        flexShrink: 0,
-                      }}>
-                        NEW
+                        display: "block", fontSize: 10, fontWeight: 500,
+                        color: "rgba(148,163,184,0.55)", marginTop: 1,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}
+                        title={g.competitorName}
+                      >
+                        {g.competitorName}
                       </span>
                     )}
                   </span>
-                  {g.competitorName && (
-                    <span style={{
-                      display: "block", fontSize: 10, fontWeight: 500,
-                      color: "rgba(148,163,184,0.55)", marginTop: 1,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    }}
-                      title={g.competitorName}
-                    >
-                      {g.competitorName}
+                  {g.volumeEstimate != null && (
+                    <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 700, flexShrink: 0 }}>
+                      {g.volumeEstimate >= 1000 ? `${(g.volumeEstimate / 1000).toFixed(1)}k` : g.volumeEstimate}/mo
                     </span>
                   )}
-                </span>
-                {g.volumeEstimate != null && (
-                  <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 700, flexShrink: 0 }}>
-                    {g.volumeEstimate >= 1000 ? `${(g.volumeEstimate / 1000).toFixed(1)}k` : g.volumeEstimate}/mo
-                  </span>
-                )}
-                {g.competitorRank != null && (
-                  <span style={{
-                    fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
-                    background: `rgba(139,92,246,0.12)`, color: ACCENT,
-                    border: `1px solid rgba(139,92,246,0.25)`, flexShrink: 0,
-                  }}>
-                    #{g.competitorRank}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          {gaps.isBaseline && (
-            <div style={{
-              marginTop: 8, fontSize: 10, color: "rgba(167,139,250,0.7)",
-              background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)",
-              borderRadius: 8, padding: "6px 10px",
-            }}>
-              ⓘ First scan — gaps show BASELINE labels. NEW vs. RETURNING will appear after the next scan.
+                  {g.competitorRank != null && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                      background: `rgba(139,92,246,0.12)`, color: ACCENT,
+                      border: `1px solid rgba(139,92,246,0.25)`, flexShrink: 0,
+                    }}>
+                      #{g.competitorRank}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
-          </>
-        )}
+            {gaps.isBaseline && (
+              <div style={{
+                marginTop: 8, fontSize: 10, color: "rgba(167,139,250,0.7)",
+                background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)",
+                borderRadius: 8, padding: "6px 10px",
+              }}>
+                ⓘ First scan — gaps show BASELINE labels. NEW vs. RETURNING will appear after the next scan.
+              </div>
+            )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Top 3 opportunities preview */}

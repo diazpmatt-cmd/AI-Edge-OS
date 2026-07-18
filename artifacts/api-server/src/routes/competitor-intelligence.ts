@@ -434,4 +434,54 @@ router.get("/api/competitor-intelligence/history", async (req, res) => {
   }
 });
 
+// ── POST /api/admin/competitor-intelligence/backfill-competitor-names ─────────
+/**
+ * One-time (idempotent) backfill that patches raw_provider_data with a
+ * `competitorName` field derived from `organicResults[0].domain` for any
+ * discovery_signals row belonging to the authenticated user's client that:
+ *   - has competitor_rank IS NOT NULL  (marked as a gap)
+ *   - has no raw_provider_data->>'competitorName'  (pre-dates the feature)
+ *   - has raw_provider_data->'organicResults'->0->>'domain' available
+ *
+ * Scope is always limited to the caller's own resolved client — no arbitrary
+ * client targeting is permitted. Safe to run multiple times (idempotent).
+ *
+ * Auth: Clerk session + resolvable client required.
+ */
+router.post("/api/admin/competitor-intelligence/backfill-competitor-names", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  try {
+    const result = await pool.query<{ id: string }>(
+      `UPDATE discovery_signals
+       SET raw_provider_data = raw_provider_data
+         || jsonb_build_object('competitorName',
+              raw_provider_data->'organicResults'->0->>'domain')
+       WHERE client_id = $1
+         AND competitor_rank IS NOT NULL
+         AND (raw_provider_data->>'competitorName' IS NULL
+              OR raw_provider_data->>'competitorName' = '')
+         AND raw_provider_data->'organicResults'->0->>'domain' IS NOT NULL
+       RETURNING id`,
+      [client.id],
+    );
+
+    res.json({
+      ok: true,
+      rowsPatched: result.rowCount ?? 0,
+      clientId: client.id,
+      message: `Backfill complete. ${result.rowCount ?? 0} signal(s) updated with competitorName from organicResults[0].domain.`,
+    });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ ok: false, rowsPatched: 0, reason: "tables_not_initialized" });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "db_error", message: msg });
+  }
+});
+
 export default router;

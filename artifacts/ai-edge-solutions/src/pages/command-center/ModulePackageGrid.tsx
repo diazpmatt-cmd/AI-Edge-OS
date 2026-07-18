@@ -100,9 +100,8 @@ const SECTIONS: SectionDef[] = [
     name: "Competitor Intelligence",
     tagline: "Market intelligence and competitive positioning",
     accentColor: "#8B5CF6",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "🕵️", label: "Competitor Intel",  sub: "Market analysis",  family: "competitor",  comingSoon: true },
+      { to: "/admin/competitor-intelligence", icon: "🕵️", label: "Competitor Intel", sub: "Keyword gap analysis", family: "competitor" },
     ],
   },
   {

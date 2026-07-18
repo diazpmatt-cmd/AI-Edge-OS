@@ -1,0 +1,835 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { AppShell } from "@/components/app-shell";
+import { useApiFetch } from "@/lib/api";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface SummaryData {
+  hasData: boolean;
+  clientId: string;
+  latestRun?: {
+    runId: string; weekLabel: string; status: string;
+    signalsReceived: number; signalsAccepted: number;
+    clusterCount: number; opportunityCount: number;
+    highPriorityCount: number; topOpportunityScore: number;
+    runDurationMs: number; createdAt: string; completedAt: string | null;
+  };
+  competitorGapCount: number;
+  highVolumeGapCount: number;
+  totalRuns: number;
+}
+
+interface GapSignal {
+  id: string; keyword: string; rawKeyword: string;
+  signalType: string; source: string; intent: string;
+  volumeEstimate: number | null; difficultyScore: number | null;
+  competitorRank: number | null; evidenceStrength: number;
+  trendDirection: string; geographicScope: string;
+  serviceId: string | null;
+}
+
+interface GapsData {
+  hasData: boolean; runId?: string; weekLabel?: string;
+  gaps: GapSignal[]; count: number;
+}
+
+interface Opportunity {
+  id: string; title: string; description: string;
+  opportunityType: string; targetEngine: string;
+  compositeScore: number; priority: string;
+  scoreCard: Record<string, unknown>;
+  status: string; createdAt: string;
+}
+
+interface OpportunitiesData {
+  hasData: boolean; runId?: string; weekLabel?: string;
+  opportunities: Opportunity[]; count: number;
+}
+
+interface HistoryRun {
+  runId: string; weekLabel: string; status: string;
+  opportunityCount: number; highPriorityCount: number;
+  topScore: number; signalsReceived: number;
+  clusterCount: number; createdAt: string; completedAt: string | null;
+}
+
+interface HistoryData {
+  history: HistoryRun[]; count: number;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const ACCENT        = "#8B5CF6";
+const ACCENT_DIM    = "rgba(139,92,246,0.15)";
+const ACCENT_BORDER = "rgba(139,92,246,0.25)";
+const BG_CARD       = "rgba(13,10,42,0.7)";
+const BG_PAGE       = "#030612";
+
+const INTENT_COLOR: Record<string, string> = {
+  commercial:    "#22C55E",
+  transactional: "#34D399",
+  informational: "#60A5FA",
+  navigational:  "#F59E0B",
+  local:         "#A78BFA",
+};
+
+const TREND_ICON: Record<string, string> = {
+  up:      "↑",
+  down:    "↓",
+  stable:  "→",
+  unknown: "–",
+};
+
+const ENGINE_COLOR: Record<string, string> = {
+  content:      "#FB923C",
+  optimization: "#00AEEF",
+  backlink:     "#38BDF8",
+  review:       "#EAB308",
+  social:       "#F472B6",
+};
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, accent = ACCENT }: {
+  label: string; value: string | number; sub?: string; accent?: string;
+}) {
+  return (
+    <div style={{
+      background: BG_CARD, border: `1px solid ${accent}25`,
+      borderRadius: 12, padding: "16px 20px",
+      display: "flex", flexDirection: "column", gap: 4,
+    }}>
+      <div style={{ fontSize: 11, color: "rgba(148,163,184,0.65)", fontWeight: 600, letterSpacing: "0.4px" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: accent, lineHeight: 1 }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{ fontSize: 10, color: "rgba(148,163,184,0.45)", marginTop: 2 }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({ emoji, title, sub }: { emoji: string; title: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <span style={{ fontSize: 20 }}>{emoji}</span>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: ACCENT, letterSpacing: "0.3px" }}>
+          {title}
+        </div>
+        {sub && <div style={{ fontSize: 10, color: "rgba(148,163,184,0.5)", marginTop: 1 }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div style={{
+      textAlign: "center", padding: "48px 24px",
+      background: BG_CARD, borderRadius: 14,
+      border: `1px dashed ${ACCENT_BORDER}`,
+    }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>🕵️</div>
+      <div style={{ fontSize: 13, color: "rgba(148,163,184,0.65)", maxWidth: 380, margin: "0 auto" }}>
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function LoadingSpinner() {
+  return (
+    <div style={{ textAlign: "center", padding: "64px 24px" }}>
+      <div style={{
+        width: 32, height: 32, border: `3px solid ${ACCENT_BORDER}`,
+        borderTopColor: ACCENT, borderRadius: "50%",
+        animation: "spin 0.8s linear infinite", margin: "0 auto 12px",
+      }} />
+      <div style={{ fontSize: 11, color: "rgba(148,163,184,0.5)" }}>Loading intelligence data…</div>
+    </div>
+  );
+}
+
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: "overview",      label: "Overview",        icon: "📊" },
+  { id: "gaps",          label: "Keyword Gaps",     icon: "🎯" },
+  { id: "opportunities", label: "Opportunities",    icon: "⚡" },
+  { id: "history",       label: "Run History",      icon: "📅" },
+] as const;
+
+type TabId = typeof TABS[number]["id"];
+
+// ── Keyword Gap table ─────────────────────────────────────────────────────────
+
+function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
+  const [filter, setFilter] = useState<"all" | "high_volume" | "local">("all");
+
+  const { data, isLoading } = useQuery<GapsData>({
+    queryKey: ["ci-gaps"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/gaps?limit=100"),
+  });
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!data?.hasData || data.gaps.length === 0) {
+    return <EmptyState message="No competitor keyword gaps found yet. Run a Discovery scan to identify keywords your competitors rank for that you're missing." />;
+  }
+
+  const displayed = data.gaps.filter(g => {
+    if (filter === "high_volume") return (g.volumeEstimate ?? 0) > 100;
+    if (filter === "local")       return g.geographicScope === "local";
+    return true;
+  });
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {(["all","high_volume","local"] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.4px",
+            padding: "5px 12px", borderRadius: 20, cursor: "pointer",
+            background: filter === f ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+            border: `1px solid ${filter === f ? ACCENT_BORDER : "rgba(255,255,255,0.08)"}`,
+            color: filter === f ? ACCENT : "rgba(148,163,184,0.65)",
+            transition: "all 0.15s",
+          }}>
+            {f === "all" ? `All (${data.gaps.length})` :
+             f === "high_volume" ? `High Volume (${data.gaps.filter(g => (g.volumeEstimate ?? 0) > 100).length})` :
+             `Local (${data.gaps.filter(g => g.geographicScope === "local").length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div style={{
+        background: BG_CARD, borderRadius: 14,
+        border: `1px solid ${ACCENT_BORDER}`,
+        overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 80px 80px 90px 80px 70px",
+          padding: "10px 16px",
+          background: `${ACCENT}0A`,
+          borderBottom: `1px solid ${ACCENT_BORDER}`,
+          fontSize: 9.5, fontWeight: 800, letterSpacing: "0.6px",
+          color: "rgba(148,163,184,0.6)",
+        }}>
+          <span>KEYWORD</span>
+          <span style={{ textAlign: "right" }}>VOLUME</span>
+          <span style={{ textAlign: "right" }}>DIFFICULTY</span>
+          <span style={{ textAlign: "center" }}>INTENT</span>
+          <span style={{ textAlign: "center" }}>TREND</span>
+          <span style={{ textAlign: "center" }}>COMP. RANK</span>
+        </div>
+
+        {displayed.length === 0 ? (
+          <div style={{ padding: "32px 16px", textAlign: "center", color: "rgba(148,163,184,0.4)", fontSize: 12 }}>
+            No keywords match this filter.
+          </div>
+        ) : (
+          displayed.map((g, i) => (
+            <div key={g.id} style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 80px 80px 90px 80px 70px",
+              padding: "11px 16px",
+              borderBottom: i < displayed.length - 1 ? `1px solid rgba(139,92,246,0.08)` : "none",
+              alignItems: "center",
+              background: i % 2 === 0 ? "transparent" : "rgba(139,92,246,0.02)",
+              transition: "background 0.1s",
+            }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(139,92,246,0.06)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = i % 2 === 0 ? "transparent" : "rgba(139,92,246,0.02)"; }}
+            >
+              {/* Keyword */}
+              <div>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: "#E2E8F0", marginBottom: 2 }}>
+                  {g.keyword}
+                </div>
+                <div style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>
+                  {g.source}
+                  {g.serviceId && <span style={{ marginLeft: 6, color: `${ACCENT}70` }}>{g.serviceId}</span>}
+                </div>
+              </div>
+
+              {/* Volume */}
+              <div style={{ textAlign: "right" }}>
+                {g.volumeEstimate != null ? (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: g.volumeEstimate > 500 ? "#22C55E" : g.volumeEstimate > 100 ? "#F59E0B" : "rgba(148,163,184,0.6)",
+                  }}>
+                    {g.volumeEstimate >= 1000 ? `${(g.volumeEstimate / 1000).toFixed(1)}k` : g.volumeEstimate}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 10, color: "rgba(148,163,184,0.3)" }}>—</span>
+                )}
+              </div>
+
+              {/* Difficulty */}
+              <div style={{ textAlign: "right" }}>
+                {g.difficultyScore != null ? (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700,
+                    color: g.difficultyScore < 30 ? "#22C55E" : g.difficultyScore < 60 ? "#F59E0B" : "#EF4444",
+                  }}>
+                    {g.difficultyScore}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 10, color: "rgba(148,163,184,0.3)" }}>—</span>
+                )}
+              </div>
+
+              {/* Intent */}
+              <div style={{ textAlign: "center" }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 10,
+                  background: `${INTENT_COLOR[g.intent] ?? "#64748B"}18`,
+                  color: INTENT_COLOR[g.intent] ?? "#64748B",
+                  border: `1px solid ${INTENT_COLOR[g.intent] ?? "#64748B"}30`,
+                }}>
+                  {g.intent}
+                </span>
+              </div>
+
+              {/* Trend */}
+              <div style={{
+                textAlign: "center", fontSize: 13,
+                color: g.trendDirection === "up" ? "#22C55E" : g.trendDirection === "down" ? "#EF4444" : "rgba(148,163,184,0.5)",
+              }}>
+                {TREND_ICON[g.trendDirection] ?? "–"}
+              </div>
+
+              {/* Competitor rank */}
+              <div style={{ textAlign: "center" }}>
+                {g.competitorRank != null ? (
+                  <span style={{
+                    fontSize: 11, fontWeight: 800,
+                    color: g.competitorRank <= 3 ? "#EF4444" : g.competitorRank <= 10 ? "#F59E0B" : "rgba(148,163,184,0.6)",
+                  }}>
+                    #{g.competitorRank}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 10, color: "rgba(148,163,184,0.3)" }}>—</span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 10, color: "rgba(148,163,184,0.35)", textAlign: "right" }}>
+        Showing {displayed.length} of {data.gaps.length} keyword gaps · Week {data.weekLabel}
+      </div>
+    </div>
+  );
+}
+
+// ── Opportunities tab ─────────────────────────────────────────────────────────
+
+function OpportunitiesTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
+  const { data, isLoading } = useQuery<OpportunitiesData>({
+    queryKey: ["ci-opportunities"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/opportunities?limit=20"),
+  });
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!data?.hasData || data.opportunities.length === 0) {
+    return <EmptyState message="No opportunities scored yet. Complete a Discovery run to surface your highest-impact keyword opportunities." />;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {data.opportunities.map((opp, i) => {
+        const sc = opp.scoreCard as Record<string, number | Record<string, unknown>>;
+        const engineColor = ENGINE_COLOR[opp.targetEngine] ?? ACCENT;
+        return (
+          <div key={opp.id} style={{
+            background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+            borderRadius: 12, padding: "14px 16px",
+            display: "flex", alignItems: "center", gap: 14,
+          }}>
+            {/* Rank badge */}
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: i === 0 ? "rgba(234,179,8,0.15)" : i === 1 ? "rgba(148,163,184,0.1)" : i === 2 ? "rgba(196,148,90,0.12)" : "rgba(139,92,246,0.1)",
+              border: `2px solid ${i === 0 ? "#EAB308" : i === 1 ? "#94A3B8" : i === 2 ? "#C4945A" : ACCENT}50`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 800,
+              color: i === 0 ? "#EAB308" : i === 1 ? "#94A3B8" : i === 2 ? "#C4945A" : ACCENT,
+            }}>
+              #{i + 1}
+            </div>
+
+            {/* Topic + engine */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {opp.title}
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 10,
+                  background: `${engineColor}18`, color: engineColor,
+                  border: `1px solid ${engineColor}30`,
+                }}>
+                  {opp.targetEngine}
+                </span>
+                <span style={{
+                  fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
+                  background: "rgba(255,255,255,0.04)", color: "rgba(148,163,184,0.55)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}>
+                  {opp.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Score */}
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{
+                fontSize: 22, fontWeight: 900, lineHeight: 1,
+                color: opp.compositeScore >= 70 ? "#22C55E" : opp.compositeScore >= 40 ? "#F59E0B" : ACCENT,
+              }}>
+                {opp.compositeScore}
+              </div>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.4)", marginTop: 2 }}>score</div>
+            </div>
+
+            {/* Score bar */}
+            <div style={{ width: 80, flexShrink: 0 }}>
+              <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 3,
+                  width: `${opp.compositeScore}%`,
+                  background: opp.compositeScore >= 70 ? "#22C55E" : opp.compositeScore >= 40 ? "#F59E0B" : ACCENT,
+                  transition: "width 0.6s ease",
+                }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ fontSize: 10, color: "rgba(148,163,184,0.35)", textAlign: "right", marginTop: 4 }}>
+        {data.count} opportunities · Week {data.weekLabel}
+      </div>
+    </div>
+  );
+}
+
+// ── Run History tab ───────────────────────────────────────────────────────────
+
+function HistoryTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
+  const { data, isLoading } = useQuery<HistoryData>({
+    queryKey: ["ci-history"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/history?limit=10"),
+  });
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!data?.history?.length) {
+    return <EmptyState message="No completed discovery runs found. Trigger a manual run from the Discovery settings to start building your intelligence history." />;
+  }
+
+  const maxOpps = Math.max(...data.history.map(r => r.opportunityCount), 1);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {data.history.map(run => (
+        <div key={run.runId} style={{
+          background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+          borderRadius: 12, padding: "14px 16px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+            {/* Status dot */}
+            <div style={{
+              width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+              background: run.status === "complete" ? "#22C55E" : "#F59E0B",
+              boxShadow: `0 0 6px ${run.status === "complete" ? "#22C55E" : "#F59E0B"}`,
+            }} />
+
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>
+                Week {run.weekLabel}
+              </div>
+              <div style={{ fontSize: 9.5, color: "rgba(148,163,184,0.45)", marginTop: 1 }}>
+                {new Date(run.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {run.completedAt && (
+                  <span style={{ marginLeft: 8 }}>
+                    · completed {new Date(run.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* High-priority badge */}
+            {run.highPriorityCount > 0 && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+                background: "rgba(239,68,68,0.12)", color: "#EF4444",
+                border: "1px solid rgba(239,68,68,0.25)",
+              }}>
+                {run.highPriorityCount} HIGH PRIORITY
+              </span>
+            )}
+          </div>
+
+          {/* Metrics row */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8,
+            marginBottom: 10,
+          }}>
+            {[
+              { label: "Signals", value: run.signalsReceived },
+              { label: "Clusters", value: run.clusterCount },
+              { label: "Opps", value: run.opportunityCount },
+              { label: "Top Score", value: run.topScore },
+            ].map(m => (
+              <div key={m.label} style={{
+                textAlign: "center", padding: "6px 8px",
+                background: "rgba(139,92,246,0.06)", borderRadius: 8,
+                border: "1px solid rgba(139,92,246,0.1)",
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: ACCENT }}>{m.value}</div>
+                <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", marginTop: 1 }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Opportunity bar */}
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(148,163,184,0.4)", marginBottom: 4 }}>
+              Opportunity volume
+            </div>
+            <div style={{ height: 4, background: "rgba(255,255,255,0.05)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 2,
+                width: `${(run.opportunityCount / maxOpps) * 100}%`,
+                background: `linear-gradient(90deg, ${ACCENT}, #A78BFA)`,
+                transition: "width 0.6s ease",
+              }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Overview tab ──────────────────────────────────────────────────────────────
+
+function OverviewTab({
+  summary, apiFetch,
+}: {
+  summary: SummaryData;
+  apiFetch: ReturnType<typeof useApiFetch>;
+}) {
+  const { data: gaps }  = useQuery<GapsData>({
+    queryKey: ["ci-gaps"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/gaps?limit=5"),
+  });
+  const { data: opps } = useQuery<OpportunitiesData>({
+    queryKey: ["ci-opportunities"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/opportunities?limit=3"),
+  });
+
+  const run = summary.latestRun;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* Summary stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+        <StatCard label="COMPETITOR GAPS" value={summary.competitorGapCount} sub="keywords competitors rank for" />
+        <StatCard label="HIGH VOLUME GAPS" value={summary.highVolumeGapCount} sub="volume > 100/mo" accent="#22C55E" />
+        <StatCard label="OPPORTUNITIES FOUND" value={run?.opportunityCount ?? 0} sub="scored & prioritized" accent="#F59E0B" />
+        <StatCard label="TOP SCORE" value={run?.topOpportunityScore ?? 0} sub="highest composite score" accent="#EF4444" />
+        <StatCard label="SIGNALS RECEIVED" value={run?.signalsReceived ?? 0} sub="raw market signals" accent="#60A5FA" />
+        <StatCard label="CLUSTERS BUILT" value={run?.clusterCount ?? 0} sub="topic groups" accent="#A78BFA" />
+      </div>
+
+      {/* Latest run status */}
+      {run && (
+        <div style={{
+          background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+          borderRadius: 14, padding: "16px 20px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: "#22C55E", boxShadow: "0 0 8px #22C55E",
+            }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>
+              Latest Run — Week {run.weekLabel}
+            </div>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
+              background: run.status === "complete" ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+              color: run.status === "complete" ? "#22C55E" : "#F59E0B",
+              border: `1px solid ${run.status === "complete" ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)"}`,
+            }}>
+              {run.status.toUpperCase()}
+            </span>
+            <div style={{ marginLeft: "auto", fontSize: 10, color: "rgba(148,163,184,0.4)" }}>
+              {run.completedAt
+                ? new Date(run.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                : new Date(run.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "rgba(148,163,184,0.55)", lineHeight: 1.5 }}>
+            Analyzed <strong style={{ color: ACCENT }}>{run.signalsReceived}</strong> market signals →
+            accepted <strong style={{ color: "#22C55E" }}>{run.signalsAccepted}</strong> →
+            built <strong style={{ color: "#A78BFA" }}>{run.clusterCount}</strong> topic clusters →
+            scored <strong style={{ color: "#F59E0B" }}>{run.opportunityCount}</strong> opportunities
+            (<strong style={{ color: "#EF4444" }}>{run.highPriorityCount} high priority</strong>).
+          </div>
+        </div>
+      )}
+
+      {/* Top 5 gaps preview */}
+      <div>
+        <SectionHeader emoji="🎯" title="Top Keyword Gaps" sub="Keywords your competitors rank for — you don't" />
+        {!gaps?.hasData || !gaps.gaps.length ? (
+          <div style={{ fontSize: 11, color: "rgba(148,163,184,0.45)", padding: "16px 0" }}>
+            No gaps found yet. Run a discovery scan to detect competitor keyword gaps.
+          </div>
+        ) : (
+          <div style={{
+            background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+            borderRadius: 12, overflow: "hidden",
+          }}>
+            {gaps.gaps.slice(0, 5).map((g, i) => (
+              <div key={g.id} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 14px",
+                borderBottom: i < 4 ? `1px solid rgba(139,92,246,0.07)` : "none",
+              }}>
+                <span style={{ fontSize: 11, color: "rgba(148,163,184,0.3)", width: 16, flexShrink: 0 }}>
+                  {i + 1}
+                </span>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0" }}>
+                  {g.keyword}
+                </span>
+                {g.volumeEstimate != null && (
+                  <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 700, flexShrink: 0 }}>
+                    {g.volumeEstimate >= 1000 ? `${(g.volumeEstimate / 1000).toFixed(1)}k` : g.volumeEstimate}/mo
+                  </span>
+                )}
+                {g.competitorRank != null && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                    background: "rgba(239,68,68,0.1)", color: "#EF4444",
+                    border: "1px solid rgba(239,68,68,0.2)", flexShrink: 0,
+                  }}>
+                    Comp. #{g.competitorRank}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Top 3 opportunities preview */}
+      <div>
+        <SectionHeader emoji="⚡" title="Top Opportunities" sub="Highest scored actions from the latest run" />
+        {!opps?.hasData || !opps.opportunities.length ? (
+          <div style={{ fontSize: 11, color: "rgba(148,163,184,0.45)", padding: "16px 0" }}>
+            No opportunities scored yet.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {opps.opportunities.slice(0, 3).map((opp, i) => {
+              const engineColor = ENGINE_COLOR[opp.targetEngine] ?? ACCENT;
+              return (
+                <div key={opp.id} style={{
+                  background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+                  borderRadius: 10, padding: "12px 14px",
+                  display: "flex", alignItems: "center", gap: 12,
+                }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                    background: i === 0 ? "rgba(234,179,8,0.1)" : "rgba(139,92,246,0.08)",
+                    border: `2px solid ${i === 0 ? "#EAB308" : ACCENT}40`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 800,
+                    color: i === 0 ? "#EAB308" : ACCENT,
+                  }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#E2E8F0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {opp.title}
+                    </div>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8,
+                      background: `${engineColor}15`, color: engineColor,
+                      border: `1px solid ${engineColor}28`,
+                    }}>
+                      {opp.targetEngine}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: 18, fontWeight: 900, flexShrink: 0,
+                    color: opp.compositeScore >= 70 ? "#22C55E" : opp.compositeScore >= 40 ? "#F59E0B" : ACCENT,
+                  }}>
+                    {opp.compositeScore}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── No-data state ─────────────────────────────────────────────────────────────
+
+function NoDataState({ totalRuns }: { totalRuns: number }) {
+  return (
+    <div style={{
+      textAlign: "center", padding: "80px 32px",
+      background: BG_CARD, borderRadius: 16,
+      border: `1.5px dashed ${ACCENT_BORDER}`,
+      maxWidth: 560, margin: "0 auto",
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🕵️</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>
+        No Discovery Data Yet
+      </div>
+      <div style={{ fontSize: 13, color: "rgba(148,163,184,0.65)", lineHeight: 1.6, marginBottom: 24 }}>
+        Competitor Intelligence is powered by the Discovery Engine.
+        Run your first Discovery scan to start mapping competitor keyword gaps and scoring opportunities.
+      </div>
+      {totalRuns > 0 && (
+        <div style={{
+          fontSize: 11, color: "rgba(148,163,184,0.45)",
+          background: "rgba(139,92,246,0.06)", borderRadius: 8, padding: "8px 12px",
+          border: `1px solid ${ACCENT_BORDER}`,
+        }}>
+          {totalRuns} run{totalRuns !== 1 ? "s" : ""} found but no complete/partial runs yet.
+          Check back after your next scan completes.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function CompetitorIntelligencePage() {
+  const apiFetch  = useApiFetch();
+  const [tab, setTab] = useState<TabId>("overview");
+
+  const { data: summary, isLoading: summaryLoading, isError } = useQuery<SummaryData>({
+    queryKey: ["ci-summary"],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/summary"),
+    staleTime: 60_000,
+  });
+
+  return (
+    <AppShell>
+      <div style={{
+        maxWidth: 960, margin: "0 auto",
+        padding: "24px 16px 64px",
+        minHeight: "100vh", background: BG_PAGE,
+      }}>
+        {/* Page header */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <span style={{ fontSize: 28 }}>🕵️</span>
+            <div>
+              <h1 style={{
+                margin: 0, fontSize: 22, fontWeight: 900,
+                color: "#FFFFFF", letterSpacing: "-0.3px",
+              }}>
+                Competitor Intelligence
+              </h1>
+              <div style={{ fontSize: 11, color: "rgba(148,163,184,0.55)", marginTop: 2 }}>
+                Keyword gap analysis &amp; market positioning · powered by Discovery Engine
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto" }}>
+              <span style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+                padding: "3px 10px", borderRadius: 20,
+                background: ACCENT_DIM, color: ACCENT,
+                border: `1px solid ${ACCENT_BORDER}`,
+              }}>
+                🏅 ADVANCED
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading state */}
+        {summaryLoading && <LoadingSpinner />}
+
+        {/* Error state */}
+        {isError && !summaryLoading && (
+          <div style={{
+            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+            borderRadius: 12, padding: "16px 20px",
+            fontSize: 12, color: "#EF4444",
+          }}>
+            Failed to load competitor intelligence data. Check your connection and try again.
+          </div>
+        )}
+
+        {/* No data state */}
+        {!summaryLoading && !isError && summary && !summary.hasData && (
+          <NoDataState totalRuns={summary.totalRuns ?? 0} />
+        )}
+
+        {/* Main content */}
+        {!summaryLoading && !isError && summary?.hasData && (
+          <>
+            {/* Tab bar */}
+            <div style={{
+              display: "flex", gap: 4, marginBottom: 20,
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: 12, padding: 4,
+              border: "1px solid rgba(255,255,255,0.07)",
+              width: "fit-content",
+            }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "8px 14px", borderRadius: 9, cursor: "pointer",
+                  background: tab === t.id ? ACCENT_DIM : "transparent",
+                  border: `1px solid ${tab === t.id ? ACCENT_BORDER : "transparent"}`,
+                  color: tab === t.id ? ACCENT : "rgba(148,163,184,0.6)",
+                  fontSize: 11, fontWeight: 700, letterSpacing: "0.2px",
+                  transition: "all 0.15s",
+                }}>
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            {tab === "overview"      && <OverviewTab summary={summary} apiFetch={apiFetch} />}
+            {tab === "gaps"          && <GapsTab apiFetch={apiFetch} />}
+            {tab === "opportunities" && <OpportunitiesTab apiFetch={apiFetch} />}
+            {tab === "history"       && <HistoryTab apiFetch={apiFetch} />}
+          </>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </AppShell>
+  );
+}

@@ -32,6 +32,7 @@ import discoveryRunRouter from "./discovery-run";
 import discoveryInspectRouter from "./discovery-inspect";
 import agentTasksRouter from "./agent-tasks";
 import gbpAuditRouter from "./gbp-audit";
+import competitorIntelligenceRouter from "./competitor-intelligence";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(discoveryRunRouter);
 router.use(discoveryInspectRouter);
 router.use(agentTasksRouter);
 router.use(gbpAuditRouter);
+router.use(competitorIntelligenceRouter);
 
 export default router;

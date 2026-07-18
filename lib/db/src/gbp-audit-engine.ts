@@ -1,5 +1,5 @@
 /**
- * GBP Audit & Optimization Engine — Phase 1
+ * GBP Audit & Optimization Engine — Phase 1 + Phase 2
  *
  * Pure functions. Zero side effects. Zero database imports.
  * All inputs are passed explicitly; all outputs are plain objects.
@@ -13,14 +13,14 @@
  *
  * EVIDENCE TYPES:
  *   local    — 10 checks (41 pts) — evaluated from existing DB tables
- *   gbp_api  — 15 checks (59 pts) — data_pending until Phase 2 connects
- *                                    the GBP Business Information API
+ *   gbp_api  — 15 checks (59 pts) — Phase 2: evaluated from GbpLiveData
+ *                                    when liveData is null → data_pending
  *
  * CHECK STATUSES:
  *   pass         — fully met; full points awarded
  *   warning      — partially met; half points awarded
  *   fail         — not met; 0 points
- *   data_pending — requires GBP API data not yet available
+ *   data_pending — GBP API data not available (no token / API error)
  *   error        — evaluation failed unexpectedly
  */
 
@@ -60,6 +60,48 @@ export interface GbpAuditInput {
   googleConnection: GbpConnectionInput | null;
   reviewStats:      GbpReviewInput | null;
   googlePosts:      GbpPostsInput | null;
+}
+
+// ── Phase 2: Live data from GBP APIs ─────────────────────────────────────────
+//
+// Produced by artifacts/api-server/src/lib/gbp-live-data.ts and passed as
+// the optional second argument to evaluateGbpAudit().
+// All fields are nullable — individual API failures leave their fields null
+// and the corresponding checks stay data_pending rather than erroring out.
+
+export interface GbpLiveData {
+  // Business Information API — readMask: categories, regularHours, profile,
+  //                                     serviceArea, specialHours, serviceItems, metadata
+  primaryCategory:         string | null;   // displayName of primaryCategory
+  additionalCategories:    string[];        // displayNames of additionalCategories
+  regularHoursDaysCount:   number | null;   // distinct open-day count (null if field absent)
+  profileDescription:      string | null;   // profile.description text
+  hasServiceArea:          boolean | null;  // any service area defined
+  specialHourPeriodsCount: number | null;   // number of specialHourPeriods entries
+  serviceItemsCount:       number | null;   // number of serviceItems entries
+  hasPendingVerification:  boolean | null;  // metadata.hasPendingVerification
+  mapsUri:                 string | null;   // metadata.mapsUri (null = not on Maps)
+
+  // Media API (mybusiness.googleapis.com/v4)
+  hasLogo:         boolean | null;   // LOGO category photo present
+  hasCover:        boolean | null;   // COVER_PHOTO category photo present
+  totalPhotoCount: number | null;    // total PHOTO format items
+  hasVideo:        boolean | null;   // any VIDEO format items
+
+  // Reviews API (mybusiness.googleapis.com/v4)
+  reviewResponseRate:   number | null;  // fraction 0-1 of reviews with owner reply
+  reviewsLast30Days:    number | null;  // reviews created in the last 30 days
+
+  // Account Management API — location count for duplicate-listings heuristic
+  locationCount: number | null;
+
+  // Which sub-API calls failed (allows per-check data_pending fallback)
+  errors: {
+    businessInfo?: string;
+    media?:        string;
+    reviews?:      string;
+    duplicates?:   string;
+  };
 }
 
 // ── Output types ──────────────────────────────────────────────────────────────
@@ -150,7 +192,7 @@ export const GBP_LOCAL_MAX_SCORE = 41;
 // Total max = 100
 export const GBP_MAX_SCORE = 100;
 
-// ── Individual check evaluators ───────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function pending(def: CheckDefinition, notes?: string): GbpCheckResult {
   return {
@@ -163,10 +205,12 @@ function pending(def: CheckDefinition, notes?: string): GbpCheckResult {
     maxScore:       def.maxScore,
     priority:       def.priority,
     currentValue:   null,
-    recommendation: notes ?? "Connect the GBP Business Information API (Phase 2) to evaluate this check.",
+    recommendation: notes ?? "Connect the GBP Business Information API to evaluate this check.",
     rawData:        { phase2Notes: def.phase2Notes ?? null },
   };
 }
+
+// ── Local-evidence check evaluators ──────────────────────────────────────────
 
 function checkBusinessName(input: GbpAuditInput): GbpCheckResult {
   const name = input.profile?.businessName?.trim() ?? null;
@@ -342,24 +386,366 @@ function checkVerificationStatus(input: GbpAuditInput): GbpCheckResult {
   };
 }
 
-// ── Data-pending stubs for GBP API checks ────────────────────────────────────
+// ── Phase 2: GBP API check evaluators ────────────────────────────────────────
+// Each evaluator returns data_pending when liveData is null or the relevant
+// sub-API errored out, so individual failures don't cascade.
 
-const PENDING_CHECKS: Array<[string, CheckDefinition]> = GBP_CHECK_REGISTRY
-  .filter(d => d.evidenceType === "gbp_api")
-  .map(d => [d.checkKey, d]);
+function checkPrimaryCategory(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  const cat = live.primaryCategory;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       cat ? "pass" : "fail",
+    score:        cat ? def.maxScore : 0,
+    currentValue: cat ?? "No primary category set",
+    recommendation: cat ? null : "Add a primary business category to your GBP listing to help customers find you in relevant searches.",
+    rawData: { primaryCategory: cat },
+  };
+}
 
-const PENDING_BY_KEY = new Map<string, CheckDefinition>(PENDING_CHECKS);
+function checkRegularHours(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  if (live.regularHoursDaysCount === null) return pending(def);
+  const days = live.regularHoursDaysCount;
+  const pass = days >= 5;
+  const warn = days >= 1;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: days === 0 ? "No business hours set" : `Hours set for ${days} day${days === 1 ? "" : "s"}`,
+    recommendation: pass ? null : "Set business hours for all days you are open. Complete hours build trust and improve local ranking.",
+    rawData: { regularHoursDaysCount: days },
+  };
+}
+
+function checkBusinessDescription(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  const desc = live.profileDescription?.trim() ?? null;
+  const len  = desc?.length ?? 0;
+  const pass = len >= 50;
+  const warn = len >= 1;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: pass
+      ? `${len} characters`
+      : warn
+      ? `${len} characters (too short — aim for 50+)`
+      : "No business description",
+    recommendation: pass
+      ? null
+      : "Write a compelling business description (50–750 characters) highlighting your services, service area, and what makes you unique.",
+    rawData: { descriptionLength: len },
+  };
+}
+
+function checkAdditionalCategories(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  const count = live.additionalCategories.length;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       count >= 1 ? "pass" : "fail",
+    score:        count >= 1 ? def.maxScore : 0,
+    currentValue: count >= 1
+      ? `${count} additional categor${count === 1 ? "y" : "ies"}: ${live.additionalCategories.slice(0, 3).join(", ")}`
+      : "No additional categories",
+    recommendation: count >= 1
+      ? null
+      : "Add up to 9 additional service categories (e.g. Exterminator, Pest Control Service) to appear in more local searches.",
+    rawData: { additionalCategoriesCount: count, categories: live.additionalCategories },
+  };
+}
+
+function checkServiceAreas(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  if (live.hasServiceArea === null) return pending(def);
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       live.hasServiceArea ? "pass" : "fail",
+    score:        live.hasServiceArea ? def.maxScore : 0,
+    currentValue: live.hasServiceArea ? "Service area defined" : "No service area set",
+    recommendation: live.hasServiceArea
+      ? null
+      : "Define your service area on Google Business Profile so you appear in searches for the cities and zip codes you serve.",
+    rawData: { hasServiceArea: live.hasServiceArea },
+  };
+}
+
+function checkHolidayHours(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  if (live.specialHourPeriodsCount === null) return pending(def);
+  const count = live.specialHourPeriodsCount;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       count >= 1 ? "pass" : "fail",
+    score:        count >= 1 ? def.maxScore : 0,
+    currentValue: count >= 1 ? `${count} special hour period${count === 1 ? "" : "s"} set` : "No holiday hours set",
+    recommendation: count >= 1
+      ? null
+      : "Add holiday hours for major holidays to prevent customer frustration from outdated hours during holidays.",
+    rawData: { specialHourPeriodsCount: count },
+  };
+}
+
+function checkServicesListed(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  if (live.serviceItemsCount === null) return pending(def);
+  const count = live.serviceItemsCount;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       count >= 1 ? "pass" : "fail",
+    score:        count >= 1 ? def.maxScore : 0,
+    currentValue: count >= 1 ? `${count} service${count === 1 ? "" : "s"} listed` : "No services catalog",
+    recommendation: count >= 1
+      ? null
+      : "Add your services to the Google Business Profile services catalog. This helps customers understand what you offer.",
+    rawData: { serviceItemsCount: count },
+  };
+}
+
+function checkLogoPhoto(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.media) {
+    return pending(def, live?.errors.media ? `Media API error: ${live.errors.media}` : undefined);
+  }
+  if (live.hasLogo === null) return pending(def);
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       live.hasLogo ? "pass" : "fail",
+    score:        live.hasLogo ? def.maxScore : 0,
+    currentValue: live.hasLogo ? "Logo photo uploaded" : "No logo photo",
+    recommendation: live.hasLogo
+      ? null
+      : "Upload a professional logo to your Google Business Profile. Logos improve brand recognition and click-through rates.",
+    rawData: { hasLogo: live.hasLogo },
+  };
+}
+
+function checkCoverPhoto(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.media) {
+    return pending(def, live?.errors.media ? `Media API error: ${live.errors.media}` : undefined);
+  }
+  if (live.hasCover === null) return pending(def);
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       live.hasCover ? "pass" : "fail",
+    score:        live.hasCover ? def.maxScore : 0,
+    currentValue: live.hasCover ? "Cover photo uploaded" : "No cover photo",
+    recommendation: live.hasCover
+      ? null
+      : "Upload a high-quality cover photo (1080×608 px minimum) showing your team or service area to make a strong first impression.",
+    rawData: { hasCover: live.hasCover },
+  };
+}
+
+function checkPhotoCount(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.media) {
+    return pending(def, live?.errors.media ? `Media API error: ${live.errors.media}` : undefined);
+  }
+  if (live.totalPhotoCount === null) return pending(def);
+  const count = live.totalPhotoCount;
+  const pass  = count >= 10;
+  const warn  = count >= 5;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: count === 0 ? "No photos" : `${count} photo${count === 1 ? "" : "s"}`,
+    recommendation: pass
+      ? null
+      : `Add more photos to reach 10+. Currently at ${count}. Businesses with 10+ photos receive significantly more clicks and direction requests.`,
+    rawData: { totalPhotoCount: count },
+  };
+}
+
+function checkVideoPresent(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.media) {
+    return pending(def, live?.errors.media ? `Media API error: ${live.errors.media}` : undefined);
+  }
+  if (live.hasVideo === null) return pending(def);
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       live.hasVideo ? "pass" : "fail",
+    score:        live.hasVideo ? def.maxScore : 0,
+    currentValue: live.hasVideo ? "Video content present" : "No video content",
+    recommendation: live.hasVideo
+      ? null
+      : "Add a short video (30 seconds–1 minute) showcasing your service or team. Videos dramatically increase engagement.",
+    rawData: { hasVideo: live.hasVideo },
+  };
+}
+
+function checkResponseRate(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.reviews) {
+    return pending(def, live?.errors.reviews ? `Reviews API error: ${live.errors.reviews}` : undefined);
+  }
+  if (live.reviewResponseRate === null) return pending(def);
+  const rate = live.reviewResponseRate;
+  const pct  = Math.round(rate * 100);
+  const pass = rate >= 0.9;
+  const warn = rate >= 0.5;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: `${pct}% response rate`,
+    recommendation: pass
+      ? null
+      : "Respond to all reviews — both positive and negative. A 90%+ response rate signals excellent customer service to Google.",
+    rawData: { reviewResponseRate: rate, responseRatePct: pct },
+  };
+}
+
+function checkReviewVelocity(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.reviews) {
+    return pending(def, live?.errors.reviews ? `Reviews API error: ${live.errors.reviews}` : undefined);
+  }
+  if (live.reviewsLast30Days === null) return pending(def);
+  const count = live.reviewsLast30Days;
+  const pass  = count >= 2;
+  const warn  = count >= 1;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: count === 0 ? "No new reviews in last 30 days" : `${count} new review${count === 1 ? "" : "s"} in last 30 days`,
+    recommendation: pass
+      ? null
+      : "Ask satisfied customers for Google reviews immediately after completing each job. Consistent new reviews are a strong ranking signal.",
+    rawData: { reviewsLast30Days: count },
+  };
+}
+
+function checkSuspensionFree(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.businessInfo) {
+    return pending(def, live?.errors.businessInfo ? `API error: ${live.errors.businessInfo}` : undefined);
+  }
+  if (live.hasPendingVerification === null && live.mapsUri === null) return pending(def);
+
+  const onMaps  = !!live.mapsUri;
+  const pending_ = live.hasPendingVerification === true;
+
+  let status: GbpCheckStatus;
+  let score: number;
+  let currentValue: string;
+  let recommendation: string | null;
+
+  if (onMaps && !pending_) {
+    status = "pass"; score = def.maxScore;
+    currentValue = "Listed on Google Maps, no flags";
+    recommendation = null;
+  } else if (pending_) {
+    status = "warning"; score = Math.round(def.maxScore / 2);
+    currentValue = "Verification pending";
+    recommendation = "Your listing has a pending verification. Complete the verification process in Google Business Profile to remove the flag.";
+  } else {
+    status = "fail"; score = 0;
+    currentValue = "Not visible on Google Maps";
+    recommendation = "Your listing may be suspended or unpublished. Log in to Google Business Profile and check for any alerts or suspension notices.";
+  }
+
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status, score, currentValue, recommendation,
+    rawData: { hasPendingVerification: live.hasPendingVerification, mapsUri: live.mapsUri },
+  };
+}
+
+function checkDuplicateListings(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  if (!live || live.errors.duplicates) {
+    return pending(def, live?.errors.duplicates ? `API error: ${live.errors.duplicates}` : undefined);
+  }
+  if (live.locationCount === null) return pending(def);
+  const count = live.locationCount;
+  const pass  = count <= 1;
+  const warn  = count <= 4;
+  return {
+    category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+    evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+    status:       count === 0 ? "data_pending" : pass ? "pass" : warn ? "warning" : "fail",
+    score:        count === 0 ? 0 : pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: count === 0
+      ? "No locations found"
+      : count === 1
+      ? "Single location — no duplicates detected"
+      : `${count} locations on this account`,
+    recommendation: (count === 0 || pass)
+      ? null
+      : `${count} locations found on this GBP account. Verify none are duplicate listings for the same address, which can dilute your ranking.`,
+    rawData: { locationCount: count },
+  };
+}
+
+// ── Live-check dispatcher ─────────────────────────────────────────────────────
+
+function evaluateLiveCheck(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
+  switch (def.checkKey) {
+    case "primary_category":      return checkPrimaryCategory(def, live);
+    case "regular_hours":         return checkRegularHours(def, live);
+    case "business_description":  return checkBusinessDescription(def, live);
+    case "additional_categories": return checkAdditionalCategories(def, live);
+    case "service_areas":         return checkServiceAreas(def, live);
+    case "holiday_hours":         return checkHolidayHours(def, live);
+    case "services_listed":       return checkServicesListed(def, live);
+    case "logo_photo":            return checkLogoPhoto(def, live);
+    case "cover_photo":           return checkCoverPhoto(def, live);
+    case "photo_count":           return checkPhotoCount(def, live);
+    case "video_present":         return checkVideoPresent(def, live);
+    case "response_rate":         return checkResponseRate(def, live);
+    case "review_velocity":       return checkReviewVelocity(def, live);
+    case "suspension_free":       return checkSuspensionFree(def, live);
+    case "duplicate_listings":    return checkDuplicateListings(def, live);
+    default:                      return pending(def);
+  }
+}
 
 // ── Main evaluation function ──────────────────────────────────────────────────
 
 /**
- * Evaluate a full GBP audit from locally-available data.
+ * Evaluate a full GBP audit.
  *
- * Phase 1: 10 local checks evaluated, 15 gbp_api checks returned as
- * data_pending. Call this function from the audit route after gathering
- * data from the DB — no async operations here.
+ * Phase 1 (liveData omitted / null): 10 local checks evaluated; 15 gbp_api
+ * checks returned as data_pending.
+ *
+ * Phase 2 (liveData provided): all 25 checks fully evaluated. Individual
+ * sub-API failures leave only their checks as data_pending; others score
+ * normally.
  */
-export function evaluateGbpAudit(input: GbpAuditInput): GbpAuditResult {
+export function evaluateGbpAudit(
+  input:    GbpAuditInput,
+  liveData?: GbpLiveData | null,
+): GbpAuditResult {
+  const live = liveData ?? null;
+
   const localChecks: GbpCheckResult[] = [
     checkBusinessName(input),
     checkPhoneNumber(input),
@@ -373,18 +759,13 @@ export function evaluateGbpAudit(input: GbpAuditInput): GbpAuditResult {
     checkVerificationStatus(input),
   ];
 
-  const pendingChecks: GbpCheckResult[] = [];
+  const liveChecks: GbpCheckResult[] = [];
   for (const def of GBP_CHECK_REGISTRY) {
     if (def.evidenceType !== "gbp_api") continue;
-    const fullDef = PENDING_BY_KEY.get(def.checkKey)!;
-    pendingChecks.push(pending(fullDef));
+    liveChecks.push(evaluateLiveCheck(def, live));
   }
 
-  const allChecks = [
-    // Interleave in registry order for correct category grouping
-    ...localChecks,
-    ...pendingChecks,
-  ].sort((a, b) => {
+  const allChecks = [...localChecks, ...liveChecks].sort((a, b) => {
     const catOrder: GbpCheckCategory[] = ["information", "media", "reviews", "posts", "authority"];
     const catDiff = catOrder.indexOf(a.category) - catOrder.indexOf(b.category);
     if (catDiff !== 0) return catDiff;
@@ -394,8 +775,8 @@ export function evaluateGbpAudit(input: GbpAuditInput): GbpAuditResult {
   });
 
   const localScore    = localChecks.reduce((s, c) => s + c.score, 0);
-  const localMaxScore = GBP_LOCAL_MAX_SCORE;
-  const overallScore  = localScore; // Phase 1: no GBP API scores yet
+  const liveScore     = liveChecks.reduce((s, c) => s + c.score, 0);
+  const overallScore  = localScore + liveScore;
 
   let checksPassed  = 0;
   let checksWarning = 0;
@@ -403,15 +784,15 @@ export function evaluateGbpAudit(input: GbpAuditInput): GbpAuditResult {
   let checksPending = 0;
 
   for (const c of allChecks) {
-    if (c.status === "pass")         checksPassed++;
-    else if (c.status === "warning") checksWarning++;
-    else if (c.status === "fail")    checksFailed++;
+    if (c.status === "pass")              checksPassed++;
+    else if (c.status === "warning")      checksWarning++;
+    else if (c.status === "fail")         checksFailed++;
     else if (c.status === "data_pending") checksPending++;
   }
 
   return {
     localScore,
-    localMaxScore,
+    localMaxScore: GBP_LOCAL_MAX_SCORE,
     overallScore,
     maxScore: GBP_MAX_SCORE,
     checksPassed,

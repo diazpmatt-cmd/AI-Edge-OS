@@ -23,7 +23,8 @@ import {
   gbpAuditSnapshotsTable,
   gbpAuditChecksTable,
 } from "@workspace/db";
-import { evaluateGbpAudit, type GbpAuditInput } from "@workspace/db";
+import { evaluateGbpAudit, type GbpAuditInput, type GbpLiveData } from "@workspace/db";
+import { fetchGbpLiveData } from "../lib/gbp-live-data";
 
 const router = Router();
 
@@ -210,9 +211,54 @@ router.post("/gbp/audit/run", async (req, res) => {
       .values({ clientId, userId, status: "running", startedAt: new Date() })
       .returning();
 
-    // Gather and evaluate
-    const input  = await gatherAuditInput(clientId, userId);
-    const result = evaluateGbpAudit(input);
+    // Gather local input
+    const input = await gatherAuditInput(clientId, userId);
+
+    // Phase 2: fetch live GBP data when the token + location are available.
+    // Failures are non-fatal — the engine degrades affected checks to data_pending.
+    let liveData: GbpLiveData | null = null;
+    const conn = input.googleConnection;
+    if (conn?.connected && conn.locationName && conn.tokenExists) {
+      const [gbpRow] = await db
+        .select()
+        .from(socialConnectionsTable)
+        .where(and(
+          eq(socialConnectionsTable.userId, userId),
+          eq(socialConnectionsTable.provider, "google_business"),
+        ));
+
+      if (gbpRow?.accessToken) {
+        let meta: Record<string, unknown> = {};
+        try { meta = typeof gbpRow.metadata === "string" ? JSON.parse(gbpRow.metadata) : {}; } catch {}
+
+        // Derive accountName from locationName when not stored explicitly.
+        // locationName format: "accounts/123456789/locations/987654321"
+        const accountName =
+          (meta.accountName as string | null) ??
+          (meta.gbpAccountName as string | null) ??
+          conn.locationName.split("/locations/")[0] ??
+          "";
+
+        if (accountName) {
+          try {
+            liveData = await fetchGbpLiveData({
+              accessToken:  gbpRow.accessToken,
+              refreshToken: gbpRow.refreshToken ?? null,
+              expiresAt:    gbpRow.expiresAt ?? null,
+              userId,
+              locationName: conn.locationName,
+              accountName,
+            });
+            console.log(`[gbp-audit] liveData fetched: errors=${JSON.stringify(liveData.errors)}`);
+          } catch (liveErr: any) {
+            console.warn(`[gbp-audit] liveData fetch error (non-fatal): ${liveErr?.message}`);
+          }
+        }
+      }
+    }
+
+    // Evaluate — Phase 1 path when liveData is null (no token / not connected)
+    const result = evaluateGbpAudit(input, liveData);
 
     // Persist checks
     if (result.checks.length > 0) {

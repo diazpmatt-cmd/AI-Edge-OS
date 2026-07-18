@@ -1,135 +1,148 @@
 import { Link, useLocation } from "wouter";
-import { LogOut, ChevronDown } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useTheme } from "@/contexts/theme-context";
 import { useActiveBusiness } from "@/contexts/business-context";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const TOP_NAV_H = 54;
 
-// ── Business selector dropdown ────────────────────────────────────────────────
-function BusinessSelector() {
+// ── Business tabs ─────────────────────────────────────────────────────────────
+function BusinessTabs() {
   const { activeBusiness, businesses, setActiveBusinessId } = useActiveBusiness();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   const handleSelect = (id: string) => {
     if (id !== activeBusiness.id) {
       setActiveBusinessId(id);
       queryClient.clear();
     }
-    setOpen(false);
   };
 
-  const activeStatusColor = activeBusiness.status === "active" ? "#22C55E" : "#F59E0B";
-
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button
-        aria-label="Select active business"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8,
-          padding: "6px 14px 6px 12px", borderRadius: 10, cursor: "pointer",
-          background: open ? "rgba(0,174,239,0.12)" : "rgba(255,255,255,0.06)",
-          border: `1px solid ${open ? "rgba(0,174,239,0.35)" : "rgba(255,255,255,0.1)"}`,
-          transition: "all 0.15s",
-        }}
-      >
-        <div style={{ textAlign: "left" }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, color: "#64748B",
-            textTransform: "uppercase", letterSpacing: "0.7px", lineHeight: 1,
-          }}>
-            Active Business
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
-            <div style={{
-              width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-              background: activeStatusColor,
-              boxShadow: `0 0 6px ${activeStatusColor}88`,
-            }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0", whiteSpace: "nowrap" }}>
-              {activeBusiness.name}
-            </span>
-          </div>
-        </div>
-        <ChevronDown style={{
-          width: 14, height: 14, color: "#64748B", flexShrink: 0,
-          transition: "transform 0.2s",
-          transform: open ? "rotate(180deg)" : "none",
-        }} />
-      </button>
+    <div
+      role="tablist"
+      aria-label="Active business"
+      style={{
+        display: "flex",
+        alignSelf: "stretch",
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        gap: 2,
+      }}
+    >
+      {businesses.map(b => {
+        const isActive = b.id === activeBusiness.id;
+        const statusColor = b.status === "active" ? "#22C55E" : "#F59E0B";
+        const statusLabel = b.status === "active" ? "Active" : "Onboarding";
+        const location = b.profile.city && b.profile.state
+          ? `${b.profile.city}, ${b.profile.state}`
+          : null;
 
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 6px)", left: 0,
-          minWidth: 230, zIndex: 50,
-          background: "linear-gradient(180deg, #0B1629 0%, #060E1E 100%)",
-          border: "1px solid rgba(0,174,239,0.2)",
-          borderRadius: 12, padding: "6px",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,174,239,0.06)",
-          animation: "dropdownIn 0.12s ease-out",
-        }}>
-          <div style={{
-            fontSize: 9, fontWeight: 700, color: "#334155",
-            textTransform: "uppercase", letterSpacing: "1px",
-            padding: "4px 10px 8px",
-          }}>
-            Select Business
-          </div>
-          {businesses.map(b => {
-            const isCurrent = b.id === activeBusiness.id;
-            const bColor = b.status === "active" ? "#22C55E" : "#F59E0B";
-            return (
-              <button
-                key={b.id}
-                onClick={() => handleSelect(b.id)}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left",
-                  background: isCurrent ? "rgba(0,174,239,0.1)" : "transparent",
-                  border: isCurrent ? "1px solid rgba(0,174,239,0.22)" : "1px solid transparent",
-                  transition: "all 0.12s",
-                }}
-                onMouseEnter={e => { if (!isCurrent) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseLeave={e => { if (!isCurrent) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-              >
-                <div style={{
-                  width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                  background: bColor, boxShadow: `0 0 5px ${bColor}88`,
-                }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: 13, fontWeight: isCurrent ? 700 : 500,
-                    color: isCurrent ? "#00AEEF" : "#CBD5E1",
+        return (
+          <button
+            key={b.id}
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => handleSelect(b.id)}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignSelf: "stretch",
+              padding: "0 18px",
+              cursor: "pointer",
+              border: "none",
+              borderBottom: isActive
+                ? "2px solid #00AEEF"
+                : "2px solid transparent",
+              borderTop: "2px solid transparent",
+              borderLeft: "none",
+              borderRight: "none",
+              background: isActive
+                ? "linear-gradient(180deg, rgba(0,174,239,0.10) 0%, rgba(0,174,239,0.04) 100%)"
+                : "transparent",
+              transition: "all 0.18s",
+              minWidth: 0,
+              flexShrink: 0,
+              position: "relative",
+            }}
+            onMouseEnter={e => {
+              if (!isActive) {
+                const el = e.currentTarget as HTMLElement;
+                el.style.background = "rgba(255,255,255,0.04)";
+                el.style.borderBottomColor = "rgba(255,255,255,0.15)";
+              }
+            }}
+            onMouseLeave={e => {
+              if (!isActive) {
+                const el = e.currentTarget as HTMLElement;
+                el.style.background = "transparent";
+                el.style.borderBottomColor = "transparent";
+              }
+            }}
+          >
+            {/* Name + status dot row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{
+                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                background: statusColor,
+                boxShadow: isActive ? `0 0 7px ${statusColor}CC` : `0 0 4px ${statusColor}66`,
+              }} />
+              <span style={{
+                fontSize: 13, fontWeight: isActive ? 800 : 500,
+                color: isActive ? "#E2E8F0" : "#64748B",
+                whiteSpace: "nowrap",
+                letterSpacing: isActive ? "-0.2px" : "0",
+              }}>
+                {b.name}
+              </span>
+            </div>
+
+            {/* Sub-line: industry · location · status */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 5, marginTop: 2,
+              paddingLeft: 14,
+            }}>
+              {b.profile.industry && (
+                <span style={{
+                  fontSize: 9, fontWeight: 600,
+                  color: isActive ? "#475569" : "#334155",
+                  whiteSpace: "nowrap",
+                }}>
+                  {b.profile.industry}
+                </span>
+              )}
+              {b.profile.industry && location && (
+                <span style={{ fontSize: 9, color: "#1E293B" }}>·</span>
+              )}
+              {location && (
+                <span style={{
+                  fontSize: 9, fontWeight: 500,
+                  color: isActive ? "#475569" : "#334155",
+                  whiteSpace: "nowrap",
+                }}>
+                  {location}
+                </span>
+              )}
+              {!isActive && (
+                <>
+                  <span style={{ fontSize: 9, color: "#1E293B" }}>·</span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700,
+                    color: statusColor,
+                    textTransform: "uppercase", letterSpacing: "0.5px",
                   }}>
-                    {b.name}
-                  </div>
-                  {b.status !== "active" && (
-                    <div style={{ fontSize: 10, color: "#64748B", textTransform: "capitalize", marginTop: 1 }}>
-                      {b.status}
-                    </div>
-                  )}
-                </div>
-                {isCurrent && <span style={{ fontSize: 13, color: "#00AEEF", flexShrink: 0 }}>✓</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
+                    {statusLabel}
+                  </span>
+                </>
+              )}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -198,46 +211,50 @@ export function AppShell({ children }: { children: ReactNode }) {
           background: "linear-gradient(180deg, #0B1629 0%, #060E1E 100%)",
           borderBottom: "1px solid rgba(0,174,239,0.12)",
           display: "flex", alignItems: "center",
-          padding: "0 20px", gap: 14,
+          padding: "0 0 0 16px",
           boxShadow: "0 2px 20px rgba(0,0,0,0.4)",
+          overflow: "hidden",
         }}
       >
         {/* Logo — always navigates to Command Center home */}
         <Link
           to="/admin/dashboard"
-          style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
+          style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0, marginRight: 10 }}
         >
           <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 36, width: "auto", objectFit: "contain" }} />
         </Link>
 
         {/* Separator */}
-        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", flexShrink: 0, marginRight: 6 }} />
 
-        {/* Active Business selector */}
-        <BusinessSelector />
+        {/* Business tabs — horizontally scrollable */}
+        <BusinessTabs />
 
         {/* Push right */}
         <div style={{ flex: 1 }} />
 
-        {/* Light / Dark toggle */}
-        <button
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          style={{
-            display: "flex", alignItems: "center", gap: 5,
-            padding: "5px 11px", borderRadius: 8, cursor: "pointer",
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-            color: "#94A3B8", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)")}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)")}
-        >
-          <span style={{ fontSize: 14 }}>{isDark ? "☀️" : "🌙"}</span>
-          <span>{isDark ? "Light" : "Dark"}</span>
-        </button>
+        {/* Right controls — pinned, no shrink */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px", flexShrink: 0 }}>
+          {/* Light / Dark toggle */}
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "5px 11px", borderRadius: 8, cursor: "pointer",
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              color: "#94A3B8", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
+            }}
+            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)")}
+            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)")}
+          >
+            <span style={{ fontSize: 14 }}>{isDark ? "☀️" : "🌙"}</span>
+            <span>{isDark ? "Light" : "Dark"}</span>
+          </button>
 
-        {/* User menu */}
-        <UserMenu />
+          {/* User menu */}
+          <UserMenu />
+        </div>
       </header>
 
       {/* ── Main content — full width below top nav ── */}
@@ -278,12 +295,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <style>{`
         * { transition: background-color 0.2s, border-color 0.2s, color 0.2s; }
-        @keyframes dropdownIn {
-          from { opacity: 0; transform: translateY(6px) scale(0.98); }
-          to   { opacity: 1; transform: translateY(0)   scale(1);    }
-        }
+        [role="tablist"]::-webkit-scrollbar { display: none; }
         @media (max-width: 600px) {
-          .app-topnav { padding: 0 12px; gap: 8px; }
+          .app-topnav { padding-left: 10px; }
         }
       `}</style>
     </div>

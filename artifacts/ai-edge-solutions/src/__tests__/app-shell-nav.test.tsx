@@ -64,11 +64,13 @@ vi.mock("@/contexts/business-context", () => ({
     businesses: [
       {
         id: "bed-bugs-and-beyond", name: "Bed Bugs & Beyond", shortName: "BB&B",
-        profile: {}, status: "active",
+        profile: { businessName: "Bed Bugs and Beyond", industry: "Pest Control", city: "Foley", state: "Alabama", websiteUrl: "", mainServices: "", targetCustomers: "" },
+        status: "active",
       },
       {
         id: "simplishelling", name: "SimpliShelling", shortName: "SS",
-        profile: {}, status: "onboarding",
+        profile: { businessName: "SimpliShelling", industry: "E-commerce / Retail", city: "Gulf Shores", state: "Alabama", websiteUrl: "", mainServices: "", targetCustomers: "" },
+        status: "onboarding",
       },
     ],
     setActiveBusinessId: vi.fn(),
@@ -119,52 +121,52 @@ describe("AppShell — top navigation bar", () => {
   });
 });
 
-// ── BUSINESS SELECTOR ─────────────────────────────────────────────────────────
+// ── BUSINESS TABS ─────────────────────────────────────────────────────────────
 
-describe("AppShell — business selector", () => {
+describe("AppShell — business tabs", () => {
   beforeEach(() => vi.resetModules());
 
-  it("shows 'Active Business' label", async () => {
+  it("renders a tablist with aria-label", async () => {
     await renderShell();
-    expect(screen.getByText(/Active Business/i)).toBeTruthy();
+    expect(document.querySelector('[role="tablist"]')).toBeTruthy();
   });
 
-  it("shows active business name in selector", async () => {
+  it("renders one tab per business", async () => {
     await renderShell();
+    const tabs = document.querySelectorAll('[role="tab"]');
+    expect(tabs.length).toBe(2);
+  });
+
+  it("shows active business tab as selected", async () => {
+    await renderShell();
+    const tabs = document.querySelectorAll('[role="tab"]');
+    const activeTab = Array.from(tabs).find(t => t.getAttribute("aria-selected") === "true");
+    expect(activeTab).toBeTruthy();
+    expect(activeTab!.textContent).toContain("Bed Bugs & Beyond");
+  });
+
+  it("shows all business names as tabs (always visible, no dropdown)", async () => {
+    await renderShell();
+    expect(screen.getByText("SimpliShelling")).toBeTruthy();
     expect(screen.getAllByText(/Bed Bugs & Beyond/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("has a selector button with aria-label", async () => {
+  it("shows onboarding status for non-active business tab", async () => {
     await renderShell();
-    expect(screen.getByLabelText(/Select active business/i)).toBeTruthy();
+    expect(screen.getByText(/Onboarding/i)).toBeTruthy();
   });
 
-  it("opens dropdown on selector click", async () => {
+  it("shows industry info in each tab", async () => {
     await renderShell();
-    const btn = screen.getByLabelText(/Select active business/i);
-    fireEvent.click(btn);
-    expect(screen.getByText(/Select Business/i)).toBeTruthy();
+    expect(screen.getByText("Pest Control")).toBeTruthy();
   });
 
-  it("lists all businesses in dropdown", async () => {
+  it("marks inactive tab as aria-selected=false", async () => {
     await renderShell();
-    fireEvent.click(screen.getByLabelText(/Select active business/i));
-    expect(screen.getByText("SimpliShelling")).toBeTruthy();
-  });
-
-  it("shows onboarding status for non-active businesses", async () => {
-    await renderShell();
-    fireEvent.click(screen.getByLabelText(/Select active business/i));
-    expect(screen.getByText("onboarding")).toBeTruthy();
-  });
-
-  it("closes dropdown when same item is selected", async () => {
-    await renderShell();
-    fireEvent.click(screen.getByLabelText(/Select active business/i));
-    expect(screen.getByText(/Select Business/i)).toBeTruthy();
-    const items = screen.getAllByText(/Bed Bugs & Beyond/i);
-    fireEvent.click(items[items.length - 1]);
-    expect(screen.queryByText(/Select Business/i)).toBeNull();
+    const tabs = document.querySelectorAll('[role="tab"]');
+    const inactiveTab = Array.from(tabs).find(t => t.getAttribute("aria-selected") === "false");
+    expect(inactiveTab).toBeTruthy();
+    expect(inactiveTab!.textContent).toContain("SimpliShelling");
   });
 });
 

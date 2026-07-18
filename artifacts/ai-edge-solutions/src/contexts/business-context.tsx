@@ -6,6 +6,7 @@ export interface Business {
   id: string;
   name: string;
   shortName: string;
+  accentColor: string;
   profile: BusinessProfile;
   status: "active" | "onboarding" | "pending";
 }
@@ -15,6 +16,7 @@ export const BUSINESSES: Business[] = [
     id: "bed-bugs-and-beyond",
     name: "Bed Bugs & Beyond",
     shortName: "BB&B",
+    accentColor: "#00AEEF",
     profile: DEMO_PROFILE,
     status: "active",
   },
@@ -22,6 +24,7 @@ export const BUSINESSES: Business[] = [
     id: "simplishelling",
     name: "SimpliShelling",
     shortName: "SS",
+    accentColor: "#F26C21",
     profile: {
       businessName: "SimpliShelling",
       websiteUrl: "https://simplishelling.com",

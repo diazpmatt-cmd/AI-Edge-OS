@@ -7,7 +7,16 @@ import { useTheme } from "@/contexts/theme-context";
 import { useActiveBusiness } from "@/contexts/business-context";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
-const TOP_NAV_H = 54;
+const TOP_NAV_H = 70;
+
+// Darken a hex color by mixing with black for gradient endpoints
+function accentDark(hex: string): string {
+  const map: Record<string, string> = {
+    "#00AEEF": "#007AB8",
+    "#F26C21": "#C04E10",
+  };
+  return map[hex] ?? hex;
+}
 
 // ── Business tabs ─────────────────────────────────────────────────────────────
 function BusinessTabs() {
@@ -27,15 +36,17 @@ function BusinessTabs() {
       aria-label="Active business"
       style={{
         display: "flex",
-        alignSelf: "stretch",
+        alignItems: "center",
+        gap: 8,
         overflowX: "auto",
         scrollbarWidth: "none",
-        gap: 2,
+        padding: "0 4px",
       }}
     >
       {businesses.map(b => {
         const isActive = b.id === activeBusiness.id;
-        const statusColor = b.status === "active" ? "#22C55E" : "#F59E0B";
+        const accent = b.accentColor;
+        const dark = accentDark(accent);
         const statusLabel = b.status === "active" ? "Active" : "Onboarding";
         const location = b.profile.city && b.profile.state
           ? `${b.profile.city}, ${b.profile.state}`
@@ -51,77 +62,84 @@ function BusinessTabs() {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              alignSelf: "stretch",
-              padding: "0 18px",
+              gap: 4,
+              padding: "10px 22px",
+              borderRadius: 10,
               cursor: "pointer",
-              border: "none",
-              borderBottom: isActive
-                ? "2px solid #00AEEF"
-                : "2px solid transparent",
-              borderTop: "2px solid transparent",
-              borderLeft: "none",
-              borderRight: "none",
+              border: isActive
+                ? `1px solid ${accent}55`
+                : "1px solid rgba(255,255,255,0.10)",
               background: isActive
-                ? "linear-gradient(180deg, rgba(0,174,239,0.10) 0%, rgba(0,174,239,0.04) 100%)"
-                : "transparent",
-              transition: "all 0.18s",
+                ? `linear-gradient(135deg, ${accent} 0%, ${dark} 100%)`
+                : "rgba(255,255,255,0.07)",
+              boxShadow: isActive
+                ? `0 4px 20px ${accent}55, 0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.18)`
+                : "0 1px 4px rgba(0,0,0,0.25)",
+              transition: "all 0.2s",
               minWidth: 0,
               flexShrink: 0,
-              position: "relative",
+              transform: isActive ? "translateY(-1px)" : "translateY(0)",
             }}
             onMouseEnter={e => {
               if (!isActive) {
                 const el = e.currentTarget as HTMLElement;
-                el.style.background = "rgba(255,255,255,0.04)";
-                el.style.borderBottomColor = "rgba(255,255,255,0.15)";
+                el.style.background = "rgba(255,255,255,0.12)";
+                el.style.borderColor = `${accent}40`;
+                el.style.transform = "translateY(-1px)";
+                el.style.boxShadow = `0 4px 12px ${accent}22, 0 2px 6px rgba(0,0,0,0.2)`;
               }
             }}
             onMouseLeave={e => {
               if (!isActive) {
                 const el = e.currentTarget as HTMLElement;
-                el.style.background = "transparent";
-                el.style.borderBottomColor = "transparent";
+                el.style.background = "rgba(255,255,255,0.07)";
+                el.style.borderColor = "rgba(255,255,255,0.10)";
+                el.style.transform = "translateY(0)";
+                el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.25)";
               }
             }}
           >
-            {/* Name + status dot row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            {/* Row 1: status dot + business name */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{
-                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                background: statusColor,
-                boxShadow: isActive ? `0 0 7px ${statusColor}CC` : `0 0 4px ${statusColor}66`,
+                width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                background: isActive ? "rgba(255,255,255,0.9)" : accent,
+                boxShadow: isActive
+                  ? "0 0 6px rgba(255,255,255,0.6)"
+                  : `0 0 6px ${accent}99`,
               }} />
               <span style={{
-                fontSize: 13, fontWeight: isActive ? 800 : 500,
-                color: isActive ? "#E2E8F0" : "#64748B",
+                fontSize: 14,
+                fontWeight: isActive ? 800 : 600,
+                color: isActive ? "#FFFFFF" : "#94A3B8",
                 whiteSpace: "nowrap",
-                letterSpacing: isActive ? "-0.2px" : "0",
+                letterSpacing: isActive ? "-0.3px" : "0",
+                textShadow: isActive ? "0 1px 4px rgba(0,0,0,0.3)" : "none",
               }}>
                 {b.name}
               </span>
             </div>
 
-            {/* Sub-line: industry · location · status */}
+            {/* Row 2: industry · location [· status] */}
             <div style={{
-              display: "flex", alignItems: "center", gap: 5, marginTop: 2,
-              paddingLeft: 14,
+              display: "flex", alignItems: "center", gap: 5, paddingLeft: 16,
             }}>
               {b.profile.industry && (
                 <span style={{
-                  fontSize: 9, fontWeight: 600,
-                  color: isActive ? "#475569" : "#334155",
+                  fontSize: 10, fontWeight: 600,
+                  color: isActive ? "rgba(255,255,255,0.75)" : "#475569",
                   whiteSpace: "nowrap",
                 }}>
                   {b.profile.industry}
                 </span>
               )}
               {b.profile.industry && location && (
-                <span style={{ fontSize: 9, color: "#1E293B" }}>·</span>
+                <span style={{ fontSize: 10, color: isActive ? "rgba(255,255,255,0.4)" : "#334155" }}>·</span>
               )}
               {location && (
                 <span style={{
-                  fontSize: 9, fontWeight: 500,
-                  color: isActive ? "#475569" : "#334155",
+                  fontSize: 10, fontWeight: 500,
+                  color: isActive ? "rgba(255,255,255,0.75)" : "#475569",
                   whiteSpace: "nowrap",
                 }}>
                   {location}
@@ -129,10 +147,10 @@ function BusinessTabs() {
               )}
               {!isActive && (
                 <>
-                  <span style={{ fontSize: 9, color: "#1E293B" }}>·</span>
+                  <span style={{ fontSize: 10, color: "#334155" }}>·</span>
                   <span style={{
                     fontSize: 9, fontWeight: 700,
-                    color: statusColor,
+                    color: accent,
                     textTransform: "uppercase", letterSpacing: "0.5px",
                   }}>
                     {statusLabel}
@@ -208,40 +226,39 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="app-topnav"
         style={{
           position: "fixed", inset: "0 0 auto 0", height: TOP_NAV_H, zIndex: 30,
-          background: "linear-gradient(180deg, #0B1629 0%, #060E1E 100%)",
-          borderBottom: "1px solid rgba(0,174,239,0.12)",
+          background: "linear-gradient(180deg, #0A1525 0%, #050D1A 100%)",
+          borderBottom: "1px solid rgba(0,174,239,0.10)",
           display: "flex", alignItems: "center",
-          padding: "0 0 0 16px",
-          boxShadow: "0 2px 20px rgba(0,0,0,0.4)",
-          overflow: "hidden",
+          padding: "0 16px",
+          gap: 12,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
         }}
       >
         {/* Logo — always navigates to Command Center home */}
         <Link
           to="/admin/dashboard"
-          style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0, marginRight: 10 }}
+          style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}
         >
-          <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 36, width: "auto", objectFit: "contain" }} />
+          <img src={logoSrc} alt="AI Edge Solutions" style={{ height: 38, width: "auto", objectFit: "contain" }} />
         </Link>
 
         {/* Separator */}
-        <div style={{ width: 1, height: 28, background: "rgba(255,255,255,0.08)", flexShrink: 0, marginRight: 6 }} />
+        <div style={{ width: 1, height: 32, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
 
-        {/* Business tabs — horizontally scrollable */}
+        {/* Business tabs — horizontally scrollable on small screens */}
         <BusinessTabs />
 
-        {/* Push right */}
+        {/* Push right controls to far right */}
         <div style={{ flex: 1 }} />
 
-        {/* Right controls — pinned, no shrink */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px", flexShrink: 0 }}>
-          {/* Light / Dark toggle */}
+        {/* Right controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <button
             onClick={() => setTheme(isDark ? "light" : "dark")}
             title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
             style={{
               display: "flex", alignItems: "center", gap: 5,
-              padding: "5px 11px", borderRadius: 8, cursor: "pointer",
+              padding: "6px 11px", borderRadius: 8, cursor: "pointer",
               background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
               color: "#94A3B8", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
             }}
@@ -252,7 +269,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span>{isDark ? "Light" : "Dark"}</span>
           </button>
 
-          {/* User menu */}
           <UserMenu />
         </div>
       </header>
@@ -262,7 +278,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         className="app-main"
         style={{ paddingTop: TOP_NAV_H, minWidth: 0, overflowX: "hidden" }}
       >
-        {/* Back-to-Command-Center breadcrumb — shown on every page except the dashboard */}
         {!location.startsWith("/admin/dashboard") && (
           <div style={{
             padding: "8px 24px",
@@ -296,8 +311,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <style>{`
         * { transition: background-color 0.2s, border-color 0.2s, color 0.2s; }
         [role="tablist"]::-webkit-scrollbar { display: none; }
-        @media (max-width: 600px) {
-          .app-topnav { padding-left: 10px; }
+        @media (max-width: 640px) {
+          .app-topnav { padding: 0 10px; gap: 8px; }
         }
       `}</style>
     </div>

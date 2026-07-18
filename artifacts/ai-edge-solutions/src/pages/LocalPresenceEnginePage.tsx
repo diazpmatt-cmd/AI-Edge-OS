@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/theme-context";
+import { useActiveBusiness } from "@/contexts/business-context";
 import { LocalPresenceChecklist } from "@/components/LocalPresenceChecklist";
 import { PublishingHubTab } from "@/components/LocalPresencePublishingHub";
 import { LeadReviewHubTab } from "@/components/LocalPresenceLeadReviewHub";
@@ -4748,7 +4749,7 @@ function FBStepBadge({ status }: { status: FBStepStatus }) {
   );
 }
 
-function FacebookLocalPresenceCard() {
+function FacebookLocalPresenceCard({ clientId }: { clientId: string }) {
   const authFetch = useApiFetch();
   const [activeTab,  setActiveTab]  = useState<"checklist" | "bizinfo" | "diagnostics">("checklist");
   const [checklist,  setChecklist]  = useState(FB_CHECKLIST);
@@ -4782,7 +4783,7 @@ function FacebookLocalPresenceCard() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: "default",
+          clientId,
           channelName: "facebook",
           status,
           score,
@@ -5528,15 +5529,17 @@ export default function LocalPresenceEnginePage() {
   const { colors: t } = useTheme();
   const authFetch = useApiFetch();
   const qc = useQueryClient();
+  const { activeBusiness } = useActiveBusiness();
   const now = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   // DB-backed local presence score + channels
   const { data: lpData } = useQuery<{
     score: number;
     channels: Array<{ channelName: string; status: string; score: number }>;
+    profile: { businessName: string; phone: string | null; website: string | null; city: string | null; state: string | null } | null;
   }>({
-    queryKey: ["local_presence_data"],
-    queryFn:  () => authFetch("/api/local-presence?clientId=default"),
+    queryKey: ["local_presence_data", activeBusiness.id],
+    queryFn:  () => authFetch("/api/local-presence?clientId=" + activeBusiness.id),
     staleTime: 30_000, retry: 1,
   });
 
@@ -5630,13 +5633,18 @@ export default function LocalPresenceEnginePage() {
           background: "rgba(0,174,239,0.05)", border: "1px solid rgba(0,174,239,0.15)",
           borderRadius: 12, padding: "12px 18px", marginBottom: 28,
         }}>
-          <span style={{ fontSize: 20, flexShrink: 0 }}>🐛</span>
+          <span style={{ fontSize: 20, flexShrink: 0 }}>📍</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{NAP.name}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#E2E8F0" }}>{activeBusiness.name}</div>
             <div style={{ fontSize: 11.5, color: "#64748B", marginTop: 2 }}>
-              {NAP.category} · {NAP.serviceArea} · {NAP.phone} · {NAP.website.replace("https://", "")}
+              {[
+                lpData?.profile?.city && lpData?.profile?.state
+                  ? `${lpData.profile.city}, ${lpData.profile.state}` : null,
+                lpData?.profile?.phone || null,
+                lpData?.profile?.website
+                  ? lpData.profile.website.replace("https://", "") : null,
+              ].filter(Boolean).join(" · ")}
             </div>
-            <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{NAP.cities}</div>
           </div>
           <div style={{
             background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.18)",
@@ -5695,7 +5703,7 @@ export default function LocalPresenceEnginePage() {
           {/* Thumbtack — V2 dedicated card */}
           <ThumbtackBusinessCard />
           {/* Facebook — V2 dedicated card with DB persistence */}
-          <FacebookLocalPresenceCard />
+          <FacebookLocalPresenceCard clientId={activeBusiness.id} />
           {/* AI Search Coming Soon */}
           <AISearchCard />
         </div>

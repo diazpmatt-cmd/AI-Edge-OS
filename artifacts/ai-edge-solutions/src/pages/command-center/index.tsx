@@ -234,8 +234,133 @@ export default function CommandCenter() {
         <ExecutiveKpiGrid cards={kpiCards} />
 
         {/* ── Module Package Grid ── */}
-        <DashboardSection id="module-packages" title="Your AI Edge Modules" defaultExpanded={true}>
+        <DashboardSection id="module-packages" title="AI Edge Module Navigation" defaultExpanded={true}>
           <ModulePackageGrid />
+        </DashboardSection>
+
+        {/* ── Plans & À La Carte Services ── */}
+        <DashboardSection id="plans-services" title="Plans & À La Carte Services" defaultExpanded={true}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+
+            {/* Pricing Packages card */}
+            <div style={{
+              background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+              border: "1px solid rgba(245,158,11,0.22)",
+              borderRadius: 16, overflow: "hidden",
+            }}>
+              <div style={{
+                background: "rgba(245,158,11,0.07)",
+                borderBottom: "1px solid rgba(245,158,11,0.18)",
+                padding: "13px 18px", display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontSize: 20 }}>📦</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#F59E0B", letterSpacing: "0.6px", textTransform: "uppercase" }}>Pricing Packages</div>
+                  <div style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", marginTop: 1 }}>Monthly plans for every business size</div>
+                </div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "2px 8px" }}>3 TIERS</div>
+              </div>
+              <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
+                  { name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
+                  { name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
+                ].map(pkg => (
+                  <div key={pkg.name} style={{
+                    background: `${pkg.color}08`, border: `1px solid ${pkg.color}22`,
+                    borderRadius: 10, padding: "10px 14px",
+                    display: "flex", alignItems: "center", gap: 10,
+                  }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: pkg.color, boxShadow: `0 0 6px ${pkg.color}88`, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.9)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        {pkg.name}
+                        <span style={{ fontSize: 8, fontWeight: 800, color: pkg.color, background: `${pkg.color}18`, border: `1px solid ${pkg.color}30`, borderRadius: 5, padding: "1px 5px" }}>{pkg.badge}</span>
+                      </div>
+                      <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.7)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {pkg.modules.slice(0, 2).join(" · ")} · +{pkg.modules.length - 2} more
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: pkg.color, flexShrink: 0 }}>{pkg.price}</div>
+                  </div>
+                ))}
+                <Link to="/pricing">
+                  <div style={{
+                    marginTop: 2, padding: "9px 12px", textAlign: "center",
+                    background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.22)",
+                    borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#F59E0B", cursor: "pointer",
+                    transition: "background 0.15s",
+                  }}>
+                    View Plan Details →
+                  </div>
+                </Link>
+              </div>
+            </div>
+
+            {/* À La Carte Services card */}
+            <div style={{
+              background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
+              border: "1px solid rgba(242,108,33,0.22)",
+              borderRadius: 16, overflow: "hidden",
+            }}>
+              <div style={{
+                background: "rgba(242,108,33,0.07)",
+                borderBottom: "1px solid rgba(242,108,33,0.18)",
+                padding: "13px 18px", display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontSize: 20 }}>🛒</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#F26C21", letterSpacing: "0.6px", textTransform: "uppercase" }}>À La Carte Services</div>
+                  <div style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", marginTop: 1 }}>Premium add-ons for accelerated growth</div>
+                </div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#F26C21", background: "rgba(242,108,33,0.1)", border: "1px solid rgba(242,108,33,0.25)", borderRadius: 6, padding: "2px 8px" }}>6 SERVICES</div>
+              </div>
+              <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 7 }}>
+                {[
+                  { icon: "📞", name: "Lead Recovery AI",          sub: "Missed call conversion",     color: "#22C55E", status: "available", to: "/admin/lead-recovery"     },
+                  { icon: "🤖", name: "AI Receptionist",           sub: "24/7 automated call handling",color: "#38BDF8", status: "available", to: "/admin/ai-receptionist"   },
+                  { icon: "📊", name: "Call Intelligence",         sub: "Call tracking & analytics",  color: "#60A5FA", status: "available", to: "/admin/call-intelligence"  },
+                  { icon: "🕵️", name: "Competitor Intelligence",   sub: "Market positioning analysis", color: "#8B5CF6", status: "soon",      to: "#"                        },
+                  { icon: "🔗", name: "Authority & Backlink Engine",sub: "Domain authority building",  color: "#38BDF8", status: "soon",      to: "#"                        },
+                  { icon: "🧠", name: "AI CMO",                    sub: "Strategic AI marketing",     color: "#F472B6", status: "available", to: "/admin/apollos"           },
+                ].map(svc => (
+                  <div key={svc.name} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 10px", borderRadius: 8,
+                    background: `${svc.color}06`,
+                    border: `1px solid ${svc.color}18`,
+                    opacity: svc.status === "soon" ? 0.65 : 1,
+                  }}>
+                    <span style={{ fontSize: 15, flexShrink: 0 }}>{svc.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: "rgba(226,232,240,0.88)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{svc.name}</div>
+                      <div style={{ fontSize: 9, color: "rgba(100,116,139,0.65)", marginTop: 1 }}>{svc.sub}</div>
+                    </div>
+                    <div style={{
+                      fontSize: 8, fontWeight: 700, flexShrink: 0,
+                      color: svc.status === "soon" ? "rgba(100,116,139,0.7)" : svc.color,
+                      background: svc.status === "soon" ? "rgba(100,116,139,0.08)" : `${svc.color}14`,
+                      border: `1px solid ${svc.status === "soon" ? "rgba(100,116,139,0.2)" : svc.color + "30"}`,
+                      borderRadius: 5, padding: "1px 5px",
+                    }}>
+                      {svc.status === "soon" ? "SOON" : "LIVE"}
+                    </div>
+                  </div>
+                ))}
+                <Link to="/services">
+                  <div style={{
+                    marginTop: 2, padding: "9px 12px", textAlign: "center",
+                    background: "rgba(242,108,33,0.06)", border: "1px solid rgba(242,108,33,0.22)",
+                    borderRadius: 9, fontSize: 10, fontWeight: 700, color: "#F26C21", cursor: "pointer",
+                    transition: "background 0.15s",
+                  }}>
+                    Browse All Services →
+                  </div>
+                </Link>
+              </div>
+            </div>
+
+          </div>
         </DashboardSection>
 
         {/* ── S3: AI Executive Brief ── */}

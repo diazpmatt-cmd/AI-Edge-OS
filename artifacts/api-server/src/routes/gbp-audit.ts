@@ -6,9 +6,12 @@
  *   GET  /api/gbp/audit/latest   — latest snapshot + checks for a client
  *   GET  /api/gbp/audit/history  — paginated list of past snapshots
  *
- * Tables bootstrapped here via raw SQL (same pattern as call-intelligence and
- * integration-health-history — drizzle-kit push is blocked by pre-existing
- * unique constraint conflicts).
+ * Schema note:
+ *   CREATE TABLE DDL lives exclusively in lib/schema-migrate.ts (canonical).
+ *   This file holds only ALTER TABLE guards for columns added after the initial
+ *   deployment.  If you add a column to lib/db/src/schema/gbp-audit.ts you MUST
+ *   update schema-migrate.ts (CREATE TABLE + ALTER TABLE guard) — do NOT add
+ *   another CREATE TABLE here.
  *
  * Phase 2: fetches live data from:
  *   - mybusinessbusinessinformation.googleapis.com  (location profile, hours, categories, etc.)
@@ -32,77 +35,29 @@ import { fetchGbpLiveData } from "../lib/gbp-live-data";
 
 const router = Router();
 
-// ── Bootstrap: create tables if they don't exist ─────────────────────────────
+// ── Bootstrap: ALTER TABLE guards only ───────────────────────────────────────
+// CREATE TABLE DDL lives in lib/schema-migrate.ts (runs before any route fires).
+// This function adds only columns that may be absent on tables created by an
+// older version of schema-migrate.ts.  Do NOT add CREATE TABLE statements here.
+// See also: lib/db/src/schema/gbp-audit.ts for the Drizzle column definitions.
 
-async function bootstrapGbpAuditTables(): Promise<void> {
+async function bootstrapGbpAuditColumns(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query(`
-      CREATE TABLE IF NOT EXISTS gbp_audit_snapshots (
-        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        client_id       TEXT NOT NULL,
-        user_id         TEXT NOT NULL,
-        status          TEXT NOT NULL DEFAULT 'pending',
-        local_score     INTEGER NOT NULL DEFAULT 0,
-        local_max_score INTEGER NOT NULL DEFAULT 0,
-        api_score       INTEGER NOT NULL DEFAULT 0,
-        api_max_score   INTEGER NOT NULL DEFAULT 0,
-        overall_score   INTEGER NOT NULL DEFAULT 0,
-        max_score       INTEGER NOT NULL DEFAULT 100,
-        checks_passed   INTEGER NOT NULL DEFAULT 0,
-        checks_warning  INTEGER NOT NULL DEFAULT 0,
-        checks_failed   INTEGER NOT NULL DEFAULT 0,
-        checks_pending  INTEGER NOT NULL DEFAULT 0,
-        location_name   TEXT,
-        location_title  TEXT,
-        gbp_connected   BOOLEAN NOT NULL DEFAULT FALSE,
-        error_message   TEXT,
-        started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        completed_at    TIMESTAMPTZ,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      -- Add api_score / api_max_score to existing tables (idempotent)
+      -- api_score / api_max_score added in Phase 2; guard for pre-Phase-2 deployments.
       ALTER TABLE gbp_audit_snapshots
         ADD COLUMN IF NOT EXISTS api_score     INTEGER NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS api_max_score INTEGER NOT NULL DEFAULT 0;
-
-      CREATE TABLE IF NOT EXISTS gbp_audit_checks (
-        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        snapshot_id     TEXT NOT NULL,
-        client_id       TEXT NOT NULL,
-        category        TEXT NOT NULL,
-        check_key       TEXT NOT NULL,
-        check_label     TEXT NOT NULL,
-        evidence_type   TEXT NOT NULL DEFAULT 'local',
-        status          TEXT NOT NULL DEFAULT 'data_pending',
-        score           INTEGER NOT NULL DEFAULT 0,
-        max_score       INTEGER NOT NULL DEFAULT 0,
-        priority        TEXT NOT NULL DEFAULT 'medium',
-        current_value   TEXT,
-        recommendation  TEXT,
-        raw_data        JSONB NOT NULL DEFAULT '{}',
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS gbp_audit_snapshots_client_id_created_at
-        ON gbp_audit_snapshots(client_id, created_at DESC);
-
-      CREATE INDEX IF NOT EXISTS gbp_audit_checks_snapshot_id
-        ON gbp_audit_checks(snapshot_id);
-
-      CREATE INDEX IF NOT EXISTS gbp_audit_checks_client_id
-        ON gbp_audit_checks(client_id);
     `);
   } finally {
     client.release();
   }
 }
 
-// Bootstrap runs once at startup (fire-and-forget with error log)
-bootstrapGbpAuditTables().catch(err =>
-  console.error("[gbp-audit] bootstrap failed:", err)
+// Runs once at startup (fire-and-forget); schema-migrate.ts guarantees tables exist.
+bootstrapGbpAuditColumns().catch(err =>
+  console.error("[gbp-audit] column bootstrap failed:", err)
 );
 
 // ── Data gathering ─────────────────────────────────────────────────────────────

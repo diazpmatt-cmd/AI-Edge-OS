@@ -1,9 +1,11 @@
 /**
  * GBP Audit & Optimization Engine — Schema
  *
- * Two tables, bootstrapped via raw SQL in the gbp-audit route
- * (same pattern as call_intelligence and integration_health_history).
+ * Two tables, bootstrapped via raw SQL.  DDL ownership:
+ *   - lib/schema-migrate.ts      ← canonical CREATE TABLE (runs at startup before routes)
+ *   - routes/gbp-audit.ts        ← ALTER TABLE guards only (adds columns missed by older deployments)
  * Do NOT use drizzle-kit push for these tables.
+ * When you add a column here, update BOTH files above.
  *
  * gbp_audit_snapshots — one audit run per client
  * gbp_audit_checks    — one row per check per snapshot (25 checks total)

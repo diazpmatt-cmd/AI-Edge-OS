@@ -821,9 +821,13 @@ export async function migrateSchema(): Promise<void> {
   `);
 
   // ── GBP Audit Engine ───────────────────────────────────────────────────────
-  // These tables are also bootstrapped in routes/gbp-audit.ts (belt-and-suspenders),
-  // but the canonical production guarantee lives here so they exist before any
-  // route handler fires.
+  // Canonical production DDL for GBP audit tables.  This is the single source
+  // of truth for CREATE TABLE.  If you add a column to lib/db/src/schema/gbp-audit.ts
+  // you MUST also add it here in the CREATE TABLE AND add an ALTER TABLE guard
+  // below so existing deployments pick it up without a manual migration.
+  //
+  // routes/gbp-audit.ts holds complementary ALTER TABLE guards only — it no
+  // longer duplicates the CREATE TABLE DDL.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gbp_audit_snapshots (
       id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -832,6 +836,8 @@ export async function migrateSchema(): Promise<void> {
       status          TEXT        NOT NULL DEFAULT 'pending',
       local_score     INTEGER     NOT NULL DEFAULT 0,
       local_max_score INTEGER     NOT NULL DEFAULT 0,
+      api_score       INTEGER     NOT NULL DEFAULT 0,
+      api_max_score   INTEGER     NOT NULL DEFAULT 0,
       overall_score   INTEGER     NOT NULL DEFAULT 0,
       max_score       INTEGER     NOT NULL DEFAULT 100,
       checks_passed   INTEGER     NOT NULL DEFAULT 0,
@@ -847,6 +853,12 @@ export async function migrateSchema(): Promise<void> {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- ALTER TABLE guards: add any column that may be absent on tables created
+    -- by an older version of this bootstrap (idempotent; ADD COLUMN IF NOT EXISTS).
+    ALTER TABLE gbp_audit_snapshots
+      ADD COLUMN IF NOT EXISTS api_score     INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS api_max_score INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS gbp_audit_checks (
       id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

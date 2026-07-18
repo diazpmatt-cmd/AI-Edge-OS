@@ -459,7 +459,7 @@ export default function GbpAuditPage() {
   // ── Latest audit fetch ──────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery<{ snapshot: AuditSnapshot | null; checks: AuditCheck[] }>({
     queryKey: ["gbp-audit-latest", clientId],
-    queryFn:  () => apiFetch(`/api/gbp/audit/latest?clientId=${encodeURIComponent(clientId)}`),
+    queryFn:  () => apiFetch(`/gbp/audit/latest?clientId=${encodeURIComponent(clientId)}`),
     staleTime: 60_000,
     retry: false,
   });
@@ -467,14 +467,14 @@ export default function GbpAuditPage() {
   // ── History fetch (for trend chart) ────────────────────────────────────────
   const { data: historyData } = useQuery<{ snapshots: HistorySnapshot[] }>({
     queryKey: ["gbp-audit-history", clientId],
-    queryFn:  () => apiFetch(`/api/gbp/audit/history?clientId=${encodeURIComponent(clientId)}&limit=30`),
+    queryFn:  () => apiFetch(`/gbp/audit/history?clientId=${encodeURIComponent(clientId)}&limit=30`),
     staleTime: 60_000,
     retry: false,
   });
 
   // ── Run audit mutation ──────────────────────────────────────────────────────
   const { mutate: runAudit, isPending: isRunning } = useMutation({
-    mutationFn: () => apiFetch("/api/gbp/audit/run", {
+    mutationFn: () => apiFetch("/gbp/audit/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId }),

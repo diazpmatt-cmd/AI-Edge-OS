@@ -1388,4 +1388,33 @@ describe("T-C3-U: competitor identifier guard fires at saveSignals time", () => 
 
     expect(warnSpy).toHaveBeenCalledTimes(2);
   });
+
+  it("U6: warns via persistRunResult path when summary contains a signal with competitorRank and no identifier", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const badSignal = makeSignal({
+      competitorRank:  4,
+      rawProviderData: { source: "dataforseo_serp" },
+    });
+
+    await repo.persistRunResult(makeSummary({ allSignals: [badSignal] }));
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]![0]).toContain("competitor_rank=4");
+  });
+
+  it("U7: does NOT warn via persistRunResult when the competitor signal has a valid topCompetitorDomain", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const signal = makeSignal({
+      competitorRank:  1,
+      rawProviderData: { topCompetitorDomain: "foleypestcontrol.com" },
+    });
+
+    await repo.persistRunResult(makeSummary({ allSignals: [signal] }));
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
 });

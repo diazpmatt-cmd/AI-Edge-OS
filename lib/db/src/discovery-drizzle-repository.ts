@@ -506,9 +506,11 @@ export class DrizzleDiscoveryRepository implements DiscoveryRepository {
         });
 
       // 2. Persist signals in batches of 500 (idempotent on deterministic PK)
+      //    Guard fires here so future callers that bypass saveSignals() are also covered.
       const SIGNAL_BATCH = 500;
       for (let i = 0; i < summary.allSignals.length; i += SIGNAL_BATCH) {
         const batch = summary.allSignals.slice(i, i + SIGNAL_BATCH);
+        for (const s of batch) warnIfMissingCompetitorIdentifier(s);
         await tx
           .insert(discoverySignalsTable)
           .values(batch.map(serializeSignal))

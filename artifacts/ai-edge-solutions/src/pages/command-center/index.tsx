@@ -150,6 +150,7 @@ export default function CommandCenter() {
         color: "#F59E0B",
         loading: gdLoading,
         link: "/admin/profit-center",
+        packageId: "revenue-ops",
       },
       {
         id: "leads",
@@ -160,6 +161,7 @@ export default function CommandCenter() {
         color: "#22C55E",
         loading: leadsLoading,
         link: "/admin/lead-recovery",
+        packageId: "lead-pipeline",
       },
       {
         id: "reputation",
@@ -169,6 +171,7 @@ export default function CommandCenter() {
         status: "setup-required",
         color: "#F59E0B",
         setupRequired: true,
+        packageId: "market-presence",
       },
       {
         id: "local-visibility",
@@ -178,6 +181,7 @@ export default function CommandCenter() {
         status: "warning",
         color: "#00AEEF",
         link: "/admin/local-presence",
+        packageId: "market-presence",
       },
       {
         id: "ai-productivity",
@@ -188,6 +192,7 @@ export default function CommandCenter() {
         color: "#8B5CF6",
         loading: ciLoading || postsLoading,
         link: "/admin/lead-recovery",
+        packageId: "ai-performance",
       },
     ];
   }, [gd, gdLoading, leadsData, leadsLoading, ciData, ciLoading, postsData, postsLoading]);

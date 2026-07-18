@@ -13,6 +13,7 @@ export interface KpiCardDef {
   error?: boolean;
   setupRequired?: boolean;
   color: string;
+  packageId?: string;
 }
 
 export interface ActionItem {

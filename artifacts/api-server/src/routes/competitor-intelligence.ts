@@ -150,6 +150,20 @@ router.get("/api/competitor-intelligence/summary", async (req, res) => {
     );
     const competitorGapCount = parseInt(gapCountRes.rows[0]?.count ?? "0", 10);
 
+    // Count gaps where no competitor name can be resolved from any field
+    const unresolvableGapRes = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count
+       FROM discovery_signals
+       WHERE client_id = $1 AND snapshot_id = $2
+         AND competitor_rank IS NOT NULL
+         AND (raw_provider_data->>'competitorName'     IS NULL OR raw_provider_data->>'competitorName'     = '')
+         AND (raw_provider_data->>'topCompetitorTitle' IS NULL OR raw_provider_data->>'topCompetitorTitle' = '')
+         AND (raw_provider_data->>'topCompetitorDomain'IS NULL OR raw_provider_data->>'topCompetitorDomain'= '')
+         AND (raw_provider_data->'competitorDomains'->>0 IS NULL OR raw_provider_data->'competitorDomains'->>0 = '')`,
+      [client.id, snap.id],
+    );
+    const unresolvableGapCount = parseInt(unresolvableGapRes.rows[0]?.count ?? "0", 10);
+
     // Count high-volume gaps (volume_estimate > 100)
     const highVolGapRes = await pool.query<{ count: string }>(
       `SELECT COUNT(*) AS count
@@ -189,6 +203,7 @@ router.get("/api/competitor-intelligence/summary", async (req, res) => {
       },
       competitorGapCount,
       highVolumeGapCount,
+      unresolvableGapCount,
       totalRuns,
     });
   } catch (err) {

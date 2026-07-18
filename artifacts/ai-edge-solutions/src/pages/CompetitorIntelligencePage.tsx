@@ -19,6 +19,7 @@ interface SummaryData {
   };
   competitorGapCount: number;
   highVolumeGapCount: number;
+  unresolvableGapCount?: number;
   totalRuns: number;
 }
 
@@ -407,7 +408,15 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                     </a>
                   </div>
                 ) : (
-                  <span style={{ fontSize: 10, color: "rgba(148,163,184,0.3)" }}>—</span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600,
+                    color: "rgba(245,158,11,0.65)",
+                    fontStyle: "italic",
+                  }}
+                    title="No organic result data was stored for this signal — competitor identity cannot be resolved"
+                  >
+                    Unknown competitor
+                  </span>
                 )}
               </div>
 
@@ -695,6 +704,28 @@ function OverviewTab({
         <StatCard label="SIGNALS RECEIVED" value={run?.signalsReceived ?? 0} sub="raw market signals" accent="#60A5FA" />
         <StatCard label="CLUSTERS BUILT" value={run?.clusterCount ?? 0} sub="topic groups" accent="#A78BFA" />
       </div>
+
+      {/* Data-quality warning — shown when some gap signals have no resolvable competitor name */}
+      {(summary.unresolvableGapCount ?? 0) > 0 && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10,
+          background: "rgba(245,158,11,0.07)",
+          border: "1px solid rgba(245,158,11,0.22)",
+          borderRadius: 10, padding: "12px 14px",
+        }}>
+          <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#F59E0B", marginBottom: 3 }}>
+              {summary.unresolvableGapCount} gap{summary.unresolvableGapCount === 1 ? "" : "s"} with unknown competitor
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.5 }}>
+              {summary.unresolvableGapCount === 1 ? "This signal was" : "These signals were"} stored without organic result data, so the competitor
+              identity cannot be resolved. They will appear as <em style={{ color: "rgba(245,158,11,0.65)" }}>Unknown competitor</em> in
+              the Keyword Gaps tab. Run the backfill endpoint or trigger a new scan to populate missing data.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Latest run status */}
       {run && (

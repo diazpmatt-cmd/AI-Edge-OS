@@ -3,7 +3,9 @@ import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   FlatList,
+  Linking,
   Platform,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -95,6 +97,15 @@ export default function KeywordsScreen() {
                 <View style={[s.diffBadge, { backgroundColor: diffColor + "20" }]}>
                   <Text style={[s.diffText, { color: diffColor }]}>{item.difficulty}</Text>
                 </View>
+                <Pressable
+                  onPress={() => Linking.openURL(`https://www.google.com/search?q=${encodeURIComponent(item.keyword)}`)}
+                  hitSlop={8}
+                  style={({ pressed }) => [s.searchLink, { opacity: pressed ? 0.5 : 1 }]}
+                  accessibilityRole="link"
+                  accessibilityLabel={`Search "${item.keyword}" on Google`}
+                >
+                  <Feather name="external-link" size={14} color={colors.mutedForeground} />
+                </Pressable>
               </View>
 
               <View style={s.cardMeta}>
@@ -151,6 +162,7 @@ const s = StyleSheet.create({
   intentBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   intentText: { fontSize: 11, fontWeight: "600" as const, fontFamily: "Inter_600SemiBold" },
   service: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  searchLink: { padding: 2, justifyContent: "center", alignItems: "center" },
   empty: {
     flex: 1, borderWidth: 1, borderRadius: 16, borderStyle: "dashed",
     padding: 40, alignItems: "center", gap: 12,

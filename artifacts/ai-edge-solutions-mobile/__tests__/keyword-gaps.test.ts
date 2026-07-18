@@ -173,6 +173,76 @@ describe("Keyword Gaps — response transformation invariants", () => {
   });
 });
 
+type RetryState = HookState & { errorWasClearedBeforeFetch: boolean };
+
+async function simulateRetry(
+  previousState: HookState,
+  fetchImpl: () => Promise<Response>,
+): Promise<RetryState> {
+  let gaps: GapSignal[] = previousState.gaps;
+  let error = previousState.error;
+
+  error = false;
+  const errorWasClearedBeforeFetch = !error;
+
+  loading: {
+    try {
+      const res = await fetchImpl();
+      if (!res.ok) {
+        error = true;
+      } else {
+        const data: GapsResponse = await res.json();
+        gaps = data.hasData ? data.gaps : [];
+      }
+    } catch {
+      error = true;
+    }
+    break loading;
+  }
+
+  return { gaps, loading: false, error, errorWasClearedBeforeFetch };
+}
+
+describe("Keyword Gaps — retry / error recovery", () => {
+  it("clears error and populates gaps after a successful retry following a prior failure", async () => {
+    const payload: GapsResponse = {
+      hasData: true,
+      gaps: [makeGap()],
+      count: 1,
+    };
+
+    const failedState = await simulateFetch(() =>
+      Promise.reject(new TypeError("Network request failed")),
+    );
+    expect(failedState.error).toBe(true);
+    expect(failedState.gaps).toHaveLength(0);
+
+    const retryState = await simulateRetry(failedState, () =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    expect(retryState.error).toBe(false);
+    expect(retryState.gaps).toHaveLength(1);
+    expect(retryState.gaps[0].keyword).toBe("pest control near me");
+  });
+
+  it("resets error to false at the start of each fetchGaps call regardless of prior error state", async () => {
+    const failedState = await simulateFetch(() =>
+      Promise.resolve(new Response(null, { status: 500 })),
+    );
+    expect(failedState.error).toBe(true);
+
+    const retryState = await simulateRetry(failedState, () =>
+      Promise.resolve(new Response(null, { status: 500 })),
+    );
+    expect(retryState.errorWasClearedBeforeFetch).toBe(true);
+  });
+});
+
 describe("Keyword Gaps — error state", () => {
   it("sets error=true and gaps=[] when fetch throws a network error", async () => {
     const { gaps, loading, error } = await simulateFetch(() =>

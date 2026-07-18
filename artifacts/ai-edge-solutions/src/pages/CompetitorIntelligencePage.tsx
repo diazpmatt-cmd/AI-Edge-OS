@@ -418,14 +418,22 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                     </a>
                   </div>
                 ) : (
-                  <span style={{
-                    fontSize: 9, fontWeight: 600,
-                    color: "rgba(245,158,11,0.65)",
-                    fontStyle: "italic",
-                  }}
-                    title="No organic result data was stored for this signal — competitor identity cannot be resolved"
+                  <span
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      fontSize: 9, fontWeight: 600,
+                      color: "rgba(245,158,11,0.75)",
+                      fontStyle: "italic",
+                      cursor: "default",
+                    }}
+                    title="Competitor name unavailable — run a fresh competitor scan to populate it"
                   >
-                    Unknown competitor
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, opacity: 0.9 }}>
+                      <path d="M8 1.5L1.5 13.5h13L8 1.5z" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(245,158,11,0.12)"/>
+                      <path d="M8 6.5v3" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
+                      <circle cx="8" cy="11.5" r="0.75" fill="rgba(245,158,11,0.9)"/>
+                    </svg>
+                    Name unavailable
                   </span>
                 )}
               </div>

@@ -11,6 +11,20 @@ type CheckStatus   = "pass" | "warning" | "fail" | "data_pending" | "error";
 type CheckPriority = "critical" | "high" | "medium" | "low";
 type CheckCategory = "information" | "media" | "reviews" | "posts" | "authority";
 
+interface HistorySnapshot {
+  id:            string;
+  status:        string;
+  overallScore:  number;
+  maxScore:      number;
+  localScore:    number;
+  localMaxScore: number;
+  apiScore:      number;
+  apiMaxScore:   number;
+  gbpConnected:  boolean;
+  createdAt:     string;
+  completedAt:   string | null;
+}
+
 interface AuditCheck {
   id:             string;
   snapshotId:     string;
@@ -68,6 +82,177 @@ const CATEGORY_META: Record<CheckCategory, { label: string; icon: string; accent
   posts:       { label: "Google Posts",         icon: "📝", accent: "#2DD4BF" },
   authority:   { label: "Authority & Trust",    icon: "🛡",  accent: "#22C55E" },
 };
+
+// ── Trend Chart ────────────────────────────────────────────────────────────────
+
+function TrendChart({ snapshots }: { snapshots: HistorySnapshot[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  const complete = snapshots
+    .filter(s => s.status === "complete")
+    .slice()
+    .reverse(); // oldest → newest
+
+  if (complete.length < 2) {
+    return (
+      <div style={{
+        background: "rgba(11,22,41,0.7)", borderRadius: 14,
+        border: "1px solid rgba(45,212,191,0.1)",
+        padding: "16px 20px", marginBottom: 20,
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        <span style={{ fontSize: 18 }}>📈</span>
+        <div style={{ fontSize: 12, color: "rgba(100,116,139,0.6)" }}>
+          Run at least 2 audits to see the score trend chart.
+        </div>
+      </div>
+    );
+  }
+
+  const W = 560;
+  const H = 80;
+  const PAD_X = 32;
+  const PAD_Y = 12;
+
+  const scores = complete.map(s =>
+    s.maxScore > 0 ? Math.round((s.overallScore / s.maxScore) * 100) : 0
+  );
+  const minS = Math.max(0, Math.min(...scores) - 10);
+  const maxS = Math.min(100, Math.max(...scores) + 10);
+  const range = maxS - minS || 10;
+
+  const px = (i: number) => PAD_X + (i / (complete.length - 1)) * (W - PAD_X * 2);
+  const py = (v: number) => H - PAD_Y - ((v - minS) / range) * (H - PAD_Y * 2);
+
+  const points = scores.map((v, i) => `${px(i)},${py(v)}`).join(" ");
+
+  const first  = scores[0];
+  const last   = scores[scores.length - 1];
+  const delta  = last - first;
+  const trendColor = delta > 2 ? "#22C55E" : delta < -2 ? "#EF4444" : "#60A5FA";
+  const trendLabel = delta > 2 ? `▲ +${delta} pts` : delta < -2 ? `▼ ${delta} pts` : "→ Stable";
+
+  const hovSnap  = hovered !== null ? complete[hovered] : null;
+  const hovScore = hovered !== null ? scores[hovered] : null;
+
+  return (
+    <div style={{
+      background: "rgba(11,22,41,0.7)", borderRadius: 14,
+      border: "1px solid rgba(45,212,191,0.1)",
+      padding: "16px 20px", marginBottom: 20,
+    }}>
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.6px", color: "rgba(148,163,184,0.5)", textTransform: "uppercase" }}>
+          Score Trend — Last {complete.length} Audits
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {hovSnap ? (
+            <div style={{ fontSize: 11, color: "rgba(148,163,184,0.7)" }}>
+              {new Date(hovSnap.createdAt).toLocaleDateString()} —{" "}
+              <span style={{ fontWeight: 700, color: "#F1F5F9" }}>{hovScore}%</span>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, fontWeight: 700, color: trendColor }}>
+              {trendLabel}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "rgba(100,116,139,0.5)" }}>
+            Current: <span style={{ color: "#F1F5F9", fontWeight: 700 }}>{last}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SVG chart */}
+      <div style={{ overflowX: "auto" }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: "100%", height: H, display: "block", minWidth: 200 }}
+          onMouseLeave={() => setHovered(null)}
+        >
+          <defs>
+            <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={trendColor} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Horizontal grid lines */}
+          {[25, 50, 75].map(v => {
+            const y = py(v);
+            if (y < 0 || y > H) return null;
+            return (
+              <line key={v} x1={PAD_X} y1={y} x2={W - PAD_X} y2={y}
+                stroke="rgba(255,255,255,0.04)" strokeWidth={1} />
+            );
+          })}
+
+          {/* Area fill */}
+          <polygon
+            points={`${px(0)},${H} ${points} ${px(complete.length - 1)},${H}`}
+            fill="url(#trendFill)"
+          />
+
+          {/* Line */}
+          <polyline
+            points={points}
+            fill="none"
+            stroke={trendColor}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 4px ${trendColor}55)` }}
+          />
+
+          {/* Data points + hover areas */}
+          {complete.map((s, i) => {
+            const x = px(i);
+            const y = py(scores[i]);
+            const isHov = hovered === i;
+            return (
+              <g key={s.id}>
+                {/* Invisible wide hover target */}
+                <rect
+                  x={x - 14} y={0} width={28} height={H}
+                  fill="transparent"
+                  onMouseEnter={() => setHovered(i)}
+                  style={{ cursor: "crosshair" }}
+                />
+                {/* Vertical hover line */}
+                {isHov && (
+                  <line x1={x} y1={PAD_Y} x2={x} y2={H - PAD_Y}
+                    stroke="rgba(255,255,255,0.15)" strokeWidth={1} strokeDasharray="3,3" />
+                )}
+                {/* Dot */}
+                <circle
+                  cx={x} cy={y} r={isHov ? 5 : 3}
+                  fill={isHov ? trendColor : "#030612"}
+                  stroke={trendColor}
+                  strokeWidth={isHov ? 2 : 1.5}
+                  style={{ transition: "r 0.1s, fill 0.1s", pointerEvents: "none" }}
+                />
+              </g>
+            );
+          })}
+
+          {/* Y-axis labels */}
+          {[minS, maxS].map((v, i) => (
+            <text
+              key={i}
+              x={PAD_X - 4} y={py(v) + 4}
+              textAnchor="end"
+              fill="rgba(100,116,139,0.45)"
+              fontSize={9}
+              style={{ fontFamily: "system-ui" }}
+            >
+              {v}%
+            </text>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 // ── Score Ring (SVG) ───────────────────────────────────────────────────────────
 
@@ -279,6 +464,14 @@ export default function GbpAuditPage() {
     retry: false,
   });
 
+  // ── History fetch (for trend chart) ────────────────────────────────────────
+  const { data: historyData } = useQuery<{ snapshots: HistorySnapshot[] }>({
+    queryKey: ["gbp-audit-history", clientId],
+    queryFn:  () => apiFetch(`/api/gbp/audit/history?clientId=${encodeURIComponent(clientId)}&limit=30`),
+    staleTime: 60_000,
+    retry: false,
+  });
+
   // ── Run audit mutation ──────────────────────────────────────────────────────
   const { mutate: runAudit, isPending: isRunning } = useMutation({
     mutationFn: () => apiFetch("/api/gbp/audit/run", {
@@ -289,6 +482,7 @@ export default function GbpAuditPage() {
     onSuccess: () => {
       toast.success("GBP audit complete");
       qc.invalidateQueries({ queryKey: ["gbp-audit-latest", clientId] });
+      qc.invalidateQueries({ queryKey: ["gbp-audit-history", clientId] });
     },
     onError: () => toast.error("Audit failed — check console for details"),
   });
@@ -419,6 +613,11 @@ export default function GbpAuditPage() {
               )}
             </div>
           </div>
+        )}
+
+        {/* ── Score trend chart ────────────────────────────────────────────── */}
+        {snap && (
+          <TrendChart snapshots={historyData?.snapshots ?? []} />
         )}
 
         {/* ── Phase 2 unlock callout ───────────────────────────────────────── */}

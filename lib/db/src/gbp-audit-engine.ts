@@ -214,8 +214,24 @@ function notConnected(def: CheckDefinition): GbpCheckResult {
     maxScore:       def.maxScore,
     priority:       def.priority,
     currentValue:   null,
-    recommendation: notes ?? "Connect the GBP Business Information API to evaluate this check.",
+    recommendation: def.phase2Notes ?? "Connect the GBP Business Information API to evaluate this check.",
     rawData:        { phase2Notes: def.phase2Notes ?? null },
+  };
+}
+
+function pending(def: CheckDefinition, apiError?: string): GbpCheckResult {
+  return {
+    category:       def.category,
+    checkKey:       def.checkKey,
+    checkLabel:     def.checkLabel,
+    evidenceType:   "gbp_api",
+    status:         "data_pending",
+    score:          0,
+    maxScore:       def.maxScore,
+    priority:       def.priority,
+    currentValue:   apiError ? `API error: ${apiError}` : null,
+    recommendation: "Connect the GBP Business Information API to evaluate this check.",
+    rawData:        { phase2Notes: def.phase2Notes ?? null, apiError: apiError ?? null },
   };
 }
 

@@ -36,6 +36,8 @@ import type { Pool } from "pg";
 import { z } from "zod/v4";
 import type * as schema from "./schema";
 
+import { warnIfMissingCompetitorIdentifier } from "./discovery-normalizer";
+
 import type {
   DiscoverySignal,
   DiscoveryCluster,
@@ -533,6 +535,7 @@ export class DrizzleDiscoveryRepository implements DiscoveryRepository {
 
   async saveSignals(signals: DiscoverySignal[]): Promise<void> {
     if (!signals.length) return;
+    for (const s of signals) warnIfMissingCompetitorIdentifier(s);
     const BATCH = 500;
     for (let i = 0; i < signals.length; i += BATCH) {
       await this.db
@@ -679,6 +682,7 @@ export class InMemoryDiscoveryRepository implements DiscoveryRepository {
     this.writeCallCounts.saveSignals++;
     if (this.simulateWriteFailure) throw new Error("simulated_db_write_failure");
     for (const s of signals) {
+      warnIfMissingCompetitorIdentifier(s);
       // ON CONFLICT DO NOTHING behavior: skip if id already present
       if (!this.signals.has(s.id)) {
         this.signals.set(s.id, { ...s });

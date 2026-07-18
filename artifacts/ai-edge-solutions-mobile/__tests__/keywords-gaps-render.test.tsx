@@ -301,3 +301,44 @@ describe("Gaps view — unresolvable warning banner", () => {
     });
   });
 });
+
+describe("Gaps segment badge — error vs. real count", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows "—" in the Gaps badge when the fetch returns a non-OK response', async () => {
+    resolveError();
+    await renderAndSwitchToGaps();
+    await waitFor(() => {
+      expect(screen.getByText("—")).toBeTruthy();
+    });
+  });
+
+  it('shows "—" in the Gaps badge when the fetch throws a network error', async () => {
+    rejectWith(new Error("Network failure"));
+    await renderAndSwitchToGaps();
+    await waitFor(() => {
+      expect(screen.getByText("—")).toBeTruthy();
+    });
+  });
+
+  it("shows the real count in the Gaps badge when data loads successfully", async () => {
+    resolveWith({
+      hasData: true,
+      gaps: [makeGap({ id: "g1" }), makeGap({ id: "g2" }), makeGap({ id: "g3" })],
+      count: 3,
+    });
+    await renderAndSwitchToGaps();
+    await waitFor(() => {
+      expect(screen.getByText("3")).toBeTruthy();
+    });
+  });
+
+  it('shows 0 in the Gaps badge (not "—") when API returns hasData:false — no error, just no data', async () => {
+    resolveWith({ hasData: false, gaps: [], count: 0 });
+    await renderAndSwitchToGaps();
+    await waitFor(() => {
+      expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText("—")).toBeNull();
+    });
+  });
+});

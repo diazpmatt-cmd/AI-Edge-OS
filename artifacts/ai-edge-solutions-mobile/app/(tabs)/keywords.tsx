@@ -153,8 +153,8 @@ export default function KeywordsScreen() {
             <Text style={[s.segLabel, { color: section === "gaps" ? colors.foreground : colors.mutedForeground }]}>
               Gaps
             </Text>
-            <View style={[s.segCount, { backgroundColor: colors.primary + "20" }]}>
-              <Text style={[s.segCountText, { color: colors.primary }]}>{gaps.length}</Text>
+            <View style={[s.segCount, { backgroundColor: gapsError ? colors.destructive + "20" : colors.primary + "20" }]}>
+              <Text style={[s.segCountText, { color: gapsError ? colors.destructive : colors.primary }]}>{gapsError ? "—" : gaps.length}</Text>
             </View>
           </Pressable>
         </View>

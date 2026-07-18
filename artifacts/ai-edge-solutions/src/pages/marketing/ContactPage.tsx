@@ -53,20 +53,30 @@ export default function ContactPage() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setSubmitError(null);
     try {
-      await fetch("/api/contact", {
+      const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-    } catch {
+      if (!res.ok) {
+        throw new Error(`Server error (${res.status})`);
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Something went wrong. Please try again or email us directly."
+      );
     } finally {
       setSubmitting(false);
-      setSubmitted(true);
     }
   };
 
@@ -336,6 +346,24 @@ export default function ContactPage() {
                   {" "}for details.
                 </p>
               </div>
+
+              {submitError && (
+                <div style={{
+                  marginBottom: 16,
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: "rgba(239,68,68,0.08)",
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  color: "#FCA5A5",
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                }}>
+                  ⚠ Submission failed — {submitError}. Please try again or email us at{" "}
+                  <a href="mailto:hello@aiedgesolutions.com" style={{ color: "#F87171", textDecoration: "underline" }}>
+                    hello@aiedgesolutions.com
+                  </a>.
+                </div>
+              )}
 
               <button
                 type="submit"

@@ -68,11 +68,12 @@ const OPPORTUNITIES: Opportunity[] = [
 ];
 
 function OpportunityCard({ opp }: { opp: Opportunity }) {
+  const confidenceColor = CONFIDENCE_COLORS[opp.confidence];
   return (
     <div style={{
       background: "linear-gradient(160deg, rgba(11,22,41,0.96), rgba(3,6,18,0.88))",
-      border: `1px solid ${opp.color}1E`,
-      borderTop: `2px solid ${opp.color}50`,
+      border: `1px solid ${opp.color}22`,
+      borderTop: `2px solid ${opp.color}60`,
       borderRadius: 14,
       padding: "18px 16px",
       display: "flex",
@@ -81,21 +82,25 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 18 }}>{opp.icon}</span>
-          <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>{opp.title}</span>
+          <span style={{
+            fontSize: 17, width: 32, height: 32, borderRadius: 9,
+            background: `${opp.color}10`, border: `1px solid ${opp.color}22`,
+            display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>{opp.icon}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0", lineHeight: 1.3 }}>{opp.title}</span>
         </div>
         <span style={{
-          fontSize: 8, fontWeight: 700, color: CONFIDENCE_COLORS[opp.confidence],
-          background: `${CONFIDENCE_COLORS[opp.confidence]}12`, border: `1px solid ${CONFIDENCE_COLORS[opp.confidence]}25`,
-          borderRadius: 10, padding: "2px 8px", letterSpacing: "0.5px", textTransform: "uppercase",
-          flexShrink: 0,
-        }}>{opp.confidence} confidence</span>
+          fontSize: 8, fontWeight: 800, color: confidenceColor,
+          background: `${confidenceColor}12`, border: `1px solid ${confidenceColor}28`,
+          borderRadius: 10, padding: "2px 8px", letterSpacing: "0.6px", textTransform: "uppercase",
+          flexShrink: 0, marginTop: 2,
+        }}>{opp.confidence} conf.</span>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <span style={{
-          fontSize: 9, fontWeight: 700, color: "#64748B",
-          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+          fontSize: 9, fontWeight: 700, color: opp.color,
+          background: `${opp.color}0C`, border: `1px solid ${opp.color}20`,
           borderRadius: 10, padding: "2px 8px",
         }}>{opp.source}</span>
         <span style={{
@@ -107,8 +112,8 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
 
       <div style={{
         fontSize: 11, fontWeight: 700, color: opp.color,
-        background: `${opp.color}0C`, border: `1px solid ${opp.color}18`,
-        borderRadius: 8, padding: "6px 10px",
+        background: `${opp.color}0C`, border: `1px solid ${opp.color}1A`,
+        borderRadius: 8, padding: "7px 11px",
       }}>
         {opp.impact}
       </div>
@@ -119,9 +124,9 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
         <button
           aria-label={`Start: ${opp.title}`}
           style={{
-            width: "100%", padding: "7px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
+            width: "100%", padding: "8px 0", borderRadius: 9, fontSize: 10, fontWeight: 800,
             cursor: "pointer", background: `${opp.color}0E`, border: `1px solid ${opp.color}30`,
-            color: opp.color,
+            color: opp.color, letterSpacing: "0.3px",
           }}
         >
           Open Module →

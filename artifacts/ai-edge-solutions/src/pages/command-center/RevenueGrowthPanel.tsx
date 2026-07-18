@@ -7,10 +7,22 @@ function StatCell({ label, value, color }: { label: string; value: string; color
   return (
     <div style={{
       background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "12px 14px",
-      border: "1px solid rgba(255,255,255,0.05)",
+      border: `1px solid ${color}14`,
     }}>
-      <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color }}>{value}</div>
+      <div style={{ fontSize: 9, fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.9px", marginBottom: 7 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+    </div>
+  );
+}
+
+function CardHeader({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+      <span style={{ fontSize: 16 }}>{icon}</span>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0", lineHeight: 1 }}>{title}</div>
+        {sub && <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{sub}</div>}
+      </div>
     </div>
   );
 }
@@ -48,7 +60,7 @@ export function RevenueGrowthPanel() {
   return (
     <div role="region" aria-label="Revenue and Growth">
       {/* Sync header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         {syncError && <span style={{ fontSize: 10, color: "#EF4444", fontWeight: 600 }}>⚠ {syncError}</span>}
         {lastSyncedAt && !syncError && (
           <span style={{ fontSize: 10, color: "#475569" }}>
@@ -56,7 +68,7 @@ export function RevenueGrowthPanel() {
           </span>
         )}
         {!gdLoading && !gdError && !gdSyncing && !lastSyncedAt && (
-          <span style={{ fontSize: 10, color: "#22C55E", fontWeight: 600 }}>● Live</span>
+          <span style={{ fontSize: 10, color: "#22C55E", fontWeight: 700 }}>● Live</span>
         )}
         {gdLoading && !gdSyncing && <span style={{ fontSize: 10, color: "#475569" }}>Loading…</span>}
         <button
@@ -64,10 +76,10 @@ export function RevenueGrowthPanel() {
           disabled={gdSyncing || gdLoading}
           aria-label="Sync GorillaDesk data"
           style={{
-            background: gdSyncing ? "rgba(0,174,239,0.06)" : "rgba(0,174,239,0.12)",
-            border: "1px solid rgba(0,174,239,0.3)",
-            borderRadius: 6, color: gdSyncing ? "#64748B" : "#00AEEF",
-            fontSize: 10, fontWeight: 700, padding: "4px 10px",
+            background: gdSyncing ? "rgba(34,197,94,0.04)" : "rgba(34,197,94,0.10)",
+            border: "1px solid rgba(34,197,94,0.28)",
+            borderRadius: 7, color: gdSyncing ? "#64748B" : "#22C55E",
+            fontSize: 10, fontWeight: 700, padding: "4px 11px",
             cursor: gdSyncing || gdLoading ? "not-allowed" : "pointer",
           }}
         >
@@ -99,13 +111,9 @@ export function RevenueGrowthPanel() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(245,158,11,0.15)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(245,158,11,0.18)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>💰</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Revenue</span>
-                {gd.revenue && <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.revenue.period}</span>}
-              </div>
+              <CardHeader icon="💰" title="Revenue" sub={gd.revenue?.period} />
               {!gd.revenue || gd.revenue.monthly_revenue === 0 ? (
                 <div style={{ textAlign: "center", padding: "10px 0", color: "#475569", fontSize: 12 }}>No revenue data yet</div>
               ) : (
@@ -120,12 +128,9 @@ export function RevenueGrowthPanel() {
 
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(34,197,94,0.15)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(34,197,94,0.18)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>🔧</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Jobs</span>
-              </div>
+              <CardHeader icon="🔧" title="Jobs" />
               {!gd.jobs || gd.jobs.total === 0 ? (
                 <div style={{ textAlign: "center", padding: "10px 0", color: "#475569", fontSize: 12 }}>No job data yet</div>
               ) : (
@@ -141,15 +146,11 @@ export function RevenueGrowthPanel() {
 
           {/* Row 2: Lead Funnel + Customers */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {/* Lead Funnel */}
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(0,174,239,0.15)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(0,174,239,0.18)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>🎯</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Lead Funnel</span>
-              </div>
+              <CardHeader icon="🎯" title="Lead Funnel" />
               {!stats ? (
                 <div style={{ textAlign: "center", padding: "10px 0", color: "#475569", fontSize: 12 }}>No lead data yet</div>
               ) : (
@@ -162,16 +163,11 @@ export function RevenueGrowthPanel() {
               )}
             </div>
 
-            {/* Customers */}
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(59,130,246,0.15)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(59,130,246,0.18)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>👥</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Customers</span>
-                {gd.customers && <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.customers.period}</span>}
-              </div>
+              <CardHeader icon="👥" title="Customers" sub={gd.customers?.period} />
               {!gd.customers || (gd.customers.new_customers === 0 && gd.customers.returning_customers === 0) ? (
                 <div style={{ textAlign: "center", padding: "10px 0", color: "#475569", fontSize: 12 }}>No customer data yet</div>
               ) : (
@@ -189,12 +185,9 @@ export function RevenueGrowthPanel() {
           {gd.payments && gd.payments.breakdown.length > 0 && (
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(59,130,246,0.12)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(59,130,246,0.14)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>💳</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Payment Breakdown</span>
-              </div>
+              <CardHeader icon="💳" title="Payment Breakdown" />
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {gd.payments.breakdown.map(p => {
                   const total = gd.payments!.total || 1;
@@ -226,13 +219,9 @@ export function RevenueGrowthPanel() {
           {gd.marketing && gd.marketing.lead_sources.length > 0 && (
             <div style={{
               background: "linear-gradient(135deg, rgba(11,22,41,0.95), rgba(3,6,18,0.85))",
-              border: "1px solid rgba(245,158,11,0.12)", borderRadius: 14, padding: "18px 20px",
+              border: "1px solid rgba(245,158,11,0.14)", borderRadius: 14, padding: "18px 20px",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 15 }}>📣</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#E2E8F0" }}>Lead Sources</span>
-                <span style={{ fontSize: 9, color: "#64748B", marginLeft: "auto" }}>{gd.marketing.period}</span>
-              </div>
+              <CardHeader icon="📣" title="Lead Sources" sub={gd.marketing.period} />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
                 {gd.marketing.lead_sources.map((src, i) => {
                   const palette = ["#00AEEF", "#22C55E", "#F59E0B", "#3B82F6", "#EF4444", "#E1306C"];

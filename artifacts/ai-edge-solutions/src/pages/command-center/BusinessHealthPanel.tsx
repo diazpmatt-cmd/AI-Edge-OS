@@ -13,41 +13,46 @@ function HealthRowCard({ row }: { row: HealthRow }) {
   const st = STATUS_CONFIG[row.status];
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      background: "rgba(11,22,41,0.6)",
-      border: "1px solid rgba(255,255,255,0.05)",
+      display: "flex", alignItems: "center", gap: 14,
+      background: "linear-gradient(135deg, rgba(11,22,41,0.92), rgba(3,6,18,0.80))",
+      border: "1px solid rgba(255,255,255,0.06)",
       borderLeft: `3px solid ${st.color}`,
-      borderRadius: 10, padding: "12px 16px",
+      borderRadius: 12, padding: "13px 18px",
+      transition: "border-color 0.15s",
     }}>
       <div style={{ flexShrink: 0 }}>
         <span style={{
-          fontSize: 11, fontWeight: 800, color: st.color,
-          background: `${st.color}12`, border: `1px solid ${st.color}25`,
-          borderRadius: 20, padding: "2px 9px",
-          textTransform: "uppercase", letterSpacing: "0.5px",
+          fontSize: 10, fontWeight: 800, color: st.color,
+          background: `${st.color}14`, border: `1px solid ${st.color}28`,
+          borderRadius: 20, padding: "2px 10px",
+          textTransform: "uppercase", letterSpacing: "0.6px",
           display: "inline-flex", alignItems: "center", gap: 5,
         }}>
           <span style={{ fontSize: 9 }}>{st.icon}</span> {st.label}
         </span>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#CBD5E1" }}>{row.label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>{row.label}</span>
           {row.score !== undefined && (
-            <span style={{ fontSize: 11, fontWeight: 800, color: st.color }}>{row.score}%</span>
+            <span style={{
+              fontSize: 11, fontWeight: 800, color: st.color,
+              background: `${st.color}10`, border: `1px solid ${st.color}25`,
+              borderRadius: 8, padding: "0px 6px",
+            }}>{row.score}%</span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.4 }}>{row.explanation}</div>
+        <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.45 }}>{row.explanation}</div>
       </div>
       {row.link && (
         <Link to={row.link} style={{ flexShrink: 0 }}>
           <button
             aria-label={`Improve ${row.label}`}
             style={{
-              padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700,
-              cursor: "pointer", background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)", color: "#64748B",
-              whiteSpace: "nowrap",
+              padding: "5px 13px", borderRadius: 8, fontSize: 10, fontWeight: 700,
+              cursor: "pointer", background: "rgba(0,174,239,0.06)",
+              border: "1px solid rgba(0,174,239,0.22)", color: "#00AEEF",
+              whiteSpace: "nowrap", letterSpacing: "0.3px",
             }}
           >
             Improve →

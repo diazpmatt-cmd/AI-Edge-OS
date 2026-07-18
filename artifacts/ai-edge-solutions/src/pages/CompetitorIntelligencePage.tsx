@@ -54,7 +54,11 @@ interface HistoryRun {
   runId: string; weekLabel: string; status: string;
   opportunityCount: number; highPriorityCount: number;
   topScore: number; signalsReceived: number;
-  clusterCount: number; createdAt: string; completedAt: string | null;
+  clusterCount: number; gapCount: number;
+  createdAt: string; completedAt: string | null;
+  opportunityCountDelta: number | null;
+  topScoreDelta: number | null;
+  gapCountDelta: number | null;
 }
 
 interface HistoryData {
@@ -129,6 +133,26 @@ function SectionHeader({ emoji, title, sub }: { emoji: string; title: string; su
         {sub && <div style={{ fontSize: 10, color: "rgba(148,163,184,0.5)", marginTop: 1 }}>{sub}</div>}
       </div>
     </div>
+  );
+}
+
+function DeltaBadge({ delta, invert = false }: { delta: number | null | undefined; invert?: boolean }) {
+  if (delta == null) return null;
+  const isPositive = invert ? delta < 0 : delta > 0;
+  const isNeutral  = delta === 0;
+  const color  = isNeutral ? "rgba(148,163,184,0.55)" : isPositive ? "#22C55E" : "#EF4444";
+  const bgColor = isNeutral ? "rgba(148,163,184,0.08)" : isPositive ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)";
+  const border = isNeutral ? "rgba(148,163,184,0.15)" : isPositive ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
+  const arrow  = isNeutral ? "→" : isPositive ? "↑" : "↓";
+  const label  = isNeutral ? "±0" : `${arrow}${Math.abs(delta)}`;
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+      background: bgColor, color, border: `1px solid ${border}`,
+      letterSpacing: "0.2px", whiteSpace: "nowrap",
+    }}>
+      {label}
+    </span>
   );
 }
 
@@ -508,21 +532,25 @@ function HistoryTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) 
 
           {/* Metrics row */}
           <div style={{
-            display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8,
+            display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8,
             marginBottom: 10,
           }}>
             {[
-              { label: "Signals", value: run.signalsReceived },
-              { label: "Clusters", value: run.clusterCount },
-              { label: "Opps", value: run.opportunityCount },
-              { label: "Top Score", value: run.topScore },
+              { label: "Signals",   value: run.signalsReceived,   delta: null,                    invert: false },
+              { label: "Clusters",  value: run.clusterCount,      delta: null,                    invert: false },
+              { label: "Gaps",      value: run.gapCount,          delta: run.gapCountDelta,        invert: true  },
+              { label: "Opps",      value: run.opportunityCount,  delta: run.opportunityCountDelta, invert: false },
+              { label: "Top Score", value: run.topScore,          delta: run.topScoreDelta,         invert: false },
             ].map(m => (
               <div key={m.label} style={{
                 textAlign: "center", padding: "6px 8px",
                 background: "rgba(139,92,246,0.06)", borderRadius: 8,
                 border: "1px solid rgba(139,92,246,0.1)",
               }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: ACCENT }}>{m.value}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: ACCENT }}>{m.value}</span>
+                  <DeltaBadge delta={m.delta} invert={m.invert} />
+                </div>
                 <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", marginTop: 1 }}>{m.label}</div>
               </div>
             ))}
@@ -550,6 +578,34 @@ function HistoryTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) 
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
 
+function StatCardWithTrend({ label, value, sub, accent = ACCENT, delta, invertDelta = false }: {
+  label: string; value: string | number; sub?: string; accent?: string;
+  delta?: number | null; invertDelta?: boolean;
+}) {
+  return (
+    <div style={{
+      background: BG_CARD, border: `1px solid ${accent}25`,
+      borderRadius: 12, padding: "16px 20px",
+      display: "flex", flexDirection: "column", gap: 4,
+    }}>
+      <div style={{ fontSize: 11, color: "rgba(148,163,184,0.65)", fontWeight: 600, letterSpacing: "0.4px" }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <div style={{ fontSize: 28, fontWeight: 800, color: accent, lineHeight: 1 }}>
+          {value}
+        </div>
+        {delta != null && <DeltaBadge delta={delta} invert={invertDelta} />}
+      </div>
+      {sub && (
+        <div style={{ fontSize: 10, color: "rgba(148,163,184,0.45)", marginTop: 2 }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({
   summary, apiFetch,
 }: {
@@ -564,17 +620,24 @@ function OverviewTab({
     queryKey: ["ci-opportunities"],
     queryFn:  () => apiFetch("/api/competitor-intelligence/opportunities?limit=3"),
   });
+  const { data: hist } = useQuery<HistoryData>({
+    queryKey: ["ci-history", 2],
+    queryFn:  () => apiFetch("/api/competitor-intelligence/history?limit=2"),
+  });
 
   const run = summary.latestRun;
+
+  // Latest run is hist.history[0], previous run is hist.history[1]
+  const latestHist = hist?.history?.[0];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Summary stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-        <StatCard label="COMPETITOR GAPS" value={summary.competitorGapCount} sub="keywords competitors rank for" />
+        <StatCardWithTrend label="COMPETITOR GAPS" value={summary.competitorGapCount} sub="keywords competitors rank for" delta={latestHist?.gapCountDelta} invertDelta={true} />
         <StatCard label="HIGH VOLUME GAPS" value={summary.highVolumeGapCount} sub="volume > 100/mo" accent="#22C55E" />
-        <StatCard label="OPPORTUNITIES FOUND" value={run?.opportunityCount ?? 0} sub="scored & prioritized" accent="#F59E0B" />
-        <StatCard label="TOP SCORE" value={run?.topOpportunityScore ?? 0} sub="highest composite score" accent="#EF4444" />
+        <StatCardWithTrend label="OPPORTUNITIES FOUND" value={run?.opportunityCount ?? 0} sub="scored & prioritized" accent="#F59E0B" delta={latestHist?.opportunityCountDelta} />
+        <StatCardWithTrend label="TOP SCORE" value={run?.topOpportunityScore ?? 0} sub="highest composite score" accent="#EF4444" delta={latestHist?.topScoreDelta} />
         <StatCard label="SIGNALS RECEIVED" value={run?.signalsReceived ?? 0} sub="raw market signals" accent="#60A5FA" />
         <StatCard label="CLUSTERS BUILT" value={run?.clusterCount ?? 0} sub="topic groups" accent="#A78BFA" />
       </div>

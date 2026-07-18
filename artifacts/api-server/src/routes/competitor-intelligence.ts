@@ -370,21 +370,59 @@ router.get("/api/competitor-intelligence/history", async (req, res) => {
       [client.id, limit],
     );
 
+    const rows = histRes.rows;
+
+    // Fetch competitor gap counts for all returned snapshots in one query
+    const snapshotIds = rows.map(r => r.id);
+    const gapCountMap: Record<string, number> = {};
+    if (snapshotIds.length > 0) {
+      const gapRes = await pool.query<{ snapshot_id: string; cnt: string }>(
+        `SELECT snapshot_id, COUNT(*) AS cnt
+         FROM discovery_signals
+         WHERE client_id = $1
+           AND snapshot_id = ANY($2::uuid[])
+           AND competitor_rank IS NOT NULL
+         GROUP BY snapshot_id`,
+        [client.id, snapshotIds],
+      );
+      for (const row of gapRes.rows) {
+        gapCountMap[row.snapshot_id] = parseInt(row.cnt, 10);
+      }
+    }
+
+    // Build enriched history array (newest first), then compute week-over-week deltas.
+    // rows is already DESC by created_at, so rows[0] is newest, rows[1] is previous, etc.
+    const history = rows.map((r, i) => {
+      const prev = rows[i + 1];
+      const gapCount     = gapCountMap[r.id] ?? 0;
+      const prevGapCount = prev ? (gapCountMap[prev.id] ?? 0) : null;
+
+      const opportunityCountDelta = prev != null ? r.opportunity_count - prev.opportunity_count : null;
+      const topScoreDelta         = prev != null ? r.top_opportunity_score - prev.top_opportunity_score : null;
+      const gapCountDelta         = prevGapCount != null ? gapCount - prevGapCount : null;
+
+      return {
+        runId:                r.id,
+        weekLabel:            r.week_label,
+        status:               r.status,
+        opportunityCount:     r.opportunity_count,
+        highPriorityCount:    r.high_priority_opportunity_count,
+        topScore:             r.top_opportunity_score,
+        signalsReceived:      r.signals_received,
+        clusterCount:         r.cluster_count,
+        gapCount,
+        createdAt:            r.created_at,
+        completedAt:          r.completed_at,
+        opportunityCountDelta,
+        topScoreDelta,
+        gapCountDelta,
+      };
+    });
+
     res.json({
       clientId: client.id,
-      history:  histRes.rows.map(r => ({
-        runId:             r.id,
-        weekLabel:         r.week_label,
-        status:            r.status,
-        opportunityCount:  r.opportunity_count,
-        highPriorityCount: r.high_priority_opportunity_count,
-        topScore:          r.top_opportunity_score,
-        signalsReceived:   r.signals_received,
-        clusterCount:      r.cluster_count,
-        createdAt:         r.created_at,
-        completedAt:       r.completed_at,
-      })),
-      count: histRes.rows.length,
+      history,
+      count: history.length,
     });
   } catch (err) {
     if (isRelationMissingError(err)) {

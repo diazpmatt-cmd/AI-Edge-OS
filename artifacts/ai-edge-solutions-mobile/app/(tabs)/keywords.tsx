@@ -35,16 +35,21 @@ const INTENT_COLORS: Record<string, { bg: string; text: string }> = {
 function useKeywordGaps() {
   const [gaps, setGaps] = useState<GapSignal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const fetchGaps = async () => {
     try {
       setLoading(true);
+      setError(false);
       const res = await customFetch("/api/competitor-intelligence/gaps?limit=50");
-      if (!res.ok) { setGaps([]); return; }
+      if (!res.ok) {
+        setError(true);
+        return;
+      }
       const data: GapsResponse = await res.json();
       setGaps(data.hasData ? data.gaps : []);
     } catch {
-      setGaps([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -52,7 +57,7 @@ function useKeywordGaps() {
 
   useEffect(() => { fetchGaps(); }, []);
 
-  return { gaps, loading, refetch: fetchGaps };
+  return { gaps, loading, error, refetch: fetchGaps };
 }
 
 function GapRow({ gap }: { gap: GapSignal }) {
@@ -106,7 +111,7 @@ export default function KeywordsScreen() {
   const [section, setSection] = useState<"keywords" | "gaps">("keywords");
 
   const { data: keywords = [], isLoading: kwLoading, refetch: refetchKw } = useListKeywords();
-  const { gaps, loading: gapsLoading, refetch: refetchGaps } = useKeywordGaps();
+  const { gaps, loading: gapsLoading, error: gapsError, refetch: refetchGaps } = useKeywordGaps();
 
   const filtered = query.trim()
     ? (keywords as Keyword[]).filter(
@@ -265,6 +270,23 @@ export default function KeywordsScreen() {
               <Feather name="loader" size={32} color={colors.mutedForeground} />
               <Text style={[s.emptyText, { color: colors.mutedForeground }]}>Loading gaps…</Text>
             </View>
+          ) : gapsError ? (
+            <View style={[s.empty, gs.errorBox, { borderColor: "rgba(239,68,68,0.3)", backgroundColor: "rgba(239,68,68,0.06)" }]}>
+              <Feather name="wifi-off" size={32} color="rgba(239,68,68,0.7)" />
+              <Text style={[s.emptyTitle, gs.errorTitle]}>Couldn't load gaps</Text>
+              <Text style={[s.emptyText, gs.errorBody]}>
+                Something went wrong while fetching keyword gap data. Check your connection and try again.
+              </Text>
+              <Pressable
+                style={[gs.retryBtn, { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.3)" }]}
+                onPress={refetchGaps}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading gaps"
+              >
+                <Feather name="refresh-cw" size={14} color="rgba(239,68,68,0.85)" />
+                <Text style={gs.retryText}>Try again</Text>
+              </Pressable>
+            </View>
           ) : gaps.length === 0 ? (
             <View style={[s.empty, { borderColor: colors.border, backgroundColor: colors.muted }]}>
               <Feather name="target" size={32} color={colors.mutedForeground} />
@@ -358,4 +380,15 @@ const gs = StyleSheet.create({
   },
   rankBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
   rankText: { fontSize: 9, fontFamily: "Inter_600SemiBold", fontWeight: "800" as const },
+  errorBox: { borderStyle: "solid" },
+  errorTitle: { color: "rgba(239,68,68,0.9)" },
+  errorBody: { color: "rgba(239,68,68,0.65)" },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, marginTop: 4,
+  },
+  retryText: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold", fontWeight: "600" as const,
+    color: "rgba(239,68,68,0.85)",
+  },
 });

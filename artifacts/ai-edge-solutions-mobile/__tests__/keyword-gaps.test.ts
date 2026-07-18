@@ -1,8 +1,32 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { GapSignal, GapsResponse } from "../lib/types";
 
 function gapsFromResponse(data: GapsResponse): GapSignal[] {
   return data.hasData ? data.gaps : [];
+}
+
+type HookState = { gaps: GapSignal[]; loading: boolean; error: boolean };
+
+async function simulateFetch(
+  fetchImpl: () => Promise<Response>,
+): Promise<HookState> {
+  let gaps: GapSignal[] = [];
+  let loading = true;
+  let error = false;
+  try {
+    const res = await fetchImpl();
+    if (!res.ok) {
+      error = true;
+    } else {
+      const data: GapsResponse = await res.json();
+      gaps = data.hasData ? data.gaps : [];
+    }
+  } catch {
+    error = true;
+  } finally {
+    loading = false;
+  }
+  return { gaps, loading, error };
 }
 
 function isUnknownCompetitor(gap: GapSignal): boolean {
@@ -146,5 +170,74 @@ describe("Keyword Gaps — response transformation invariants", () => {
     const result = gapsFromResponse(response);
     expect(result).not.toBe(originalGaps);
     expect(result).toHaveLength(0);
+  });
+});
+
+describe("Keyword Gaps — error state", () => {
+  it("sets error=true and gaps=[] when fetch throws a network error", async () => {
+    const { gaps, loading, error } = await simulateFetch(() =>
+      Promise.reject(new TypeError("Network request failed")),
+    );
+    expect(error).toBe(true);
+    expect(gaps).toHaveLength(0);
+    expect(loading).toBe(false);
+  });
+
+  it("sets error=true and gaps=[] when the response status is non-OK (500)", async () => {
+    const { gaps, loading, error } = await simulateFetch(() =>
+      Promise.resolve(new Response(null, { status: 500 })),
+    );
+    expect(error).toBe(true);
+    expect(gaps).toHaveLength(0);
+    expect(loading).toBe(false);
+  });
+
+  it("sets error=true and gaps=[] when the response status is 401", async () => {
+    const { gaps, error } = await simulateFetch(() =>
+      Promise.resolve(new Response(null, { status: 401 })),
+    );
+    expect(error).toBe(true);
+    expect(gaps).toHaveLength(0);
+  });
+
+  it("sets error=false and populates gaps on a successful 200 response", async () => {
+    const payload: GapsResponse = {
+      hasData: true,
+      gaps: [makeGap()],
+      count: 1,
+    };
+    const { gaps, loading, error } = await simulateFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    expect(error).toBe(false);
+    expect(gaps).toHaveLength(1);
+    expect(loading).toBe(false);
+  });
+
+  it("error state is distinct from the no-data empty state (error=true vs gaps=[])", async () => {
+    const errorState = await simulateFetch(() =>
+      Promise.reject(new Error("Connection refused")),
+    );
+    const emptyState = await simulateFetch(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ hasData: false, gaps: [], count: 0 } satisfies GapsResponse),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    expect(errorState.error).toBe(true);
+    expect(errorState.gaps).toHaveLength(0);
+
+    expect(emptyState.error).toBe(false);
+    expect(emptyState.gaps).toHaveLength(0);
+
+    expect(errorState.error).not.toBe(emptyState.error);
   });
 });

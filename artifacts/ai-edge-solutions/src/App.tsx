@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show } from "@clerk/react";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { BusinessProvider } from "@/contexts/business-context";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -256,16 +257,18 @@ function AppRouter() {
 function App() {
   return (
     <ThemeProvider>
-      <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <WouterRouter base={basePath}>
-              <AppRouter />
-              <Toaster />
-            </WouterRouter>
-          </TooltipProvider>
-        </QueryClientProvider>
-      </ClerkProvider>
+      <BusinessProvider>
+        <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <WouterRouter base={basePath}>
+                <AppRouter />
+                <Toaster />
+              </WouterRouter>
+            </TooltipProvider>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </BusinessProvider>
     </ThemeProvider>
   );
 }

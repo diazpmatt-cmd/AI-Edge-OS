@@ -8,7 +8,8 @@ import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
 import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
 import { useInsights } from "@/lib/insights";
 import { useApiFetch } from "@/lib/api";
-import { loadProfile, type Keyword, type ArticleDraft } from "@/lib/business-data";
+import { type Keyword, type ArticleDraft } from "@/lib/business-data";
+import { useActiveBusiness } from "@/contexts/business-context";
 import { fetchKeywords, insertKeywords, clearKeywords } from "@/lib/keywords-store";
 import { fetchArticles, insertArticles, clearArticles, buildContentPlan } from "@/lib/articles-store";
 import { generateKeywordIdeas } from "@/lib/keywords.functions";
@@ -53,7 +54,8 @@ function SectionHeader({ title, right }: { title: string; right?: React.ReactNod
 }
 
 export default function CommandCenter() {
-  const profile = useMemo(() => loadProfile(), []);
+  const { activeBusiness } = useActiveBusiness();
+  const profile = activeBusiness.profile;
   const apiFetch = useApiFetch();
 
   const { data: gd, loading: gdLoading, error: gdError, syncing: gdSyncing, lastSyncedAt, syncFromGorillaDesk } = useGorilladeskAnalytics();
@@ -219,7 +221,7 @@ export default function CommandCenter() {
 
         {/* ── S1: Executive Header ── */}
         <ExecutiveHeader
-          businessName="Bed Bugs & Beyond"
+          businessName={activeBusiness.name}
           healthStatus={healthStatus}
           aiStatus="active"
           activeAutomations={activeAutomations}

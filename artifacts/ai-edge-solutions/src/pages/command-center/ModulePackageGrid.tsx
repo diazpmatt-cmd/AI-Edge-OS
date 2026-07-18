@@ -52,6 +52,7 @@ const PACKAGES: PackageGroup[] = [
       { to: "/admin/social-publishing", icon: "✈",   label: "Publishing Center",   sub: "Social media engine",        family: "automation"     },
       { to: "/admin/bbb-autopilot",     icon: "⚡",  label: "Content Autopilot",   sub: "Automated publishing",       family: "automation"     },
       // 🌎 Local Presence
+      { to: "/admin/gbp-audit",          icon: "🏥",  label: "GBP Health Audit",    sub: "Profile optimization",       family: "localPresence"  },
       { to: "/admin/reviews",           icon: "⭐",  label: "Reviews Engine",      sub: "Reputation management",      family: "localPresence"  },
       { to: "/admin/local-presence",    icon: "📍",  label: "Local Presence",      sub: "Maps & listings",            family: "localPresence"  },
       // 🏢 Operations

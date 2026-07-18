@@ -19,6 +19,7 @@ export * from "./client-context";
 export * from "./db-service-registry-provider";
 export * from "./registry-validator";
 export * from "./scheduler-eligibility";
+export * from "./gbp-audit-engine";
 
 // ── Phase C2: Discovery Engine ────────────────────────────────────────────────
 export * from "./discovery-types";

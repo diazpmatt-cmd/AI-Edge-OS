@@ -48,6 +48,7 @@ const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEngineP
 const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
 const LocalPresenceEnginePage       = lazy(() => import("./pages/LocalPresenceEnginePage"));
+const GbpAuditPage                  = lazy(() => import("./pages/GbpAuditPage"));
 const VoiceSearchEnginePage         = lazy(() => import("./pages/VoiceSearchEnginePage"));
 const ReviewsEnginePage             = lazy(() => import("./pages/ReviewsEnginePage"));
 const AIVisibilityEnginePage        = lazy(() => import("./pages/AIVisibilityEnginePage"));
@@ -163,6 +164,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/diagnostics">
           <Authenticated><SystemDiagnosticsPage /></Authenticated>
+        </Route>
+        <Route path="/admin/gbp-audit">
+          <Authenticated><GbpAuditPage /></Authenticated>
         </Route>
         <Route path="/admin/local-presence">
           <Authenticated><LocalPresenceEnginePage /></Authenticated>

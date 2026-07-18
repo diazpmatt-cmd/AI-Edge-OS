@@ -200,13 +200,55 @@ type TabId = typeof TABS[number]["id"];
 
 // ── Keyword Gap table ─────────────────────────────────────────────────────────
 
-function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
-  const [filter, setFilter] = useState<"all" | "high_volume" | "local" | "unknown">("all");
+type InlineScanPhase = "idle" | "scanning" | "done" | "error";
+
+function GapsTab({
+  apiFetch,
+  onRunComplete,
+}: {
+  apiFetch: ReturnType<typeof useApiFetch>;
+  onRunComplete?: () => void;
+}) {
+  const [filter, setFilter]                       = useState<"all" | "high_volume" | "local" | "unknown">("all");
+  const [inlineScanPhase, setInlineScanPhase]     = useState<InlineScanPhase>("idle");
+  const { getToken }                              = useAuth();
+  const queryClient                               = useQueryClient();
 
   const { data, isLoading } = useQuery<GapsData>({
     queryKey: ["ci-gaps"],
     queryFn:  () => apiFetch("/api/competitor-intelligence/gaps?limit=100"),
   });
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const handleInlineScan = useCallback(async () => {
+    if (inlineScanPhase !== "idle") return;
+    setInlineScanPhase("scanning");
+    try {
+      const token = await getToken().catch(() => null);
+      const resp = await fetch(`${BASE}/api/discovery/manual-run`, {
+        method:      "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ dryRun: false }),
+      });
+      if (resp.ok || resp.status === 409) {
+        setInlineScanPhase("done");
+        queryClient.invalidateQueries({ queryKey: ["ci-gaps"] });
+        onRunComplete?.();
+        setTimeout(() => setInlineScanPhase("idle"), 3_000);
+      } else {
+        setInlineScanPhase("error");
+        setTimeout(() => setInlineScanPhase("idle"), 4_000);
+      }
+    } catch {
+      setInlineScanPhase("error");
+      setTimeout(() => setInlineScanPhase("idle"), 4_000);
+    }
+  }, [inlineScanPhase, getToken, BASE, queryClient, onRunComplete]);
 
   if (isLoading) return <LoadingSpinner />;
   if (!data?.hasData || data.gaps.length === 0) {
@@ -443,23 +485,61 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                     </a>
                   </div>
                 ) : (
-                  <span
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 4,
-                      fontSize: 9, fontWeight: 600,
-                      color: "rgba(245,158,11,0.75)",
-                      fontStyle: "italic",
-                      cursor: "default",
-                    }}
-                    title="Competitor name unavailable — run a fresh competitor scan to populate it"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, opacity: 0.9 }}>
-                      <path d="M8 1.5L1.5 13.5h13L8 1.5z" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(245,158,11,0.12)"/>
-                      <path d="M8 6.5v3" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
-                      <circle cx="8" cy="11.5" r="0.75" fill="rgba(245,158,11,0.9)"/>
-                    </svg>
-                    Name unavailable
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 4,
+                        fontSize: 9, fontWeight: 600,
+                        color: "rgba(245,158,11,0.75)",
+                        fontStyle: "italic",
+                      }}
+                      title="Competitor name unavailable — run a fresh competitor scan to populate it"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, opacity: 0.9 }}>
+                        <path d="M8 1.5L1.5 13.5h13L8 1.5z" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(245,158,11,0.12)"/>
+                        <path d="M8 6.5v3" stroke="rgba(245,158,11,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <circle cx="8" cy="11.5" r="0.75" fill="rgba(245,158,11,0.9)"/>
+                      </svg>
+                      Name unavailable
+                    </span>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleInlineScan(); }}
+                      disabled={inlineScanPhase !== "idle"}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        fontSize: 8, fontWeight: 800, letterSpacing: "0.3px",
+                        padding: "2px 7px", borderRadius: 6, cursor: inlineScanPhase !== "idle" ? "default" : "pointer",
+                        background: inlineScanPhase === "done"     ? "rgba(34,197,94,0.12)" :
+                                    inlineScanPhase === "error"    ? "rgba(239,68,68,0.1)" :
+                                    inlineScanPhase === "scanning" ? "rgba(245,158,11,0.1)" :
+                                    "rgba(245,158,11,0.12)",
+                        border: `1px solid ${
+                          inlineScanPhase === "done"     ? "rgba(34,197,94,0.3)" :
+                          inlineScanPhase === "error"    ? "rgba(239,68,68,0.25)" :
+                          inlineScanPhase === "scanning" ? "rgba(245,158,11,0.25)" :
+                          "rgba(245,158,11,0.3)"}`,
+                        color: inlineScanPhase === "done"     ? "#22C55E" :
+                               inlineScanPhase === "error"    ? "#EF4444" :
+                               inlineScanPhase === "scanning" ? "rgba(245,158,11,0.7)" :
+                               "#F59E0B",
+                        opacity: inlineScanPhase !== "idle" ? 0.75 : 1,
+                        transition: "all 0.15s",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {inlineScanPhase === "scanning" && (
+                        <span style={{
+                          display: "inline-block", width: 6, height: 6,
+                          border: "1.5px solid rgba(245,158,11,0.3)", borderTopColor: "#F59E0B",
+                          borderRadius: "50%", animation: "spin 0.7s linear infinite",
+                        }} />
+                      )}
+                      {inlineScanPhase === "done"     ? "✓ Scan complete" :
+                       inlineScanPhase === "error"    ? "Scan failed" :
+                       inlineScanPhase === "scanning" ? "Scanning…" :
+                       "▶ Run scan"}
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -1581,7 +1661,7 @@ export default function CompetitorIntelligencePage() {
 
             {/* Tab content */}
             {tab === "overview"      && <OverviewTab summary={summary} apiFetch={apiFetch} />}
-            {tab === "gaps"          && <GapsTab apiFetch={apiFetch} />}
+            {tab === "gaps"          && <GapsTab apiFetch={apiFetch} onRunComplete={handleRunComplete} />}
             {tab === "opportunities" && <OpportunitiesTab apiFetch={apiFetch} />}
             {tab === "history"       && <HistoryTab apiFetch={apiFetch} />}
           </>

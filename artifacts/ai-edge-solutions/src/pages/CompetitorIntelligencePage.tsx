@@ -845,6 +845,41 @@ function NoDataState({ totalRuns }: { totalRuns: number }) {
 
 type ScanPhase = "idle" | "starting" | "running" | "done" | "error";
 
+// ── Stage label helpers ────────────────────────────────────────────────────────
+
+const SIGNAL_STAGES = new Set([
+  "seed_extraction", "keyword_expansion", "paa_extraction",
+  "trend_overlay", "competitor_gap", "ai_search_audit", "social_listening",
+]);
+const CLUSTER_STAGES = new Set(["registry_gate", "cluster_building"]);
+const SCORE_STAGES   = new Set(["opportunity_scoring", "persistence"]);
+
+function deriveStageLabel(currentStage: string | null): string {
+  if (!currentStage) return "Preparing…";
+  if (SIGNAL_STAGES.has(currentStage))  return "Collecting signals";
+  if (CLUSTER_STAGES.has(currentStage)) return "Building clusters";
+  if (SCORE_STAGES.has(currentStage))   return "Scoring opportunities";
+  return "Scanning…";
+}
+
+/** Which of the 3 high-level milestones are we in? (1, 2, or 3) */
+function deriveMilestone(currentStage: string | null): 1 | 2 | 3 {
+  if (!currentStage) return 1;
+  if (CLUSTER_STAGES.has(currentStage)) return 2;
+  if (SCORE_STAGES.has(currentStage))   return 3;
+  return 1;
+}
+
+// ── Scan progress state ────────────────────────────────────────────────────────
+
+interface ScanProgress {
+  pct:       number;
+  stage:     string | null;
+  signals:   number;
+  clusters:  number;
+  opps:      number;
+}
+
 // ── Run New Scan button ────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 4_000;
@@ -854,13 +889,14 @@ function RunScanButton({
 }: {
   onRunComplete: () => void;
 }) {
-  const { getToken }              = useAuth();
-  const apiFetch                  = useApiFetch();
-  const [phase, setPhase]         = useState<ScanPhase>("idle");
-  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
-  const pollRef                   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const runIdRef                  = useRef<string | null>(null);
-  const pollFailsRef              = useRef<number>(0);
+  const { getToken }                    = useAuth();
+  const apiFetch                        = useApiFetch();
+  const [phase, setPhase]               = useState<ScanPhase>("idle");
+  const [errorMsg, setErrorMsg]         = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const pollRef                         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runIdRef                        = useRef<string | null>(null);
+  const pollFailsRef                    = useRef<number>(0);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -879,18 +915,41 @@ function RunScanButton({
     const runId = runIdRef.current;
     if (!runId) return;
     try {
-      // Note: useApiFetch already prepends /api, so path must not include it
-      const result = await apiFetch<{ status?: string }>(`/discovery/runs/${runId}`);
+      const result = await apiFetch<{
+        status?: string;
+        progress?: {
+          currentStage?: string | null;
+          percentComplete?: number;
+          signalsCollected?: number;
+          clustersBuilt?: number;
+          opportunitiesCreated?: number;
+        } | null;
+      }>(`/discovery/runs/${runId}`);
       pollFailsRef.current = 0;
       const status: string = result?.status ?? "";
+
+      // Update progress if available
+      if (result?.progress) {
+        const p = result.progress;
+        setScanProgress({
+          pct:     p.percentComplete    ?? 0,
+          stage:   p.currentStage       ?? null,
+          signals: p.signalsCollected   ?? 0,
+          clusters: p.clustersBuilt     ?? 0,
+          opps:    p.opportunitiesCreated ?? 0,
+        });
+      }
+
       if (status === "complete" || status === "partial") {
         stopPolling();
         setPhase("done");
+        setScanProgress(null);
         onRunComplete();
         setTimeout(() => setPhase("idle"), 3_000);
       } else if (status === "failed" || status === "cancelled") {
         stopPolling();
         setPhase("error");
+        setScanProgress(null);
         setErrorMsg("Scan ended with status: " + status);
         setTimeout(() => setPhase("idle"), 5_000);
       }
@@ -899,6 +958,7 @@ function RunScanButton({
       if (pollFailsRef.current >= MAX_POLL_FAILURES) {
         stopPolling();
         setPhase("error");
+        setScanProgress(null);
         setErrorMsg("Lost connection while tracking scan progress.");
         setTimeout(() => setPhase("idle"), 6_000);
       }
@@ -909,6 +969,7 @@ function RunScanButton({
     if (phase === "starting" || phase === "running") return;
     setPhase("starting");
     setErrorMsg(null);
+    setScanProgress(null);
 
     let resp: Response;
     try {
@@ -962,6 +1023,7 @@ function RunScanButton({
     // 200: execution is synchronous — run has already completed by the time we get here.
     // Immediately invalidate queries; no polling needed.
     setPhase("done");
+    setScanProgress(null);
     onRunComplete();
     setTimeout(() => setPhase("idle"), 3_000);
   }, [phase, BASE, getToken, pollStatus, onRunComplete]);
@@ -977,8 +1039,125 @@ function RunScanButton({
   const isDone   = phase === "done";
   const isErr    = phase === "error";
 
+  const milestone  = scanProgress ? deriveMilestone(scanProgress.stage) : 1;
+  const stageLabel = scanProgress ? deriveStageLabel(scanProgress.stage) : "Preparing…";
+  const pct        = scanProgress?.pct ?? 0;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+
+      {/* Progress indicator — shown only while running and progress data is available */}
+      {phase === "running" && (
+        <div style={{
+          width: 240, background: "rgba(13,10,42,0.85)",
+          border: `1px solid ${ACCENT_BORDER}`,
+          borderRadius: 10, padding: "10px 12px",
+          display: "flex", flexDirection: "column", gap: 6,
+        }}>
+
+          {/* Stage milestone dots */}
+          <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+            {(["Signals", "Clusters", "Opportunities"] as const).map((name, i) => {
+              const step = (i + 1) as 1 | 2 | 3;
+              const done = milestone > step;
+              const active = milestone === step;
+              return (
+                <div key={name} style={{ display: "flex", alignItems: "center", flex: i < 2 ? 1 : undefined }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: done ? "#22C55E" : active ? ACCENT : "rgba(255,255,255,0.06)",
+                      border: `2px solid ${done ? "#22C55E" : active ? ACCENT : "rgba(255,255,255,0.12)"}`,
+                      transition: "all 0.4s ease",
+                      boxShadow: active ? `0 0 8px ${ACCENT}60` : "none",
+                    }}>
+                      {done ? (
+                        <span style={{ fontSize: 9, color: "#fff", fontWeight: 900 }}>✓</span>
+                      ) : active ? (
+                        <span style={{
+                          display: "inline-block", width: 7, height: 7,
+                          border: `1.5px solid rgba(255,255,255,0.4)`,
+                          borderTopColor: "#fff", borderRadius: "50%",
+                          animation: "spin 0.7s linear infinite",
+                        }} />
+                      ) : null}
+                    </div>
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, letterSpacing: "0.3px",
+                      color: done ? "#22C55E" : active ? ACCENT : "rgba(148,163,184,0.4)",
+                      whiteSpace: "nowrap",
+                      transition: "color 0.3s",
+                    }}>
+                      {name}
+                    </span>
+                  </div>
+
+                  {/* Connector line between dots */}
+                  {i < 2 && (
+                    <div style={{
+                      flex: 1, height: 2, marginBottom: 11, marginLeft: 3, marginRight: 3,
+                      background: done
+                        ? "#22C55E"
+                        : `linear-gradient(90deg, ${active ? ACCENT : "rgba(255,255,255,0.08)"}, rgba(255,255,255,0.08))`,
+                      transition: "background 0.4s",
+                      borderRadius: 2,
+                    }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ marginTop: 2 }}>
+            <div style={{
+              height: 4, background: "rgba(255,255,255,0.06)",
+              borderRadius: 3, overflow: "hidden",
+            }}>
+              <div style={{
+                height: "100%", borderRadius: 3,
+                width: `${Math.max(pct, 4)}%`,
+                background: `linear-gradient(90deg, ${ACCENT}, #A78BFA)`,
+                transition: "width 0.8s ease",
+              }} />
+            </div>
+            <div style={{
+              display: "flex", justifyContent: "space-between",
+              marginTop: 4,
+            }}>
+              <span style={{ fontSize: 9, color: "rgba(148,163,184,0.55)", fontStyle: "italic" }}>
+                {stageLabel}
+              </span>
+              {pct > 0 && (
+                <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)", fontWeight: 700 }}>
+                  {pct}%
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Live counts row */}
+          {scanProgress && (scanProgress.signals > 0 || scanProgress.clusters > 0 || scanProgress.opps > 0) && (
+            <div style={{
+              display: "flex", gap: 10, paddingTop: 4,
+              borderTop: `1px solid ${ACCENT_BORDER}`,
+            }}>
+              {[
+                { label: "signals",  val: scanProgress.signals  },
+                { label: "clusters", val: scanProgress.clusters },
+                { label: "opps",     val: scanProgress.opps     },
+              ].map(({ label: lbl, val }) => val > 0 ? (
+                <div key={lbl} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: ACCENT, lineHeight: 1 }}>{val}</span>
+                  <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)", marginTop: 1 }}>{lbl}</span>
+                </div>
+              ) : null)}
+            </div>
+          )}
+        </div>
+      )}
+
       <button
         onClick={handleClick}
         disabled={isActive}

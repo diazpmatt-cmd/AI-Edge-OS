@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 
@@ -725,10 +726,184 @@ function NoDataState({ totalRuns }: { totalRuns: number }) {
   );
 }
 
+// ── Scan phase type ────────────────────────────────────────────────────────────
+
+type ScanPhase = "idle" | "starting" | "running" | "done" | "error";
+
+// ── Run New Scan button ────────────────────────────────────────────────────────
+
+const POLL_INTERVAL_MS = 4_000;
+
+function RunScanButton({
+  onRunComplete,
+}: {
+  onRunComplete: () => void;
+}) {
+  const { getToken }              = useAuth();
+  const apiFetch                  = useApiFetch();
+  const [phase, setPhase]         = useState<ScanPhase>("idle");
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
+  const pollRef                   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runIdRef                  = useRef<string | null>(null);
+  const pollFailsRef              = useRef<number>(0);
+
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  const MAX_POLL_FAILURES = 5;
+
+  const pollStatus = useCallback(async () => {
+    const runId = runIdRef.current;
+    if (!runId) return;
+    try {
+      // Note: useApiFetch already prepends /api, so path must not include it
+      const result = await apiFetch<{ status?: string }>(`/discovery/runs/${runId}`);
+      pollFailsRef.current = 0;
+      const status: string = result?.status ?? "";
+      if (status === "complete" || status === "partial") {
+        stopPolling();
+        setPhase("done");
+        onRunComplete();
+        setTimeout(() => setPhase("idle"), 3_000);
+      } else if (status === "failed" || status === "cancelled") {
+        stopPolling();
+        setPhase("error");
+        setErrorMsg("Scan ended with status: " + status);
+        setTimeout(() => setPhase("idle"), 5_000);
+      }
+    } catch {
+      pollFailsRef.current += 1;
+      if (pollFailsRef.current >= MAX_POLL_FAILURES) {
+        stopPolling();
+        setPhase("error");
+        setErrorMsg("Lost connection while tracking scan progress.");
+        setTimeout(() => setPhase("idle"), 6_000);
+      }
+    }
+  }, [apiFetch, stopPolling, onRunComplete]);
+
+  const handleClick = useCallback(async () => {
+    if (phase === "starting" || phase === "running") return;
+    setPhase("starting");
+    setErrorMsg(null);
+
+    let resp: Response;
+    try {
+      const token = await getToken().catch(() => null);
+      resp = await fetch(`${BASE}/api/discovery/manual-run`, {
+        method:  "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ dryRun: false }),
+      });
+    } catch {
+      setPhase("error");
+      setErrorMsg("Network error — check your connection.");
+      setTimeout(() => setPhase("idle"), 5_000);
+      return;
+    }
+
+    if (resp.status === 409) {
+      // A run is already in progress
+      const body = await resp.json().catch(() => ({})) as { runId?: string };
+      runIdRef.current = body?.runId ?? null;
+      if (runIdRef.current) {
+        // We have a runId — poll until it finishes
+        pollFailsRef.current = 0;
+        setPhase("running");
+        pollRef.current = setInterval(pollStatus, POLL_INTERVAL_MS);
+      } else {
+        // Governance denied with no runId — can't track, show a clear message
+        setPhase("error");
+        setErrorMsg("A scan is already running. Wait for it to finish, then try again.");
+        setTimeout(() => setPhase("idle"), 8_000);
+      }
+      return;
+    }
+
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({})) as { message?: string; reason?: string; hint?: string };
+      const hint =
+        resp.status === 503 ? "Discovery provider is not configured." :
+        resp.status === 402 ? "Estimated cost exceeds the run budget." :
+        body?.hint ?? body?.message ?? body?.reason ?? `Error ${resp.status}`;
+      setPhase("error");
+      setErrorMsg(hint);
+      setTimeout(() => setPhase("idle"), 6_000);
+      return;
+    }
+
+    // 200: execution is synchronous — run has already completed by the time we get here.
+    // Immediately invalidate queries; no polling needed.
+    setPhase("done");
+    onRunComplete();
+    setTimeout(() => setPhase("idle"), 3_000);
+  }, [phase, BASE, getToken, pollStatus, onRunComplete]);
+
+  const label =
+    phase === "starting" ? "Starting scan…" :
+    phase === "running"  ? "Scan in progress…" :
+    phase === "done"     ? "✓ Scan complete" :
+    phase === "error"    ? (errorMsg ?? "Scan failed") :
+    "▶ Run New Scan";
+
+  const isActive = phase === "starting" || phase === "running";
+  const isDone   = phase === "done";
+  const isErr    = phase === "error";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+      <button
+        onClick={handleClick}
+        disabled={isActive}
+        style={{
+          display: "flex", alignItems: "center", gap: 7,
+          padding: "8px 16px", borderRadius: 10, cursor: isActive ? "default" : "pointer",
+          fontSize: 11, fontWeight: 800, letterSpacing: "0.3px",
+          background: isDone  ? "rgba(34,197,94,0.15)" :
+                      isErr   ? "rgba(239,68,68,0.12)" :
+                      isActive ? ACCENT_DIM : ACCENT,
+          border: `1px solid ${
+            isDone  ? "rgba(34,197,94,0.3)" :
+            isErr   ? "rgba(239,68,68,0.3)" :
+            isActive ? ACCENT_BORDER : ACCENT}`,
+          color: isDone  ? "#22C55E" :
+                 isErr   ? "#EF4444" :
+                 isActive ? ACCENT : "#030612",
+          transition: "all 0.2s",
+          opacity: isActive ? 0.85 : 1,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {isActive && (
+          <span style={{
+            display: "inline-block", width: 10, height: 10,
+            border: `2px solid ${ACCENT}50`, borderTopColor: ACCENT,
+            borderRadius: "50%", animation: "spin 0.7s linear infinite",
+          }} />
+        )}
+        {label}
+      </button>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CompetitorIntelligencePage() {
-  const apiFetch  = useApiFetch();
+  const apiFetch     = useApiFetch();
+  const queryClient  = useQueryClient();
   const [tab, setTab] = useState<TabId>("overview");
 
   const { data: summary, isLoading: summaryLoading, isError } = useQuery<SummaryData>({
@@ -736,6 +911,13 @@ export default function CompetitorIntelligencePage() {
     queryFn:  () => apiFetch("/api/competitor-intelligence/summary"),
     staleTime: 60_000,
   });
+
+  const handleRunComplete = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["ci-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["ci-gaps"] });
+    queryClient.invalidateQueries({ queryKey: ["ci-opportunities"] });
+    queryClient.invalidateQueries({ queryKey: ["ci-history"] });
+  }, [queryClient]);
 
   return (
     <AppShell>
@@ -759,7 +941,8 @@ export default function CompetitorIntelligencePage() {
                 Keyword gap analysis &amp; market positioning · powered by Discovery Engine
               </div>
             </div>
-            <div style={{ marginLeft: "auto" }}>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+              <RunScanButton onRunComplete={handleRunComplete} />
               <span style={{
                 fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
                 padding: "3px 10px", borderRadius: 20,

@@ -271,10 +271,23 @@ router.post("/api/discovery/manual-run", async (req, res) => {
         console.error("[discovery-run] Audit write failed:", err instanceof Error ? err.message : String(err));
       });
 
+      // Fetch the active run's ID so the caller can track it
+      const activeRunRow = await pool
+        .query<{ id: string }>(
+          `SELECT id FROM discovery_snapshots
+           WHERE client_id = $1
+             AND status IN ('running', 'queued', 'planned', 'cancel_requested')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [clientId],
+        )
+        .catch(() => ({ rows: [] as { id: string }[] }));
+
       res.status(409).json({
         error:         "governance_denied",
         reason:        govResult.reason,
         message:       govResult.message,
+        runId:         activeRunRow.rows[0]?.id ?? null,
         correlationId,
       });
       return;

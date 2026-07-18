@@ -277,11 +277,14 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
       for (const row of prevRes.rows) prevKeywords.add(row.normalized_value);
     }
 
+    const isBaseline = !prevSnap;
+
     res.json({
-      hasData:   true,
-      runId:     snap.id,
-      weekLabel: snap.week_label,
-      gaps:      gapRes.rows.map(r => ({
+      hasData:    true,
+      runId:      snap.id,
+      weekLabel:  snap.week_label,
+      isBaseline,
+      gaps:       gapRes.rows.map(r => ({
         id:              r.id,
         keyword:         r.normalized_value,
         rawKeyword:      r.raw_value,
@@ -296,9 +299,9 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
         trendDirection:  r.trend_direction,
         geographicScope: r.geographic_scope,
         serviceId:       r.service_id,
-        status:          prevSnap
-                           ? (prevKeywords.has(r.normalized_value) ? "returning" : "new")
-                           : "new",
+        status:          isBaseline
+                           ? "baseline"
+                           : (prevKeywords.has(r.normalized_value) ? "returning" : "new"),
       })),
       count: gapRes.rows.length,
     });

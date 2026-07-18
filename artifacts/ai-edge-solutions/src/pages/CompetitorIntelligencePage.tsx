@@ -31,11 +31,12 @@ interface GapSignal {
   evidenceStrength: number;
   trendDirection: string; geographicScope: string;
   serviceId: string | null;
-  status: "new" | "returning";
+  status: "new" | "returning" | "baseline";
 }
 
 interface GapsData {
   hasData: boolean; runId?: string; weekLabel?: string;
+  isBaseline?: boolean;
   gaps: GapSignal[]; count: number;
 }
 
@@ -303,7 +304,16 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                       <path d="M5 7L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                     </svg>
                   </a>
-                  {g.status === "new" ? (
+                  {g.status === "baseline" ? (
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
+                      background: "rgba(139,92,246,0.12)", color: "#A78BFA",
+                      border: "1px solid rgba(139,92,246,0.25)", letterSpacing: "0.4px",
+                      flexShrink: 0,
+                    }}>
+                      BASELINE
+                    </span>
+                  ) : g.status === "new" ? (
                     <span style={{
                       fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
                       background: "rgba(34,197,94,0.15)", color: "#22C55E",
@@ -441,6 +451,15 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
       <div style={{ marginTop: 10, fontSize: 10, color: "rgba(148,163,184,0.35)", textAlign: "right" }}>
         Showing {displayed.length} of {data.gaps.length} keyword gaps · Week {data.weekLabel}
       </div>
+      {data.isBaseline && (
+        <div style={{
+          marginTop: 8, fontSize: 10, color: "rgba(167,139,250,0.7)",
+          background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)",
+          borderRadius: 8, padding: "6px 10px",
+        }}>
+          ⓘ This is your first scan — all gaps are marked BASELINE. NEW vs. RETURNING labels will appear once a second scan is complete.
+        </div>
+      )}
     </div>
   );
 }
@@ -773,6 +792,7 @@ function OverviewTab({
             No gaps found yet. Run a discovery scan to detect competitor keyword gaps.
           </div>
         ) : (
+          <>
           <div style={{
             background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
             borderRadius: 12, overflow: "hidden",
@@ -789,7 +809,16 @@ function OverviewTab({
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0", minWidth: 0 }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     {g.keyword}
-                    {g.status === "new" && (
+                    {g.status === "baseline" ? (
+                      <span style={{
+                        fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
+                        background: "rgba(139,92,246,0.12)", color: "#A78BFA",
+                        border: "1px solid rgba(139,92,246,0.25)", letterSpacing: "0.4px",
+                        flexShrink: 0,
+                      }}>
+                        BASELINE
+                      </span>
+                    ) : g.status === "new" && (
                       <span style={{
                         fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
                         background: "rgba(34,197,94,0.15)", color: "#22C55E",
@@ -829,6 +858,16 @@ function OverviewTab({
               </div>
             ))}
           </div>
+          {gaps.isBaseline && (
+            <div style={{
+              marginTop: 8, fontSize: 10, color: "rgba(167,139,250,0.7)",
+              background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)",
+              borderRadius: 8, padding: "6px 10px",
+            }}>
+              ⓘ First scan — gaps show BASELINE labels. NEW vs. RETURNING will appear after the next scan.
+            </div>
+          )}
+          </>
         )}
       </div>
 

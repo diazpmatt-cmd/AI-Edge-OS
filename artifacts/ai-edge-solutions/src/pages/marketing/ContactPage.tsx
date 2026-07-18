@@ -59,25 +59,42 @@ export default function ContactPage() {
     e.preventDefault();
     setSubmitting(true);
     setSubmitError(null);
-    try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) {
-        throw new Error(`Server error (${res.status})`);
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 1000;
+
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    let lastError: string | null = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch("/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        if (!res.ok) {
+          lastError = `Server error (${res.status})`;
+          if (res.status < 500) {
+            break;
+          }
+        } else {
+          setSubmitted(true);
+          setSubmitting(false);
+          return;
+        }
+      } catch {
+        lastError = "Something went wrong. Please try again or email us directly.";
       }
-      setSubmitted(true);
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Something went wrong. Please try again or email us directly."
-      );
-    } finally {
-      setSubmitting(false);
+
+      if (attempt < MAX_ATTEMPTS) {
+        await delay(RETRY_DELAY_MS);
+      }
     }
+
+    setSubmitError(lastError ?? "Something went wrong. Please try again or email us directly.");
+    setSubmitting(false);
   };
 
   const toggleService = (service: string) => {

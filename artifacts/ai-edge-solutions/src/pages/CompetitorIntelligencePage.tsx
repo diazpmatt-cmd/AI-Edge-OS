@@ -201,7 +201,7 @@ type TabId = typeof TABS[number]["id"];
 // ── Keyword Gap table ─────────────────────────────────────────────────────────
 
 function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
-  const [filter, setFilter] = useState<"all" | "high_volume" | "local">("all");
+  const [filter, setFilter] = useState<"all" | "high_volume" | "local" | "unknown">("all");
 
   const { data, isLoading } = useQuery<GapsData>({
     queryKey: ["ci-gaps"],
@@ -213,16 +213,23 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
     return <EmptyState message="No competitor keyword gaps found yet. Run a Discovery scan to identify keywords your competitors rank for that you're missing." />;
   }
 
+  const unknownCount = data.gaps.filter(g => g.competitorName == null).length;
+
   const displayed = data.gaps.filter(g => {
     if (filter === "high_volume") return (g.volumeEstimate ?? 0) > 100;
     if (filter === "local")       return g.geographicScope === "local";
+    if (filter === "unknown")     return g.competitorName == null;
     return true;
   });
+
+  const UNKNOWN_ACCENT        = "#F59E0B";
+  const UNKNOWN_ACCENT_DIM    = "rgba(245,158,11,0.15)";
+  const UNKNOWN_ACCENT_BORDER = "rgba(245,158,11,0.3)";
 
   return (
     <div>
       {/* Filter bar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {(["all","high_volume","local"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             fontSize: 10, fontWeight: 700, letterSpacing: "0.4px",
@@ -237,6 +244,24 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
              `Local (${data.gaps.filter(g => g.geographicScope === "local").length})`}
           </button>
         ))}
+        {unknownCount > 0 && (
+          <button onClick={() => setFilter("unknown")} style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.4px",
+            padding: "5px 12px", borderRadius: 20, cursor: "pointer",
+            background: filter === "unknown" ? UNKNOWN_ACCENT_DIM : "rgba(255,255,255,0.04)",
+            border: `1px solid ${filter === "unknown" ? UNKNOWN_ACCENT_BORDER : "rgba(255,255,255,0.08)"}`,
+            color: filter === "unknown" ? UNKNOWN_ACCENT : "rgba(148,163,184,0.65)",
+            transition: "all 0.15s",
+            display: "flex", alignItems: "center", gap: 5,
+          }}>
+            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 1.5L1.5 13.5h13L8 1.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="currentColor" fillOpacity="0.15"/>
+              <path d="M8 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="8" cy="11.5" r="0.75" fill="currentColor"/>
+            </svg>
+            {`Unknown (${unknownCount})`}
+          </button>
+        )}
       </div>
 
       {/* Table */}

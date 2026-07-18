@@ -2,25 +2,24 @@
  * GBP Audit & Optimization Engine — API Route
  *
  * Endpoints:
- *   POST /api/gbp/audit/run      — trigger a new audit (gathers local + GBP API data, scores)
- *   GET  /api/gbp/audit/latest   — latest snapshot + checks for a client
- *   GET  /api/gbp/audit/history  — paginated list of past snapshots
+ *   POST  /api/gbp/audit/run               — trigger a new audit
+ *   GET   /api/gbp/audit/latest            — latest snapshot + checks
+ *   GET   /api/gbp/audit/history           — paginated snapshot list
+ *   GET   /api/gbp/audit/optimizations     — persisted optimization opportunities
+ *   PATCH /api/gbp/audit/optimizations/:id — mark opportunity resolved/unresolved
+ *   GET   /api/gbp/audit/trend             — trend summary (last 2 audits)
  *
  * Schema note:
- *   CREATE TABLE DDL lives exclusively in lib/schema-migrate.ts (canonical).
- *   This file holds only ALTER TABLE guards for columns added after the initial
- *   deployment.  If you add a column to lib/db/src/schema/gbp-audit.ts you MUST
- *   update schema-migrate.ts (CREATE TABLE + ALTER TABLE guard) — do NOT add
- *   another CREATE TABLE here.
+ *   CREATE TABLE DDL lives in artifacts/api-server/src/lib/schema-migrate.ts.
+ *   This file holds only ALTER TABLE guards for columns added after initial deployment.
  *
- * Phase 2: fetches live data from:
- *   - mybusinessbusinessinformation.googleapis.com  (location profile, hours, categories, etc.)
- *   - mybusiness.googleapis.com/v4 (media items, reviews)
+ * Phase 2: fetches live data from the GBP Business Information + Media APIs.
+ * Phase 3: generates and persists prioritized optimization opportunities.
  */
 
 import { Router }   from "express";
 import { getAuth }  from "@clerk/express";
-import { pool, db, eq, and, sql } from "@workspace/db";
+import { pool, db, eq, and, ne, sql } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import {
   localPresenceProfilesTable,
@@ -29,23 +28,26 @@ import {
   socialPostsTable,
   gbpAuditSnapshotsTable,
   gbpAuditChecksTable,
+  gbpOptimizationOpportunitiesTable,
 } from "@workspace/db";
-import { evaluateGbpAudit, type GbpAuditInput, type GbpLiveData } from "@workspace/db";
+import {
+  evaluateGbpAudit,
+  generateOptimizations,
+  type GbpAuditInput,
+  type GbpAuditResult,
+  type GbpCheckResult,
+  type GbpLiveData,
+} from "@workspace/db";
 import { fetchGbpLiveData } from "../lib/gbp-live-data";
 
 const router = Router();
 
 // ── Bootstrap: ALTER TABLE guards only ───────────────────────────────────────
-// CREATE TABLE DDL lives in lib/schema-migrate.ts (runs before any route fires).
-// This function adds only columns that may be absent on tables created by an
-// older version of schema-migrate.ts.  Do NOT add CREATE TABLE statements here.
-// See also: lib/db/src/schema/gbp-audit.ts for the Drizzle column definitions.
 
 async function bootstrapGbpAuditColumns(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query(`
-      -- api_score / api_max_score added in Phase 2; guard for pre-Phase-2 deployments.
       ALTER TABLE gbp_audit_snapshots
         ADD COLUMN IF NOT EXISTS api_score     INTEGER NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS api_max_score INTEGER NOT NULL DEFAULT 0;
@@ -55,10 +57,100 @@ async function bootstrapGbpAuditColumns(): Promise<void> {
   }
 }
 
-// Runs once at startup (fire-and-forget); schema-migrate.ts guarantees tables exist.
 bootstrapGbpAuditColumns().catch(err =>
   console.error("[gbp-audit] column bootstrap failed:", err)
 );
+
+// ── Optimization helpers ──────────────────────────────────────────────────────
+
+type PrevOppRow = {
+  checkKey:   string;
+  resolved:   boolean;
+  resolvedAt: Date | null;
+};
+
+/**
+ * Reconstruct a minimal GbpAuditResult from persisted snapshot + check rows
+ * so we can pass it to generateOptimizations() without re-running the audit.
+ */
+function reconstructAuditResult(
+  snap:   typeof gbpAuditSnapshotsTable.$inferSelect,
+  checks: (typeof gbpAuditChecksTable.$inferSelect)[],
+): GbpAuditResult {
+  return {
+    localScore:    snap.localScore,
+    localMaxScore: snap.localMaxScore,
+    apiScore:      snap.apiScore  ?? 0,
+    apiMaxScore:   snap.apiMaxScore ?? 0,
+    overallScore:  snap.overallScore,
+    maxScore:      snap.maxScore,
+    checksPassed:  snap.checksPassed,
+    checksWarning: snap.checksWarning,
+    checksFailed:  snap.checksFailed,
+    checksPending: snap.checksPending,
+    checks:        checks.map(c => ({
+      category:       c.category      as GbpCheckResult["category"],
+      checkKey:       c.checkKey,
+      checkLabel:     c.checkLabel,
+      evidenceType:   c.evidenceType  as GbpCheckResult["evidenceType"],
+      status:         c.status        as GbpCheckResult["status"],
+      score:          c.score,
+      maxScore:       c.maxScore,
+      priority:       c.priority      as GbpCheckResult["priority"],
+      currentValue:   c.currentValue  ?? null,
+      recommendation: c.recommendation ?? null,
+      rawData:        (c.rawData as Record<string, unknown>) ?? {},
+    })),
+  };
+}
+
+/**
+ * Persist optimization opportunities for a snapshot.
+ * Preserves manual "resolved" overrides from the previous snapshot's rows.
+ */
+async function persistOptimizations(
+  snapshotId: string,
+  clientId:   string,
+  optResult:  ReturnType<typeof generateOptimizations>,
+  prevOpps:   PrevOppRow[] | null,
+): Promise<void> {
+  if (optResult.opportunities.length === 0) return;
+
+  const prevResolved = new Map<string, { resolved: boolean; resolvedAt: Date | null }>(
+    (prevOpps ?? [])
+      .filter(o => o.resolved)
+      .map(o => [o.checkKey, { resolved: o.resolved, resolvedAt: o.resolvedAt }])
+  );
+
+  await db.insert(gbpOptimizationOpportunitiesTable).values(
+    optResult.opportunities.map(o => {
+      const prevState = prevResolved.get(o.id);
+      return {
+        snapshotId,
+        clientId,
+        checkKey:                  o.id,
+        category:                  o.category,
+        title:                     o.title,
+        description:               o.description,
+        severity:                  o.severity,
+        priorityScore:             o.priorityScore,
+        estimatedImpact:           o.estimatedImpact,
+        implementationDifficulty:  o.implementationDifficulty,
+        confidence:                o.confidence,
+        evidence:                  o.evidence,
+        recommendedAction:         o.recommendedAction,
+        supportingGoogleGuideline: o.supportingGoogleGuideline,
+        groupName:                 o.group,
+        trend:                     o.trend,
+        timeEstimate:              o.timeEstimate,
+        aiFixAvailable:            o.aiFixAvailable,
+        checkStatus:               o.checkStatus,
+        resolved:                  prevState?.resolved ?? o.resolved,
+        resolvedAt:                prevState?.resolvedAt ?? (o.resolved ? new Date() : null),
+      };
+    })
+  );
+}
 
 // ── Data gathering ─────────────────────────────────────────────────────────────
 
@@ -66,13 +158,11 @@ async function gatherAuditInput(
   clientId: string,
   userId:   string,
 ): Promise<GbpAuditInput> {
-  // 1. NAP profile
   const [profile] = await db
     .select()
     .from(localPresenceProfilesTable)
     .where(eq(localPresenceProfilesTable.clientId, clientId));
 
-  // 2. Google Business connection
   const [gbpRow] = await db
     .select()
     .from(socialConnectionsTable)
@@ -102,7 +192,6 @@ async function gatherAuditInput(
     };
   }
 
-  // 3. Review stats (platform = 'google')
   const [reviewRow] = await db
     .select()
     .from(reviewPlatformStatsTable)
@@ -115,22 +204,21 @@ async function gatherAuditInput(
       }
     : null;
 
-  // 4. Google posts (last 30 days, published)
   const postsResult = await db.execute<{
-    total_last_30:  string;
-    total_last_14:  string;
-    with_image_30:  string;
+    total_last_30: string;
+    total_last_14: string;
+    with_image_30: string;
   }>(sql`
     SELECT
-      COUNT(*)                                                 AS total_last_30,
-      COUNT(*) FILTER (WHERE published_at > NOW() - INTERVAL '14 days') AS total_last_14,
+      COUNT(*)                                                                   AS total_last_30,
+      COUNT(*) FILTER (WHERE published_at > NOW() - INTERVAL '14 days')        AS total_last_14,
       COUNT(*) FILTER (
         WHERE (image_data IS NOT NULL OR matched_image_url IS NOT NULL)
           AND published_at > NOW() - INTERVAL '30 days'
-      )                                                        AS with_image_30
+      )                                                                          AS with_image_30
     FROM social_posts
-    WHERE user_id    = ${userId}
-      AND status     = 'published'
+    WHERE user_id     = ${userId}
+      AND status      = 'published'
       AND published_at > NOW() - INTERVAL '30 days'
       AND platforms::jsonb ? 'google'
   `);
@@ -138,9 +226,9 @@ async function gatherAuditInput(
   const pr = postsResult.rows[0];
   const googlePosts: GbpAuditInput["googlePosts"] = pr
     ? {
-        totalLast30Days:          parseInt(pr.total_last_30, 10)  || 0,
-        totalLast14Days:          parseInt(pr.total_last_14, 10)  || 0,
-        postsWithImageLast30Days: parseInt(pr.with_image_30, 10)  || 0,
+        totalLast30Days:          parseInt(pr.total_last_30, 10) || 0,
+        totalLast14Days:          parseInt(pr.total_last_14, 10) || 0,
+        postsWithImageLast30Days: parseInt(pr.with_image_30, 10) || 0,
       }
     : { totalLast30Days: 0, totalLast14Days: 0, postsWithImageLast30Days: 0 };
 
@@ -171,17 +259,13 @@ router.post("/gbp/audit/run", async (req, res) => {
   const clientId = (req.body?.clientId as string | undefined) || "default";
 
   try {
-    // Insert snapshot as "running"
     const [snap] = await db
       .insert(gbpAuditSnapshotsTable)
       .values({ clientId, userId, status: "running", startedAt: new Date() })
       .returning();
 
-    // Gather local input
     const input = await gatherAuditInput(clientId, userId);
 
-    // Phase 2: fetch live GBP data when the token + location are available.
-    // Failures are non-fatal — the engine degrades affected checks to data_pending.
     let liveData: GbpLiveData | null = null;
     const conn = input.googleConnection;
     if (conn?.connected && conn.locationName && conn.tokenExists) {
@@ -211,10 +295,8 @@ router.post("/gbp/audit/run", async (req, res) => {
       }
     }
 
-    // Evaluate — Phase 1 path when liveData is null (no token / not connected)
     const result = evaluateGbpAudit(input, liveData);
 
-    // Persist checks
     if (result.checks.length > 0) {
       await db.insert(gbpAuditChecksTable).values(
         result.checks.map(c => ({
@@ -235,7 +317,6 @@ router.post("/gbp/audit/run", async (req, res) => {
       );
     }
 
-    // Update snapshot as "complete"
     const [updated] = await db
       .update(gbpAuditSnapshotsTable)
       .set({
@@ -259,14 +340,68 @@ router.post("/gbp/audit/run", async (req, res) => {
       .where(eq(gbpAuditSnapshotsTable.id, snap.id))
       .returning();
 
+    // ── Phase 3: generate + persist optimization opportunities ────────────────
+    try {
+      const [prevSnap] = await db
+        .select()
+        .from(gbpAuditSnapshotsTable)
+        .where(
+          and(
+            eq(gbpAuditSnapshotsTable.clientId, clientId),
+            eq(gbpAuditSnapshotsTable.status, "complete"),
+            ne(gbpAuditSnapshotsTable.id, snap.id),
+          )
+        )
+        .orderBy(desc(gbpAuditSnapshotsTable.createdAt))
+        .limit(1);
+
+      let prevChecks: GbpCheckResult[] | undefined;
+      let prevOpps:   PrevOppRow[] | null = null;
+
+      if (prevSnap) {
+        const rawPrevChecks = await db
+          .select()
+          .from(gbpAuditChecksTable)
+          .where(eq(gbpAuditChecksTable.snapshotId, prevSnap.id));
+
+        prevChecks = rawPrevChecks.map(c => ({
+          category:       c.category      as GbpCheckResult["category"],
+          checkKey:       c.checkKey,
+          checkLabel:     c.checkLabel,
+          evidenceType:   c.evidenceType  as GbpCheckResult["evidenceType"],
+          status:         c.status        as GbpCheckResult["status"],
+          score:          c.score,
+          maxScore:       c.maxScore,
+          priority:       c.priority      as GbpCheckResult["priority"],
+          currentValue:   c.currentValue  ?? null,
+          recommendation: c.recommendation ?? null,
+          rawData:        (c.rawData as Record<string, unknown>) ?? {},
+        }));
+
+        prevOpps = await db
+          .select({
+            checkKey:   gbpOptimizationOpportunitiesTable.checkKey,
+            resolved:   gbpOptimizationOpportunitiesTable.resolved,
+            resolvedAt: gbpOptimizationOpportunitiesTable.resolvedAt,
+          })
+          .from(gbpOptimizationOpportunitiesTable)
+          .where(eq(gbpOptimizationOpportunitiesTable.snapshotId, prevSnap.id));
+      }
+
+      const optResult = generateOptimizations(result, prevChecks);
+      await persistOptimizations(snap.id, clientId, optResult, prevOpps);
+    } catch (optErr) {
+      console.warn("[gbp-audit] optimization persistence failed (non-fatal):", optErr);
+    }
+
     const apiCallsMade = liveData !== null;
     const apiErrors    = liveData ? Object.values(liveData.errors).filter(Boolean) : [];
 
     return res.json({
-      snapshot:      updated,
-      checkCount:    result.checks.length,
+      snapshot:   updated,
+      checkCount: result.checks.length,
       apiCallsMade,
-      apiErrors:     apiErrors.length > 0 ? apiErrors : undefined,
+      apiErrors:  apiErrors.length > 0 ? apiErrors : undefined,
     });
   } catch (err) {
     console.error("[gbp-audit] run error:", err);
@@ -330,6 +465,160 @@ router.get("/gbp/audit/history", async (req, res) => {
     return res.json({ snapshots });
   } catch (err) {
     console.error("[gbp-audit] history error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET /api/gbp/audit/optimizations ─────────────────────────────────────────
+
+router.get("/gbp/audit/optimizations", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const clientId = (req.query.clientId as string | undefined) || "default";
+
+  try {
+    const [snap] = await db
+      .select()
+      .from(gbpAuditSnapshotsTable)
+      .where(
+        and(
+          eq(gbpAuditSnapshotsTable.clientId, clientId),
+          eq(gbpAuditSnapshotsTable.status, "complete"),
+        )
+      )
+      .orderBy(desc(gbpAuditSnapshotsTable.createdAt))
+      .limit(1);
+
+    if (!snap) return res.json({ snapshotId: null, snapshotDate: null, opportunities: [] });
+
+    let opps = await db
+      .select()
+      .from(gbpOptimizationOpportunitiesTable)
+      .where(eq(gbpOptimizationOpportunitiesTable.snapshotId, snap.id))
+      .orderBy(desc(gbpOptimizationOpportunitiesTable.priorityScore));
+
+    // Pre-Phase-3 snapshot: regenerate + persist on-the-fly
+    if (opps.length === 0) {
+      const checks = await db
+        .select()
+        .from(gbpAuditChecksTable)
+        .where(eq(gbpAuditChecksTable.snapshotId, snap.id));
+
+      if (checks.length > 0) {
+        try {
+          const auditResult = reconstructAuditResult(snap, checks);
+          const optResult   = generateOptimizations(auditResult);
+          await persistOptimizations(snap.id, clientId, optResult, null);
+          opps = await db
+            .select()
+            .from(gbpOptimizationOpportunitiesTable)
+            .where(eq(gbpOptimizationOpportunitiesTable.snapshotId, snap.id))
+            .orderBy(desc(gbpOptimizationOpportunitiesTable.priorityScore));
+        } catch (genErr) {
+          console.warn("[gbp-audit] on-the-fly opt generation failed:", genErr);
+        }
+      }
+    }
+
+    return res.json({
+      snapshotId:   snap.id,
+      snapshotDate: snap.createdAt,
+      opportunities: opps,
+    });
+  } catch (err) {
+    console.error("[gbp-audit] optimizations error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── PATCH /api/gbp/audit/optimizations/:id ────────────────────────────────────
+
+router.patch("/gbp/audit/optimizations/:id", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const { id }   = req.params;
+  const resolved = req.body?.resolved as boolean | undefined;
+
+  if (resolved === undefined) {
+    return res.status(400).json({ error: "resolved field required" });
+  }
+
+  try {
+    const [updated] = await db
+      .update(gbpOptimizationOpportunitiesTable)
+      .set({
+        resolved,
+        resolvedAt: resolved ? new Date() : null,
+      })
+      .where(eq(gbpOptimizationOpportunitiesTable.id, id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Opportunity not found" });
+    return res.json({ opportunity: updated });
+  } catch (err) {
+    console.error("[gbp-audit] optimizations patch error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET /api/gbp/audit/trend ──────────────────────────────────────────────────
+
+router.get("/gbp/audit/trend", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const clientId = (req.query.clientId as string | undefined) || "default";
+
+  try {
+    const snaps = await db
+      .select()
+      .from(gbpAuditSnapshotsTable)
+      .where(
+        and(
+          eq(gbpAuditSnapshotsTable.clientId, clientId),
+          eq(gbpAuditSnapshotsTable.status, "complete"),
+        )
+      )
+      .orderBy(desc(gbpAuditSnapshotsTable.createdAt))
+      .limit(2);
+
+    if (snaps.length < 2) return res.json({ trend: null });
+
+    const [curr, prev] = snaps;
+
+    const currOpps = await db
+      .select()
+      .from(gbpOptimizationOpportunitiesTable)
+      .where(eq(gbpOptimizationOpportunitiesTable.snapshotId, curr.id));
+
+    let improved = 0, regressed = 0, newIssues = 0, resolved = 0, unchanged = 0;
+    for (const o of currOpps) {
+      switch (o.trend) {
+        case "improved":   improved++;  break;
+        case "regressed":  regressed++; break;
+        case "new_issue":  newIssues++; break;
+        case "resolved":   resolved++;  break;
+        default:           unchanged++; break;
+      }
+    }
+
+    const currScore = curr.maxScore > 0 ? Math.round((curr.overallScore / curr.maxScore) * 100) : 0;
+    const prevScore = prev.maxScore > 0 ? Math.round((prev.overallScore / prev.maxScore) * 100) : 0;
+
+    return res.json({
+      trend: {
+        improved, regressed, newIssues, resolved, unchanged,
+        scoreDelta:    currScore - prevScore,
+        currentScore:  currScore,
+        previousScore: prevScore,
+        currentDate:   curr.createdAt,
+        previousDate:  prev.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("[gbp-audit] trend error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });

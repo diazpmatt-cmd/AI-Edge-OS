@@ -20,6 +20,7 @@ export * from "./db-service-registry-provider";
 export * from "./registry-validator";
 export * from "./scheduler-eligibility";
 export * from "./gbp-audit-engine";
+export * from "./gbp-optimization-engine";
 export * from "./local-presence-providers";
 
 // ── Phase C2: Discovery Engine ────────────────────────────────────────────────
@@ -331,7 +332,7 @@ export type {
   StaleRunInfo,
 } from "./discovery-c6-repository";
 
-export { eq, and, or, sql } from "drizzle-orm";
+export { eq, and, or, ne, sql } from "drizzle-orm";
 
 // ── Phase C7: Discovery Scheduling ────────────────────────────────────────────
 

@@ -888,5 +888,42 @@ export async function migrateSchema(): Promise<void> {
       ON gbp_audit_checks(client_id);
   `);
 
+  // ── GBP Optimization Opportunities (Phase 3) ───────────────────────────────
+  // Stores one row per check per audit snapshot: priority-scored, grouped, and
+  // trend-tagged improvement opportunities derived by gbp-optimization-engine.ts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_optimization_opportunities (
+      id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      snapshot_id               TEXT        NOT NULL,
+      client_id                 TEXT        NOT NULL,
+      check_key                 TEXT        NOT NULL,
+      category                  TEXT        NOT NULL,
+      title                     TEXT        NOT NULL,
+      description               TEXT        NOT NULL DEFAULT '',
+      severity                  TEXT        NOT NULL DEFAULT 'Medium',
+      priority_score            INTEGER     NOT NULL DEFAULT 0,
+      estimated_impact          INTEGER     NOT NULL DEFAULT 0,
+      implementation_difficulty TEXT        NOT NULL DEFAULT 'Moderate',
+      confidence                INTEGER     NOT NULL DEFAULT 0,
+      evidence                  TEXT        NOT NULL DEFAULT '',
+      recommended_action        TEXT        NOT NULL DEFAULT '',
+      supporting_google_guideline TEXT,
+      group_name                TEXT        NOT NULL DEFAULT 'needs_attention',
+      trend                     TEXT,
+      time_estimate             TEXT,
+      ai_fix_available          BOOLEAN     NOT NULL DEFAULT FALSE,
+      check_status              TEXT        NOT NULL DEFAULT 'fail',
+      resolved                  BOOLEAN     NOT NULL DEFAULT FALSE,
+      resolved_at               TIMESTAMPTZ,
+      created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_opt_client_snap
+      ON gbp_optimization_opportunities(client_id, snapshot_id);
+
+    CREATE INDEX IF NOT EXISTS gbp_opt_snapshot_priority
+      ON gbp_optimization_opportunities(snapshot_id, priority_score DESC);
+  `);
+
   console.log("[SCHEMA] Core schema migration complete");
 }

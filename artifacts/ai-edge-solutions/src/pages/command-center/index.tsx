@@ -190,29 +190,46 @@ export default function CommandCenter() {
                 <div style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "2px 8px" }}>3 TIERS</div>
               </div>
               <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-                {[
-                  { name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
-                  { name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
-                  { name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
-                ].map(pkg => (
-                  <div key={pkg.name} style={{
-                    background: `${pkg.color}08`, border: `1px solid ${pkg.color}22`,
-                    borderRadius: 10, padding: "10px 14px",
-                    display: "flex", alignItems: "center", gap: 10,
-                  }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: pkg.color, boxShadow: `0 0 6px ${pkg.color}88`, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.9)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {pkg.name}
-                        <span style={{ fontSize: 8, fontWeight: 800, color: pkg.color, background: `${pkg.color}18`, border: `1px solid ${pkg.color}30`, borderRadius: 5, padding: "1px 5px" }}>{pkg.badge}</span>
+                {([
+                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
+                  { id: "growth",     name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
+                  { id: "enterprise", name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
+                ] as const).map(pkg => {
+                  const isActive = activeBusiness.currentTier === pkg.id;
+                  return (
+                    <div key={pkg.name} style={{
+                      background: isActive ? `${pkg.color}14` : `${pkg.color}08`,
+                      border: isActive ? `1.5px solid ${pkg.color}55` : `1px solid ${pkg.color}22`,
+                      borderRadius: 10, padding: "10px 14px",
+                      display: "flex", alignItems: "center", gap: 10,
+                      boxShadow: isActive ? `0 0 12px ${pkg.color}18` : "none",
+                      position: "relative",
+                    }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: pkg.color, boxShadow: `0 0 6px ${pkg.color}88`, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.9)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {pkg.name}
+                          <span style={{ fontSize: 8, fontWeight: 800, color: pkg.color, background: `${pkg.color}18`, border: `1px solid ${pkg.color}30`, borderRadius: 5, padding: "1px 5px" }}>{pkg.badge}</span>
+                          {isActive && (
+                            <span style={{ fontSize: 8, fontWeight: 800, color: "#030612", background: pkg.color, borderRadius: 5, padding: "1px 6px", letterSpacing: "0.3px" }}>YOUR PLAN</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.7)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {pkg.modules.slice(0, 2).join(" · ")} · +{pkg.modules.length - 2} more
+                        </div>
                       </div>
-                      <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.7)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {pkg.modules.slice(0, 2).join(" · ")} · +{pkg.modules.length - 2} more
-                      </div>
+                      {isActive ? (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: pkg.color, flexShrink: 0 }}>{pkg.price}</div>
+                      ) : (
+                        <div style={{
+                          fontSize: 8, fontWeight: 700, color: "rgba(100,116,139,0.6)",
+                          background: "rgba(100,116,139,0.08)", border: "1px solid rgba(100,116,139,0.18)",
+                          borderRadius: 5, padding: "2px 6px", flexShrink: 0,
+                        }}>UPGRADE</div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: pkg.color, flexShrink: 0 }}>{pkg.price}</div>
-                  </div>
-                ))}
+                  );
+                })}
                 <Link to="/pricing">
                   <div style={{
                     marginTop: 2, padding: "9px 12px", textAlign: "center",

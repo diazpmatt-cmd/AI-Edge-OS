@@ -9,6 +9,7 @@ export interface Business {
   accentColor: string;
   profile: BusinessProfile;
   status: "active" | "onboarding" | "pending";
+  currentTier?: "core" | "growth" | "enterprise";
 }
 
 export const BUSINESSES: Business[] = [
@@ -19,6 +20,7 @@ export const BUSINESSES: Business[] = [
     accentColor: "#00AEEF",
     profile: DEMO_PROFILE,
     status: "active",
+    currentTier: "core",
   },
   {
     id: "simplishelling",
@@ -35,6 +37,7 @@ export const BUSINESSES: Business[] = [
       targetCustomers: "Homeowners, landscapers, restaurants, and coastal property owners in the Gulf Coast region",
     },
     status: "onboarding",
+    currentTier: "growth",
   },
 ];
 

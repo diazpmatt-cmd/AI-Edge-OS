@@ -85,8 +85,8 @@ export interface GbpLiveData {
   // Media API (mybusiness.googleapis.com/v4)
   hasLogo:         boolean | null;   // LOGO category photo present
   hasCover:        boolean | null;   // COVER_PHOTO category photo present
-  totalPhotoCount: number | null;    // total PHOTO format items
   hasVideo:        boolean | null;   // any VIDEO format items
+  totalPhotoCount: number | null;    // total PHOTO format items
 
   // Reviews API (mybusiness.googleapis.com/v4)
   reviewResponseRate:   number | null;  // fraction 0-1 of reviews with owner reply
@@ -128,6 +128,8 @@ export interface GbpCheckResult {
 export interface GbpAuditResult {
   localScore:    number;
   localMaxScore: number;
+  apiScore:      number;
+  apiMaxScore:   number;
   overallScore:  number;
   maxScore:      number;
   checksPassed:  number;
@@ -189,18 +191,25 @@ export const GBP_CHECK_REGISTRY: CheckDefinition[] = [
 
 // Local-evidence max score = 2+4+4+3+5+5+5+3+2+8 = 41
 export const GBP_LOCAL_MAX_SCORE = 41;
+// GBP API max score = 100 - 41 = 59
+export const GBP_API_MAX_SCORE = 59;
 // Total max = 100
 export const GBP_MAX_SCORE = 100;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function pending(def: CheckDefinition, notes?: string): GbpCheckResult {
+/**
+ * Return a `fail` result for a GBP API check when the user has not connected
+ * their Google Business Profile. Score is 0 (out of maxScore) so the overall
+ * score is still meaningful. `data_pending` is never emitted by this engine.
+ */
+function notConnected(def: CheckDefinition): GbpCheckResult {
   return {
     category:       def.category,
     checkKey:       def.checkKey,
     checkLabel:     def.checkLabel,
     evidenceType:   "gbp_api",
-    status:         "data_pending",
+    status:         "fail",
     score:          0,
     maxScore:       def.maxScore,
     priority:       def.priority,
@@ -778,6 +787,7 @@ export function evaluateGbpAudit(
   const liveScore     = liveChecks.reduce((s, c) => s + c.score, 0);
   const overallScore  = localScore + liveScore;
 
+
   let checksPassed  = 0;
   let checksWarning = 0;
   let checksFailed  = 0;
@@ -788,17 +798,21 @@ export function evaluateGbpAudit(
     else if (c.status === "warning")      checksWarning++;
     else if (c.status === "fail")         checksFailed++;
     else if (c.status === "data_pending") checksPending++;
+    // "error" does not increment any counter (counted as neither pass nor fail)
   }
 
   return {
     localScore,
     localMaxScore: GBP_LOCAL_MAX_SCORE,
+    apiScore:      liveScore,
+    apiMaxScore:   GBP_API_MAX_SCORE,
+
     overallScore,
-    maxScore: GBP_MAX_SCORE,
+    maxScore:      GBP_MAX_SCORE,
     checksPassed,
     checksWarning,
     checksFailed,
     checksPending,
-    checks: allChecks,
+    checks:        allChecks,
   };
 }

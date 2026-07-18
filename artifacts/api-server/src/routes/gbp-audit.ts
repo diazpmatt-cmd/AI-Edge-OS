@@ -2,13 +2,17 @@
  * GBP Audit & Optimization Engine — API Route
  *
  * Endpoints:
- *   POST /api/gbp/audit/run      — trigger a new audit (gathers local data, scores)
+ *   POST /api/gbp/audit/run      — trigger a new audit (gathers local + GBP API data, scores)
  *   GET  /api/gbp/audit/latest   — latest snapshot + checks for a client
  *   GET  /api/gbp/audit/history  — paginated list of past snapshots
  *
  * Tables bootstrapped here via raw SQL (same pattern as call-intelligence and
  * integration-health-history — drizzle-kit push is blocked by pre-existing
  * unique constraint conflicts).
+ *
+ * Phase 2: fetches live data from:
+ *   - mybusinessbusinessinformation.googleapis.com  (location profile, hours, categories, etc.)
+ *   - mybusiness.googleapis.com/v4 (media items, reviews)
  */
 
 import { Router }   from "express";
@@ -41,6 +45,8 @@ async function bootstrapGbpAuditTables(): Promise<void> {
         status          TEXT NOT NULL DEFAULT 'pending',
         local_score     INTEGER NOT NULL DEFAULT 0,
         local_max_score INTEGER NOT NULL DEFAULT 0,
+        api_score       INTEGER NOT NULL DEFAULT 0,
+        api_max_score   INTEGER NOT NULL DEFAULT 0,
         overall_score   INTEGER NOT NULL DEFAULT 0,
         max_score       INTEGER NOT NULL DEFAULT 100,
         checks_passed   INTEGER NOT NULL DEFAULT 0,
@@ -56,6 +62,11 @@ async function bootstrapGbpAuditTables(): Promise<void> {
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- Add api_score / api_max_score to existing tables (idempotent)
+      ALTER TABLE gbp_audit_snapshots
+        ADD COLUMN IF NOT EXISTS api_score     INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS api_max_score INTEGER NOT NULL DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS gbp_audit_checks (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -222,37 +233,25 @@ router.post("/gbp/audit/run", async (req, res) => {
       const [gbpRow] = await db
         .select()
         .from(socialConnectionsTable)
-        .where(and(
-          eq(socialConnectionsTable.userId, userId),
-          eq(socialConnectionsTable.provider, "google_business"),
-        ));
-
+        .where(
+          and(
+            eq(socialConnectionsTable.userId, userId),
+            eq(socialConnectionsTable.provider, "google_business"),
+          )
+        );
       if (gbpRow?.accessToken) {
-        let meta: Record<string, unknown> = {};
-        try { meta = typeof gbpRow.metadata === "string" ? JSON.parse(gbpRow.metadata) : {}; } catch {}
-
-        // Derive accountName from locationName when not stored explicitly.
-        // locationName format: "accounts/123456789/locations/987654321"
-        const accountName =
-          (meta.accountName as string | null) ??
-          (meta.gbpAccountName as string | null) ??
-          conn.locationName.split("/locations/")[0] ??
-          "";
-
-        if (accountName) {
-          try {
-            liveData = await fetchGbpLiveData({
-              accessToken:  gbpRow.accessToken,
-              refreshToken: gbpRow.refreshToken ?? null,
-              expiresAt:    gbpRow.expiresAt ?? null,
-              userId,
-              locationName: conn.locationName,
-              accountName,
-            });
-            console.log(`[gbp-audit] liveData fetched: errors=${JSON.stringify(liveData.errors)}`);
-          } catch (liveErr: any) {
-            console.warn(`[gbp-audit] liveData fetch error (non-fatal): ${liveErr?.message}`);
-          }
+        try {
+          liveData = await fetchGbpLiveData({
+            accessToken:  gbpRow.accessToken,
+            refreshToken: gbpRow.refreshToken ?? null,
+            expiresAt:    gbpRow.expiresAt    ?? null,
+            userId,
+            locationName: conn.locationName,
+            accountName:  (conn.accountName ?? conn.locationName.split("/locations/")[0]),
+          });
+          console.log(`[gbp-audit] liveData fetched: errors=${JSON.stringify(liveData.errors)}`);
+        } catch (liveErr: any) {
+          console.warn(`[gbp-audit] liveData fetch error (non-fatal): ${liveErr?.message}`);
         }
       }
     }
@@ -288,6 +287,8 @@ router.post("/gbp/audit/run", async (req, res) => {
         status:        "complete",
         localScore:    result.localScore,
         localMaxScore: result.localMaxScore,
+        apiScore:      result.apiScore,
+        apiMaxScore:   result.apiMaxScore,
         overallScore:  result.overallScore,
         maxScore:      result.maxScore,
         checksPassed:  result.checksPassed,
@@ -303,7 +304,15 @@ router.post("/gbp/audit/run", async (req, res) => {
       .where(eq(gbpAuditSnapshotsTable.id, snap.id))
       .returning();
 
-    return res.json({ snapshot: updated, checkCount: result.checks.length });
+    const apiCallsMade = liveData !== null;
+    const apiErrors    = liveData ? Object.values(liveData.errors).filter(Boolean) : [];
+
+    return res.json({
+      snapshot:      updated,
+      checkCount:    result.checks.length,
+      apiCallsMade,
+      apiErrors:     apiErrors.length > 0 ? apiErrors : undefined,
+    });
   } catch (err) {
     console.error("[gbp-audit] run error:", err);
     return res.status(500).json({ error: "Audit failed" });

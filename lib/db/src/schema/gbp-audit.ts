@@ -33,9 +33,13 @@ export const gbpAuditSnapshotsTable = pgTable("gbp_audit_snapshots", {
   // ── Scores ──────────────────────────────────────────────────────────────────
   /** Points earned from "local" evidence checks (Phase 1 max = 41). */
   localScore:   integer("local_score").notNull().default(0),
-  /** Maximum local-evidence score (always 41 in Phase 1). */
+  /** Maximum local-evidence score (always 41). */
   localMaxScore:integer("local_max_score").notNull().default(0),
-  /** Total points earned across all checks (same as localScore in Phase 1). */
+  /** Points earned from GBP API checks (Phase 2 max = 59, 0 when not connected). */
+  apiScore:     integer("api_score").notNull().default(0),
+  /** Maximum GBP API score (59 when API connected, 0 when data_pending). */
+  apiMaxScore:  integer("api_max_score").notNull().default(0),
+  /** Total points earned across all checks (localScore + apiScore). */
   overallScore: integer("overall_score").notNull().default(0),
   /** Total possible score including data_pending checks (always 100). */
   maxScore:     integer("max_score").notNull().default(100),
@@ -89,7 +93,7 @@ export const gbpAuditChecksTable = pgTable("gbp_audit_checks", {
   currentValue:   text("current_value"),
   /** Actionable recommendation shown in the UI. */
   recommendation: text("recommendation"),
-  /** Raw evidence preserved for debugging and Phase 2 enrichment. */
+  /** Raw evidence preserved for debugging. */
   rawData:        jsonb("raw_data").notNull().default({}),
 
   createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

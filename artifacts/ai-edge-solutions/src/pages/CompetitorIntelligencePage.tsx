@@ -281,8 +281,26 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
             >
               {/* Keyword */}
               <div>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: "#E2E8F0", marginBottom: 2 }}>
-                  {g.keyword}
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: "#E2E8F0" }}>
+                    {g.keyword}
+                  </span>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(g.keyword)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Search Google for "${g.keyword}"`}
+                    style={{ color: "rgba(148,163,184,0.35)", lineHeight: 1, flexShrink: 0, textDecoration: "none" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = ACCENT; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(148,163,184,0.35)"; }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M8 1h3v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M5 7L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    </svg>
+                  </a>
                 </div>
                 <div style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>
                   {g.source}

@@ -1,6 +1,13 @@
 import { useState } from "react";
+import { useSearch } from "wouter";
 import Nav from "@/components/marketing/Nav";
 import Footer from "@/components/marketing/Footer";
+
+const PACKAGE_LABELS: Record<string, string> = {
+  core: "Core Package",
+  growth: "Growth Package",
+  enterprise: "Enterprise",
+};
 
 const SERVICES = [
   "Lead Recovery AI",
@@ -32,6 +39,10 @@ type FormData = {
 };
 
 export default function ContactPage() {
+  const search = useSearch();
+  const packageParam = new URLSearchParams(search).get("package") ?? "";
+  const packageLabel = PACKAGE_LABELS[packageParam] ?? "";
+
   const [form, setForm] = useState<FormData>({
     firstName: "", lastName: "", email: "", phone: "",
     business: "", industry: "", services: [], message: "",
@@ -134,9 +145,26 @@ export default function ContactPage() {
             border: "1px solid rgba(255,255,255,0.06)",
             borderRadius: 24, padding: 40,
           }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#FFFFFF", marginBottom: 32, letterSpacing: "-0.3px" }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#FFFFFF", marginBottom: packageLabel ? 16 : 32, letterSpacing: "-0.3px" }}>
               Tell us about your business
             </h2>
+
+            {packageLabel && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.28)",
+                borderRadius: 10, padding: "12px 16px", marginBottom: 24,
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: "#00AEEF", boxShadow: "0 0 8px rgba(0,174,239,0.7)", flexShrink: 0,
+                }} />
+                <span style={{ fontSize: 14, color: "#94A3B8" }}>
+                  You're inquiring about:{" "}
+                  <strong style={{ color: "#00AEEF", fontWeight: 700 }}>{packageLabel}</strong>
+                </span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit}>
               {/* Name row */}

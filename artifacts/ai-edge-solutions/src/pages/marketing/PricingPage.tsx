@@ -238,7 +238,10 @@ export default function PricingPage() {
       {/* ═══════════════════════════════════════════════════ PLAN CARDS ══ */}
       <section style={{ padding: "0 24px 72px", maxWidth: 1200, margin: "0 auto" }}>
         <div className="pricing-cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
-          {PLANS.map(plan => <PlanCard key={plan.name} plan={plan} onCta={() => navigate("/contact")} />)}
+          {PLANS.map(plan => {
+            const slug = plan.name === "Core Package" ? "core" : plan.name === "Growth Package" ? "growth" : "enterprise";
+            return <PlanCard key={plan.name} plan={plan} onCta={() => navigate(`/contact?package=${slug}`)} />;
+          })}
         </div>
       </section>
 

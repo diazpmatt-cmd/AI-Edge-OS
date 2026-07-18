@@ -1,6 +1,14 @@
 import { pool } from "@workspace/db";
 
 /**
+ * MAINTENANCE: This file is the production bootstrap for ALL application tables not
+ * covered by another dedicated startup bootstrap. It MUST be kept in sync with the
+ * canonical Drizzle schema in lib/db/src/schema/. Every change to that schema that
+ * adds a table or column must have a corresponding additive statement here.
+ * All DDL must remain strictly additive and non-destructive — only
+ * CREATE TABLE IF NOT EXISTS and ALTER TABLE … ADD COLUMN IF NOT EXISTS are
+ * permitted; DROP, RENAME, ALTER TYPE, and TRUNCATE are never allowed.
+ *
  * Comprehensive startup schema migration.
  *
  * Creates every application table that does NOT have its own dedicated

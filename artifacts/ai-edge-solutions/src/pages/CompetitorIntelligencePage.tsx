@@ -880,6 +880,53 @@ interface ScanProgress {
   opps:      number;
 }
 
+// ── Discovery health types ─────────────────────────────────────────────────────
+
+interface DiscoveryHealth {
+  provider: string;
+  health: {
+    status: "unconfigured" | "disabled" | "configured";
+    reason?: string;
+    login?: string;
+    baseUrl?: string;
+  };
+}
+
+// ── Discovery not-configured callout ──────────────────────────────────────────
+
+function DiscoverySetupCallout({ health }: { health: DiscoveryHealth["health"] }) {
+  const isDisabled     = health.status === "disabled";
+  const titleText      = isDisabled
+    ? "Discovery provider is disabled"
+    : "Discovery provider not configured";
+  const bodyText       = isDisabled
+    ? "Set DISCOVERY_DATAFORSEO_ENABLED=true in the server environment to enable live scans."
+    : "Add DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD to the server environment to enable live scans.";
+
+  return (
+    <div style={{
+      background: "rgba(239,68,68,0.07)",
+      border: "1px solid rgba(239,68,68,0.25)",
+      borderRadius: 10,
+      padding: "10px 14px",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 10,
+      maxWidth: 380,
+    }}>
+      <span style={{ fontSize: 16, lineHeight: 1.3, flexShrink: 0 }}>⚠️</span>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#EF4444", marginBottom: 3 }}>
+          {titleText}
+        </div>
+        <div style={{ fontSize: 10, color: "rgba(148,163,184,0.7)", lineHeight: 1.5 }}>
+          {bodyText}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Run New Scan button ────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 4_000;
@@ -897,6 +944,15 @@ function RunScanButton({
   const pollRef                         = useRef<ReturnType<typeof setInterval> | null>(null);
   const runIdRef                        = useRef<string | null>(null);
   const pollFailsRef                    = useRef<number>(0);
+
+  const { data: healthData, isLoading: healthLoading } = useQuery<DiscoveryHealth>({
+    queryKey: ["discovery-health"],
+    queryFn:  () => apiFetch("/api/discovery/health"),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const providerReady = !healthLoading && healthData?.health?.status === "configured";
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -967,6 +1023,7 @@ function RunScanButton({
 
   const handleClick = useCallback(async () => {
     if (phase === "starting" || phase === "running") return;
+    if (!providerReady) return;
     setPhase("starting");
     setErrorMsg(null);
     setScanProgress(null);
@@ -1026,25 +1083,33 @@ function RunScanButton({
     setScanProgress(null);
     onRunComplete();
     setTimeout(() => setPhase("idle"), 3_000);
-  }, [phase, BASE, getToken, pollStatus, onRunComplete]);
+  }, [phase, providerReady, BASE, getToken, pollStatus, onRunComplete]);
 
   const label =
+    healthLoading       ? "Checking provider…" :
     phase === "starting" ? "Starting scan…" :
     phase === "running"  ? "Scan in progress…" :
     phase === "done"     ? "✓ Scan complete" :
     phase === "error"    ? (errorMsg ?? "Scan failed") :
     "▶ Run New Scan";
 
-  const isActive = phase === "starting" || phase === "running";
-  const isDone   = phase === "done";
-  const isErr    = phase === "error";
+  const isActive   = phase === "starting" || phase === "running";
+  const isDone     = phase === "done";
+  const isErr      = phase === "error";
+  const notReady   = !healthLoading && !providerReady;
+  const isDisabled = isActive || healthLoading || notReady;
 
   const milestone  = scanProgress ? deriveMilestone(scanProgress.stage) : 1;
   const stageLabel = scanProgress ? deriveStageLabel(scanProgress.stage) : "Preparing…";
   const pct        = scanProgress?.pct ?? 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+
+      {/* Persistent setup callout — shown when provider is not ready */}
+      {notReady && healthData?.health && (
+        <DiscoverySetupCallout health={healthData.health} />
+      )}
 
       {/* Progress indicator — shown only while running and progress data is available */}
       {phase === "running" && (
@@ -1160,27 +1225,30 @@ function RunScanButton({
 
       <button
         onClick={handleClick}
-        disabled={isActive}
+        disabled={isDisabled}
         style={{
           display: "flex", alignItems: "center", gap: 7,
-          padding: "8px 16px", borderRadius: 10, cursor: isActive ? "default" : "pointer",
+          padding: "8px 16px", borderRadius: 10, cursor: isDisabled ? "default" : "pointer",
           fontSize: 11, fontWeight: 800, letterSpacing: "0.3px",
-          background: isDone  ? "rgba(34,197,94,0.15)" :
-                      isErr   ? "rgba(239,68,68,0.12)" :
-                      isActive ? ACCENT_DIM : ACCENT,
+          background: isDone    ? "rgba(34,197,94,0.15)" :
+                      isErr     ? "rgba(239,68,68,0.12)" :
+                      notReady  ? "rgba(255,255,255,0.04)" :
+                      isActive  ? ACCENT_DIM : ACCENT,
           border: `1px solid ${
-            isDone  ? "rgba(34,197,94,0.3)" :
-            isErr   ? "rgba(239,68,68,0.3)" :
-            isActive ? ACCENT_BORDER : ACCENT}`,
-          color: isDone  ? "#22C55E" :
-                 isErr   ? "#EF4444" :
-                 isActive ? ACCENT : "#030612",
+            isDone    ? "rgba(34,197,94,0.3)" :
+            isErr     ? "rgba(239,68,68,0.3)" :
+            notReady  ? "rgba(255,255,255,0.1)" :
+            isActive  ? ACCENT_BORDER : ACCENT}`,
+          color: isDone    ? "#22C55E" :
+                 isErr     ? "#EF4444" :
+                 notReady  ? "rgba(148,163,184,0.35)" :
+                 isActive  ? ACCENT : "#030612",
           transition: "all 0.2s",
-          opacity: isActive ? 0.85 : 1,
+          opacity: isDisabled ? 0.6 : 1,
           whiteSpace: "nowrap",
         }}
       >
-        {isActive && (
+        {(isActive || healthLoading) && (
           <span style={{
             display: "inline-block", width: 10, height: 10,
             border: `2px solid ${ACCENT}50`, borderTopColor: ACCENT,

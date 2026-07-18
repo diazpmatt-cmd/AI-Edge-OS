@@ -1,12 +1,26 @@
 import { Link, useLocation } from "wouter";
 
+// ── Canonical AI Edge functional families ─────────────────────────────────────
+// Pricing package = WHERE the module lives
+// Family = WHAT COLOR the tile uses
+const F = {
+  home:           { accent: "#CBD5E1", bg: "#0D1520" },  // 🏠 Home — White/Silver
+  dailyCommand:   { accent: "#FBBF24", bg: "#1A1200" },  // 🌅 Daily Command — Gold
+  growth:         { accent: "#22C55E", bg: "#071F10" },  // 📈 Growth — Green
+  localPresence:  { accent: "#2DD4BF", bg: "#071E1E" },  // 🌎 Local Presence — Teal/Blue
+  aiIntelligence: { accent: "#A78BFA", bg: "#0D0A2A" },  // 🧠 AI Intelligence — Purple
+  creativeStudio: { accent: "#FB923C", bg: "#1A0E00" },  // 🎨 Creative Studio — Orange
+  automation:     { accent: "#38BDF8", bg: "#06141E" },  // ⚙️ Automation — Electric Blue
+  operations:     { accent: "#94A3B8", bg: "#0F1520" },  // 🏢 Operations — Gray
+  development:    { accent: "#64748B", bg: "#07101A" },  // 🧪 Development — Dark Blue
+} as const;
+
 interface ModuleTile {
   to: string;
   icon: string;
   label: string;
   sub: string;
-  bg: string;
-  accent: string;
+  family: keyof typeof F;
 }
 
 interface PackageGroup {
@@ -19,6 +33,7 @@ interface PackageGroup {
   tiles: ModuleTile[];
 }
 
+// ── Module registry — ordered by family within each pricing package ────────────
 const PACKAGES: PackageGroup[] = [
   {
     id: "price-package",
@@ -28,14 +43,19 @@ const PACKAGES: PackageGroup[] = [
     borderColor: "rgba(245,158,11,0.35)",
     headerBg: "rgba(245,158,11,0.07)",
     tiles: [
-      { to: "/admin/morning-brief",     icon: "☀️", label: "Morning Brief",       sub: "Daily AI briefing",        bg: "#1A1200", accent: "#FBBF24" },
-      { to: "/admin/mission-control",   icon: "🚀", label: "Mission Control",     sub: "Execution hub",            bg: "#0A0E26", accent: "#00AEEF" },
-      { to: "/admin/bbb-execution",     icon: "🎯", label: "Growth Execution",    sub: "Revenue campaigns",        bg: "#1A0E08", accent: "#F26C21" },
-      { to: "/admin/bbb-autopilot",     icon: "⚡", label: "Content Autopilot",   sub: "Automated publishing",     bg: "#150E1A", accent: "#F26C21" },
-      { to: "/admin/bbb-operations",    icon: "🐛", label: "BB&B Ops Center",     sub: "Operations dashboard",     bg: "#0D1A2E", accent: "#00AEEF" },
-      { to: "/admin/social-publishing", icon: "✈",  label: "Publishing Center",   sub: "Social media engine",      bg: "#281400", accent: "#F59E0B" },
-      { to: "/admin/reviews",           icon: "⭐", label: "Reviews Engine",      sub: "Reputation management",    bg: "#261A00", accent: "#FCD34D" },
-      { to: "/admin/local-presence",    icon: "📍", label: "Local Presence",      sub: "Maps & listings",          bg: "#0A1E1E", accent: "#2DD4BF" },
+      // 🌅 Daily Command
+      { to: "/admin/morning-brief",     icon: "☀️",  label: "Morning Brief",       sub: "Daily AI briefing",          family: "dailyCommand"   },
+      { to: "/admin/mission-control",   icon: "🚀",  label: "Mission Control",     sub: "Daily execution hub",        family: "dailyCommand"   },
+      // 📈 Growth
+      { to: "/admin/bbb-execution",     icon: "🎯",  label: "Growth Execution",    sub: "Revenue campaigns",          family: "growth"         },
+      // ⚙️ Automation
+      { to: "/admin/social-publishing", icon: "✈",   label: "Publishing Center",   sub: "Social media engine",        family: "automation"     },
+      { to: "/admin/bbb-autopilot",     icon: "⚡",  label: "Content Autopilot",   sub: "Automated publishing",       family: "automation"     },
+      // 🌎 Local Presence
+      { to: "/admin/reviews",           icon: "⭐",  label: "Reviews Engine",      sub: "Reputation management",      family: "localPresence"  },
+      { to: "/admin/local-presence",    icon: "📍",  label: "Local Presence",      sub: "Maps & listings",            family: "localPresence"  },
+      // 🏢 Operations
+      { to: "/admin/bbb-operations",    icon: "🐛",  label: "BB&B Ops Center",     sub: "Operations dashboard",       family: "operations"     },
     ],
   },
   {
@@ -46,12 +66,15 @@ const PACKAGES: PackageGroup[] = [
     borderColor: "rgba(242,108,33,0.35)",
     headerBg: "rgba(242,108,33,0.07)",
     tiles: [
-      { to: "/admin/lead-recovery",     icon: "📞", label: "Lead Recovery AI",    sub: "Missed call conversion",   bg: "#0A2010", accent: "#4ADE80" },
-      { to: "/admin/ai-receptionist",   icon: "🤖", label: "AI Receptionist",     sub: "24/7 call handling",       bg: "#180D2E", accent: "#3B82F6" },
-      { to: "/admin/ai-visibility",     icon: "✨", label: "AI Visibility",        sub: "Search AI presence",       bg: "#221800", accent: "#FBBF24" },
-      { to: "/admin/call-intelligence", icon: "📊", label: "Call Intelligence",   sub: "Call tracking & analytics",bg: "#0D1828", accent: "#60A5FA" },
-      { to: "/admin/apollos",           icon: "🧠", label: "Apollos AI",           sub: "Business intelligence",    bg: "#0D0A2A", accent: "#A78BFA" },
-      { to: "/admin/voice-search",      icon: "🔊", label: "Voice Search",         sub: "Voice SEO engine",         bg: "#1A1026", accent: "#818CF8" },
+      // 📈 Growth
+      { to: "/admin/lead-recovery",     icon: "📞",  label: "Lead Recovery AI",    sub: "Missed call conversion",     family: "growth"         },
+      { to: "/admin/call-intelligence", icon: "📊",  label: "Call Intelligence",   sub: "Call tracking & analytics",  family: "growth"         },
+      // ⚙️ Automation
+      { to: "/admin/ai-receptionist",   icon: "🤖",  label: "AI Receptionist",     sub: "24/7 call handling",         family: "automation"     },
+      // 🧠 AI Intelligence
+      { to: "/admin/apollos",           icon: "🧠",  label: "Apollos AI",           sub: "Business intelligence",      family: "aiIntelligence" },
+      { to: "/admin/ai-visibility",     icon: "✨",  label: "AI Visibility",        sub: "Search AI presence",         family: "aiIntelligence" },
+      { to: "/admin/voice-search",      icon: "🔊",  label: "Voice Search",         sub: "Voice SEO engine",           family: "aiIntelligence" },
     ],
   },
   {
@@ -62,18 +85,24 @@ const PACKAGES: PackageGroup[] = [
     borderColor: "rgba(0,174,239,0.3)",
     headerBg: "rgba(0,174,239,0.06)",
     tiles: [
-      { to: "/admin/dashboard",         icon: "🏠", label: "Command Center",      sub: "Executive dashboard",      bg: "#0D2218", accent: "#22C55E" },
-      { to: "/admin/media-engine",      icon: "🎥", label: "Media Engine",        sub: "Content & video hub",      bg: "#0D1428", accent: "#00AEEF" },
-      { to: "/admin/asset-library",     icon: "📁", label: "Asset Library",       sub: "Brand asset storage",      bg: "#0A1A2E", accent: "#00AEEF" },
-      { to: "/admin/connections",       icon: "🔗", label: "Connected Accounts",  sub: "Integrations & OAuth",     bg: "#261200", accent: "#F59E0B" },
-      { to: "/admin/diagnostics",       icon: "🛰",  label: "System Diagnostics", sub: "Platform health",          bg: "#0A1A1A", accent: "#94A3B8" },
-      { to: "/admin/secrets",           icon: "🔑", label: "Secrets Vault",       sub: "API keys & credentials",   bg: "#071C2A", accent: "#00AEEF" },
+      // 🏠 Home
+      { to: "/admin/dashboard",         icon: "🏠",  label: "Command Center",      sub: "Executive dashboard",        family: "home"           },
+      // 🎨 Creative Studio
+      { to: "/admin/media-engine",      icon: "🎥",  label: "Media Engine",        sub: "Content & video hub",        family: "creativeStudio" },
+      { to: "/admin/asset-library",     icon: "📁",  label: "Asset Library",       sub: "Brand asset storage",        family: "creativeStudio" },
+      // 🧪 Development
+      { to: "/admin/connections",       icon: "🔗",  label: "Connected Accounts",  sub: "Integrations & OAuth",       family: "development"    },
+      { to: "/admin/diagnostics",       icon: "🛰",   label: "System Diagnostics", sub: "Platform health",            family: "development"    },
+      { to: "/admin/secrets",           icon: "🔑",  label: "Secrets Vault",       sub: "API keys & credentials",     family: "development"    },
     ],
   },
 ];
 
+// ── Tile card ─────────────────────────────────────────────────────────────────
 function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string }) {
   const active = location.startsWith(tile.to);
+  const { accent, bg } = F[tile.family];
+
   return (
     <Link
       to={tile.to}
@@ -87,12 +116,14 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
         borderRadius: 12,
         textDecoration: "none",
         background: active
-          ? `linear-gradient(135deg, ${tile.bg} 0%, ${tile.bg}CC 100%)`
-          : `linear-gradient(135deg, ${tile.bg} 0%, ${tile.bg}99 100%)`,
+          ? `linear-gradient(135deg, ${bg} 0%, ${bg}CC 100%)`
+          : `linear-gradient(135deg, ${bg} 0%, ${bg}99 100%)`,
         border: active
-          ? `1.5px solid ${tile.accent}`
-          : `1.5px solid ${tile.accent}33`,
-        boxShadow: active ? `0 0 14px ${tile.accent}33, 0 2px 8px rgba(0,0,0,0.4)` : "0 2px 8px rgba(0,0,0,0.25)",
+          ? `1.5px solid ${accent}`
+          : `1.5px solid ${accent}33`,
+        boxShadow: active
+          ? `0 0 14px ${accent}33, 0 2px 8px rgba(0,0,0,0.4)`
+          : "0 2px 8px rgba(0,0,0,0.25)",
         cursor: "pointer",
         transition: "all 0.15s",
         minHeight: 90,
@@ -100,16 +131,18 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
       }}
       onMouseEnter={e => {
         if (!active) {
-          (e.currentTarget as HTMLElement).style.border = `1.5px solid ${tile.accent}77`;
-          (e.currentTarget as HTMLElement).style.boxShadow = `0 0 10px ${tile.accent}22, 0 4px 12px rgba(0,0,0,0.35)`;
-          (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+          const el = e.currentTarget as HTMLElement;
+          el.style.border = `1.5px solid ${accent}77`;
+          el.style.boxShadow = `0 0 10px ${accent}22, 0 4px 12px rgba(0,0,0,0.35)`;
+          el.style.transform = "translateY(-1px)";
         }
       }}
       onMouseLeave={e => {
         if (!active) {
-          (e.currentTarget as HTMLElement).style.border = `1.5px solid ${tile.accent}33`;
-          (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
-          (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+          const el = e.currentTarget as HTMLElement;
+          el.style.border = `1.5px solid ${accent}33`;
+          el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
+          el.style.transform = "translateY(0)";
         }
       }}
     >
@@ -117,16 +150,18 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
         <div style={{
           position: "absolute", top: 6, right: 7,
           width: 6, height: 6, borderRadius: "50%",
-          background: tile.accent,
-          boxShadow: `0 0 6px ${tile.accent}`,
+          background: accent,
+          boxShadow: `0 0 6px ${accent}`,
         }} />
       )}
+
       <span style={{
         fontSize: 26, lineHeight: 1,
         filter: active ? "none" : "saturate(0.8) brightness(0.85)",
       }}>
         {tile.icon}
       </span>
+
       <div style={{ textAlign: "center" }}>
         <div style={{
           fontSize: 11, fontWeight: 700, lineHeight: 1.2,
@@ -137,7 +172,7 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
         </div>
         <div style={{
           fontSize: 9.5, fontWeight: 500, lineHeight: 1.3,
-          color: active ? `${tile.accent}CC` : "rgba(148,163,184,0.5)",
+          color: active ? `${accent}CC` : `${accent}88`,
           marginTop: 2,
         }}>
           {tile.sub}
@@ -147,6 +182,7 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
   );
 }
 
+// ── Package section ───────────────────────────────────────────────────────────
 function PackageSection({ pkg, location }: { pkg: PackageGroup; location: string }) {
   return (
     <div style={{
@@ -208,6 +244,7 @@ function PackageSection({ pkg, location }: { pkg: PackageGroup; location: string
   );
 }
 
+// ── Main export ───────────────────────────────────────────────────────────────
 export function ModulePackageGrid() {
   const [location] = useLocation();
   return (

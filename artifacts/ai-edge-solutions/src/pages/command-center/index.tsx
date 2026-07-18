@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { DashboardSection } from "./DashboardSection";
 import { ExecutiveHeader } from "./ExecutiveHeader";
 import { ExecutiveKpiGrid } from "./ExecutiveKpiGrid";
+import { ModulePackageGrid } from "./ModulePackageGrid";
 import { AiExecutiveBrief } from "./AiExecutiveBrief";
 import { ActionCenter } from "./ActionCenter";
 import { BusinessHealthPanel } from "./BusinessHealthPanel";
@@ -224,6 +225,11 @@ export default function CommandCenter() {
 
         {/* ── S2: Executive KPI Row ── */}
         <ExecutiveKpiGrid cards={kpiCards} />
+
+        {/* ── Module Package Grid ── */}
+        <DashboardSection id="module-packages" title="Your AI Edge Modules" defaultExpanded={true}>
+          <ModulePackageGrid />
+        </DashboardSection>
 
         {/* ── S3: AI Executive Brief ── */}
         <DashboardSection id="ai-brief" title="Today's Executive Brief">

@@ -701,8 +701,19 @@ function OverviewTab({
                 <span style={{ fontSize: 11, color: "rgba(148,163,184,0.3)", width: 16, flexShrink: 0 }}>
                   {i + 1}
                 </span>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0" }}>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0", minWidth: 0 }}>
                   {g.keyword}
+                  {g.competitorName && (
+                    <span style={{
+                      display: "block", fontSize: 10, fontWeight: 500,
+                      color: "rgba(148,163,184,0.55)", marginTop: 1,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}
+                      title={g.competitorName}
+                    >
+                      {g.competitorName}
+                    </span>
+                  )}
                 </span>
                 {g.volumeEstimate != null && (
                   <span style={{ fontSize: 10, color: "#F59E0B", fontWeight: 700, flexShrink: 0 }}>
@@ -712,10 +723,10 @@ function OverviewTab({
                 {g.competitorRank != null && (
                   <span style={{
                     fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
-                    background: "rgba(239,68,68,0.1)", color: "#EF4444",
-                    border: "1px solid rgba(239,68,68,0.2)", flexShrink: 0,
+                    background: `rgba(139,92,246,0.12)`, color: ACCENT,
+                    border: `1px solid rgba(139,92,246,0.25)`, flexShrink: 0,
                   }}>
-                    Comp. #{g.competitorRank}
+                    #{g.competitorRank}
                   </span>
                 )}
               </div>

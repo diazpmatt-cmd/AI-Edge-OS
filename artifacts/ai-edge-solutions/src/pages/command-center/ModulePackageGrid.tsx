@@ -110,9 +110,8 @@ const SECTIONS: SectionDef[] = [
     name: "Authority & Backlink Engine",
     tagline: "Domain authority building and link acquisition",
     accentColor: "#38BDF8",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "🔗", label: "Authority Engine",  sub: "Backlink acquisition", family: "authority", comingSoon: true },
+      { to: "/admin/authority-engine", icon: "🔗", label: "Authority Engine", sub: "Citations & backlinks", family: "authority" },
     ],
   },
   {

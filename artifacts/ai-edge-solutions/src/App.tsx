@@ -73,6 +73,7 @@ const ApollosPage                   = lazy(() => import("./pages/ApollosPage"));
 const SecretsPage                   = lazy(() => import("./pages/SecretsPage"));
 const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 const CompetitorIntelligencePage    = lazy(() => import("./pages/CompetitorIntelligencePage"));
+const AuthorityEnginePage           = lazy(() => import("./pages/AuthorityEnginePage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -237,6 +238,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/competitor-intelligence">
           <Authenticated><CompetitorIntelligencePage /></Authenticated>
+        </Route>
+        <Route path="/admin/authority-engine">
+          <Authenticated><AuthorityEnginePage /></Authenticated>
         </Route>
 
         {/* /admin root → redirect to dashboard */}

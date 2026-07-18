@@ -25,7 +25,8 @@ interface GapSignal {
   id: string; keyword: string; rawKeyword: string;
   signalType: string; source: string; intent: string;
   volumeEstimate: number | null; difficultyScore: number | null;
-  competitorRank: number | null; evidenceStrength: number;
+  competitorRank: number | null; competitorName: string | null;
+  evidenceStrength: number;
   trendDirection: string; geographicScope: string;
   serviceId: string | null;
 }
@@ -219,7 +220,7 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
         {/* Header */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "2fr 80px 80px 90px 80px 70px",
+          gridTemplateColumns: "2fr 80px 70px 90px 60px 1fr 65px",
           padding: "10px 16px",
           background: `${ACCENT}0A`,
           borderBottom: `1px solid ${ACCENT_BORDER}`,
@@ -231,7 +232,8 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
           <span style={{ textAlign: "right" }}>DIFFICULTY</span>
           <span style={{ textAlign: "center" }}>INTENT</span>
           <span style={{ textAlign: "center" }}>TREND</span>
-          <span style={{ textAlign: "center" }}>COMP. RANK</span>
+          <span style={{ textAlign: "left", paddingLeft: 8 }}>RANKING COMPETITOR</span>
+          <span style={{ textAlign: "center" }}>RANK</span>
         </div>
 
         {displayed.length === 0 ? (
@@ -242,7 +244,7 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
           displayed.map((g, i) => (
             <div key={g.id} style={{
               display: "grid",
-              gridTemplateColumns: "2fr 80px 80px 90px 80px 70px",
+              gridTemplateColumns: "2fr 80px 70px 90px 60px 1fr 65px",
               padding: "11px 16px",
               borderBottom: i < displayed.length - 1 ? `1px solid rgba(139,92,246,0.08)` : "none",
               alignItems: "center",
@@ -309,6 +311,25 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                 color: g.trendDirection === "up" ? "#22C55E" : g.trendDirection === "down" ? "#EF4444" : "rgba(148,163,184,0.5)",
               }}>
                 {TREND_ICON[g.trendDirection] ?? "–"}
+              </div>
+
+              {/* Ranking competitor name */}
+              <div style={{ paddingLeft: 8 }}>
+                {g.competitorName ? (
+                  <span style={{
+                    fontSize: 10, fontWeight: 600,
+                    color: "#CBD5E1",
+                    display: "block",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    maxWidth: "100%",
+                  }}
+                    title={g.competitorName}
+                  >
+                    {g.competitorName}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 10, color: "rgba(148,163,184,0.3)" }}>—</span>
+                )}
               </div>
 
               {/* Competitor rank */}

@@ -143,6 +143,21 @@ export function normalizeKeywordResult(input: NormalizeKeywordInput): DiscoveryS
   const normalizedValue = normalizeText(raw.keyword);
   const id              = deriveSignalId(clientId, source, normalizedValue);
 
+  // Enrich rawProviderData with a pre-extracted competitorName so the API can
+  // surface it without re-parsing organicResults.  This is stored regardless of
+  // whether competitor_rank is set — a dedicated pipeline stage (Phase C7) is
+  // responsible for determining true gap signals and setting competitorRank.
+  // Prefer topCompetitorTitle (page title → best business-name proxy) over domain.
+  const providerRaw         = raw.providerRaw;
+  const topCompetitorTitle  = typeof providerRaw["topCompetitorTitle"] === "string"
+    ? providerRaw["topCompetitorTitle"] : null;
+  const topCompetitorDomain = typeof providerRaw["topCompetitorDomain"] === "string"
+    ? providerRaw["topCompetitorDomain"] : null;
+  const competitorName      = topCompetitorTitle ?? topCompetitorDomain ?? null;
+  const rawProviderData     = competitorName
+    ? { ...providerRaw, competitorName }
+    : providerRaw;
+
   return {
     id,
     snapshotId,
@@ -161,7 +176,7 @@ export function normalizeKeywordResult(input: NormalizeKeywordInput): DiscoveryS
     competitorRank:   null,
     citationFound:    null,
     evidenceStrength: evidenceStrengthFor(source),
-    rawProviderData:  raw.providerRaw,
+    rawProviderData,
     createdAt,
   };
 }

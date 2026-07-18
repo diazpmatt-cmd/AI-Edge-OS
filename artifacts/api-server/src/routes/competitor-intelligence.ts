@@ -22,6 +22,57 @@ import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 
 const router = Router();
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Extract a human-readable competitor name from a signal's raw_provider_data.
+ *
+ * Priority:
+ *   1. raw_provider_data.competitorName  — pre-extracted by normalizer on new signals
+ *   2. raw_provider_data.topCompetitorTitle — raw page title stored by DataForSEO adapter;
+ *      cleaned by splitting at the first " | ", " - ", " – ", or " — " separator so that
+ *      "Arrow Exterminators | Pest Control" → "Arrow Exterminators".
+ *   3. raw_provider_data.topCompetitorDomain — bare domain as last resort
+ *   4. raw_provider_data.competitorDomains[0] — fallback for pre-feature signals
+ *
+ * Returns null when no competitor data is present.
+ */
+function extractCompetitorName(raw: Record<string, unknown> | null | undefined): string | null {
+  if (!raw) return null;
+
+  // 1. Pre-extracted name (set by normalizer)
+  if (typeof raw["competitorName"] === "string" && raw["competitorName"]) {
+    return cleanTitle(raw["competitorName"]);
+  }
+
+  // 2. Page title stored by adapter
+  if (typeof raw["topCompetitorTitle"] === "string" && raw["topCompetitorTitle"]) {
+    return cleanTitle(raw["topCompetitorTitle"]);
+  }
+
+  // 3. Domain stored by adapter
+  if (typeof raw["topCompetitorDomain"] === "string" && raw["topCompetitorDomain"]) {
+    return raw["topCompetitorDomain"];
+  }
+
+  // 4. Oldest fallback: first entry in competitorDomains array
+  const domains = raw["competitorDomains"];
+  if (Array.isArray(domains) && domains.length > 0 && typeof domains[0] === "string") {
+    return domains[0];
+  }
+
+  return null;
+}
+
+/**
+ * Strip common page-title suffixes to extract a clean business name.
+ * "Arrow Exterminators | Pest Control Services" → "Arrow Exterminators"
+ * "Bed Bug Experts - Local Treatment" → "Bed Bug Experts"
+ */
+function cleanTitle(title: string): string {
+  return title.split(/\s+[|–—-]\s+/)[0]?.trim() || title.trim();
+}
+
 // ── shared auth + client resolver ────────────────────────────────────────────
 
 async function resolveClient(req: any, res: any) {
@@ -162,11 +213,12 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
       volume_estimate: number | null; difficulty_score: number | null;
       competitor_rank: number | null; evidence_strength: number;
       trend_direction: string; geographic_scope: string;
-      service_id: string | null;
+      service_id: string | null; raw_provider_data: Record<string, unknown>;
     }>(
       `SELECT id, normalized_value, raw_value, signal_type, source, intent,
               volume_estimate, difficulty_score, competitor_rank,
-              evidence_strength, trend_direction, geographic_scope, service_id
+              evidence_strength, trend_direction, geographic_scope, service_id,
+              raw_provider_data
        FROM discovery_signals
        WHERE client_id = $1 AND snapshot_id = $2
          AND competitor_rank IS NOT NULL
@@ -191,6 +243,7 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
         volumeEstimate:  r.volume_estimate,
         difficultyScore: r.difficulty_score,
         competitorRank:  r.competitor_rank,
+        competitorName:  extractCompetitorName(r.raw_provider_data),
         evidenceStrength:r.evidence_strength,
         trendDirection:  r.trend_direction,
         geographicScope: r.geographic_scope,

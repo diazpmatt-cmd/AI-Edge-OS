@@ -73,6 +73,20 @@ function cleanTitle(title: string): string {
   return title.split(/\s+[|–—-]\s+/)[0]?.trim() || title.trim();
 }
 
+// ── pg error helper ───────────────────────────────────────────────────────────
+
+/**
+ * Returns true when the error is a PostgreSQL "relation does not exist" error
+ * (SQLSTATE 42P01). This happens on fresh environments where
+ * bootstrapDiscoveryTables() hasn't run yet.
+ */
+function isRelationMissingError(err: unknown): boolean {
+  if (err && typeof err === "object" && "code" in err) {
+    return (err as { code: string }).code === "42P01";
+  }
+  return false;
+}
+
 // ── shared auth + client resolver ────────────────────────────────────────────
 
 async function resolveClient(req: any, res: any) {
@@ -178,6 +192,10 @@ router.get("/api/competitor-intelligence/summary", async (req, res) => {
       totalRuns,
     });
   } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ hasData: false, reason: "tables_not_initialized" });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "db_error", message: msg });
   }
@@ -252,6 +270,10 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
       count: gapRes.rows.length,
     });
   } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ hasData: false, gaps: [], reason: "tables_not_initialized" });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "db_error", message: msg });
   }
@@ -314,6 +336,10 @@ router.get("/api/competitor-intelligence/opportunities", async (req, res) => {
       count: oppRes.rows.length,
     });
   } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ hasData: false, opportunities: [], reason: "tables_not_initialized" });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "db_error", message: msg });
   }
@@ -361,6 +387,10 @@ router.get("/api/competitor-intelligence/history", async (req, res) => {
       count: histRes.rows.length,
     });
   } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ clientId: auth.client.id, history: [], count: 0, reason: "tables_not_initialized" });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "db_error", message: msg });
   }

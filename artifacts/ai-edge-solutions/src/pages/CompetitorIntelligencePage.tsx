@@ -9,6 +9,7 @@ import { useApiFetch } from "@/lib/api";
 interface SummaryData {
   hasData: boolean;
   clientId: string;
+  reason?: string;
   latestRun?: {
     runId: string; weekLabel: string; status: string;
     signalsReceived: number; signalsAccepted: number;
@@ -715,6 +716,36 @@ function OverviewTab({
   );
 }
 
+// ── Setup-needed state ────────────────────────────────────────────────────────
+
+function SetupNeededState() {
+  return (
+    <div style={{
+      textAlign: "center", padding: "80px 32px",
+      background: BG_CARD, borderRadius: 16,
+      border: `1.5px dashed ${ACCENT_BORDER}`,
+      maxWidth: 560, margin: "0 auto",
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>⚙️</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: ACCENT, marginBottom: 8 }}>
+        Discovery Tables Not Initialized
+      </div>
+      <div style={{ fontSize: 13, color: "rgba(148,163,184,0.65)", lineHeight: 1.6, marginBottom: 24 }}>
+        The Competitor Intelligence data store hasn't been set up yet on this environment.
+        This is a one-time initialization step — trigger a Discovery run to automatically
+        create the required tables and populate your first dataset.
+      </div>
+      <div style={{
+        fontSize: 11, color: "rgba(148,163,184,0.5)",
+        background: "rgba(139,92,246,0.06)", borderRadius: 8, padding: "8px 14px",
+        border: `1px solid ${ACCENT_BORDER}`, display: "inline-block",
+      }}>
+        Use the <strong style={{ color: ACCENT }}>▶ Run New Scan</strong> button above to initialize and run your first scan.
+      </div>
+    </div>
+  );
+}
+
 // ── No-data state ─────────────────────────────────────────────────────────────
 
 function NoDataState({ totalRuns }: { totalRuns: number }) {
@@ -979,7 +1010,17 @@ export default function CompetitorIntelligencePage() {
         {/* Loading state */}
         {summaryLoading && <LoadingSpinner />}
 
-        {/* Error state */}
+        {/* Setup-needed state (tables missing — not an error, just uninitialized) */}
+        {!summaryLoading && !isError && summary && !summary.hasData && summary.reason === "tables_not_initialized" && (
+          <SetupNeededState />
+        )}
+
+        {/* No data state (tables exist but no completed runs yet) */}
+        {!summaryLoading && !isError && summary && !summary.hasData && summary.reason !== "tables_not_initialized" && (
+          <NoDataState totalRuns={summary.totalRuns ?? 0} />
+        )}
+
+        {/* Error state (genuine network/db failure) */}
         {isError && !summaryLoading && (
           <div style={{
             background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
@@ -988,11 +1029,6 @@ export default function CompetitorIntelligencePage() {
           }}>
             Failed to load competitor intelligence data. Check your connection and try again.
           </div>
-        )}
-
-        {/* No data state */}
-        {!summaryLoading && !isError && summary && !summary.hasData && (
-          <NoDataState totalRuns={summary.totalRuns ?? 0} />
         )}
 
         {/* Main content */}

@@ -252,6 +252,31 @@ export default function HomePage() {
                 <span style={{ fontSize: 14, fontWeight: 800, color }}>{value}</span>
               </div>
             ))}
+
+            <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+                Curious what this looks like for your budget?
+              </p>
+              <button
+                onClick={() => navigate("/pricing")}
+                style={{
+                  width: "100%", padding: "12px 20px", borderRadius: 10,
+                  background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)",
+                  color: "#00AEEF", fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", transition: "all 0.25s",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(0,174,239,0.22)";
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.6)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(0,174,239,0.12)";
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.35)";
+                }}
+              >
+                See Pricing & Packages →
+              </button>
+            </div>
           </div>
 
         </div>

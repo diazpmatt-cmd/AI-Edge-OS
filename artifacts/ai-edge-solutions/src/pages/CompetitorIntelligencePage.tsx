@@ -724,7 +724,22 @@ function OverviewTab({
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Summary stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-        <StatCardWithTrend label="COMPETITOR GAPS" value={summary.competitorGapCount} sub="keywords competitors rank for" delta={latestHist?.gapCountDelta} invertDelta={true} />
+        {(() => {
+          const unknowns = summary.unresolvableGapCount ?? 0;
+          const identified = summary.competitorGapCount - unknowns;
+          const gapSub = unknowns > 0
+            ? `${identified} identified · ${unknowns} unknown excluded`
+            : "keywords competitors rank for";
+          return (
+            <StatCardWithTrend
+              label="COMPETITOR GAPS"
+              value={identified}
+              sub={gapSub}
+              delta={latestHist?.gapCountDelta}
+              invertDelta={true}
+            />
+          );
+        })()}
         <StatCard label="HIGH VOLUME GAPS" value={summary.highVolumeGapCount} sub="volume > 100/mo" accent="#22C55E" />
         <StatCardWithTrend label="OPPORTUNITIES FOUND" value={run?.opportunityCount ?? 0} sub="scored & prioritized" accent="#F59E0B" delta={latestHist?.opportunityCountDelta} />
         <StatCardWithTrend label="TOP SCORE" value={run?.topOpportunityScore ?? 0} sub="highest composite score" accent="#EF4444" delta={latestHist?.topScoreDelta} />

@@ -156,6 +156,7 @@ const SECTIONS: SectionDef[] = [
     accentColor: "#22C55E",
     tiles: [
       { to: "/admin/lead-recovery",     icon: "📞", label: "Lead Recovery AI",  sub: "Missed call conversion",    family: "growth" },
+      { to: "/admin/web-leads",         icon: "📋", label: "Web Leads",         sub: "Contact form submissions",  family: "growth" },
       { to: "/admin/call-intelligence", icon: "📊", label: "Call Intelligence", sub: "Call tracking & analytics", family: "growth" },
       { to: "/admin/bbb-execution",     icon: "🎯", label: "Growth Execution",  sub: "Revenue campaigns",         family: "growth" },
       { to: "/admin/ai-receptionist",   icon: "🤖", label: "AI Receptionist",   sub: "24/7 call handling",        family: "growth" },

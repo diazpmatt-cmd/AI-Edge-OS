@@ -75,6 +75,7 @@ const DemoPage                      = lazy(() => import("./pages/DemoPage"));
 const CompetitorIntelligencePage    = lazy(() => import("./pages/CompetitorIntelligencePage"));
 const AuthorityEnginePage           = lazy(() => import("./pages/AuthorityEnginePage"));
 const ReferralProgramPage           = lazy(() => import("./pages/ReferralProgramPage"));
+const WebLeadsPage                  = lazy(() => import("./pages/WebLeadsPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -242,6 +243,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/authority-engine">
           <Authenticated><AuthorityEnginePage /></Authenticated>
+        </Route>
+        <Route path="/admin/web-leads">
+          <Authenticated><WebLeadsPage /></Authenticated>
         </Route>
         <Route path="/admin/referrals">
           <Authenticated><ReferralProgramPage /></Authenticated>

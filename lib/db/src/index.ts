@@ -20,6 +20,7 @@ export * from "./db-service-registry-provider";
 export * from "./registry-validator";
 export * from "./scheduler-eligibility";
 export * from "./gbp-audit-engine";
+export * from "./local-presence-providers";
 
 // ── Phase C2: Discovery Engine ────────────────────────────────────────────────
 export * from "./discovery-types";

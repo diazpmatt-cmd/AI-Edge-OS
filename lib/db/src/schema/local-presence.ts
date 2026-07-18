@@ -16,17 +16,19 @@ export const localPresenceProfilesTable = pgTable("local_presence_profiles", {
 });
 
 export const localPresenceChannelsTable = pgTable("local_presence_channels", {
-  id:                uuid("id").primaryKey().defaultRandom(),
-  clientId:          text("client_id").notNull(),
-  channelName:       text("channel_name").notNull(),
-  status:            text("status").notNull().default("not_started"),
-  score:             integer("score").notNull().default(0),
-  listingUrl:        text("listing_url"),
-  verificationStatus:text("verification_status"),
-  recommendedAction: text("recommended_action"),
-  metadataJson:      text("metadata_json"),
-  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:         timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  id:                  uuid("id").primaryKey().defaultRandom(),
+  clientId:            text("client_id").notNull(),
+  channelName:         text("channel_name").notNull(),
+  status:              text("status").notNull().default("not_started"),
+  score:               integer("score").notNull().default(0),
+  listingUrl:          text("listing_url"),
+  verificationStatus:  text("verification_status"),
+  recommendedAction:   text("recommended_action"),
+  metadataJson:        text("metadata_json"),
+  completenessScore:   integer("completeness_score").notNull().default(0),
+  lastSyncAt:          timestamp("last_sync_at", { withTimezone: true }),
+  createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   clientChannelUniq: unique().on(t.clientId, t.channelName),
 }));

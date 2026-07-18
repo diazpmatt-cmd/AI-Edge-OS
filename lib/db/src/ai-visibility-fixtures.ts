@@ -40,9 +40,11 @@ export const BBB_AI_VISIBILITY_LOCAL_PROFILE: LocalPresenceProfile = {
 export const BBB_AI_VISIBILITY_LOCAL_CHANNELS: readonly LocalPresenceChannel[] = Object.freeze([
   { id: "21111111-1111-4111-8111-111111111111", clientId: BBB_BACKLINK_CLIENT_ID, channelName: "google_business", status: "connected", score: 35,
     listingUrl: "https://bedbugsandbeyond.net", verificationStatus: "verified", recommendedAction: "Maintain GBP facts and review responses.", metadataJson: null,
+    completenessScore: 85, lastSyncAt: null,
     createdAt: new Date("2026-07-01T12:00:00.000Z"), updatedAt: BBB_AI_VISIBILITY_NOW },
   { id: "21111111-1111-4111-8111-111111111112", clientId: BBB_BACKLINK_CLIENT_ID, channelName: "nextdoor", status: "not_started", score: 0,
     listingUrl: null, verificationStatus: "not_started", recommendedAction: "Create and verify the Nextdoor business listing with canonical NAP.", metadataJson: null,
+    completenessScore: 0, lastSyncAt: null,
     createdAt: new Date("2026-07-01T12:00:00.000Z"), updatedAt: BBB_AI_VISIBILITY_NOW },
 ]);
 

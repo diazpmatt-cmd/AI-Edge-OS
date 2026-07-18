@@ -211,18 +211,19 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
   const limit = Math.min(parseInt(String(req.query["limit"] ?? "50"), 10) || 50, 200);
 
   try {
-    // Latest complete/partial run
+    // Two most recent complete/partial runs
     const snapRes = await pool.query<{ id: string; week_label: string }>(
       `SELECT id, week_label FROM discovery_snapshots
        WHERE client_id = $1 AND status IN ('complete','partial')
-       ORDER BY created_at DESC LIMIT 1`,
+       ORDER BY created_at DESC LIMIT 2`,
       [client.id],
     );
     if (snapRes.rows.length === 0) {
       res.json({ hasData: false, gaps: [] });
       return;
     }
-    const snap = snapRes.rows[0];
+    const snap     = snapRes.rows[0];
+    const prevSnap = snapRes.rows[1] ?? null;
 
     // Keyword gap signals: competitor ranks here but we likely don't
     const gapRes = await pool.query<{
@@ -247,6 +248,20 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
       [client.id, snap.id, limit],
     );
 
+    // Build a set of normalized_values present in the previous run so we can
+    // label each gap as "new" (first time seen) or "returning" (also in prev run).
+    const prevKeywords = new Set<string>();
+    if (prevSnap) {
+      const prevRes = await pool.query<{ normalized_value: string }>(
+        `SELECT DISTINCT normalized_value
+         FROM discovery_signals
+         WHERE client_id = $1 AND snapshot_id = $2
+           AND competitor_rank IS NOT NULL`,
+        [client.id, prevSnap.id],
+      );
+      for (const row of prevRes.rows) prevKeywords.add(row.normalized_value);
+    }
+
     res.json({
       hasData:   true,
       runId:     snap.id,
@@ -266,6 +281,9 @@ router.get("/api/competitor-intelligence/gaps", async (req, res) => {
         trendDirection:  r.trend_direction,
         geographicScope: r.geographic_scope,
         serviceId:       r.service_id,
+        status:          prevSnap
+                           ? (prevKeywords.has(r.normalized_value) ? "returning" : "new")
+                           : "new",
       })),
       count: gapRes.rows.length,
     });

@@ -30,6 +30,7 @@ interface GapSignal {
   evidenceStrength: number;
   trendDirection: string; geographicScope: string;
   serviceId: string | null;
+  status: "new" | "returning";
 }
 
 interface GapsData {
@@ -301,6 +302,25 @@ function GapsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
                       <path d="M5 7L11 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                     </svg>
                   </a>
+                  {g.status === "new" ? (
+                    <span style={{
+                      fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
+                      background: "rgba(34,197,94,0.15)", color: "#22C55E",
+                      border: "1px solid rgba(34,197,94,0.3)", letterSpacing: "0.4px",
+                      flexShrink: 0,
+                    }}>
+                      NEW
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
+                      background: "rgba(148,163,184,0.08)", color: "rgba(148,163,184,0.5)",
+                      border: "1px solid rgba(148,163,184,0.15)", letterSpacing: "0.4px",
+                      flexShrink: 0,
+                    }}>
+                      RETURNING
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>
                   {g.source}
@@ -720,7 +740,19 @@ function OverviewTab({
                   {i + 1}
                 </span>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#E2E8F0", minWidth: 0 }}>
-                  {g.keyword}
+                  <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    {g.keyword}
+                    {g.status === "new" && (
+                      <span style={{
+                        fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 6,
+                        background: "rgba(34,197,94,0.15)", color: "#22C55E",
+                        border: "1px solid rgba(34,197,94,0.3)", letterSpacing: "0.4px",
+                        flexShrink: 0,
+                      }}>
+                        NEW
+                      </span>
+                    )}
+                  </span>
                   {g.competitorName && (
                     <span style={{
                       display: "block", fontSize: 10, fontWeight: 500,

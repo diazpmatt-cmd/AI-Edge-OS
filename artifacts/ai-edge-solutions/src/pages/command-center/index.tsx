@@ -64,6 +64,15 @@ export default function CommandCenter() {
     refetchInterval: 60_000,
   });
 
+  const clientId = activeBusiness?.id ?? "default";
+  const { data: gbpData } = useQuery<{
+    snapshot: { localScore: number; localMaxScore: number; checksFailed: number; gbpConnected: boolean; completedAt: string | null } | null;
+  }>({
+    queryKey: ["gbp-audit-latest-cc", clientId],
+    queryFn: () => apiFetch(`/gbp/audit/latest?clientId=${encodeURIComponent(clientId)}`),
+    staleTime: 5 * 60_000,
+  });
+
   const kpiCards = useMemo((): KpiCardDef[] => {
     const missedCalls = ciData?.metrics?.missed_calls ?? 0;
     const leadsRecovered = ciData?.metrics?.leads_captured ?? 0;
@@ -322,6 +331,61 @@ export default function CommandCenter() {
         {/* ── S5: Business Health ── */}
         <DashboardSection id="business-health" title="Business Health" accentColor="#00AEEF" defaultExpanded={true}>
           <BusinessHealthPanel />
+        </DashboardSection>
+
+        {/* ── S5b: GBP Health Widget (Phase 7) ── */}
+        <DashboardSection id="gbp-health" title="GBP Health" accentColor="#2DD4BF" defaultExpanded={true}
+          right={<a href="/admin/gbp-audit" style={{ fontSize: 10, color: "#2DD4BF", textDecoration: "none", fontWeight: 700 }}>View Full Audit →</a>}
+        >
+          {gbpData?.snapshot ? (() => {
+            const s     = gbpData.snapshot;
+            const pct   = s.localMaxScore > 0 ? Math.round((s.localScore / s.localMaxScore) * 100) : 0;
+            const color = pct >= 80 ? "#22C55E" : pct >= 55 ? "#F59E0B" : pct >= 30 ? "#FB923C" : "#EF4444";
+            const label = pct >= 80 ? "Strong" : pct >= 55 ? "Good" : pct >= 30 ? "Needs Work" : "Critical";
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}>
+                    <svg width="64" height="64" viewBox="0 0 64 64">
+                      <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+                      <circle cx="32" cy="32" r="26" fill="none" stroke={color}
+                        strokeWidth="7" strokeLinecap="round" strokeDasharray={`${163.4}`}
+                        strokeDashoffset={163.4 - (pct / 100) * 163.4}
+                        transform="rotate(-90 32 32)" style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+                    </svg>
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 900, color }}>{pct}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{label}</div>
+                    <div style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", marginTop: 3 }}>GBP Health Score</div>
+                  </div>
+                </div>
+                <div style={{ width: 1, height: 50, background: "rgba(255,255,255,0.05)", flexShrink: 0 }} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12, flex: 1 }}>
+                  {[
+                    { label: "Failed Checks",  value: s.checksFailed,   color: s.checksFailed > 0 ? "#EF4444" : "#22C55E" },
+                    { label: "GBP Connected",  value: s.gbpConnected ? "Yes" : "No", color: s.gbpConnected ? "#22C55E" : "#EF4444" },
+                    { label: "Last Audit",     value: s.completedAt ? new Date(s.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—", color: "rgba(148,163,184,0.8)" },
+                  ].map(m => (
+                    <div key={m.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+                      <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.55)", marginTop: 3, fontWeight: 600 }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })() : (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+              <span style={{ fontSize: 18 }}>📍</span>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(226,232,240,0.7)" }}>No GBP audit data yet</div>
+                <a href="/admin/gbp-audit" style={{ fontSize: 11, color: "#2DD4BF", textDecoration: "none" }}>Run your first audit →</a>
+              </div>
+            </div>
+          )}
         </DashboardSection>
 
         {/* ── S6: Revenue & Growth ── */}

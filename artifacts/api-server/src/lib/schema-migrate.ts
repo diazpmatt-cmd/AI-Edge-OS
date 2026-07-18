@@ -925,5 +925,46 @@ export async function migrateSchema(): Promise<void> {
       ON gbp_optimization_opportunities(snapshot_id, priority_score DESC);
   `);
 
+  // ── GBP Audit Schedules (Phase 5) ─────────────────────────────────────────
+  // Tracks per-client auto-audit schedule and alert preferences.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_audit_schedules (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT        NOT NULL UNIQUE,
+      user_id         TEXT        NOT NULL DEFAULT '',
+      enabled         BOOLEAN     NOT NULL DEFAULT FALSE,
+      cadence_hours   INTEGER     NOT NULL DEFAULT 168,
+      next_run_at     TIMESTAMPTZ,
+      last_run_at     TIMESTAMPTZ,
+      alert_on_drop   INTEGER     NOT NULL DEFAULT 10,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_audit_schedules_next_run
+      ON gbp_audit_schedules(next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
+  // ── GBP Alert Log (Phase 5) ────────────────────────────────────────────────
+  // One row per alert event: score drops, new critical/high issues, etc.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_alert_log (
+      id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id     TEXT        NOT NULL,
+      snapshot_id   TEXT,
+      alert_type    TEXT        NOT NULL,
+      message       TEXT        NOT NULL,
+      severity      TEXT        NOT NULL DEFAULT 'info',
+      score_before  INTEGER,
+      score_after   INTEGER,
+      acknowledged  BOOLEAN     NOT NULL DEFAULT FALSE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_alert_log_client
+      ON gbp_alert_log(client_id, created_at DESC);
+  `);
+
   console.log("[SCHEMA] Core schema migration complete");
 }

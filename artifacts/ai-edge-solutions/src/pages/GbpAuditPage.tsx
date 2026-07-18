@@ -95,6 +95,81 @@ interface OptimizationsResponse {
   opportunities: OptOpportunity[];
 }
 
+// ── Phase 5 types ─────────────────────────────────────────────────────────────
+
+interface AlertRow {
+  id:           string;
+  alert_type:   string;
+  message:      string;
+  severity:     string;
+  score_before: number | null;
+  score_after:  number | null;
+  acknowledged: boolean;
+  created_at:   string;
+}
+interface ScheduleSettings {
+  enabled:       boolean;
+  cadence_hours: number;
+  next_run_at:   string | null;
+  last_run_at:   string | null;
+}
+interface AlertsResponse {
+  alerts:   AlertRow[];
+  schedule: ScheduleSettings | null;
+}
+
+// ── Phase 6 types ─────────────────────────────────────────────────────────────
+
+interface CompetitorEntry { name: string; keywordCount: number }
+interface CompetitiveData {
+  yourMetrics: {
+    reviewCount:    number;
+    averageRating:  number;
+    postsLast30:    number;
+    gbpConnected:   boolean;
+    gbpScore:       number;
+  };
+  benchmarks: {
+    reviewCountTop10Pct:     number;
+    reviewCountMedian:       number;
+    averageRatingTarget:     number;
+    monthlyPostsRecommended: number;
+    monthlyPostsMedian:      number;
+  };
+  competitors:      CompetitorEntry[];
+  gaps: {
+    reviewGap:       number;
+    postGap:         number;
+    ratingGap:       number;
+    keywordGapCount: number;
+  };
+  competitiveScore: number;
+}
+
+// ── Phase 8 types ─────────────────────────────────────────────────────────────
+
+interface AnalyticsPoint {
+  id:         string;
+  date:       string;
+  localScore: number;
+  localMax:   number;
+  overallPct: number;
+  passed:     number;
+  failed:     number;
+  warning:    number;
+}
+interface CategoryBreakdown {
+  category: string;
+  score:    number;
+  maxScore: number;
+  pct:      number;
+}
+interface AnalyticsData {
+  points:            AnalyticsPoint[];
+  categoryBreakdown: CategoryBreakdown[];
+  totalSnapshots:    number;
+}
+
 // ── Style maps ─────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<CheckStatus, { label: string; bg: string; color: string; border: string }> = {
@@ -426,13 +501,111 @@ function OptimizationStats({ opps }: { opps: OptOpportunity[] }) {
   );
 }
 
+// ── Phase 4: AI Generate Panel ────────────────────────────────────────────────
+
+function AiGeneratePanel({ checkKey, clientId }: { checkKey: string; clientId: string }) {
+  const apiFetch            = useApiFetch();
+  const [loading, setLoading] = useState(false);
+  const [result,  setResult ] = useState<string | null>(null);
+  const [error,   setError  ] = useState<string | null>(null);
+  const [copied,  setCopied ] = useState(false);
+
+  const generate = async () => {
+    setLoading(true); setError(null);
+    try {
+      const data = await apiFetch<{ content: unknown }>("/gbp/ai/generate", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ clientId, checkKey }),
+      });
+      const c = data.content;
+      setResult(typeof c === "string" ? c : JSON.stringify(c, null, 2));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = () => {
+    if (!result) return;
+    void navigator.clipboard.writeText(result);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {!result && !loading && (
+        <button
+          onClick={generate}
+          style={{
+            padding: "5px 14px", borderRadius: 6, border: "1px solid rgba(167,139,250,0.35)",
+            background: "rgba(167,139,250,0.1)", color: "#A78BFA",
+            fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: "0.2px",
+          }}
+        >
+          ✨ Generate AI Content
+        </button>
+      )}
+      {loading && (
+        <div style={{ fontSize: 11, color: "#A78BFA", padding: "6px 0" }}>
+          ✨ Generating with AI…
+        </div>
+      )}
+      {error && (
+        <div style={{ fontSize: 11, color: "#EF4444", padding: "6px 0" }}>
+          ⚠ {error}
+          <button onClick={generate} style={{ marginLeft: 8, color: "#A78BFA", background: "none", border: "none", cursor: "pointer", fontSize: 11 }}>Retry</button>
+        </div>
+      )}
+      {result && (
+        <div style={{
+          background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.25)",
+          borderRadius: 8, padding: "10px 12px", marginTop: 4,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#A78BFA", letterSpacing: "0.4px", textTransform: "uppercase" }}>
+              ✨ AI Generated
+            </span>
+            <button
+              onClick={copy}
+              style={{
+                padding: "2px 8px", borderRadius: 5, border: "1px solid rgba(167,139,250,0.3)",
+                background: copied ? "rgba(34,197,94,0.12)" : "rgba(167,139,250,0.1)",
+                color: copied ? "#22C55E" : "#A78BFA", fontSize: 10, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              {copied ? "✓ Copied" : "Copy"}
+            </button>
+            <button
+              onClick={() => { setResult(null); void generate(); }}
+              style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 5, border: "1px solid rgba(100,116,139,0.25)",
+                background: "transparent", color: "rgba(100,116,139,0.7)", fontSize: 10, cursor: "pointer" }}
+            >
+              ↺ Regenerate
+            </button>
+          </div>
+          <pre style={{
+            fontSize: 11, color: "rgba(226,232,240,0.8)", lineHeight: 1.6,
+            whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0,
+            maxHeight: 240, overflowY: "auto",
+          }}>
+            {result}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Optimization: Opportunity Card ────────────────────────────────────────────
 
 function OpportunityCard({
-  opp, rank, onToggleResolved,
+  opp, rank, clientId, onToggleResolved,
 }: {
   opp:              OptOpportunity;
   rank?:            number;
+  clientId:         string;
   onToggleResolved: (id: string, resolved: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -553,6 +726,11 @@ function OpportunityCard({
             </div>
           )}
 
+          {/* AI Generate Panel — Phase 4 */}
+          {opp.aiFixAvailable && (
+            <AiGeneratePanel checkKey={opp.checkKey} clientId={clientId} />
+          )}
+
           {/* Footer row */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 2 }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: diff.color }}>
@@ -606,10 +784,11 @@ function OpportunityCard({
 // ── Optimization: Group Section ────────────────────────────────────────────────
 
 function GroupSection({
-  groupName, opps, onToggleResolved, defaultOpen = true,
+  groupName, opps, clientId, onToggleResolved, defaultOpen = true,
 }: {
   groupName:        GroupName;
   opps:             OptOpportunity[];
+  clientId:         string;
   onToggleResolved: (id: string, resolved: boolean) => void;
   defaultOpen?:     boolean;
 }) {
@@ -646,7 +825,7 @@ function GroupSection({
       </div>
 
       {open && opps.map(o => (
-        <OpportunityCard key={o.id} opp={o} onToggleResolved={onToggleResolved} />
+        <OpportunityCard key={o.id} opp={o} clientId={clientId} onToggleResolved={onToggleResolved} />
       ))}
     </div>
   );
@@ -655,9 +834,10 @@ function GroupSection({
 // ── Optimization: Top 5 Panel ──────────────────────────────────────────────────
 
 function TopActionsPanel({
-  opps, onToggleResolved,
+  opps, clientId, onToggleResolved,
 }: {
   opps:             OptOpportunity[];
+  clientId:         string;
   onToggleResolved: (id: string, resolved: boolean) => void;
 }) {
   const top5 = opps
@@ -674,7 +854,7 @@ function TopActionsPanel({
         <span>★</span> Top 5 Recommended Actions
       </div>
       {top5.map((o, i) => (
-        <OpportunityCard key={o.id} opp={o} rank={i + 1} onToggleResolved={onToggleResolved} />
+        <OpportunityCard key={o.id} opp={o} rank={i + 1} clientId={clientId} onToggleResolved={onToggleResolved} />
       ))}
     </div>
   );
@@ -686,7 +866,7 @@ export default function GbpAuditPage() {
   const { activeBusiness } = useActiveBusiness();
   const apiFetch           = useApiFetch();
   const qc                 = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"audit" | "optimization">("audit");
+  const [activeTab, setActiveTab] = useState<"audit" | "optimization" | "competitive" | "analytics">("audit");
 
   const clientId = activeBusiness?.id ?? "default";
 
@@ -709,6 +889,35 @@ export default function GbpAuditPage() {
     enabled:  activeTab === "optimization",
   });
 
+  // ── Phase 5: alerts ──────────────────────────────────────────────────────────
+  const { data: alertsData } = useQuery<AlertsResponse>({
+    queryKey: ["gbp-audit-alerts", clientId],
+    queryFn:  () => apiFetch(`/gbp/audit/alerts?clientId=${encodeURIComponent(clientId)}`),
+    staleTime: 30_000, retry: false,
+  });
+
+  const { mutate: acknowledgeAlert } = useMutation({
+    mutationFn: (alertId: string) =>
+      apiFetch(`/gbp/audit/alerts/${alertId}/acknowledge`, { method: "PATCH" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["gbp-audit-alerts", clientId] }),
+  });
+
+  // ── Phase 6: competitive ─────────────────────────────────────────────────────
+  const { data: competitiveData, isLoading: compLoading } = useQuery<CompetitiveData>({
+    queryKey: ["gbp-audit-competitive", clientId],
+    queryFn:  () => apiFetch(`/gbp/audit/competitive?clientId=${encodeURIComponent(clientId)}`),
+    staleTime: 5 * 60_000, retry: false,
+    enabled:  activeTab === "competitive",
+  });
+
+  // ── Phase 8: analytics ───────────────────────────────────────────────────────
+  const { data: analyticsData, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
+    queryKey: ["gbp-audit-analytics", clientId],
+    queryFn:  () => apiFetch(`/gbp/audit/analytics?clientId=${encodeURIComponent(clientId)}&days=90`),
+    staleTime: 5 * 60_000, retry: false,
+    enabled:  activeTab === "analytics",
+  });
+
   const { mutate: runAudit, isPending: isRunning } = useMutation({
     mutationFn: () => apiFetch("/gbp/audit/run", {
       method: "POST",
@@ -720,6 +929,7 @@ export default function GbpAuditPage() {
       qc.invalidateQueries({ queryKey: ["gbp-audit-latest",        clientId] });
       qc.invalidateQueries({ queryKey: ["gbp-audit-history",       clientId] });
       qc.invalidateQueries({ queryKey: ["gbp-audit-optimizations", clientId] });
+      qc.invalidateQueries({ queryKey: ["gbp-audit-alerts",        clientId] });
     },
     onError: () => toast.error("Audit failed — check console for details"),
   });
@@ -767,6 +977,15 @@ export default function GbpAuditPage() {
 
   const handleToggleResolved = (id: string, resolved: boolean) => toggleResolved({ id, resolved });
 
+  const unacknowledgedAlerts = alertsData?.alerts.filter(a => !a.acknowledged) ?? [];
+
+  const TABS = [
+    { key: "audit",        label: "📊 Audit Results"      },
+    { key: "optimization", label: "🎯 Optimization"        },
+    { key: "competitive",  label: "🏆 Competitive"         },
+    { key: "analytics",    label: "📈 Analytics"           },
+  ] as const;
+
   return (
     <AppShell>
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 20px 60px" }}>
@@ -788,7 +1007,7 @@ export default function GbpAuditPage() {
                 Google Business Profile Health
               </h1>
               <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.65)", lineHeight: 1.5 }}>
-                Canonical GBP health score. 25 checks across 5 categories. Phase 3: actionable optimization engine.
+                25 checks · AI recommendations · competitive intelligence · automated monitoring
               </p>
             </div>
             <button
@@ -806,6 +1025,40 @@ export default function GbpAuditPage() {
             </button>
           </div>
         </div>
+
+        {/* ── Phase 5: Alert Banner ─────────────────────────────────────────── */}
+        {unacknowledgedAlerts.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            {unacknowledgedAlerts.map(alert => (
+              <div key={alert.id} style={{
+                background: alert.severity === "critical" ? "rgba(239,68,68,0.07)" : "rgba(245,158,11,0.07)",
+                border:     alert.severity === "critical" ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(245,158,11,0.25)",
+                borderRadius: 10, padding: "10px 14px", marginBottom: 8,
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>
+                  {alert.severity === "critical" ? "🚨" : "⚠️"}
+                </span>
+                <div style={{ flex: 1, fontSize: 12, color: "rgba(226,232,240,0.85)", lineHeight: 1.4 }}>
+                  {alert.message}
+                  <span style={{ fontSize: 10, color: "rgba(100,116,139,0.55)", marginLeft: 8 }}>
+                    {new Date(alert.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <button
+                  onClick={() => acknowledgeAlert(alert.id)}
+                  style={{
+                    padding: "3px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                    background: "rgba(100,116,139,0.15)", color: "rgba(148,163,184,0.7)",
+                    fontSize: 10, fontWeight: 700, flexShrink: 0,
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Score overview */}
         {snap && (
@@ -850,24 +1103,21 @@ export default function GbpAuditPage() {
           </div>
         )}
 
-        {/* Tab bar */}
+        {/* Tab bar — 4 tabs (Phases 1–8) */}
         {snap && (
           <div style={{
             display: "flex", gap: 4, marginBottom: 20,
             background: "rgba(11,22,41,0.5)", borderRadius: 10, padding: 4,
             border: "1px solid rgba(255,255,255,0.06)",
           }}>
-            {([
-              { key: "audit",        label: "📊 Audit Results"       },
-              { key: "optimization", label: "🎯 Optimization Engine"  },
-            ] as { key: "audit" | "optimization"; label: string }[]).map(tab => (
+            {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 style={{
-                  flex: 1, padding: "8px 14px", borderRadius: 7, border: "none",
-                  cursor: "pointer", fontSize: 12, fontWeight: 700,
-                  transition: "all 0.15s",
+                  flex: 1, padding: "8px 10px", borderRadius: 7, border: "none",
+                  cursor: "pointer", fontSize: 11, fontWeight: 700,
+                  transition: "all 0.15s", whiteSpace: "nowrap",
                   background:  activeTab === tab.key ? "rgba(45,212,191,0.15)" : "transparent",
                   color:       activeTab === tab.key ? "#2DD4BF"              : "rgba(100,116,139,0.7)",
                   boxShadow:   activeTab === tab.key ? "0 0 10px rgba(45,212,191,0.1)" : "none",
@@ -927,7 +1177,7 @@ export default function GbpAuditPage() {
                     {snap.checksPending} checks need the GBP Business Information API
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(100,116,139,0.7)", marginTop: 2 }}>
-                    Phase 2 will connect the full GBP API to unlock photo verification, hours, categories, description, response rate, and more — unlocking all 59 remaining points.
+                    Connect your GBP account to unlock photo verification, hours, categories, description, response rate, and more — unlocking all 59 remaining points.
                   </div>
                 </div>
               </div>
@@ -990,25 +1240,292 @@ export default function GbpAuditPage() {
 
             {!optLoading && opps.length > 0 && (
               <>
-                {/* Stats */}
                 <OptimizationStats opps={opps} />
-
-                {/* Top 5 actions */}
-                <TopActionsPanel opps={opps} onToggleResolved={handleToggleResolved} />
-
-                {/* Divider */}
+                <TopActionsPanel opps={opps} clientId={clientId} onToggleResolved={handleToggleResolved} />
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.6px", color: "rgba(148,163,184,0.5)",
                   textTransform: "uppercase", marginBottom: 16 }}>
                   All Opportunities — By Group
                 </div>
-
-                {/* Group sections */}
-                <GroupSection groupName="quick_win"       opps={oppsByGroup.quick_win}       onToggleResolved={handleToggleResolved} defaultOpen={true}  />
-                <GroupSection groupName="high_impact"     opps={oppsByGroup.high_impact}     onToggleResolved={handleToggleResolved} defaultOpen={true}  />
-                <GroupSection groupName="needs_attention" opps={oppsByGroup.needs_attention} onToggleResolved={handleToggleResolved} defaultOpen={true}  />
-                <GroupSection groupName="long_term"       opps={oppsByGroup.long_term}       onToggleResolved={handleToggleResolved} defaultOpen={false} />
-                <GroupSection groupName="optimized"       opps={oppsByGroup.optimized}       onToggleResolved={handleToggleResolved} defaultOpen={false} />
+                <GroupSection groupName="quick_win"       opps={oppsByGroup.quick_win}       clientId={clientId} onToggleResolved={handleToggleResolved} defaultOpen={true}  />
+                <GroupSection groupName="high_impact"     opps={oppsByGroup.high_impact}     clientId={clientId} onToggleResolved={handleToggleResolved} defaultOpen={true}  />
+                <GroupSection groupName="needs_attention" opps={oppsByGroup.needs_attention} clientId={clientId} onToggleResolved={handleToggleResolved} defaultOpen={true}  />
+                <GroupSection groupName="long_term"       opps={oppsByGroup.long_term}       clientId={clientId} onToggleResolved={handleToggleResolved} defaultOpen={false} />
+                <GroupSection groupName="optimized"       opps={oppsByGroup.optimized}       clientId={clientId} onToggleResolved={handleToggleResolved} defaultOpen={false} />
               </>
+            )}
+          </>
+        )}
+
+        {/* ── COMPETITIVE INTELLIGENCE TAB — Phase 6 ───────────────────────── */}
+        {snap && activeTab === "competitive" && (
+          <>
+            {compLoading && (
+              <div style={{ textAlign: "center", padding: 60, color: "rgba(148,163,184,0.5)", fontSize: 13 }}>
+                Loading competitive data…
+              </div>
+            )}
+            {!compLoading && competitiveData && (() => {
+              const cd = competitiveData;
+              const compColor =
+                cd.competitiveScore >= 70 ? "#22C55E" :
+                cd.competitiveScore >= 45 ? "#F59E0B" : "#EF4444";
+              return (
+                <>
+                  {/* Competitive Score Overview */}
+                  <div style={{
+                    background: "rgba(11,22,41,0.7)", borderRadius: 14,
+                    border: "1px solid rgba(167,139,250,0.15)",
+                    padding: "20px 24px", marginBottom: 20,
+                    display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
+                  }}>
+                    <ScoreRing score={cd.competitiveScore} max={100} label="Competitive" accent={compColor} size={100} strokeWidth={8} />
+                    <div style={{ width: 1, height: 70, background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 14 }}>
+                      {[
+                        { label: "Your Reviews",   value: cd.yourMetrics.reviewCount,                     color: "#60A5FA"  },
+                        { label: "Your Rating",    value: cd.yourMetrics.averageRating.toFixed(1) + " ★",  color: "#FBBF24"  },
+                        { label: "Posts/Month",    value: cd.yourMetrics.postsLast30,                      color: "#2DD4BF"  },
+                        { label: "GBP Score",      value: cd.yourMetrics.gbpScore + "%",                   color: compColor  },
+                      ].map(m => (
+                        <div key={m.label} style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+                          <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.55)", marginTop: 3, fontWeight: 600 }}>{m.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Benchmarks vs You */}
+                  <div style={{ background: "rgba(11,22,41,0.5)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: "16px 18px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(148,163,184,0.5)", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 14 }}>
+                      Industry Benchmarks — Pest Control / Home Services
+                    </div>
+                    {[
+                      {
+                        label: "Review Count",
+                        yours: cd.yourMetrics.reviewCount,
+                        median: cd.benchmarks.reviewCountMedian,
+                        top10: cd.benchmarks.reviewCountTop10Pct,
+                        gap: cd.gaps.reviewGap,
+                        gapLabel: cd.gaps.reviewGap > 0 ? `${cd.gaps.reviewGap} more needed to reach median` : "Above median ✓",
+                        gapColor: cd.gaps.reviewGap > 0 ? "#EF4444" : "#22C55E",
+                      },
+                      {
+                        label: "Monthly Posts",
+                        yours: cd.yourMetrics.postsLast30,
+                        median: cd.benchmarks.monthlyPostsMedian,
+                        top10: cd.benchmarks.monthlyPostsRecommended,
+                        gap: cd.gaps.postGap,
+                        gapLabel: cd.gaps.postGap > 0 ? `${cd.gaps.postGap} more posts/month recommended` : "On track ✓",
+                        gapColor: cd.gaps.postGap > 0 ? "#F59E0B" : "#22C55E",
+                      },
+                      {
+                        label: "Rating",
+                        yours: cd.yourMetrics.averageRating,
+                        median: 4.0,
+                        top10: cd.benchmarks.averageRatingTarget,
+                        gap: cd.gaps.ratingGap,
+                        gapLabel: cd.gaps.ratingGap > 0 ? `Need +${cd.gaps.ratingGap} to hit ${cd.benchmarks.averageRatingTarget} target` : "Meets target ✓",
+                        gapColor: cd.gaps.ratingGap > 0 ? "#F59E0B" : "#22C55E",
+                      },
+                    ].map(row => {
+                      const pctYours = Math.min(100, (row.yours / row.top10) * 100);
+                      return (
+                        <div key={row.label} style={{ marginBottom: 14 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.8)" }}>{row.label}</span>
+                            <span style={{ fontSize: 10, color: row.gapColor, fontWeight: 700 }}>{row.gapLabel}</span>
+                          </div>
+                          <div style={{ position: "relative", height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pctYours}%`, borderRadius: 4, background: pctYours >= 100 ? "#22C55E" : "#60A5FA", transition: "width 0.5s ease" }} />
+                            <div style={{ position: "absolute", top: 0, bottom: 0, left: `${(row.median / row.top10) * 100}%`, width: 2, background: "rgba(245,158,11,0.6)" }} />
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+                            <span style={{ fontSize: 9.5, color: "rgba(100,116,139,0.5)" }}>You: {row.yours}</span>
+                            <span style={{ fontSize: 9.5, color: "rgba(245,158,11,0.6)" }}>Median: {row.median}</span>
+                            <span style={{ fontSize: 9.5, color: "rgba(100,116,139,0.5)" }}>Target: {row.top10}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Competitor List */}
+                  {cd.competitors.length > 0 && (
+                    <div style={{ background: "rgba(11,22,41,0.5)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: "16px 18px", marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(148,163,184,0.5)", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 12 }}>
+                        Competitors Detected via Discovery Engine
+                      </div>
+                      {cd.competitors.map((comp, i) => (
+                        <div key={comp.name} style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
+                          borderBottom: i < cd.competitors.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                        }}>
+                          <div style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(100,116,139,0.15)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 9, fontWeight: 800, color: "rgba(148,163,184,0.7)", flexShrink: 0 }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "rgba(226,232,240,0.8)" }}>{comp.name}</div>
+                          <div style={{ fontSize: 10, color: "rgba(100,116,139,0.6)" }}>
+                            {comp.keywordCount} competing keyword{comp.keywordCount !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {cd.competitors.length === 0 && (
+                    <div style={{ background: "rgba(100,116,139,0.06)", borderRadius: 10, border: "1px solid rgba(100,116,139,0.12)", padding: "12px 16px", fontSize: 12, color: "rgba(148,163,184,0.6)" }}>
+                      💡 Run a Discovery Engine scan to surface local competitors. Competitor keyword data will appear here once discovery data is available.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            {!compLoading && !competitiveData && (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(148,163,184,0.5)" }}>
+                Could not load competitive data. Run an audit first.
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── ANALYTICS TAB — Phase 8 ───────────────────────────────────────── */}
+        {snap && activeTab === "analytics" && (
+          <>
+            {analyticsLoading && (
+              <div style={{ textAlign: "center", padding: 60, color: "rgba(148,163,184,0.5)", fontSize: 13 }}>
+                Loading analytics…
+              </div>
+            )}
+            {!analyticsLoading && analyticsData && (() => {
+              const pts = analyticsData.points;
+              const hasData = pts.length >= 2;
+              return (
+                <>
+                  {/* Stats row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
+                    {[
+                      { label: "Total Audits",     value: analyticsData.totalSnapshots, color: "#60A5FA" },
+                      { label: "Latest Score",     value: pts.length > 0 ? pts[pts.length - 1].overallPct + "%" : "—", color: "#2DD4BF" },
+                      { label: "First Score",      value: pts.length > 0 ? pts[0].overallPct + "%" : "—", color: "#A78BFA" },
+                      { label: "Score Change",     value: pts.length >= 2 ? (pts[pts.length - 1].overallPct - pts[0].overallPct > 0 ? "+" : "") + (pts[pts.length - 1].overallPct - pts[0].overallPct) + " pts" : "—",
+                        color: pts.length >= 2 && pts[pts.length - 1].overallPct >= pts[0].overallPct ? "#22C55E" : "#EF4444" },
+                    ].map(s => (
+                      <div key={s.label} style={{
+                        background: "rgba(11,22,41,0.7)", borderRadius: 10,
+                        border: "1px solid rgba(255,255,255,0.06)", padding: "14px 16px", textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 10, color: "rgba(100,116,139,0.55)", marginTop: 4, fontWeight: 600 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Full trend chart */}
+                  {hasData ? (() => {
+                    const W = 560; const H = 100; const PX = 32; const PY = 14;
+                    const scores  = pts.map(p => p.overallPct);
+                    const minS    = Math.max(0, Math.min(...scores) - 10);
+                    const maxS    = Math.min(100, Math.max(...scores) + 10);
+                    const range   = maxS - minS || 10;
+                    const px      = (i: number) => PX + (i / (pts.length - 1)) * (W - PX * 2);
+                    const py      = (v: number) => H - PY - ((v - minS) / range) * (H - PY * 2);
+                    const pointsStr = scores.map((v, i) => `${px(i)},${py(v)}`).join(" ");
+                    const trendDelta = scores[scores.length - 1] - scores[0];
+                    const trendColor = trendDelta > 2 ? "#22C55E" : trendDelta < -2 ? "#EF4444" : "#60A5FA";
+                    return (
+                      <div style={{ background: "rgba(11,22,41,0.7)", borderRadius: 14, border: "1px solid rgba(96,165,250,0.12)", padding: "16px 20px", marginBottom: 20 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(148,163,184,0.5)", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+                            90-Day Score Trend
+                          </div>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: trendColor }}>
+                              {trendDelta > 0 ? "▲ +" : trendDelta < 0 ? "▼ " : "→ "}{trendDelta} pts
+                            </span>
+                            <a
+                              href={`/api/gbp/audit/export?clientId=${encodeURIComponent(clientId)}`}
+                              target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 10, fontWeight: 700, color: "#60A5FA", textDecoration: "none",
+                                padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(96,165,250,0.25)",
+                                background: "rgba(96,165,250,0.08)" }}
+                            >
+                              ⬇ Export CSV
+                            </a>
+                          </div>
+                        </div>
+                        <div style={{ overflowX: "auto" }}>
+                          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", minWidth: 300 }}>
+                            <defs>
+                              <linearGradient id="analyticsGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={trendColor} stopOpacity="0.18" />
+                                <stop offset="100%" stopColor={trendColor} stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            <polygon
+                              points={`${px(0)},${H} ${pointsStr} ${px(pts.length - 1)},${H}`}
+                              fill="url(#analyticsGrad)"
+                            />
+                            <polyline
+                              points={pointsStr}
+                              fill="none" stroke={trendColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                            />
+                            {scores.map((v, i) => (
+                              <circle key={i} cx={px(i)} cy={py(v)} r="4" fill={trendColor} stroke="#030612" strokeWidth="2" />
+                            ))}
+                          </svg>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                          <span style={{ fontSize: 9.5, color: "rgba(100,116,139,0.5)" }}>
+                            {new Date(pts[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <span style={{ fontSize: 9.5, color: "rgba(100,116,139,0.5)" }}>
+                            {new Date(pts[pts.length - 1].date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <div style={{ background: "rgba(11,22,41,0.5)", borderRadius: 12, border: "1px dashed rgba(96,165,250,0.15)", padding: "24px", textAlign: "center", marginBottom: 20, color: "rgba(148,163,184,0.5)", fontSize: 12 }}>
+                      Run at least 2 audits to see the trend chart.
+                    </div>
+                  )}
+
+                  {/* Category breakdown */}
+                  {analyticsData.categoryBreakdown.length > 0 && (
+                    <div style={{ background: "rgba(11,22,41,0.5)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: "16px 18px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(148,163,184,0.5)", letterSpacing: "0.6px", textTransform: "uppercase", marginBottom: 14 }}>
+                        Category Breakdown — Latest Audit
+                      </div>
+                      {analyticsData.categoryBreakdown.map(cat => {
+                        const catMeta = CATEGORY_META[cat.category as CheckCategory];
+                        const accent  = catMeta?.accent ?? "#60A5FA";
+                        return (
+                          <div key={cat.category} style={{ marginBottom: 12 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                              <span style={{ fontSize: 12 }}>{catMeta?.icon ?? "📋"}</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.85)", flex: 1 }}>
+                                {catMeta?.label ?? cat.category}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: accent }}>{cat.pct}%</span>
+                              <span style={{ fontSize: 10, color: "rgba(100,116,139,0.5)" }}>({cat.score}/{cat.maxScore})</span>
+                            </div>
+                            <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${cat.pct}%`, borderRadius: 3, background: accent, transition: "width 0.5s ease" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            {!analyticsLoading && !analyticsData && (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(148,163,184,0.5)" }}>
+                Could not load analytics. Run an audit first.
+              </div>
             )}
           </>
         )}

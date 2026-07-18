@@ -1,4 +1,4 @@
-import { db } from "@workspace/db";
+import { db, pool as dbPool } from "@workspace/db";
 import { socialPostsTable, leadsTable, autoContentSettingsTable, clientsTable } from "@workspace/db/schema";
 import { createWeeklyPlanId, evaluateClientEligibility, isValidIanaTimezone } from "@workspace/db";
 import { eq, and, gte, sql, inArray } from "drizzle-orm";
@@ -9,8 +9,9 @@ import { sendSms } from "./sms";
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
 
-const POLL_INTERVAL_MS      = 60_000;      // post-publish tick: every 60s
-const AUTOPILOT_INTERVAL_MS = 30 * 60_000; // autonomous generation check: every 30min
+const POLL_INTERVAL_MS      = 60_000;       // post-publish tick: every 60s
+const AUTOPILOT_INTERVAL_MS = 30 * 60_000;  // autonomous generation check: every 30min
+const GBP_MONITOR_INTERVAL  = 6 * 60 * 60_000; // GBP audit monitor: every 6h
 
 // Tracks posts currently being published — prevents duplicate publishes if a
 // tick fires while a previous publish is still in flight (e.g. slow GBP upload).
@@ -418,12 +419,63 @@ async function recoverMissedCalls(): Promise<void> {
   }
 }
 
+// ── GBP Audit Monitor ──────────────────────────────────────────────────────────
+// Runs every 6h. Finds enabled schedules where next_run_at <= NOW() and calls
+// POST /api/gbp/audit/run via internal HTTP with the scheduler secret.
+// Gracefully skips if gbp_audit_schedules table does not yet exist.
+
+async function runGbpAuditMonitor(): Promise<void> {
+  const port = parseInt(process.env.PORT ?? "8080", 10);
+  const base = `http://localhost:${port}`;
+
+  let rows: Array<{ client_id: string; user_id: string }>;
+  try {
+    const result = await dbPool.query<{ client_id: string; user_id: string }>(
+      `SELECT client_id, user_id
+       FROM gbp_audit_schedules
+       WHERE enabled = TRUE
+         AND next_run_at IS NOT NULL
+         AND next_run_at <= NOW()
+       LIMIT 10`,
+    );
+    rows = result.rows;
+  } catch {
+    return; // table may not exist yet on first startup
+  }
+
+  if (rows.length === 0) return;
+  logger.info(`[gbp-monitor] ${rows.length} scheduled audit(s) due`);
+
+  for (const row of rows) {
+    try {
+      const res = await fetch(`${base}/api/gbp/audit/run`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":        "application/json",
+          "x-scheduler-secret":  SCHEDULER_SECRET,
+          "x-scheduler-user-id": row.user_id,
+        },
+        body: JSON.stringify({ clientId: row.client_id }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        logger.warn({ clientId: row.client_id, status: res.status, txt }, "[gbp-monitor] audit run failed");
+      } else {
+        logger.info({ clientId: row.client_id }, "[gbp-monitor] audit completed");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ clientId: row.client_id, msg }, "[gbp-monitor] fetch error");
+    }
+  }
+}
+
 // ── Re-exports for test access ─────────────────────────────────────────────────
 
 export { evaluateClientEligibility } from "@workspace/db";
 
 export function startScheduler(): void {
-  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m");
+  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h");
 
   // ── Post publishing ──
   publishDuePosts().catch((err: unknown) => {
@@ -465,4 +517,17 @@ export function startScheduler(): void {
       logger.error({ err: msg }, "[scheduler] recovery tick error");
     });
   }, 5 * 60_000);
+
+  // ── GBP Audit Monitor ──
+  runGbpAuditMonitor().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "[scheduler] startup gbp-monitor error");
+  });
+
+  setInterval(() => {
+    runGbpAuditMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] gbp-monitor tick error");
+    });
+  }, GBP_MONITOR_INTERVAL);
 }

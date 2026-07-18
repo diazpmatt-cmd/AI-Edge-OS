@@ -34,6 +34,7 @@ import agentTasksRouter from "./agent-tasks";
 import gbpAuditRouter from "./gbp-audit";
 import competitorIntelligenceRouter from "./competitor-intelligence";
 import contactRouter from "./contact";
+import referralsRouter from "./referrals";
 
 const router: IRouter = Router();
 
@@ -72,5 +73,6 @@ router.use(agentTasksRouter);
 router.use(gbpAuditRouter);
 router.use(competitorIntelligenceRouter);
 router.use(contactRouter);
+router.use(referralsRouter);
 
 export default router;

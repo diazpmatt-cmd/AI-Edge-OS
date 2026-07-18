@@ -159,6 +159,7 @@ const SECTIONS: SectionDef[] = [
       { to: "/admin/call-intelligence", icon: "📊", label: "Call Intelligence", sub: "Call tracking & analytics", family: "growth" },
       { to: "/admin/bbb-execution",     icon: "🎯", label: "Growth Execution",  sub: "Revenue campaigns",         family: "growth" },
       { to: "/admin/ai-receptionist",   icon: "🤖", label: "AI Receptionist",   sub: "24/7 call handling",        family: "growth" },
+      { to: "/admin/referrals",         icon: "🤝", label: "Referral Engine",   sub: "Customers → growth",        family: "growth" },
     ],
   },
   {

@@ -36,6 +36,8 @@ type FormData = {
   industry: string;
   services: string[];
   message: string;
+  packageKey: string;
+  packageLabel: string;
 };
 
 export default function ContactPage() {
@@ -46,12 +48,26 @@ export default function ContactPage() {
   const [form, setForm] = useState<FormData>({
     firstName: "", lastName: "", email: "", phone: "",
     business: "", industry: "", services: [], message: "",
+    packageKey: packageParam,
+    packageLabel: packageLabel,
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    try {
+      await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+    } catch {
+    } finally {
+      setSubmitting(false);
+      setSubmitted(true);
+    }
   };
 
   const toggleService = (service: string) => {
@@ -323,24 +339,30 @@ export default function ContactPage() {
 
               <button
                 type="submit"
+                disabled={submitting}
                 style={{
                   width: "100%", padding: "15px",
-                  borderRadius: 12, background: "#00AEEF",
+                  borderRadius: 12, background: submitting ? "rgba(0,174,239,0.5)" : "#00AEEF",
                   border: "none", color: "#fff",
-                  fontSize: 16, fontWeight: 700, cursor: "pointer",
+                  fontSize: 16, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer",
                   boxShadow: "0 0 30px rgba(0,174,239,0.35)",
                   transition: "all 0.25s",
+                  opacity: submitting ? 0.7 : 1,
                 }}
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.background = "#00C4FF";
-                  (e.currentTarget as HTMLElement).style.boxShadow = "0 0 50px rgba(0,174,239,0.55)";
+                  if (!submitting) {
+                    (e.currentTarget as HTMLElement).style.background = "#00C4FF";
+                    (e.currentTarget as HTMLElement).style.boxShadow = "0 0 50px rgba(0,174,239,0.55)";
+                  }
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = "#00AEEF";
-                  (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(0,174,239,0.35)";
+                  if (!submitting) {
+                    (e.currentTarget as HTMLElement).style.background = "#00AEEF";
+                    (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(0,174,239,0.35)";
+                  }
                 }}
               >
-                Book My Free Strategy Call →
+                {submitting ? "Sending…" : "Book My Free Strategy Call →"}
               </button>
               <p style={{ textAlign: "center", fontSize: 13, color: "#4B5563", marginTop: 14 }}>
                 We respond within 1 business day. No spam, ever.

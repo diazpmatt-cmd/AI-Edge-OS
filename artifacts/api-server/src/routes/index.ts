@@ -33,6 +33,7 @@ import discoveryInspectRouter from "./discovery-inspect";
 import agentTasksRouter from "./agent-tasks";
 import gbpAuditRouter from "./gbp-audit";
 import competitorIntelligenceRouter from "./competitor-intelligence";
+import contactRouter from "./contact";
 
 const router: IRouter = Router();
 
@@ -70,5 +71,6 @@ router.use(discoveryInspectRouter);
 router.use(agentTasksRouter);
 router.use(gbpAuditRouter);
 router.use(competitorIntelligenceRouter);
+router.use(contactRouter);
 
 export default router;

@@ -1,7 +1,7 @@
-import app from "./app";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
+import { migrateSchema } from "./lib/schema-migrate.js";
 
 const rawPort = process.env["PORT"];
 
@@ -17,9 +17,11 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-migrateAgentTasks()
-  .then(() => {
-    app.listen(port, (err) => {
+migrateSchema()
+  .then(() => migrateAgentTasks())
+  .then(() => import("./app.js"))
+  .then(({ default: app }) => {
+    app.listen(port, (err: unknown) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         process.exit(1);
@@ -30,6 +32,6 @@ migrateAgentTasks()
     });
   })
   .catch((err) => {
-    logger.error({ err }, "Agent tasks migration failed — server will not start");
+    logger.error({ err }, "Startup migration failed — server will not start");
     process.exit(1);
   });

@@ -13,7 +13,7 @@ const SERVICES = [
   { icon: "🔍", title: "Local SEO", tagline: "Rank where it counts", description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need." },
   { icon: "🌐", title: "Website Design", tagline: "Sites that convert visitors", description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand." },
   { icon: "📲", title: "Social Media Distribution", tagline: "AI content across every platform", description: "Repurpose your content into social posts, schedule across platforms, and maintain a consistent presence without lifting a finger." },
-  { icon: "🧠", title: "AI Visibility / GEO", tagline: "Get found by AI search", description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery." },
+  { icon: "🧠", title: "AI Edge Visibility", tagline: "Get found by AI search", description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery." },
 ];
 
 const TRUST = [

@@ -612,7 +612,7 @@ export default function AIVisibilityEnginePage() {
 
         {/* ── 4. Authority Engine ── */}
         <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="Authority Engine" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
+          <SectionDivider title="Edge Authority" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {AUTHORITY_ITEMS.map(item => {
               const st = AUTHORITY_STATUS[item.status];

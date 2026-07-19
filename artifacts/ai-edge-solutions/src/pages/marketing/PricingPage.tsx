@@ -43,10 +43,10 @@ const PLANS: Plan[] = [
     cta: "Get Started with Core",
     ctaStyle: "primary",
     modules: [
-      { name: "GBP Audit Engine",      icon: "🔍", description: "Automated Business Edge Profile health scoring, issue detection, and optimization recommendations." },
+      { name: "Business Edge Profile",  icon: "🔍", description: "Automated Business Edge Profile health scoring, issue detection, and optimization recommendations." },
       { name: "Local Edge Presence",   icon: "📍", description: "Listing consistency management across Google, Apple, Bing, and Nextdoor." },
       { name: "Reviews Engine",        icon: "⭐", description: "Automated review request campaigns and reputation monitoring with AI sentiment analysis." },
-      { name: "Daily Command Edge Center", icon: "📊", description: "Unified dashboard with KPIs, AI executive brief, and action queue updated every 24 hours." },
+      { name: "Command Edge Center",    icon: "📊", description: "Unified dashboard with KPIs, AI executive brief, and action queue updated every 24 hours." },
     ],
     extras: [
       "Done-with-you GBP setup & optimization",
@@ -108,10 +108,10 @@ const PLANS: Plan[] = [
 ];
 
 const MODULE_COMPARISON = [
-  { module: "GBP Audit Engine",              core: true,  growth: false, enterprise: true  },
+  { module: "Business Edge Profile",         core: true,  growth: false, enterprise: true  },
   { module: "Local Edge Presence",           core: true,  growth: false, enterprise: true  },
   { module: "Reviews Engine",               core: true,  growth: false, enterprise: true  },
-  { module: "Daily Command Edge Center",     core: true,  growth: true,  enterprise: true  },
+  { module: "Command Edge Center",           core: true,  growth: true,  enterprise: true  },
   { module: "Lead Recovery AI",             core: false, growth: true,  enterprise: true  },
   { module: "Call Intelligence",            core: false, growth: true,  enterprise: true  },
   { module: "Growth Execution Engine",      core: false, growth: true,  enterprise: true  },
@@ -284,7 +284,7 @@ export default function PricingPage() {
           {/* Connector line */}
           <div style={{ position: "absolute", left: 28, top: 36, bottom: 36, width: 2, background: "linear-gradient(to bottom, #00AEEF44, #22C55E44, #A78BFA44)", borderRadius: 2 }} />
           {[
-            { step: "1", title: "Core Package", sub: "GBP · Local Edge Presence · Reviews · Command Edge Center", color: "#00AEEF", note: "Start here — get your local foundation right." },
+            { step: "1", title: "Core Package", sub: "Business Edge Profile · Local Edge Presence · Reviews · Command Edge Center", color: "#00AEEF", note: "Start here — get your local foundation right." },
             { step: "2", title: "+ Growth Package", sub: "Lead Recovery · Call AI · Growth Execution · AI Receptionist", color: "#22C55E", note: "Layer in when you're ready to convert more leads." },
             { step: "3", title: "+ Enterprise", sub: "Competitive Edge Intelligence · Edge Authority · AI Edge CMO · All Engines", color: "#A78BFA", note: "Scale to full AI Growth OS when you want to dominate your market." },
           ].map((item, i) => (

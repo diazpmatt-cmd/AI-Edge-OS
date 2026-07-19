@@ -37,7 +37,7 @@ const REVENUE_ITEMS = [
 const FUTURE_ITEMS = [
   { emoji: "📅", title: "AI Booking Engine",      line: "Schedules appointments directly from any conversation — call, text, or form." },
   { emoji: "🧠", title: "AI Voice Search",        line: "Makes your business the answer when people ask their phones." },
-  { emoji: "📈", title: "AI Competitor Intel",    line: "Monitors what your rivals are doing and tells you how to win." },
+  { emoji: "📈", title: "Competitive Edge Intelligence", line: "Monitors what your rivals are doing and tells you how to win." },
   { emoji: "🎙️", title: "AI Review Responder",   line: "Responds to every Google and Facebook review within minutes." },
 ];
 

@@ -150,7 +150,7 @@ export function ActionCenter() {
     reason: "Apple Business Connect and Nextdoor Business listings are pending. Complete setup to maximize local visibility.",
     impact: "medium",
     urgency: "this-week",
-    module: "Local Presence",
+    module: "Local Edge Presence",
     link: "/admin/local-presence",
   });
 

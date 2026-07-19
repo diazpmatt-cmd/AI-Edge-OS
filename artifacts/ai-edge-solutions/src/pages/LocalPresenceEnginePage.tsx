@@ -4696,7 +4696,7 @@ const SUMMARY_PLATFORMS: {
   { name: "Waze (WME)",              dot: "#00BBDE", summaryStatus: "not_started",         note: "Free path via Waze Map Editor — community moderated"                 },
   { name: "Angi for Pros",           dot: "#E8330A", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
   { name: "Thumbtack for Pros",      dot: "#009FD9", summaryStatus: "not_started",         note: "Pro account not yet created"                                         },
-  { name: "AI Search (LLMs)",        dot: "#6B7280", summaryStatus: "coming_soon",         note: "AI Visibility module — not yet set up"                               },
+  { name: "AI Search (LLMs)",        dot: "#6B7280", summaryStatus: "coming_soon",         note: "AI Edge Visibility module — not yet set up"                          },
 ];
 
 // ── Facebook Local Presence V2 Card ──────────────────────────────────────────
@@ -5611,7 +5611,7 @@ export default function LocalPresenceEnginePage() {
           </div>
 
           <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>
-            Local Presence Engine
+            Local Edge Presence
           </h1>
           <p style={{ fontSize: 14, color: t.text2, margin: "0 0 16px", lineHeight: 1.5, maxWidth: 620 }}>
             <strong style={{ color: "#00AEEF" }}>Get Found Everywhere</strong> — Manage local visibility across Google, Apple Maps, Bing, AI search,

@@ -20,8 +20,8 @@ const STATUS_COLOR: Record<string, string> = {
 
 const MODULES: ModuleStatus[] = [
   { id: "lead-recovery",  name: "Lead Recovery AI",    icon: "📞", status: "active",      statusLabel: "Active",       summary: "Telnyx connected · Monitoring calls",       link: "/admin/lead-recovery"     },
-  { id: "local-presence", name: "Local Presence",      icon: "📍", status: "in-progress", statusLabel: "In Progress",  summary: "Bing verified · 2 platforms pending",       link: "/admin/local-presence"    },
-  { id: "ai-visibility",  name: "AI Visibility",       icon: "✨", status: "pending",     statusLabel: "Pending Scan", summary: "No scan data yet",                          link: "/admin/ai-visibility"     },
+  { id: "local-presence", name: "Local Edge Presence",  icon: "📍", status: "in-progress", statusLabel: "In Progress",  summary: "Bing verified · 2 platforms pending",       link: "/admin/local-presence"    },
+  { id: "ai-visibility",  name: "AI Edge Visibility",  icon: "✨", status: "pending",     statusLabel: "Pending Scan", summary: "No scan data yet",                          link: "/admin/ai-visibility"     },
   { id: "connections",    name: "Connected Accounts",  icon: "🔗", status: "partial",     statusLabel: "Partial",      summary: "4 of 8 platforms connected",                link: "/admin/connections"       },
   { id: "publishing",     name: "Publishing Center",   icon: "📸", status: "active",      statusLabel: "Ready",        summary: "Queue open · AI content ready",             link: "/admin/social-publishing" },
   { id: "auto-content",   name: "Auto Content Engine", icon: "🤖", status: "active",      statusLabel: "Active",       summary: "Content pipeline running",                  link: "/admin/auto-content"      },

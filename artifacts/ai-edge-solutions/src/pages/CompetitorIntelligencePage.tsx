@@ -1765,7 +1765,7 @@ const OBS_CAT_META: Record<ObsCategory, { label: string; icon: string }> = {
   local_presence: { label: "Local Edge Presence", icon: "📍" },
   reviews:        { label: "Reviews",        icon: "⭐" },
   authority:      { label: "Authority",      icon: "🔗" },
-  ai_visibility:  { label: "AI Visibility",  icon: "🤖" },
+  ai_visibility:  { label: "AI Edge Visibility",  icon: "🤖" },
 };
 
 function ObsLoadingTile({ icon, title }: { icon: string; title: string }) {

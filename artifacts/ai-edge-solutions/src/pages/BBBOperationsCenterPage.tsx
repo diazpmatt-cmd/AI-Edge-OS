@@ -164,7 +164,7 @@ function EditableStat({ icon, label, value, placeholder, color, prefix = "", suf
 
 const QUICK_ACTIONS = [
   { icon: "📞", label: "Lead Recovery",      link: "/admin/lead-recovery",     color: "#22C55E" },
-  { icon: "📍", label: "Local Presence",     link: "/admin/local-presence",    color: "#00AEEF" },
+  { icon: "📍", label: "Local Edge Presence", link: "/admin/local-presence",    color: "#00AEEF" },
   { icon: "✈️",  label: "Publishing Center",  link: "/admin/social-publishing", color: "#F59E0B" },
   { icon: "🤖", label: "AI Receptionist",    link: "/admin/ai-receptionist",   color: "#3B82F6" },
 ];

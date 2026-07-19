@@ -37,7 +37,7 @@ const SERVICES = [
   },
   {
     icon: "📍",
-    title: "Business Edge Profile Automation",
+    title: "Business Edge Profile",
     tagline: "Own your local presence",
     description: "Your GBP is your most powerful free marketing asset. We automate consistent posting, photo uploads, Q&A responses, and profile optimization to keep you ranked at the top of local search.",
     features: [
@@ -117,7 +117,7 @@ const SERVICES = [
   },
   {
     icon: "🧠",
-    title: "AI Visibility / GEO Optimization",
+    title: "AI Edge Visibility",
     tagline: "Get found by AI-powered search",
     description: "ChatGPT, Gemini, Perplexity, and AI assistants are the new search engines. We optimize your business to be cited, recommended, and featured by these AI systems — the next frontier of local discovery.",
     features: [

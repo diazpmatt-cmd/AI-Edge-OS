@@ -32,7 +32,7 @@ const OPPORTUNITIES: Opportunity[] = [
   {
     id: "ai-search",
     title: "AI Search Visibility Gap",
-    source: "AI Visibility Scanner",
+    source: "AI Edge Visibility Scanner",
     impact: "Est. pending scan",
     effort: "medium",
     confidence: "medium",

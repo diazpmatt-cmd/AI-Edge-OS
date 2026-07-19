@@ -200,7 +200,7 @@ export default function CommandCenter() {
               </div>
               <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
                 {([
-                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Edge Presence","Reviews Engine","Daily Command"], price: "Included" },
+                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["Business Edge Profile","Local Edge Presence","Reviews Engine","Command Edge Center"], price: "Included" },
                   { id: "growth",     name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
                   { id: "enterprise", name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitive Edge Intelligence","Edge Authority","AI Edge CMO","All Engines"], price: "Custom" },
                 ] as const).map(pkg => {

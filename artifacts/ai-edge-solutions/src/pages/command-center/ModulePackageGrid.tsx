@@ -65,7 +65,7 @@ const SECTIONS: SectionDef[] = [
   {
     id: "gbp-engine",
     headerEmoji: "📍",
-    name: "Business Edge Profile Engine",
+    name: "Business Edge Profile",
     tagline: "Flagship · Business Edge Profile health scoring and optimization",
     accentColor: "#EAB308",
     tiles: [
@@ -75,7 +75,7 @@ const SECTIONS: SectionDef[] = [
   {
     id: "local-presence",
     headerEmoji: "🌎",
-    name: "Local Edge Presence Engine",
+    name: "Local Edge Presence",
     tagline: "Maps, listings, and reputation management",
     accentColor: "#94A3B8",
     tiles: [
@@ -86,11 +86,11 @@ const SECTIONS: SectionDef[] = [
   {
     id: "ai-visibility",
     headerEmoji: "🤖",
-    name: "AI Edge Visibility Engine",
+    name: "AI Edge Visibility",
     tagline: "Voice search, AI presence, and search intelligence",
     accentColor: "#C4945A",
     tiles: [
-      { to: "/admin/ai-visibility", icon: "✨",  label: "AI Visibility", sub: "Search AI presence", family: "aiVisibility" },
+      { to: "/admin/ai-visibility", icon: "✨",  label: "AI Edge Visibility", sub: "Search AI presence", family: "aiVisibility" },
       { to: "/admin/voice-search",  icon: "🔊",  label: "Voice Search",  sub: "Voice SEO engine",   family: "aiVisibility" },
     ],
   },
@@ -101,7 +101,7 @@ const SECTIONS: SectionDef[] = [
     tagline: "Market intelligence and competitive positioning",
     accentColor: "#8B5CF6",
     tiles: [
-      { to: "/admin/competitor-intelligence", icon: "🕵️", label: "Competitor Intel", sub: "Keyword gap analysis", family: "competitor" },
+      { to: "/admin/competitor-intelligence", icon: "🕵️", label: "Competitive Edge Intelligence", sub: "Keyword gap analysis", family: "competitor" },
     ],
   },
   {
@@ -111,7 +111,7 @@ const SECTIONS: SectionDef[] = [
     tagline: "Domain authority building and link acquisition",
     accentColor: "#38BDF8",
     tiles: [
-      { to: "/admin/authority-engine", icon: "🔗", label: "Authority Engine", sub: "Citations & backlinks", family: "authority" },
+      { to: "/admin/authority-engine", icon: "🔗", label: "Edge Authority", sub: "Citations & backlinks", family: "authority" },
     ],
   },
   {

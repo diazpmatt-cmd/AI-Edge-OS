@@ -10,7 +10,7 @@ const SERVICES = [
   "Local SEO",
   "Website Design",
   "Social Media Distribution",
-  "AI Visibility / GEO",
+  "AI Edge Visibility",
 ];
 
 const COMPANY = [

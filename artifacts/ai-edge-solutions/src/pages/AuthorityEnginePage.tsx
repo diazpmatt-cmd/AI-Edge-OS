@@ -202,8 +202,11 @@ export default function AuthorityEnginePage() {
                 }}>AUTHORITY ENGINE</span>
               </div>
               <h1 style={{ fontSize: 26, fontWeight: 900, color: "#F1F5F9", margin: 0, lineHeight: 1.15 }}>
-                Domain Authority &amp; Citation Builder
+                Edge Authority
               </h1>
+              <p style={{ fontSize: 13, color: "#94A3B8", margin: "3px 0 0", fontWeight: 500 }}>
+                Domain Authority &amp; Citation Builder
+              </p>
               <p style={{ fontSize: 13, color: "#64748B", margin: "5px 0 0" }}>
                 Bed Bugs &amp; Beyond · Las Vegas, NV · Pest Control
               </p>

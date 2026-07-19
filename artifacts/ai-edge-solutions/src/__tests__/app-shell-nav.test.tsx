@@ -196,18 +196,18 @@ describe("AppShell — sidebar removed", () => {
 describe("AppShell — breadcrumb navigation", () => {
   beforeEach(() => vi.resetModules());
 
-  it("shows ← Command Center breadcrumb on non-dashboard routes", async () => {
+  it("shows ← Command Edge Center breadcrumb on non-dashboard routes", async () => {
     await renderShell("/admin/lead-recovery");
-    expect(screen.getAllByText(/← Command Center/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/← Command Edge Center/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it("does NOT show breadcrumb on /admin/dashboard", async () => {
     await renderShell("/admin/dashboard");
-    expect(screen.queryAllByText(/← Command Center/i)).toHaveLength(0);
+    expect(screen.queryAllByText(/← Command Edge Center/i)).toHaveLength(0);
   });
 
   it("shows breadcrumb on /admin/reviews", async () => {
     await renderShell("/admin/reviews");
-    expect(screen.getAllByText(/← Command Center/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/← Command Edge Center/i).length).toBeGreaterThanOrEqual(1);
   });
 });

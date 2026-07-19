@@ -283,26 +283,23 @@ describe("ExecutiveKpiGrid", () => {
 // ── OpportunityCenter ─────────────────────────────────────────────────────────
 
 describe("OpportunityCenter", () => {
-  it("renders all 4 opportunity cards", async () => {
+  it("renders no-data state when API returns no data", async () => {
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     render(<OpportunityCenter />);
-    expect(screen.getAllByRole("button", { name: /Start:/i })).toHaveLength(4);
+    expect(screen.getByText(/No opportunities scored yet/i)).toBeTruthy();
   });
 
-  it("shows expected opportunity titles", async () => {
+  it("shows Run Discovery CTA in no-data state", async () => {
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     render(<OpportunityCenter />);
-    expect(screen.getByText(/Missed Call Revenue Recovery/i)).toBeTruthy();
-    expect(screen.getByText(/AI Search Visibility Gap/i)).toBeTruthy();
-    expect(screen.getByText(/Local Directory Expansion/i)).toBeTruthy();
-    expect(screen.getByText(/Review Velocity Campaign/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Run Discovery/i })).toBeTruthy();
   });
 
-  it("shows confidence badges", async () => {
+  it("Run Discovery links to /admin/competitor-intelligence", async () => {
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     render(<OpportunityCenter />);
-    const highBadges = screen.getAllByText(/high confidence/i);
-    expect(highBadges.length).toBeGreaterThanOrEqual(1);
+    const link = document.querySelector('a[href="/admin/competitor-intelligence"]');
+    expect(link).toBeTruthy();
   });
 });
 
@@ -313,7 +310,7 @@ describe("SystemStatusPanel", () => {
     const { SystemStatusPanel } = await import("../pages/command-center/SystemStatusPanel");
     render(<SystemStatusPanel />);
     expect(screen.getByText(/Lead Recovery AI/i)).toBeTruthy();
-    expect(screen.getByText(/Local Presence/i)).toBeTruthy();
+    expect(screen.getByText(/Local Edge Presence/i)).toBeTruthy();
     expect(screen.getByText(/System Diagnostics/i)).toBeTruthy();
   });
 
@@ -353,7 +350,7 @@ describe("BusinessHealthPanel", () => {
   it("renders health metric rows", async () => {
     const { BusinessHealthPanel } = await import("../pages/command-center/BusinessHealthPanel");
     render(<BusinessHealthPanel />);
-    expect(screen.getByText(/Google Business Profile/i)).toBeTruthy();
+    expect(screen.getByText(/Business Edge Profile/i)).toBeTruthy();
     expect(screen.getByText(/Bing Places/i)).toBeTruthy();
   });
 

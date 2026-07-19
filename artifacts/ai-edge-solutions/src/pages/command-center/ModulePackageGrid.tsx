@@ -40,7 +40,7 @@ interface SectionDef {
 }
 
 // ── Section registry — medal hierarchy order ───────────────────────────────────
-const SECTIONS: SectionDef[] = [
+export const SECTIONS: SectionDef[] = [
   {
     id: "home",
     headerEmoji: "🏠",
@@ -120,9 +120,8 @@ const SECTIONS: SectionDef[] = [
     name: "Edge Opportunities",
     tagline: "Convert market signals into revenue-generating actions",
     accentColor: "#34D399",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "⚡", label: "Opp → Action", sub: "Signal-to-revenue", family: "opportunity", comingSoon: true },
+      { to: "/admin/edge-opportunities", icon: "⚡", label: "Edge Opportunities", sub: "Signal-to-revenue", family: "opportunity" },
     ],
   },
   {

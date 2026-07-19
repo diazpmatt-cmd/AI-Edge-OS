@@ -138,6 +138,27 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 
 ---
 
+---
+
+## GBP Engine Closeout (July 2026) — COMPLETE
+
+All four target areas verified with runtime behavioral tests. No additional feature changes in scope.
+
+| Area | Status | Test File | Passing |
+|------|--------|-----------|---------|
+| **Security & Tenant Isolation** | ✅ COMPLETE | `gbp-security.test.ts` | 15/15 |
+| **Alert Threshold Fix** | ✅ COMPLETE | `gbp-alert-threshold.test.ts` | 11/11 |
+| **Shared Google Token Service** | ✅ COMPLETE | `google-token.test.ts` | 11/11 |
+| **GBP → Content Autopilot** | ✅ COMPLETE | `gbp-autopilot-states.test.ts` | 10/10 |
+
+Supporting files: `gbp-finalization.test.ts` (25/25), `gbp-schema-drift.test.ts` (2/2).
+
+Commit: `b660d11a5858b80462099a8106986af66b3dd96d`
+
+Remaining external blocker: Google Business Profile Posts API returns 429 on every attempt. Root cause is GCP project 474786012895 quota/access — **Matthew must verify in GCP Console** before any retry. No live Google post was sent or claimed during closeout.
+
+---
+
 ## Current State (v1 Pilot — July 2026)
 
 ### Active Platforms (BB&B Pilot v1)

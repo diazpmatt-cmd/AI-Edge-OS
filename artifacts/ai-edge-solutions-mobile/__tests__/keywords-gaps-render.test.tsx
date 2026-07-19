@@ -179,19 +179,19 @@ describe("Gaps view — empty state", () => {
     });
   });
 
-  it('renders "No gaps found yet" when API returns a non-OK response (error path)', async () => {
+  it('renders "Couldn\'t load gaps" when API returns a non-OK response (error path)', async () => {
     resolveError();
     await renderAndSwitchToGaps();
     await waitFor(() => {
-      expect(screen.getByText("No gaps found yet")).toBeTruthy();
+      expect(screen.getByText("Couldn't load gaps")).toBeTruthy();
     });
   });
 
-  it('renders "No gaps found yet" when the fetch throws a network error', async () => {
+  it('renders "Couldn\'t load gaps" when the fetch throws a network error', async () => {
     rejectWith(new Error("Network error"));
     await renderAndSwitchToGaps();
     await waitFor(() => {
-      expect(screen.getByText("No gaps found yet")).toBeTruthy();
+      expect(screen.getByText("Couldn't load gaps")).toBeTruthy();
     });
   });
 

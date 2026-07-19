@@ -424,6 +424,11 @@ export * from "./backlink-fixture-provider";
 export * from "./backlink-ingestion";
 export * from "./backlink-ingestion-run";
 
+// Phase C8R-8: production backlink provider readiness
+export * from "./backlink-provider-config";
+export * from "./backlink-provider-registry";
+export * from "./dataforseo-backlink-adapter";
+
 // Competitor Intelligence Engine — canonical entity layer
 export * from "./competitor-types";
 export * from "./competitor-extractor";

@@ -9,13 +9,55 @@ import {
   BBB_BACKLINK_BLOCKED_PHRASES,
   ingestFixtureBacklinks,
   BACKLINK_MAX_PAGE_SIZE,
+  parseDataForSEOBacklinkConfig,
+  getDataForSEOBacklinkHealthState,
+  DataForSEOBacklinkAdapter,
+  BacklinkProviderRegistry,
   type BacklinkWorkflowStatus,
   type BacklinkOpportunityCategory,
+  type BacklinkProviderHealthState,
+  type BacklinkDataProvider,
+  type BacklinkCapability,
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 
 const router = Router();
 const repo   = new DrizzleBacklinkRepository(db);
+
+// ── Backlink provider registry (singleton per process) ────────────────────────
+
+const _dfsConfig = parseDataForSEOBacklinkConfig();
+const _dfsHealth = getDataForSEOBacklinkHealthState(_dfsConfig);
+
+// When credentials are absent, register a stub so DataForSEO always appears
+// in the health report as "unconfigured".  resolve() will never pick it because
+// health.status != "configured".
+const _dfsProvider: BacklinkDataProvider = _dfsConfig
+  ? new DataForSEOBacklinkAdapter(_dfsConfig)
+  : {
+      name:         "dataforseo_backlinks",
+      capabilities: new Set<BacklinkCapability>([
+        "referring_domains",
+        "link_intersections",
+        "authority_metrics",
+      ]),
+      async discover() { return []; },
+    };
+
+const _fixtureHealth: BacklinkProviderHealthState = {
+  provider: "fixture_backlinks",
+  status:   "configured",
+  reason:   null,
+  login:    null,
+};
+
+const _backlinkRegistry = new BacklinkProviderRegistry();
+_backlinkRegistry.register({ provider: _dfsProvider,     getHealth: () => _dfsHealth,    priority: 10 });
+_backlinkRegistry.register({
+  provider:  new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS),
+  getHealth: () => _fixtureHealth,
+  priority:  1,
+});
 
 function isRelationMissingError(err: unknown): boolean {
   if (err && typeof err === "object" && "code" in err) {
@@ -40,6 +82,14 @@ async function resolveClient(req: any, res: any): Promise<{ userId: string; clie
   }
   return { userId, client: resolved.client };
 }
+
+// ── GET /api/backlinks/providers/health ──────────────────────────────────────
+
+router.get("/api/backlinks/providers/health", (req, res): void => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  res.json(_backlinkRegistry.healthReport());
+});
 
 // ── GET /api/backlinks/opportunities ─────────────────────────────────────────
 

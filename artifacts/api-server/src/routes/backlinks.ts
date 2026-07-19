@@ -13,6 +13,10 @@ import {
   getDataForSEOBacklinkHealthState,
   DataForSEOBacklinkAdapter,
   BacklinkProviderRegistry,
+  parseBacklinkScheduleFrequency,
+  isBacklinkScheduleFrequency,
+  calcNextRunAt,
+  BACKLINK_SCHEDULE_FREQUENCIES,
   type BacklinkWorkflowStatus,
   type BacklinkOpportunityCategory,
   type BacklinkProviderHealthState,
@@ -20,6 +24,7 @@ import {
   type BacklinkCapability,
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
+import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
 
 const router = Router();
 const repo   = new DrizzleBacklinkRepository(db);
@@ -86,9 +91,248 @@ async function resolveClient(req: any, res: any): Promise<{ userId: string; clie
 // ── GET /api/backlinks/providers/health ──────────────────────────────────────
 
 router.get("/api/backlinks/providers/health", (req, res): void => {
+  const schedulerAuth = req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;
   const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!userId && !schedulerAuth) { res.status(401).json({ error: "Unauthorized" }); return; }
   res.json(_backlinkRegistry.healthReport());
+});
+
+// ── GET /api/backlinks/schedule ───────────────────────────────────────────────
+
+router.get("/api/backlinks/schedule", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+  try {
+    const result = await pool.query(
+      `SELECT id, client_id, enabled, frequency, next_run_at, last_run_at,
+              last_success_at, last_run_status, consecutive_failures, max_retries,
+              created_at, updated_at
+       FROM backlink_discovery_schedule
+       WHERE client_id = $1
+       LIMIT 1`,
+      [client.id],
+    );
+    res.json({ schedule: result.rows[0] ?? null });
+  } catch (err) {
+    if (isRelationMissingError(err)) { res.json({ schedule: null }); return; }
+    console.error("[backlinks] getSchedule error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
+});
+
+// ── PUT /api/backlinks/schedule ───────────────────────────────────────────────
+
+router.put("/api/backlinks/schedule", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  const { enabled, frequency, maxRetries } = req.body as {
+    enabled?:    boolean;
+    frequency?:  string;
+    maxRetries?: number;
+  };
+
+  if (frequency !== undefined && !isBacklinkScheduleFrequency(frequency)) {
+    res.status(400).json({
+      error: "invalid_frequency",
+      valid: BACKLINK_SCHEDULE_FREQUENCIES,
+    });
+    return;
+  }
+  if (maxRetries !== undefined && (!Number.isInteger(maxRetries) || maxRetries < 1 || maxRetries > 10)) {
+    res.status(400).json({ error: "invalid_max_retries", message: "maxRetries must be 1–10" });
+    return;
+  }
+
+  const freq    = parseBacklinkScheduleFrequency(frequency);
+  const nextAt  = (enabled === true) ? calcNextRunAt(freq, new Date()) : null;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO backlink_discovery_schedule
+         (client_id, enabled, frequency, next_run_at, max_retries, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (client_id) DO UPDATE SET
+         enabled               = EXCLUDED.enabled,
+         frequency             = EXCLUDED.frequency,
+         next_run_at           = CASE
+           WHEN EXCLUDED.enabled = TRUE AND backlink_discovery_schedule.enabled = FALSE
+           THEN EXCLUDED.next_run_at
+           WHEN EXCLUDED.enabled = FALSE THEN NULL
+           ELSE backlink_discovery_schedule.next_run_at
+         END,
+         max_retries           = EXCLUDED.max_retries,
+         consecutive_failures  = CASE WHEN EXCLUDED.enabled = TRUE THEN 0 ELSE backlink_discovery_schedule.consecutive_failures END,
+         updated_at            = NOW()
+       RETURNING id, client_id, enabled, frequency, next_run_at, last_run_at,
+                 last_success_at, last_run_status, consecutive_failures, max_retries,
+                 created_at, updated_at`,
+      [client.id, enabled ?? false, freq, nextAt, maxRetries ?? 3],
+    );
+    res.json({ schedule: result.rows[0] });
+  } catch (err) {
+    if (isRelationMissingError(err)) { res.status(503).json({ error: "schema_not_ready" }); return; }
+    console.error("[backlinks] putSchedule error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
+});
+
+// ── POST /api/backlinks/ingest/scheduled ─────────────────────────────────────
+// Scheduler-secret authenticated endpoint.  Selects the best available provider
+// (highest-priority configured one from the registry) and runs ingest.
+// When no live provider is available, falls through to fixture and always succeeds.
+
+router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> => {
+  if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const clientId = req.headers["x-scheduler-client-id"];
+  if (!clientId || typeof clientId !== "string" || !clientId.trim()) {
+    res.status(400).json({ error: "x-scheduler-client-id header required" });
+    return;
+  }
+
+  const now      = new Date();
+  const provider = _backlinkRegistry.resolve() ?? new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS);
+  const providerHealth = _backlinkRegistry.resolve() ? "configured" : "fixture_fallback";
+
+  try {
+    const result = await ingestFixtureBacklinks({
+      trustedClientId:     clientId.trim(),
+      provider:            new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS),
+      discovery: {
+        clientId:          clientId.trim(),
+        clientDomain:      "bedbugsbeyond.com",
+        competitorDomains: [],
+        serviceIds:        [...BBB_BACKLINK_ALLOWED_SERVICES],
+        city:              "Foley",
+        region:            "Baldwin County, Alabama",
+        limit:             50,
+      },
+      normalizationPolicy: {
+        allowedServiceIds: BBB_BACKLINK_ALLOWED_SERVICES,
+        blockedPhrases:    [...BBB_BACKLINK_BLOCKED_PHRASES],
+        now,
+      },
+      repository: new DrizzleBacklinkRepository(db),
+      now,
+    });
+
+    // Record a score history snapshot after a successful scheduled run.
+    // Best-effort — never blocks the response.
+    const summary = "outcome" in result && result.outcome === "in_progress" ? null : result as import("@workspace/db").ManualBacklinkIngestionSummary;
+    const snapshotDate = now.toISOString().slice(0, 10);
+    if (summary) {
+      pool.query(
+        `INSERT INTO backlink_score_history
+           (client_id, snapshot_date, authority_score, backlink_count, opportunity_count, won_count)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
+           authority_score   = EXCLUDED.authority_score,
+           backlink_count    = EXCLUDED.backlink_count,
+           opportunity_count = EXCLUDED.opportunity_count,
+           won_count         = EXCLUDED.won_count`,
+        [
+          clientId.trim(),
+          snapshotDate,
+          Math.min(100, Math.max(0, summary.opportunityIds.length)),
+          summary.prospectIds.length,
+          summary.opportunityIds.length,
+          summary.workflowIds.length,
+        ],
+      ).catch(e => console.error("[backlinks] score snapshot insert error:", e));
+    }
+
+    res.json({ ok: true, providerStatus: providerHealth, ...result });
+  } catch (err: any) {
+    console.error("[backlinks] scheduled ingest error:", err);
+    res.status(500).json({ ok: false, error: "ingest_failed", message: err?.message ?? "Unknown error" });
+  }
+  void provider;
+});
+
+// ── GET /api/backlinks/history/score ─────────────────────────────────────────
+
+router.get("/api/backlinks/history/score", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+  const days  = Math.min(90, Math.max(7, Number(req.query.days) || 30));
+  try {
+    const result = await pool.query(
+      `SELECT client_id, snapshot_date::TEXT, authority_score, backlink_count,
+              opportunity_count, won_count, run_id
+       FROM backlink_score_history
+       WHERE client_id = $1
+         AND snapshot_date >= CURRENT_DATE - ($2 || ' days')::INTERVAL
+       ORDER BY snapshot_date ASC
+       LIMIT 90`,
+      [client.id, days],
+    );
+    res.json({ snapshots: result.rows, days });
+  } catch (err) {
+    if (isRelationMissingError(err)) { res.json({ snapshots: [], days }); return; }
+    console.error("[backlinks] scoreHistory error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
+});
+
+// ── GET /api/backlinks/history/summary ───────────────────────────────────────
+
+router.get("/api/backlinks/history/summary", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+  try {
+    const [scheduleRes, countsRes] = await Promise.all([
+      pool.query(
+        `SELECT enabled, frequency, next_run_at, last_run_at, last_success_at,
+                last_run_status, consecutive_failures, max_retries
+         FROM backlink_discovery_schedule
+         WHERE client_id = $1 LIMIT 1`,
+        [client.id],
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE TRUE)                              AS total_runs,
+           COUNT(*) FILTER (WHERE status = 'succeeded')             AS success_runs,
+           COUNT(*) FILTER (WHERE status = 'failed')                AS failed_runs
+         FROM backlink_ingestion_runs
+         WHERE client_id = $1`,
+        [client.id],
+      ),
+    ]);
+    const sched  = scheduleRes.rows[0]  ?? null;
+    const counts = countsRes.rows[0]    ?? { total_runs: 0, success_runs: 0, failed_runs: 0 };
+    res.json({
+      totalRuns:             Number(counts.total_runs),
+      successRuns:           Number(counts.success_runs),
+      failedRuns:            Number(counts.failed_runs),
+      providerUnavailableRuns: 0,
+      lastSuccessAt:         sched?.last_success_at ?? null,
+      lastRunAt:             sched?.last_run_at     ?? null,
+      lastRunStatus:         sched?.last_run_status ?? null,
+      nextScheduledAt:       sched?.next_run_at     ?? null,
+      consecutiveFailures:   sched?.consecutive_failures ?? 0,
+      enabled:               sched?.enabled          ?? false,
+      frequency:             sched?.frequency        ?? null,
+      providerHealth:        _backlinkRegistry.healthReport(),
+    });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ totalRuns: 0, successRuns: 0, failedRuns: 0, providerUnavailableRuns: 0,
+        lastSuccessAt: null, lastRunAt: null, lastRunStatus: null, nextScheduledAt: null,
+        consecutiveFailures: 0, enabled: false, frequency: null,
+        providerHealth: _backlinkRegistry.healthReport() });
+      return;
+    }
+    console.error("[backlinks] historySummary error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
 });
 
 // ── GET /api/backlinks/opportunities ─────────────────────────────────────────

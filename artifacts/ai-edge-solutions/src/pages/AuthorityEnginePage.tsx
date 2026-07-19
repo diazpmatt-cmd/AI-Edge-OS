@@ -13,6 +13,12 @@ import {
   isPageEnd,
   shortRunId,
   runStatusColor,
+  formatRelativeTime,
+  scheduleFrequencyLabel,
+  scheduledRunStatusConfig,
+  buildSparklinePoints,
+  formatScoreDelta,
+  providerHealthColor,
   type BacklinkOpportunityCategoryFE,
   type BacklinkWorkflowStatusFE,
 } from "@/lib/backlink-ui-helpers";
@@ -63,6 +69,33 @@ interface OppDetailResponse {
   opportunity: LiveOpportunity["opportunity"];
   workflow: OppDetailWorkflow | null;
   evidence: OppDetailEvidence[];
+}
+
+// ── C8R-9 types ───────────────────────────────────────────────────────────────
+
+interface DiscoverySchedule {
+  id: string; client_id: string; enabled: boolean; frequency: string;
+  next_run_at: string | null; last_run_at: string | null; last_success_at: string | null;
+  last_run_status: string | null; consecutive_failures: number; max_retries: number;
+  created_at: string; updated_at: string;
+}
+
+interface ScoreSnapshot {
+  client_id: string; snapshot_date: string; authority_score: number;
+  backlink_count: number; opportunity_count: number; won_count: number;
+  run_id: string | null;
+}
+
+interface HistorySummary {
+  totalRuns: number; successRuns: number; failedRuns: number;
+  providerUnavailableRuns: number; lastSuccessAt: string | null;
+  lastRunAt: string | null; lastRunStatus: string | null;
+  nextScheduledAt: string | null; consecutiveFailures: number;
+  enabled: boolean; frequency: string | null;
+  providerHealth?: {
+    overallStatus?: string;
+    providers?: Array<{ id: string; status: string; label: string }>;
+  };
 }
 
 interface CitationDir {
@@ -228,6 +261,12 @@ export default function AuthorityEnginePage() {
   // Runs section
   const [showRuns, setShowRuns] = useState(false);
 
+  // C8R-9: schedule + history state
+  const [schedule, setSchedule]               = useState<DiscoverySchedule | null>(null);
+  const [scoreSnapshots, setScoreSnapshots]   = useState<ScoreSnapshot[]>([]);
+  const [historySummary, setHistorySummary]   = useState<HistorySummary | null>(null);
+  const [historyLoading, setHistoryLoading]   = useState(false);
+
   const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "bbb";
 
   // ── Callbacks ────────────────────────────────────────────────────────────────
@@ -308,6 +347,21 @@ export default function AuthorityEnginePage() {
     }
   }, [apiFetch, fetchOpportunities, fetchRuns, oppCatFilter, oppStatusFilter]);
 
+  const fetchScheduleData = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const [schedRes, summaryRes, snapshotsRes] = await Promise.all([
+        apiFetch<{ schedule: DiscoverySchedule | null }>("/backlinks/schedule"),
+        apiFetch<HistorySummary>("/backlinks/history/summary"),
+        apiFetch<{ snapshots: ScoreSnapshot[]; days: number }>("/backlinks/history/score?days=30"),
+      ]);
+      setSchedule(schedRes.schedule ?? null);
+      setHistorySummary(summaryRes);
+      setScoreSnapshots(snapshotsRes.snapshots ?? []);
+    } catch { /* silent — history widgets show empty */ }
+    finally { setHistoryLoading(false); }
+  }, [apiFetch]);
+
   const handleCatFilter = useCallback((v: BacklinkOpportunityCategoryFE) => {
     setOppCatFilter(v); setOppOffset(0);
   }, []);
@@ -331,6 +385,8 @@ export default function AuthorityEnginePage() {
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
   useEffect(() => { if (selectedOppId) fetchDetail(selectedOppId); }, [selectedOppId, fetchDetail]);
   useEffect(() => { hasMounted.current = true; }, []);
+  // Load schedule + history whenever the backlinks tab becomes active
+  useEffect(() => { if (tab === "backlinks") fetchScheduleData(); }, [tab, fetchScheduleData]);
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
@@ -870,6 +926,127 @@ export default function AuthorityEnginePage() {
           {/* ── Tab: Backlinks ── */}
           {tab === "backlinks" && (
             <div>
+              {/* ── C8R-9: Discovery Status card ── */}
+              {(() => {
+                const sched   = schedule;
+                const summary = historySummary;
+                const ph      = summary?.providerHealth;
+                const phColor = providerHealthColor(ph?.overallStatus);
+                const lastRunCfg = scheduledRunStatusConfig(sched?.last_run_status ?? summary?.lastRunStatus);
+                const nextAt  = sched?.next_run_at ?? summary?.nextScheduledAt;
+                const lastOk  = sched?.last_success_at ?? summary?.lastSuccessAt;
+                const failures = sched?.consecutive_failures ?? summary?.consecutiveFailures ?? 0;
+                const freq    = sched?.frequency ?? summary?.frequency;
+                const enabled = sched?.enabled ?? summary?.enabled ?? false;
+                return (
+                  <div style={{
+                    background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 12, padding: "14px 18px", marginBottom: 16,
+                  }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      marginBottom: 12, flexWrap: "wrap", gap: 8,
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14 }}>🗓️</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>Scheduled Discovery</span>
+                        <span style={{
+                          fontSize: 9, fontWeight: 700,
+                          color: enabled ? "#22C55E" : "#475569",
+                          background: enabled ? "rgba(34,197,94,0.10)" : "rgba(71,85,105,0.15)",
+                          border: `1px solid ${enabled ? "rgba(34,197,94,0.25)" : "rgba(71,85,105,0.25)"}`,
+                          borderRadius: 20, padding: "2px 8px",
+                        }}>{enabled ? "● Enabled" : "○ Disabled"}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {/* Provider health badge */}
+                        {ph && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: phColor,
+                            background: `${phColor}12`, border: `1px solid ${phColor}28`,
+                            borderRadius: 20, padding: "2px 8px",
+                          }}>
+                            {ph.overallStatus === "ready" ? "✓" : ph.overallStatus === "degraded" ? "⚠" : "○"}{" "}
+                            {ph.overallStatus ?? "checking"}
+                          </span>
+                        )}
+                        {freq && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, color: "#94A3B8",
+                            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 20, padding: "2px 8px",
+                          }}>{scheduleFrequencyLabel(freq)}</span>
+                        )}
+                        {historyLoading && (
+                          <span style={{ fontSize: 9, color: "#475569" }}>⟳ loading…</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                      {[
+                        {
+                          label: "Last Successful Run",
+                          value: formatRelativeTime(lastOk),
+                          sub:   lastOk ? new Date(lastOk).toLocaleDateString() : null,
+                          color: lastOk ? "#22C55E" : "#475569",
+                        },
+                        {
+                          label: "Next Scheduled",
+                          value: nextAt && enabled ? formatRelativeTime(new Date(nextAt).getTime() - Date.now() < 0 ? nextAt : nextAt) : "Not scheduled",
+                          sub:   nextAt && enabled ? new Date(nextAt).toLocaleDateString() : null,
+                          color: nextAt && enabled ? "#38BDF8" : "#475569",
+                        },
+                        {
+                          label: "Last Run Status",
+                          value: lastRunCfg.label,
+                          sub:   null,
+                          color: lastRunCfg.color,
+                          icon:  lastRunCfg.icon,
+                        },
+                        {
+                          label: "Consecutive Failures",
+                          value: String(failures),
+                          sub:   failures > 0 ? `max: ${sched?.max_retries ?? summary?.consecutiveFailures ?? 3}` : null,
+                          color: failures === 0 ? "#22C55E" : failures >= 2 ? "#EF4444" : "#F59E0B",
+                        },
+                      ].map(item => (
+                        <div key={item.label} style={{
+                          background: "rgba(255,255,255,0.02)", borderRadius: 8,
+                          padding: "10px 12px", border: "1px solid rgba(255,255,255,0.05)",
+                        }}>
+                          <div style={{ fontSize: 9, color: "#475569", fontWeight: 700,
+                            textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>
+                            {item.label}
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: item.color }}>
+                            {"icon" in item && item.icon ? `${item.icon} ` : ""}{item.value}
+                          </div>
+                          {item.sub && (
+                            <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{item.sub}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Provider list */}
+                    {ph?.providers && ph.providers.length > 0 && (
+                      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {ph.providers.map((p: { id: string; status: string; label: string }) => (
+                          <span key={p.id} style={{
+                            fontSize: 9, fontWeight: 600,
+                            color:      p.status === "configured" ? "#22C55E" : p.status === "fixture" ? "#F59E0B" : "#475569",
+                            background: p.status === "configured" ? "rgba(34,197,94,0.08)" : p.status === "fixture" ? "rgba(245,158,11,0.08)" : "rgba(71,85,105,0.08)",
+                            border:     `1px solid ${p.status === "configured" ? "rgba(34,197,94,0.2)" : p.status === "fixture" ? "rgba(245,158,11,0.2)" : "rgba(71,85,105,0.2)"}`,
+                            borderRadius: 20, padding: "2px 8px",
+                          }}>
+                            {p.label} · {p.status}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Stats row */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 18 }}>
                 {[
@@ -1104,6 +1281,127 @@ export default function AuthorityEnginePage() {
                   }}>Next →</button>
                 </div>
               )}
+
+              {/* ── C8R-9: Historical Authority Trend sparkline ── */}
+              {scoreSnapshots.length >= 2 && (() => {
+                const scores     = scoreSnapshots.map(s => s.authority_score);
+                const counts     = scoreSnapshots.map(s => s.backlink_count);
+                const scorePts   = buildSparklinePoints(scores,  220, 36);
+                const countPts   = buildSparklinePoints(counts,  220, 36);
+                const first      = scoreSnapshots[0]!;
+                const last       = scoreSnapshots[scoreSnapshots.length - 1]!;
+                const delta      = last.authority_score - first.authority_score;
+                const avgScore   = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+                const peakScore  = Math.max(...scores);
+                const trendColor = delta > 0 ? "#22C55E" : delta < 0 ? "#EF4444" : "#64748B";
+                return (
+                  <div style={{
+                    background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: 12, padding: "14px 18px", marginBottom: 16,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13 }}>📈</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>Historical Authority Trend</span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, color: trendColor,
+                          background: `${trendColor}12`, border: `1px solid ${trendColor}25`,
+                          borderRadius: 20, padding: "2px 8px",
+                        }}>{delta > 0 ? "↑" : delta < 0 ? "↓" : "→"} {formatScoreDelta(delta)}</span>
+                      </div>
+                      <span style={{ fontSize: 10, color: "#475569" }}>Last 30 days · {scoreSnapshots.length} snapshots</span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {/* Authority score sparkline */}
+                      <div>
+                        <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.5px",
+                          textTransform: "uppercase", marginBottom: 6 }}>Authority Score</div>
+                        <svg width="100%" viewBox={`0 0 220 36`} preserveAspectRatio="none"
+                          style={{ display: "block", height: 36 }}>
+                          <defs>
+                            <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%"   stopColor="#38BDF8" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+                          <polygon
+                            points={`0,36 ${scorePts} 220,36`}
+                            fill="url(#sparkGrad)"
+                          />
+                          <polyline
+                            points={scorePts}
+                            fill="none"
+                            stroke="#38BDF8"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                          <span style={{ fontSize: 9, color: "#475569" }}>{first.snapshot_date}</span>
+                          <span style={{ fontSize: 9, color: "#475569" }}>{last.snapshot_date}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+                          {[
+                            { label: "Latest",  value: last.authority_score,  color: "#38BDF8" },
+                            { label: "Average", value: avgScore,              color: "#94A3B8" },
+                            { label: "Peak",    value: peakScore,             color: "#F59E0B" },
+                          ].map(m => (
+                            <div key={m.label}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.value}</div>
+                              <div style={{ fontSize: 9, color: "#475569" }}>{m.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Backlink count sparkline */}
+                      <div>
+                        <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.5px",
+                          textTransform: "uppercase", marginBottom: 6 }}>Backlink Count</div>
+                        <svg width="100%" viewBox={`0 0 220 36`} preserveAspectRatio="none"
+                          style={{ display: "block", height: 36 }}>
+                          <defs>
+                            <linearGradient id="countGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%"   stopColor="#22C55E" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#22C55E" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+                          <polygon
+                            points={`0,36 ${countPts} 220,36`}
+                            fill="url(#countGrad)"
+                          />
+                          <polyline
+                            points={countPts}
+                            fill="none"
+                            stroke="#22C55E"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                          <span style={{ fontSize: 9, color: "#475569" }}>{first.snapshot_date}</span>
+                          <span style={{ fontSize: 9, color: "#475569" }}>{last.snapshot_date}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
+                          {[
+                            { label: "Latest",   value: last.backlink_count,               color: "#22C55E" },
+                            { label: "Δ",        value: `${last.backlink_count - first.backlink_count >= 0 ? "+" : ""}${last.backlink_count - first.backlink_count}`, color: "#94A3B8" },
+                            { label: "Opps Won", value: last.won_count,                    color: "#F59E0B" },
+                          ].map(m => (
+                            <div key={m.label}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.value}</div>
+                              <div style={{ fontSize: 9, color: "#475569" }}>{m.label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Ingestion History */}
               <div style={{ marginTop: 4 }}>

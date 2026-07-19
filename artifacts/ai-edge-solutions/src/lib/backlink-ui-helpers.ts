@@ -48,6 +48,91 @@ export function oppCategoryLabel(category: string): string {
     .join(" ");
 }
 
+// ── C8R-9: Scheduling & History helpers ──────────────────────────────────────
+
+/**
+ * Format an ISO timestamp as a short relative-time string.
+ * Examples: "Just now", "14m ago", "3h ago", "5d ago", "Never"
+ */
+export function formatRelativeTime(isoTimestamp: string | Date | null | undefined): string {
+  if (!isoTimestamp) return "Never";
+  const d = typeof isoTimestamp === "string" ? new Date(isoTimestamp) : isoTimestamp;
+  if (isNaN(d.getTime())) return "Unknown";
+  const diffMs  = Date.now() - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60)  return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60)  return `${diffMin}m ago`;
+  const diffH   = Math.floor(diffMin / 60);
+  if (diffH   < 24)  return `${diffH}h ago`;
+  const diffD   = Math.floor(diffH   / 24);
+  if (diffD   < 30)  return `${diffD}d ago`;
+  return `${Math.floor(diffD / 30)}mo ago`;
+}
+
+/** Human-friendly label for a schedule frequency. */
+export function scheduleFrequencyLabel(frequency: string | null | undefined): string {
+  if (!frequency) return "Not set";
+  const labels: Record<string, string> = {
+    daily:    "Daily",
+    weekly:   "Weekly",
+    biweekly: "Every 2 Weeks",
+  };
+  return labels[frequency] ?? frequency;
+}
+
+/** Icon, label, and colour for a scheduled run status. */
+export function scheduledRunStatusConfig(
+  status: string | null | undefined,
+): { icon: string; label: string; color: string } {
+  if (!status) return { icon: "○", label: "Not run yet", color: "#475569" };
+  const map: Record<string, { icon: string; label: string; color: string }> = {
+    succeeded:            { icon: "✓", label: "Succeeded",            color: "#22C55E" },
+    failed:               { icon: "✕", label: "Failed",               color: "#EF4444" },
+    provider_unavailable: { icon: "⚠", label: "Provider Unavailable", color: "#F59E0B" },
+  };
+  return map[status] ?? { icon: "○", label: status, color: "#475569" };
+}
+
+/** Format a score delta as a signed string: "+5" / "-3" / "±0" */
+export function formatScoreDelta(delta: number): string {
+  if (delta > 0) return `+${delta}`;
+  if (delta < 0) return `${delta}`;
+  return "±0";
+}
+
+/**
+ * Build SVG polyline "points" string from an array of numeric values.
+ * Normalises values into a (width × height) viewport.
+ */
+export function buildSparklinePoints(
+  values: readonly number[],
+  width:  number,
+  height: number,
+): string {
+  if (values.length === 0) return "";
+  if (values.length === 1) return `0,${height / 2} ${width},${height / 2}`;
+  const minVal  = Math.min(...values);
+  const maxVal  = Math.max(...values);
+  const range   = maxVal - minVal || 1;
+  const stepX   = width / (values.length - 1);
+  return values
+    .map((v, i) => {
+      const x = Math.round(i * stepX);
+      const y = Math.round(height - ((v - minVal) / range) * height);
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
+/** Provider health status → colour mapping. */
+export function providerHealthColor(overallStatus: string | undefined): string {
+  if (overallStatus === "ready")        return "#22C55E";
+  if (overallStatus === "degraded")     return "#F59E0B";
+  if (overallStatus === "unavailable")  return "#EF4444";
+  return "#64748B";
+}
+
 export function attainabilityColor(score: number): string {
   if (score >= 70) return "#22C55E";
   if (score >= 40) return "#F59E0B";

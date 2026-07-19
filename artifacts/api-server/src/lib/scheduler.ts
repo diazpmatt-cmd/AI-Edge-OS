@@ -5,6 +5,7 @@ import { eq, and, gte, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
+import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
@@ -475,7 +476,7 @@ async function runGbpAuditMonitor(): Promise<void> {
 export { evaluateClientEligibility } from "@workspace/db";
 
 export function startScheduler(): void {
-  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h");
+  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h · backlink-scheduler every 15min");
 
   // ── Post publishing ──
   publishDuePosts().catch((err: unknown) => {
@@ -530,4 +531,22 @@ export function startScheduler(): void {
       logger.error({ err: msg }, "[scheduler] gbp-monitor tick error");
     });
   }, GBP_MONITOR_INTERVAL);
+
+  // ── Backlink Scheduler Monitor (C8R-9) ────────────────────────────────────
+  // Checks backlink_discovery_schedule for due rows every 15 min.
+  // Disabled-by-default: no schedule rows have enabled=true until an admin
+  // calls PUT /api/backlinks/schedule.  Safe to run unconditionally.
+  const BACKLINK_SCHEDULER_INTERVAL = 15 * 60_000;
+
+  runBacklinkSchedulerMonitor().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "[scheduler] startup backlink-scheduler error");
+  });
+
+  setInterval(() => {
+    runBacklinkSchedulerMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] backlink-scheduler tick error");
+    });
+  }, BACKLINK_SCHEDULER_INTERVAL);
 }

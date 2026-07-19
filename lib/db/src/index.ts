@@ -429,6 +429,10 @@ export * from "./backlink-provider-config";
 export * from "./backlink-provider-registry";
 export * from "./dataforseo-backlink-adapter";
 
+// Phase C8R-9: scheduled backlink discovery & historical tracking
+export * from "./backlink-scheduler-config";
+export * from "./backlink-history";
+
 // Competitor Intelligence Engine — canonical entity layer
 export * from "./competitor-types";
 export * from "./competitor-extractor";

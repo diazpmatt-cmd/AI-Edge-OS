@@ -935,6 +935,59 @@ export async function migrateSchema(): Promise<void> {
       ON backlink_ingestion_runs(client_id, status, started_at);
   `);
 
+  // ── Backlink Scheduler & Score History (C8R-9) ────────────────────────────
+  // backlink_discovery_schedule: per-client scheduled discovery state.
+  // One row per client, upserted by the PUT /api/backlinks/schedule endpoint.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS backlink_discovery_schedule (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            TEXT        NOT NULL UNIQUE,
+      enabled              BOOLEAN     NOT NULL DEFAULT FALSE,
+      frequency            TEXT        NOT NULL DEFAULT 'weekly'
+        CHECK (frequency IN ('daily', 'weekly', 'biweekly')),
+      next_run_at          TIMESTAMPTZ,
+      last_run_at          TIMESTAMPTZ,
+      last_success_at      TIMESTAMPTZ,
+      last_run_status      TEXT
+        CHECK (last_run_status IS NULL OR last_run_status IN ('succeeded', 'failed', 'provider_unavailable')),
+      consecutive_failures INTEGER     NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+      max_retries          INTEGER     NOT NULL DEFAULT 3  CHECK (max_retries >= 1),
+      provider_override    TEXT,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_backlink_schedule_due
+      ON backlink_discovery_schedule(next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
+  // backlink_score_history: periodic authority score snapshots for trend tracking.
+  // One row per (client_id, snapshot_date).  90-day retention applied at startup.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS backlink_score_history (
+      id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id         TEXT        NOT NULL,
+      snapshot_date     DATE        NOT NULL,
+      authority_score   INTEGER     NOT NULL DEFAULT 0
+        CHECK (authority_score BETWEEN 0 AND 100),
+      backlink_count    INTEGER     NOT NULL DEFAULT 0 CHECK (backlink_count >= 0),
+      opportunity_count INTEGER     NOT NULL DEFAULT 0,
+      won_count         INTEGER     NOT NULL DEFAULT 0,
+      run_id            TEXT,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_backlink_score_history_client_date
+        UNIQUE (client_id, snapshot_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_backlink_score_history_client_date
+      ON backlink_score_history(client_id, snapshot_date DESC);
+  `);
+
+  // Prune backlink_score_history rows older than 90 days (non-destructive; best-effort).
+  await pool.query(
+    `DELETE FROM backlink_score_history
+     WHERE snapshot_date < CURRENT_DATE - INTERVAL '90 days'`,
+  ).catch(() => { /* ignore if table not yet populated */ });
+
   // ── GBP Audit Engine ───────────────────────────────────────────────────────
   // Canonical production DDL for GBP audit tables.  This is the single source
   // of truth for CREATE TABLE.  If you add a column to lib/db/src/schema/gbp-audit.ts

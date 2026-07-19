@@ -243,6 +243,61 @@ describe("Keyword Gaps — retry / error recovery", () => {
   });
 });
 
+function showsErrorUI(state: HookState): boolean {
+  return state.error === true;
+}
+
+describe("Keyword Gaps — error UI visibility after retry", () => {
+  it("hides retry button and error banner when error=false and gaps are populated", async () => {
+    const failedState = await simulateFetch(() =>
+      Promise.reject(new TypeError("Network request failed")),
+    );
+    expect(showsErrorUI(failedState)).toBe(true);
+
+    const payload: GapsResponse = {
+      hasData: true,
+      gaps: [makeGap()],
+      count: 1,
+    };
+    const retryState = await simulateRetry(failedState, () =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    expect(retryState.error).toBe(false);
+    expect(retryState.gaps.length).toBeGreaterThan(0);
+    expect(showsErrorUI(retryState)).toBe(false);
+  });
+
+  it("error UI visible and error UI hidden are mutually exclusive states", async () => {
+    const payload: GapsResponse = {
+      hasData: true,
+      gaps: [makeGap()],
+      count: 1,
+    };
+
+    const errorState = await simulateFetch(() =>
+      Promise.reject(new TypeError("Network request failed")),
+    );
+    const successState = await simulateFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    expect(showsErrorUI(errorState)).toBe(true);
+    expect(showsErrorUI(successState)).toBe(false);
+    expect(showsErrorUI(errorState)).not.toBe(showsErrorUI(successState));
+  });
+});
+
 describe("Keyword Gaps — error state", () => {
   it("sets error=true and gaps=[] when fetch throws a network error", async () => {
     const { gaps, loading, error } = await simulateFetch(() =>

@@ -342,3 +342,52 @@ describe("Gaps segment badge — error vs. real count", () => {
     });
   });
 });
+
+describe("Gaps view — retry button hidden after successful retry", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("hides the retry button and error banner once the retry succeeds and gaps are populated", async () => {
+    rejectWith(new Error("Network request failed"));
+    await renderAndSwitchToGaps();
+
+    await waitFor(() => {
+      expect(screen.getByText("Couldn't load gaps")).toBeTruthy();
+      expect(screen.getByText("Try again")).toBeTruthy();
+    });
+
+    resolveWith({ hasData: true, gaps: [makeGap()], count: 1 });
+
+    const retryBtn = screen.getByText("Try again").closest("button")!;
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Try again")).toBeNull();
+      expect(screen.queryByText("Couldn't load gaps")).toBeNull();
+      expect(screen.getByText("pest control near me")).toBeTruthy();
+    });
+  });
+
+  it("error UI and success UI are mutually exclusive — both cannot be visible at the same time", async () => {
+    rejectWith(new Error("Network request failed"));
+    await renderAndSwitchToGaps();
+
+    await waitFor(() => {
+      expect(screen.getByText("Try again")).toBeTruthy();
+      expect(screen.queryByText("pest control near me")).toBeNull();
+    });
+
+    resolveWith({ hasData: true, gaps: [makeGap()], count: 1 });
+
+    const retryBtn = screen.getByText("Try again").closest("button")!;
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Try again")).toBeNull();
+      expect(screen.getByText("pest control near me")).toBeTruthy();
+    });
+  });
+});

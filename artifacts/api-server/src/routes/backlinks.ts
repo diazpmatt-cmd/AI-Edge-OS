@@ -17,6 +17,7 @@ import {
   isBacklinkScheduleFrequency,
   calcNextRunAt,
   BACKLINK_SCHEDULE_FREQUENCIES,
+  computePeriodSummaries,
   type BacklinkWorkflowStatus,
   type BacklinkOpportunityCategory,
   type BacklinkProviderHealthState,
@@ -232,13 +233,17 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     if (summary) {
       pool.query(
         `INSERT INTO backlink_score_history
-           (client_id, snapshot_date, authority_score, backlink_count, opportunity_count, won_count)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (client_id, snapshot_date, authority_score, backlink_count, opportunity_count,
+            won_count, new_count, lost_count, referring_domain_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
-           authority_score   = EXCLUDED.authority_score,
-           backlink_count    = EXCLUDED.backlink_count,
-           opportunity_count = EXCLUDED.opportunity_count,
-           won_count         = EXCLUDED.won_count`,
+           authority_score         = EXCLUDED.authority_score,
+           backlink_count          = EXCLUDED.backlink_count,
+           opportunity_count       = EXCLUDED.opportunity_count,
+           won_count               = EXCLUDED.won_count,
+           new_count               = EXCLUDED.new_count,
+           lost_count              = EXCLUDED.lost_count,
+           referring_domain_count  = EXCLUDED.referring_domain_count`,
         [
           clientId.trim(),
           snapshotDate,
@@ -246,6 +251,9 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
           summary.prospectIds.length,
           summary.opportunityIds.length,
           summary.workflowIds.length,
+          0, // new_count: v1 placeholder (requires live provider delta tracking)
+          0, // lost_count: v1 placeholder (requires live provider delta tracking)
+          0, // referring_domain_count: v1 placeholder (requires live DA provider)
         ],
       ).catch(e => console.error("[backlinks] score snapshot insert error:", e));
     }
@@ -267,7 +275,10 @@ router.get("/api/backlinks/history/score", async (req, res): Promise<void> => {
   try {
     const result = await pool.query(
       `SELECT client_id, snapshot_date::TEXT, authority_score, backlink_count,
-              opportunity_count, won_count, run_id
+              opportunity_count, won_count, run_id,
+              COALESCE(new_count, 0)              AS new_count,
+              COALESCE(lost_count, 0)             AS lost_count,
+              COALESCE(referring_domain_count, 0) AS referring_domain_count
        FROM backlink_score_history
        WHERE client_id = $1
          AND snapshot_date >= CURRENT_DATE - ($2 || ' days')::INTERVAL
@@ -333,6 +344,110 @@ router.get("/api/backlinks/history/summary", async (req, res): Promise<void> => 
       return;
     }
     console.error("[backlinks] historySummary error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
+});
+
+// ── GET /api/backlinks/history/trend ─────────────────────────────────────────
+// Returns per-period (7d/30d/90d) authority + backlink delta summaries.
+
+router.get("/api/backlinks/history/trend", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+  try {
+    const result = await pool.query(
+      `SELECT client_id, snapshot_date::TEXT, authority_score, backlink_count,
+              opportunity_count, won_count, run_id,
+              COALESCE(new_count, 0)              AS new_count,
+              COALESCE(lost_count, 0)             AS lost_count,
+              COALESCE(referring_domain_count, 0) AS referring_domain_count
+       FROM backlink_score_history
+       WHERE client_id = $1
+         AND snapshot_date >= CURRENT_DATE - '90 days'::INTERVAL
+       ORDER BY snapshot_date ASC
+       LIMIT 90`,
+      [client.id],
+    );
+    const snapshots = result.rows.map((r: any) => ({
+      clientId:             r.client_id,
+      snapshotDate:         r.snapshot_date,
+      authorityScore:       Number(r.authority_score),
+      backlinkCount:        Number(r.backlink_count),
+      opportunityCount:     Number(r.opportunity_count),
+      wonCount:             Number(r.won_count),
+      newCount:             Number(r.new_count),
+      lostCount:            Number(r.lost_count),
+      referringDomainCount: Number(r.referring_domain_count),
+      runId:                r.run_id ?? null,
+    }));
+    const periods = computePeriodSummaries(snapshots);
+    res.json({ periods, snapshotCount: snapshots.length });
+  } catch (err) {
+    if (isRelationMissingError(err)) { res.json({ periods: [], snapshotCount: 0 }); return; }
+    console.error("[backlinks] historyTrend error:", err);
+    res.status(500).json({ error: "db_error" });
+  }
+});
+
+// ── GET /api/backlinks/history/competitive ────────────────────────────────────
+// Side-by-side comparison of client vs. top known competitors.
+
+router.get("/api/backlinks/history/competitive", async (req, res): Promise<void> => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+  try {
+    const [competitorsRes, selfRes] = await Promise.all([
+      pool.query(
+        `SELECT domain, business_name,
+                COALESCE(domain_authority, 0)         AS domain_authority,
+                COALESCE(backlink_count, 0)            AS backlink_count,
+                COALESCE(citation_score, 0)            AS citation_score,
+                COALESCE(opportunity_score, 0)         AS opportunity_score,
+                COALESCE(organic_visibility_score, 0)  AS organic_visibility_score
+         FROM competitors
+         WHERE client_id = $1 AND canonical_status = 'active'
+           AND (domain_authority IS NOT NULL OR backlink_count IS NOT NULL)
+         ORDER BY COALESCE(domain_authority, 0) DESC
+         LIMIT 10`,
+        [client.id],
+      ),
+      pool.query(
+        `SELECT authority_score, backlink_count, opportunity_count, won_count,
+                COALESCE(referring_domain_count, 0) AS referring_domain_count
+         FROM backlink_score_history
+         WHERE client_id = $1
+         ORDER BY snapshot_date DESC
+         LIMIT 1`,
+        [client.id],
+      ),
+    ]);
+    const selfRow = selfRes.rows[0];
+    res.json({
+      client: {
+        authorityScore:       Number(selfRow?.authority_score          ?? 0),
+        backlinkCount:        Number(selfRow?.backlink_count           ?? 0),
+        referringDomainCount: Number(selfRow?.referring_domain_count   ?? 0),
+        opportunityCount:     Number(selfRow?.opportunity_count        ?? 0),
+        wonCount:             Number(selfRow?.won_count                ?? 0),
+      },
+      competitors: competitorsRes.rows.map((r: any) => ({
+        domain:                 r.domain,
+        businessName:           r.business_name ?? null,
+        authorityScore:         Number(r.domain_authority),
+        backlinkCount:          Number(r.backlink_count),
+        citationScore:          Number(r.citation_score),
+        opportunityScore:       Number(r.opportunity_score),
+        organicVisibilityScore: Number(r.organic_visibility_score),
+      })),
+    });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ client: { authorityScore: 0, backlinkCount: 0, referringDomainCount: 0, opportunityCount: 0, wonCount: 0 }, competitors: [] });
+      return;
+    }
+    console.error("[backlinks] competitive error:", err);
     res.status(500).json({ error: "db_error" });
   }
 });

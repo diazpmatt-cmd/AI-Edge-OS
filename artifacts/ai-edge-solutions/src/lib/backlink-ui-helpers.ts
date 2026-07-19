@@ -172,3 +172,28 @@ export function runStatusColor(status: string): string {
   if (status === "in_progress" || status === "running") return "#38BDF8";
   return "#64748B";
 }
+
+// ── C8R-9: Period summary & competitive comparison helpers ────────────────────
+
+/** Human-readable label for a period expressed in days. */
+export function computePeriodLabel(days: number): string {
+  const labels: Record<number, string> = { 7: "7-Day", 30: "30-Day", 90: "90-Day" };
+  return labels[days] ?? `${days}-Day`;
+}
+
+/**
+ * Colour for a numeric delta value.
+ * pass inverted=true when a positive delta is *bad* (e.g. lost backlinks).
+ */
+export function periodDeltaColor(delta: number, inverted = false): string {
+  if (delta === 0) return "#64748B";
+  const positive = delta > 0;
+  return (positive !== inverted) ? "#22C55E" : "#EF4444";
+}
+
+/** Arrow icon for a trend direction string ("up" | "down" | "flat" | "unknown"). */
+export function competitorTrendIcon(direction: string): string {
+  if (direction === "up")   return "↑";
+  if (direction === "down") return "↓";
+  return "→";
+}

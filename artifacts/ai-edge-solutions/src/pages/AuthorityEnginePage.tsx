@@ -19,6 +19,9 @@ import {
   buildSparklinePoints,
   formatScoreDelta,
   providerHealthColor,
+  computePeriodLabel,
+  periodDeltaColor,
+  competitorTrendIcon,
   type BacklinkOpportunityCategoryFE,
   type BacklinkWorkflowStatusFE,
 } from "@/lib/backlink-ui-helpers";
@@ -84,6 +87,28 @@ interface ScoreSnapshot {
   client_id: string; snapshot_date: string; authority_score: number;
   backlink_count: number; opportunity_count: number; won_count: number;
   run_id: string | null;
+  new_count: number; lost_count: number; referring_domain_count: number;
+}
+
+interface BacklinkTrendPeriod {
+  periodDays: number; authorityDelta: number; backlinkDelta: number;
+  referringDomainDelta: number; opportunityDelta: number;
+  newBacklinks: number; lostBacklinks: number;
+  direction: "up" | "down" | "flat"; snapshotsInWindow: number;
+}
+
+interface CompetitorBenchmark {
+  domain: string; businessName: string | null;
+  authorityScore: number; backlinkCount: number; citationScore: number;
+  opportunityScore: number; organicVisibilityScore: number;
+}
+
+interface CompetitiveComparisonResult {
+  client: {
+    authorityScore: number; backlinkCount: number;
+    referringDomainCount: number; opportunityCount: number; wonCount: number;
+  };
+  competitors: CompetitorBenchmark[];
 }
 
 interface HistorySummary {
@@ -267,6 +292,10 @@ export default function AuthorityEnginePage() {
   const [historySummary, setHistorySummary]   = useState<HistorySummary | null>(null);
   const [historyLoading, setHistoryLoading]   = useState(false);
 
+  // C8R-9: period trend summaries + competitive comparison
+  const [trendPeriods, setTrendPeriods]           = useState<BacklinkTrendPeriod[]>([]);
+  const [competitiveSummary, setCompetitiveSummary] = useState<CompetitiveComparisonResult | null>(null);
+
   const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "bbb";
 
   // ── Callbacks ────────────────────────────────────────────────────────────────
@@ -350,14 +379,18 @@ export default function AuthorityEnginePage() {
   const fetchScheduleData = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const [schedRes, summaryRes, snapshotsRes] = await Promise.all([
+      const [schedRes, summaryRes, snapshotsRes, trendRes, competitiveRes] = await Promise.all([
         apiFetch<{ schedule: DiscoverySchedule | null }>("/backlinks/schedule"),
         apiFetch<HistorySummary>("/backlinks/history/summary"),
         apiFetch<{ snapshots: ScoreSnapshot[]; days: number }>("/backlinks/history/score?days=30"),
+        apiFetch<{ periods: BacklinkTrendPeriod[]; snapshotCount: number }>("/backlinks/history/trend"),
+        apiFetch<CompetitiveComparisonResult>("/backlinks/history/competitive"),
       ]);
       setSchedule(schedRes.schedule ?? null);
       setHistorySummary(summaryRes);
       setScoreSnapshots(snapshotsRes.snapshots ?? []);
+      setTrendPeriods((trendRes as any).periods ?? []);
+      setCompetitiveSummary(competitiveRes as CompetitiveComparisonResult);
     } catch { /* silent — history widgets show empty */ }
     finally { setHistoryLoading(false); }
   }, [apiFetch]);
@@ -1399,6 +1432,132 @@ export default function AuthorityEnginePage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── C8R-9: Period Trend Summary (7d / 30d / 90d) ── */}
+              {trendPeriods.length > 0 && (
+                <div style={{
+                  background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 12, padding: "14px 18px", marginBottom: 16,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 13 }}>🕐</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>Historical Trend Analysis</span>
+                    <span style={{ fontSize: 10, color: "#475569" }}>7d · 30d · 90d windows</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                    {trendPeriods.map(p => {
+                      const dirColor = p.direction === "up" ? "#22C55E" : p.direction === "down" ? "#EF4444" : "#64748B";
+                      const dirIcon  = competitorTrendIcon(p.direction);
+                      return (
+                        <div key={p.periodDays} style={{
+                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 10, padding: "12px 14px",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#CBD5E1" }}>{computePeriodLabel(p.periodDays)}</span>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: dirColor,
+                              background: `${dirColor}12`, border: `1px solid ${dirColor}28`,
+                              borderRadius: 20, padding: "1px 7px",
+                            }}>{dirIcon} {p.direction}</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                            {[
+                              { label: "Authority Δ",   value: formatScoreDelta(p.authorityDelta),        color: periodDeltaColor(p.authorityDelta) },
+                              { label: "Backlinks Δ",   value: formatScoreDelta(p.backlinkDelta),         color: periodDeltaColor(p.backlinkDelta) },
+                              { label: "Opps Δ",        value: formatScoreDelta(p.opportunityDelta),      color: periodDeltaColor(p.opportunityDelta) },
+                              { label: "New Links",     value: `+${p.newBacklinks}`,                      color: p.newBacklinks > 0 ? "#22C55E" : "#64748B" },
+                              { label: "Lost Links",    value: `-${p.lostBacklinks}`,                     color: p.lostBacklinks > 0 ? "#EF4444" : "#64748B" },
+                              { label: "Ref. Domains Δ", value: formatScoreDelta(p.referringDomainDelta), color: periodDeltaColor(p.referringDomainDelta) },
+                            ].map(m => (
+                              <div key={m.label}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.value}</div>
+                                <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>{m.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ marginTop: 8, fontSize: 9, color: "rgba(100,116,139,0.55)" }}>
+                            {p.snapshotsInWindow} snapshot{p.snapshotsInWindow !== 1 ? "s" : ""} in window
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── C8R-9: Competitive Benchmark Table ── */}
+              {competitiveSummary && (() => {
+                const { client: self, competitors } = competitiveSummary;
+                const allRows = [
+                  { domain: "bedbugsbeyond.com", businessName: "Bed Bugs & Beyond (You)", authorityScore: self.authorityScore, backlinkCount: self.backlinkCount, citationScore: null as number | null, opportunityScore: self.opportunityCount, isSelf: true },
+                  ...competitors.map(c => ({ ...c, citationScore: c.citationScore as number | null, isSelf: false })),
+                ];
+                if (allRows.length <= 1 && competitors.length === 0) return null;
+                return (
+                  <div style={{
+                    background: "rgba(11,22,41,0.8)", border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: 12, padding: "14px 18px", marginBottom: 16,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: 13 }}>⚔️</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>Competitive Benchmark</span>
+                      <span style={{ fontSize: 10, color: "#475569" }}>{competitors.length} competitor{competitors.length !== 1 ? "s" : ""} tracked</span>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <div style={{ minWidth: 540 }}>
+                        {/* Header */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 80px 70px 70px", gap: 8,
+                          padding: "6px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          {["Domain / Name", "Auth.", "Backlinks", "Citation", "Opps"].map(h => (
+                            <div key={h} style={{ fontSize: 9, fontWeight: 700, color: "rgba(100,116,139,0.7)",
+                              letterSpacing: "0.4px", textTransform: "uppercase" }}>{h}</div>
+                          ))}
+                        </div>
+                        {/* Rows */}
+                        {allRows.map((row, i) => (
+                          <div key={row.domain} style={{
+                            display: "grid", gridTemplateColumns: "1fr 60px 80px 70px 70px",
+                            gap: 8, padding: "9px 10px", alignItems: "center",
+                            background: row.isSelf ? "rgba(56,189,248,0.04)" : (i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent"),
+                            borderBottom: "1px solid rgba(255,255,255,0.03)",
+                            border: row.isSelf ? "1px solid rgba(56,189,248,0.15)" : undefined,
+                            borderRadius: row.isSelf ? 6 : undefined,
+                          }}>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: row.isSelf ? 700 : 500,
+                                color: row.isSelf ? "#38BDF8" : "#CBD5E1",
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {row.businessName ?? row.domain}
+                              </div>
+                              {row.businessName && (
+                                <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>{row.domain}</div>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: row.authorityScore >= 40 ? "#22C55E" : "#94A3B8" }}>
+                              {row.authorityScore || "—"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                              {row.backlinkCount > 0 ? row.backlinkCount.toLocaleString() : "—"}
+                            </div>
+                            <div style={{ fontSize: 11, color: row.citationScore != null && row.citationScore > 0 ? "#38BDF8" : "#475569" }}>
+                              {row.citationScore != null && row.citationScore > 0 ? row.citationScore : "—"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                              {row.opportunityScore > 0 ? row.opportunityScore : "—"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {competitors.length === 0 && (
+                      <div style={{ padding: "10px 4px 2px", fontSize: 10, color: "#475569" }}>
+                        No competitor data available yet. Competitors will appear after the first discovery run.
+                      </div>
+                    )}
                   </div>
                 );
               })()}

@@ -988,6 +988,17 @@ export async function migrateSchema(): Promise<void> {
      WHERE snapshot_date < CURRENT_DATE - INTERVAL '90 days'`,
   ).catch(() => { /* ignore if table not yet populated */ });
 
+  // C8R-9 history extension: new_count, lost_count, referring_domain_count columns.
+  // Additive ALTER TABLE guards — safe to run on existing deployments.
+  await pool.query(`
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS new_count              INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS lost_count             INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS referring_domain_count INTEGER NOT NULL DEFAULT 0;
+  `).catch(() => { /* ignore if table doesn't exist yet — CREATE TABLE above will include them next run */ });
+
   // ── GBP Audit Engine ───────────────────────────────────────────────────────
   // Canonical production DDL for GBP audit tables.  This is the single source
   // of truth for CREATE TABLE.  If you add a column to lib/db/src/schema/gbp-audit.ts

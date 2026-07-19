@@ -12,19 +12,65 @@
 
 /** One persisted row of backlink_score_history. */
 export interface BacklinkScoreSnapshot {
-  readonly clientId:         string;
+  readonly clientId:              string;
   /** ISO date string "YYYY-MM-DD" */
-  readonly snapshotDate:     string;
+  readonly snapshotDate:          string;
   /** Overall backlink authority score 0–100 */
-  readonly authorityScore:   number;
+  readonly authorityScore:        number;
   /** Total backlink / referring-domain count observed */
-  readonly backlinkCount:    number;
+  readonly backlinkCount:         number;
   /** Total open opportunity count at snapshot time */
-  readonly opportunityCount: number;
+  readonly opportunityCount:      number;
   /** Total "won" opportunities at snapshot time */
-  readonly wonCount:         number;
+  readonly wonCount:              number;
+  /** New backlinks gained since previous snapshot (v1: always 0 until live DA provider) */
+  readonly newCount:              number;
+  /** Backlinks lost since previous snapshot (v1: always 0 until live DA provider) */
+  readonly lostCount:             number;
+  /** Unique referring domains at snapshot time (v1: always 0 until live DA provider) */
+  readonly referringDomainCount:  number;
   /** Ingestion run ID that produced this snapshot, or null if manually recorded */
-  readonly runId:            string | null;
+  readonly runId:                 string | null;
+}
+
+// ── Period summaries ──────────────────────────────────────────────────────────
+
+export interface BacklinkPeriodSummary {
+  /** Window size in days (e.g. 7, 30, 90) */
+  readonly periodDays:            number;
+  /** Authority score delta: latest − baseline. */
+  readonly authorityDelta:        number;
+  /** Backlink count delta: latest − baseline. */
+  readonly backlinkDelta:         number;
+  /** Referring domain count delta: latest − baseline. */
+  readonly referringDomainDelta:  number;
+  /** Opportunity count delta: latest − baseline. */
+  readonly opportunityDelta:      number;
+  /** Sum of new_count for all snapshots within the window. */
+  readonly newBacklinks:          number;
+  /** Sum of lost_count for all snapshots within the window. */
+  readonly lostBacklinks:         number;
+  /** Trend direction driven by authorityDelta. */
+  readonly direction:             BacklinkTrendDirection;
+  /** Number of snapshots present within the window (inclusive of baseline). */
+  readonly snapshotsInWindow:     number;
+}
+
+// ── Competitive comparison ────────────────────────────────────────────────────
+
+export interface BacklinkCompetitorComparison {
+  readonly domain:                  string;
+  readonly businessName:            string | null;
+  /** Domain authority 0–100 from competitors table (NULL stored as 0). */
+  readonly authorityScore:          number;
+  /** Total backlink count from competitors table (NULL stored as 0). */
+  readonly backlinkCount:           number;
+  /** Citation score 0–100 from competitors table (NULL stored as 0). */
+  readonly citationScore:           number;
+  /** Opportunity score from competitors table. */
+  readonly opportunityScore:        number;
+  /** Organic visibility score from competitors table (NULL stored as 0). */
+  readonly organicVisibilityScore:  number;
 }
 
 // ── Trend ─────────────────────────────────────────────────────────────────────
@@ -84,6 +130,66 @@ export function computeBacklinkScoreTrend(
                      "flat";
 
   return { direction, scoreDelta, backlinkCountDelta, latest, earliest, snapshotCount: snapshots.length, peakScore, avgScore };
+}
+
+/**
+ * Compute period summaries (7-day, 30-day, 90-day) from an ordered (oldest-first)
+ * array of BacklinkScoreSnapshot records.
+ *
+ * For each period N:
+ *  - Baseline: the latest snapshot whose date is ≤ (now − N days).
+ *    Falls back to the oldest snapshot if none qualify.
+ *  - Latest: the most recent snapshot in the array.
+ *  - Deltas: latest − baseline for authority, backlinkCount, referringDomainCount, opportunityCount.
+ *  - newBacklinks / lostBacklinks: sum of newCount / lostCount for snapshots AFTER the baseline.
+ */
+export function computePeriodSummaries(
+  snapshots:  readonly BacklinkScoreSnapshot[],
+  periodDays: readonly number[] = [7, 30, 90],
+  now:        Date              = new Date(),
+): BacklinkPeriodSummary[] {
+  if (snapshots.length === 0) return [];
+  const latest = snapshots[snapshots.length - 1]!;
+
+  return periodDays.map(days => {
+    const cutoffDate = new Date(now.getTime() - days * 86_400_000);
+    const cutoffStr  = cutoffDate.toISOString().slice(0, 10);
+
+    // Find the latest snapshot on or before the cutoff (scanning from oldest end).
+    let baseline: BacklinkScoreSnapshot = snapshots[0]!;
+    for (let i = 0; i < snapshots.length; i++) {
+      if (snapshots[i]!.snapshotDate <= cutoffStr) {
+        baseline = snapshots[i]!;
+      } else {
+        break;
+      }
+    }
+
+    const authorityDelta        = latest.authorityScore        - baseline.authorityScore;
+    const backlinkDelta         = latest.backlinkCount         - baseline.backlinkCount;
+    const referringDomainDelta  = latest.referringDomainCount  - baseline.referringDomainCount;
+    const opportunityDelta      = latest.opportunityCount      - baseline.opportunityCount;
+
+    const windowSnapshots = snapshots.filter(s => s.snapshotDate > baseline.snapshotDate);
+    const newBacklinks    = windowSnapshots.reduce((a, s) => a + s.newCount,  0);
+    const lostBacklinks   = windowSnapshots.reduce((a, s) => a + s.lostCount, 0);
+
+    const direction: BacklinkTrendDirection =
+      authorityDelta > 0 ? "up" :
+      authorityDelta < 0 ? "down" : "flat";
+
+    return {
+      periodDays,
+      authorityDelta,
+      backlinkDelta,
+      referringDomainDelta,
+      opportunityDelta,
+      newBacklinks,
+      lostBacklinks,
+      direction,
+      snapshotsInWindow: windowSnapshots.length + 1,
+    } as unknown as BacklinkPeriodSummary;
+  }).map((s, i) => ({ ...s, periodDays: periodDays[i]! }));
 }
 
 // ── Run history summary ───────────────────────────────────────────────────────

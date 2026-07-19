@@ -2468,7 +2468,7 @@ export default function CompetitorIntelligencePage() {
                 margin: 0, fontSize: 22, fontWeight: 900,
                 color: "#FFFFFF", letterSpacing: "-0.3px",
               }}>
-                Competitor Intelligence
+                Competitive Edge Intelligence
               </h1>
               <div style={{ fontSize: 11, color: "rgba(148,163,184,0.55)", marginTop: 2 }}>
                 Keyword gap analysis &amp; market positioning · powered by Discovery Engine

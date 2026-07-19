@@ -345,6 +345,66 @@ export class DrizzleCompetitorRepository {
     };
   }
 
+  // ── Score write-back ─────────────────────────────────────────────────────────
+
+  /**
+   * Persist externally-derived scores onto a canonical competitor row.
+   *
+   * Only the supplied keys are written — undefined keys are skipped entirely.
+   * Nullable score fields accept null to explicitly clear a stale score.
+   * `confidenceScore` is non-nullable (Postgres NOT NULL) and is therefore
+   * only accepted as a number; undefined means "do not change".
+   *
+   * Tenant isolation: query is always scoped to (client_id, domain).
+   *
+   * Confidence score formula (for callers that compute it):
+   *   Base:           10   SERP signal confirmed the domain exists
+   *   Multi-signal:  +10   keywordGapCount ≥ 3 (3+ keywords confirm)
+   *                  +5    keywordGapCount = 2  (2 keywords)
+   *   SERP position: +5    topKeywordRank ≤ 5  (top-5 presence)
+   *   Business name: +10   name was extracted, not falling back to domain
+   *   Location data: +5    city or state was populated from signal
+   *   Category:      +5    primaryCategory was populated
+   *   Cap: 70
+   */
+  async updateScores(
+    clientId: string,
+    domain: string,
+    scores: {
+      citationScore?:      number | null;
+      domainAuthority?:    number | null;
+      backlinkCount?:      number | null;
+      aiVisibilityScore?:  number | null;
+      localPresenceScore?: number | null;
+      gbpHealthScore?:     number | null;
+      confidenceScore?:    number;
+    },
+  ): Promise<void> {
+    // Build a type-safe partial SET using the Drizzle InsertCompetitor type.
+    // Only supplied keys are included — undefined means "do not touch".
+    const patch: Partial<InsertCompetitor> = { updatedAt: new Date() };
+
+    if ("citationScore"      in scores) patch.citationScore      = scores.citationScore      ?? null;
+    if ("domainAuthority"    in scores) patch.domainAuthority    = scores.domainAuthority    ?? null;
+    if ("backlinkCount"      in scores) patch.backlinkCount      = scores.backlinkCount      ?? null;
+    if ("aiVisibilityScore"  in scores) patch.aiVisibilityScore  = scores.aiVisibilityScore  ?? null;
+    if ("localPresenceScore" in scores) patch.localPresenceScore = scores.localPresenceScore ?? null;
+    if ("gbpHealthScore"     in scores) patch.gbpHealthScore     = scores.gbpHealthScore     ?? null;
+    if ("confidenceScore" in scores && scores.confidenceScore !== undefined) {
+      patch.confidenceScore = scores.confidenceScore;
+    }
+
+    if (Object.keys(patch).length <= 1) return; // nothing to update beyond updatedAt
+
+    await this.db
+      .update(competitorsTable)
+      .set(patch)
+      .where(and(
+        eq(competitorsTable.clientId, clientId),
+        eq(competitorsTable.domain, domain),
+      ));
+  }
+
   // ── Write helpers ─────────────────────────────────────────────────────────────
 
   async suppress(clientId: string, domain: string): Promise<void> {

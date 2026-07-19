@@ -2,7 +2,7 @@
  * Competitor Discovery Service — Phase 3 integration smoke test.
  *
  * Exercises the full extraction pipeline against the live dev DB:
- *   discovery_signals (seeded by Phase 3 test data) →
+ *   discovery_signals (seeded by beforeAll fixture) →
  *   extractCompetitorsFromSignals() →
  *   DrizzleCompetitorRepository.upsertMany() →
  *   competitors table
@@ -10,20 +10,84 @@
  * Phase 3E: verifies www-dedup (10 signals → 6 unique competitors).
  * Phase 3D: verifies provenance fields on upserted rows.
  *
- * This test does NOT seed its own data — it expects the test-client
- * snapshot seeded during Phase 3 development to be present in the DB.
- * It cleans up after itself by removing test-client competitors.
+ * Fixture layout (10 signals → 6 unique domains after normalization):
+ *   arrowexterminators.com  ×3  (includes 1 www. prefix variant) → rank 1, gaps 3 → critical
+ *   orkin.com               ×2                                    → rank 1, gaps 2 → high
+ *   terminix.com            ×1                                    → rank 3, gaps 1 → high
+ *   massey.com              ×1                                    → rank 5, gaps 1 → high
+ *   bugbusters.com          ×1                                    → rank 7, gaps 1 → high
+ *   pestmaster.com          ×2                                    → rank 4, gaps 2 → high
+ *
+ * beforeAll seeds the snapshot + signals; afterAll cleans up everything.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { pool } from "@workspace/db";
 import { CompetitorDiscoveryService } from "../lib/competitor-discovery-service.js";
 
-const TEST_CLIENT = "test-client";
+const TEST_CLIENT   = "test-client";
+const TEST_SNAPSHOT = "run::test-client::2026-w29";
+
+// ── Fixture helpers ────────────────────────────────────────────────────────────
+
+async function seedSnapshot(): Promise<void> {
+  await pool.query(
+    `INSERT INTO discovery_snapshots
+       (id, client_id, week_label, status)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (id) DO NOTHING`,
+    [TEST_SNAPSHOT, TEST_CLIENT, "2026-w29", "complete"],
+  );
+}
+
+async function seedSignal(
+  id: string,
+  keyword: string,
+  competitorDomain: string,
+  rank: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO discovery_signals
+       (id, snapshot_id, client_id, signal_type, source,
+        raw_value, normalized_value, intent,
+        competitor_rank, raw_provider_data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      id,
+      TEST_SNAPSHOT,
+      TEST_CLIENT,
+      "keyword_gap",
+      "dataforseo_serp",
+      keyword,
+      keyword,
+      "transactional",
+      rank,
+      JSON.stringify({ topCompetitorDomain: competitorDomain }),
+    ],
+  );
+}
+
+beforeAll(async () => {
+  await seedSnapshot();
+
+  // 10 signals that produce 6 unique competitors after domain normalization:
+  //   www.arrowexterminators.com (sig-2) collapses into arrowexterminators.com
+  await seedSignal("sig::tc::1", "pest control atlanta",   "arrowexterminators.com",      1);
+  await seedSignal("sig::tc::2", "exterminator near me",   "www.arrowexterminators.com",  2);
+  await seedSignal("sig::tc::3", "termite treatment",      "arrowexterminators.com",      1);
+  await seedSignal("sig::tc::4", "ant control service",    "orkin.com",                   1);
+  await seedSignal("sig::tc::5", "rodent removal service", "orkin.com",                   3);
+  await seedSignal("sig::tc::6", "termite inspection",     "terminix.com",                3);
+  await seedSignal("sig::tc::7", "flea treatment",         "massey.com",                  5);
+  await seedSignal("sig::tc::8", "bed bug treatment",      "bugbusters.com",              7);
+  await seedSignal("sig::tc::9", "mosquito control",       "pestmaster.com",              4);
+  await seedSignal("sig::tc::10","wasp removal service",   "pestmaster.com",              6);
+});
 
 afterAll(async () => {
-  await pool.query(`DELETE FROM competitors WHERE client_id = $1`, [TEST_CLIENT]);
-  await pool.query(`DELETE FROM discovery_signals WHERE client_id = $1`, [TEST_CLIENT]);
+  await pool.query(`DELETE FROM competitors        WHERE client_id = $1`, [TEST_CLIENT]);
+  await pool.query(`DELETE FROM discovery_signals  WHERE client_id = $1`, [TEST_CLIENT]);
   await pool.query(`DELETE FROM discovery_snapshots WHERE client_id = $1`, [TEST_CLIENT]);
 });
 

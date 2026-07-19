@@ -1,5 +1,5 @@
 /**
- * Competitor Discovery Service — Phase 3A
+ * Competitor Discovery Service — Phase 3A / P6.1
  *
  * Reads the most recent discovery snapshot for a tenant, maps every signal
  * that carries competitor domain data into NormalizedCompetitor entities,
@@ -15,7 +15,21 @@
  * Phase 3D — Provenance:
  * Every upserted entity carries discoveredProvider="dataforseo_serp",
  * providerMetadata={snapshotId, keyword}, firstSeenAt, lastSeenAt, and
- * confidenceScore=10 (SERP-only baseline). Future engines raise the score.
+ * confidenceScore=10 (SERP-only baseline).
+ *
+ * Phase P6.1 — Confidence Elevation:
+ * After upsertMany() completes, a fire-and-forget confidence sync pass
+ * elevates confidenceScore above the 10-point baseline using signal richness
+ * from the extraction data (no new external API calls).
+ *
+ * Confidence formula (cap 70):
+ *   Base:           10  SERP signal confirmed domain exists
+ *   Multi-signal:  +10  keywordGapCount ≥ 3  (3+ keywords confirm the domain)
+ *                  +5   keywordGapCount = 2  (2 keywords confirm)
+ *   SERP position: +5   topKeywordRank ≤ 5  (top-5 visibility)
+ *   Business name: +10  name was extracted, not falling back to domain string
+ *   Location data: +5   city or state was populated from signal data
+ *   Category:      +5   primaryCategory was populated from signal data
  */
 
 import {
@@ -24,7 +38,7 @@ import {
   extractCompetitorsFromSignals,
   DrizzleCompetitorRepository,
 } from "@workspace/db";
-import type { SignalRow } from "@workspace/db";
+import type { SignalRow, NormalizedCompetitor } from "@workspace/db";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +187,13 @@ export class CompetitorDiscoveryService {
       }
     }
 
+    // ── Step 6: Elevate confidence scores (P6.1, fire-and-forget) ────────────
+    // Computes signal-richness-based confidence for each entity and persists
+    // it when higher than the SERP baseline of 10. Never blocks the return.
+    this.elevateConfidenceScores(clientId, entities, repo).catch(err => {
+      console.error("[competitor-discovery] confidence sync error:", err);
+    });
+
     return {
       clientId,
       snapshotId,
@@ -183,6 +204,60 @@ export class CompetitorDiscoveryService {
       duplicateGroups,
       processingTimeMs: Date.now() - startedAt,
     };
+  }
+
+  // ── Private: P6.1 confidence elevation ────────────────────────────────────
+
+  /**
+   * For each extracted entity whose derived confidence exceeds the current
+   * stored value, persist the elevated score via updateScores().
+   *
+   * This is always called fire-and-forget — errors are logged, never thrown.
+   */
+  private async elevateConfidenceScores(
+    clientId: string,
+    entities: NormalizedCompetitor[],
+    repo: DrizzleCompetitorRepository,
+  ): Promise<void> {
+    for (const entity of entities) {
+      const derived = this.deriveConfidenceScore(entity);
+      if (derived > (entity.confidenceScore ?? 10)) {
+        await repo.updateScores(clientId, entity.domain, {
+          confidenceScore: derived,
+        });
+      }
+    }
+  }
+
+  /**
+   * Derive a confidence score from extraction signal richness.
+   * No external API calls — uses only data already present on the entity.
+   *
+   * Formula (cap 70):
+   *   Base:           10  SERP signal confirmed domain exists
+   *   Multi-signal:  +10  keywordGapCount ≥ 3
+   *                  +5   keywordGapCount = 2
+   *   SERP position: +5   topKeywordRank ≤ 5
+   *   Business name: +10  name was extracted (not a domain fallback)
+   *   Location data: +5   city or state was populated
+   *   Category:      +5   primaryCategory was populated
+   */
+  deriveConfidenceScore(entity: NormalizedCompetitor): number {
+    let score = 10;
+    const gaps = entity.keywordGapCount ?? 0;
+
+    if (gaps >= 3)      score += 10;
+    else if (gaps >= 2) score += 5;
+
+    if (entity.topKeywordRank != null && entity.topKeywordRank <= 5) score += 5;
+
+    const nameIsDomain = !entity.businessName || entity.businessName === entity.domain;
+    if (!nameIsDomain) score += 10;
+
+    if (entity.city || entity.state) score += 5;
+    if (entity.primaryCategory)      score += 5;
+
+    return Math.min(score, 70);
   }
 }
 

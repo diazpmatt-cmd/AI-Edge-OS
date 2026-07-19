@@ -1740,10 +1740,16 @@ function CompetitorCard({
 }) {
   const cfg      = c.threatLevel ? (THREAT_CFG[c.threatLevel] ?? THREAT_UNKNOWN) : THREAT_UNKNOWN;
   const scoreCol = c.opportunityScore >= 70 ? "#22C55E" : c.opportunityScore >= 40 ? "#EAB308" : ACCENT;
+  const confCol  = c.confidenceScore >= 60 ? "#22C55E" : "#EAB308";
   const location = [c.city, c.state].filter(Boolean).join(", ");
-  const fmtDate  = (s: string) => {
-    try { return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
-    catch { return s; }
+
+  const fmtDate = (s: string | Date) => {
+    try { return new Date(s as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+    catch { return String(s); }
+  };
+  const fmtShort = (s: string | Date) => {
+    try { return new Date(s as string).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+    catch { return String(s); }
   };
 
   return (
@@ -1754,93 +1760,139 @@ function CompetitorCard({
       transition: "border-color 0.15s",
       overflow: "hidden",
     }}>
-      {/* ── Collapsed row ── */}
+      {/* ── Collapsed header — always visible ── */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={onToggle}
-        style={{
-          padding: "14px 16px",
-          display: "flex", alignItems: "center", gap: 14,
-          cursor: "pointer",
-        }}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        style={{ padding: "13px 14px 0 14px", cursor: "pointer" }}
       >
-        {/* Threat badge */}
-        <div style={{ flexShrink: 0, width: 64, display: "flex", justifyContent: "center" }}>
-          <ThreatBadge level={c.threatLevel} />
-        </div>
+        {/* Row 1: identity + score */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Threat badge — fixed 72px zone */}
+          <div style={{ flexShrink: 0, width: 72, display: "flex", justifyContent: "center" }}>
+            <ThreatBadge level={c.threatLevel} />
+          </div>
 
-        {/* Name + domain + category */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Name + domain + meta */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 13, fontWeight: 800, color: "#E2E8F0",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              lineHeight: 1.3,
+            }}>
+              {c.businessName}
+            </div>
+            <div style={{ display: "flex", gap: 5, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, color: "rgba(148,163,184,0.5)", fontFamily: "monospace" }}>
+                {c.domain}
+              </span>
+              {c.primaryCategory && (
+                <span style={{
+                  fontSize: 9, color: "rgba(148,163,184,0.38)",
+                  padding: "1px 5px", borderRadius: 4,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                }}>
+                  {c.primaryCategory}
+                </span>
+              )}
+              {location && (
+                <span style={{ fontSize: 9, color: "rgba(148,163,184,0.3)" }}>
+                  📍 {location}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Opportunity score */}
+          <div style={{ textAlign: "right", flexShrink: 0, width: 34 }}>
+            <div style={{ fontSize: 20, fontWeight: 900, color: scoreCol, lineHeight: 1 }}>
+              {c.opportunityScore}
+            </div>
+            <div style={{ fontSize: 8, color: "rgba(148,163,184,0.3)", marginTop: 1, letterSpacing: "0.2px" }}>opp</div>
+          </div>
+
+          {/* Score bar */}
+          <MiniScoreBar score={c.opportunityScore} color={scoreCol} />
+
+          {/* Expand toggle */}
           <div style={{
-            fontSize: 13, fontWeight: 800, color: "#E2E8F0",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            marginBottom: 2,
+            flexShrink: 0, width: 22, height: 22, display: "flex",
+            alignItems: "center", justifyContent: "center",
+            borderRadius: 6,
+            background: expanded ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+            border: `1px solid ${expanded ? ACCENT_BORDER : "rgba(255,255,255,0.07)"}`,
+            color: expanded ? ACCENT : "rgba(148,163,184,0.4)",
+            fontSize: 9, fontWeight: 900,
+            transition: "all 0.15s",
           }}>
-            {c.businessName}
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", fontFamily: "monospace" }}>
-              {c.domain}
-            </span>
-            {c.primaryCategory && (
-              <span style={{
-                fontSize: 9, color: "rgba(148,163,184,0.4)",
-                padding: "1px 6px", borderRadius: 6,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}>
-                {c.primaryCategory}
-              </span>
-            )}
-            {location && (
-              <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)" }}>
-                📍 {location}
-              </span>
-            )}
+            {expanded ? "▲" : "▼"}
           </div>
         </div>
 
-        {/* Stats chips */}
-        <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+        {/* Row 2: metadata strip — all 9 spec fields visible */}
+        <div style={{
+          display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap",
+          paddingLeft: 84,
+          paddingTop: 7, paddingBottom: 11,
+        }}>
+          {/* Discovery source */}
           <span style={{
-            fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
-            background: "rgba(139,92,246,0.12)", color: ACCENT,
-            border: `1px solid ${ACCENT_BORDER}`,
+            fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
+            background: ACCENT_DIM, color: ACCENT, border: `1px solid ${ACCENT_BORDER}`,
+          }}>
+            {c.discoverySource.replace(/_/g, " ")}
+          </span>
+
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.1)" }}>·</span>
+
+          {/* Keyword gap count */}
+          <span style={{
+            fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
+            background: "rgba(139,92,246,0.08)", color: ACCENT,
+            border: `1px solid rgba(139,92,246,0.18)`,
           }}>
             🎯 {c.keywordGapCount} {c.keywordGapCount === 1 ? "gap" : "gaps"}
           </span>
+
+          {/* Best rank */}
           {c.topKeywordRank != null && (
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
-              background: "rgba(255,255,255,0.05)", color: "rgba(148,163,184,0.65)",
-              border: "1px solid rgba(255,255,255,0.09)",
-            }}>
-              #{c.topKeywordRank}
-            </span>
+            <>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.1)" }}>·</span>
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
+                background: "rgba(255,255,255,0.04)", color: "rgba(148,163,184,0.55)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}>
+                #{c.topKeywordRank} rank
+              </span>
+            </>
           )}
-        </div>
 
-        {/* Opportunity score */}
-        <div style={{ textAlign: "right", flexShrink: 0, width: 44 }}>
-          <div style={{ fontSize: 20, fontWeight: 900, color: scoreCol, lineHeight: 1 }}>
-            {c.opportunityScore}
-          </div>
-          <div style={{ fontSize: 8, color: "rgba(148,163,184,0.35)", marginTop: 1 }}>score</div>
-        </div>
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.1)" }}>·</span>
 
-        {/* Score bar */}
-        <MiniScoreBar score={c.opportunityScore} color={scoreCol} />
+          {/* Confidence */}
+          <span style={{
+            fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 6,
+            background: c.confidenceScore >= 60 ? "rgba(34,197,94,0.09)" : "rgba(234,179,8,0.09)",
+            color: confCol,
+            border: `1px solid ${c.confidenceScore >= 60 ? "rgba(34,197,94,0.18)" : "rgba(234,179,8,0.18)"}`,
+          }}>
+            conf {c.confidenceScore}
+          </span>
 
-        {/* Expand toggle */}
-        <div style={{
-          flexShrink: 0, width: 24, height: 24, display: "flex",
-          alignItems: "center", justifyContent: "center",
-          borderRadius: 6, background: expanded ? ACCENT_DIM : "rgba(255,255,255,0.04)",
-          border: `1px solid ${expanded ? ACCENT_BORDER : "rgba(255,255,255,0.07)"}`,
-          color: expanded ? ACCENT : "rgba(148,163,184,0.45)",
-          fontSize: 10, fontWeight: 900,
-          transition: "all 0.15s",
-        }}>
-          {expanded ? "▲" : "▼"}
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.1)" }}>·</span>
+
+          {/* First / last seen */}
+          <span style={{ fontSize: 9, color: "rgba(148,163,184,0.38)" }}>
+            First {fmtShort(c.firstSeenAt)}
+          </span>
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.1)" }}>–</span>
+          <span style={{ fontSize: 9, color: "rgba(148,163,184,0.38)" }}>
+            Last {fmtShort(c.lastSeenAt)}
+          </span>
         </div>
       </div>
 
@@ -1848,10 +1900,10 @@ function CompetitorCard({
       {expanded && (
         <div style={{
           borderTop: `1px solid rgba(255,255,255,0.06)`,
-          padding: "16px 16px 20px",
+          padding: "16px 14px 20px",
           display: "flex", flexDirection: "column", gap: 16,
         }}>
-          {/* Provenance row */}
+          {/* Provenance grid */}
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
@@ -1859,7 +1911,7 @@ function CompetitorCard({
           }}>
             {/* Canonical domain */}
             <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 5 }}>
                 CANONICAL DOMAIN
               </div>
               <a
@@ -1877,9 +1929,38 @@ function CompetitorCard({
               </a>
             </div>
 
-            {/* Discovery source */}
+            {/* Confidence detail */}
             <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 5 }}>
+                CONFIDENCE SCORE
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <span style={{ fontSize: 18, fontWeight: 900, color: confCol, lineHeight: 1 }}>
+                  {c.confidenceScore}
+                </span>
+                <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>/100</span>
+              </div>
+              <div style={{ marginTop: 5, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${c.confidenceScore}%`, borderRadius: 2, background: confCol }} />
+              </div>
+            </div>
+
+            {/* Observation window */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 5 }}>
+                OBSERVATION WINDOW
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.9 }}>
+                <span style={{ color: "rgba(148,163,184,0.4)" }}>First </span>{fmtDate(c.firstSeenAt)}
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.9 }}>
+                <span style={{ color: "rgba(148,163,184,0.4)" }}>Last  </span>{fmtDate(c.lastSeenAt)}
+              </div>
+            </div>
+
+            {/* Discovery detail */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 5 }}>
                 DISCOVERY SOURCE
               </div>
               <span style={{
@@ -1888,44 +1969,41 @@ function CompetitorCard({
               }}>
                 {c.discoverySource.replace(/_/g, " ")}
               </span>
-            </div>
-
-            {/* Confidence */}
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
-                CONFIDENCE
-              </div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                <span style={{ fontSize: 18, fontWeight: 900, color: c.confidenceScore >= 60 ? "#22C55E" : "#EAB308", lineHeight: 1 }}>
-                  {c.confidenceScore}
-                </span>
-                <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>/100</span>
-              </div>
-              <div style={{ marginTop: 4, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", width: `${c.confidenceScore}%`, borderRadius: 2,
-                  background: c.confidenceScore >= 60 ? "#22C55E" : "#EAB308",
-                }} />
-              </div>
-            </div>
-
-            {/* Seen dates */}
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 6 }}>
-                OBSERVATION WINDOW
-              </div>
-              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.8 }}>
-                <span style={{ color: "rgba(148,163,184,0.4)" }}>First seen </span>
-                {fmtDate(c.firstSeenAt)}
-              </div>
-              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.8 }}>
-                <span style={{ color: "rgba(148,163,184,0.4)" }}>Last seen </span>
-                {fmtDate(c.lastSeenAt)}
-              </div>
+              {(c.reviewCount != null || c.domainAuthority != null || c.backlinkCount != null) && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 7 }}>
+                  {c.reviewCount != null && (
+                    <span style={{
+                      fontSize: 9, padding: "2px 6px", borderRadius: 5,
+                      background: "rgba(234,179,8,0.1)", color: "#EAB308",
+                      border: "1px solid rgba(234,179,8,0.2)",
+                    }}>
+                      ⭐ {c.avgRating?.toFixed(1) ?? "?"} · {c.reviewCount}
+                    </span>
+                  )}
+                  {c.domainAuthority != null && (
+                    <span style={{
+                      fontSize: 9, padding: "2px 6px", borderRadius: 5,
+                      background: "rgba(96,165,250,0.1)", color: "#60A5FA",
+                      border: "1px solid rgba(96,165,250,0.2)",
+                    }}>
+                      DA {c.domainAuthority}
+                    </span>
+                  )}
+                  {c.backlinkCount != null && (
+                    <span style={{
+                      fontSize: 9, padding: "2px 6px", borderRadius: 5,
+                      background: "rgba(56,189,248,0.1)", color: "#38BDF8",
+                      border: "1px solid rgba(56,189,248,0.2)",
+                    }}>
+                      {c.backlinkCount.toLocaleString()} links
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Intelligence scores — Phase 6 placeholders */}
+          {/* Competitive intelligence — Phase 6 placeholder tiles */}
           <div>
             <div style={{
               fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.4)",
@@ -1934,46 +2012,13 @@ function CompetitorCard({
               COMPETITIVE INTELLIGENCE
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <ScoreSection icon="🌐" title="WEBSITE INTEL"    score={null} />
-              <ScoreSection icon="📍" title="LOCAL PRESENCE"   score={c.localPresenceScore} />
-              <ScoreSection icon="⭐" title="REVIEWS"          score={c.avgRating != null ? Math.round(c.avgRating * 20) : null} />
-              <ScoreSection icon="🔗" title="AUTHORITY"        score={c.citationScore} />
-              <ScoreSection icon="🤖" title="AI VISIBILITY"    score={c.aiVisibilityScore} />
+              <ScoreSection icon="🌐" title="WEBSITE INTEL"  score={null} />
+              <ScoreSection icon="📍" title="LOCAL PRESENCE" score={c.localPresenceScore} />
+              <ScoreSection icon="⭐" title="REVIEWS"        score={c.avgRating != null ? Math.round(c.avgRating * 20) : null} />
+              <ScoreSection icon="🔗" title="AUTHORITY"      score={c.citationScore} />
+              <ScoreSection icon="🤖" title="AI VISIBILITY"  score={c.aiVisibilityScore} />
             </div>
           </div>
-
-          {/* Reviews / authority details — only if available */}
-          {(c.reviewCount != null || c.domainAuthority != null || c.backlinkCount != null) && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {c.reviewCount != null && (
-                <span style={{
-                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
-                  background: "rgba(234,179,8,0.1)", color: "#EAB308",
-                  border: "1px solid rgba(234,179,8,0.2)",
-                }}>
-                  ⭐ {c.avgRating?.toFixed(1) ?? "?"} · {c.reviewCount} reviews
-                </span>
-              )}
-              {c.domainAuthority != null && (
-                <span style={{
-                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
-                  background: "rgba(96,165,250,0.1)", color: "#60A5FA",
-                  border: "1px solid rgba(96,165,250,0.2)",
-                }}>
-                  🔗 DA {c.domainAuthority}
-                </span>
-              )}
-              {c.backlinkCount != null && (
-                <span style={{
-                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
-                  background: "rgba(56,189,248,0.1)", color: "#38BDF8",
-                  border: "1px solid rgba(56,189,248,0.2)",
-                }}>
-                  {c.backlinkCount.toLocaleString()} backlinks
-                </span>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -1994,6 +2039,7 @@ const SORT_OPTIONS = [
   { id: "opportunityScore", label: "Opportunity Score" },
   { id: "keywordGapCount",  label: "Keyword Gaps"      },
   { id: "lastSeenAt",       label: "Last Seen"         },
+  { id: "topKeywordRank",   label: "Best Rank"         },
 ];
 
 const PAGE_SIZE = 20;
@@ -2104,6 +2150,7 @@ function CompetitorsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch>
             return (
               <button
                 key={f.id}
+                type="button"
                 onClick={() => setThreat(f.id)}
                 style={{
                   padding: "5px 11px", borderRadius: 8, cursor: "pointer",
@@ -2134,6 +2181,7 @@ function CompetitorsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch>
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 8, color: "#E2E8F0", fontSize: 10,
             cursor: "pointer", outline: "none",
+            colorScheme: "dark",
           }}
         >
           {SORT_OPTIONS.map(o => (
@@ -2170,7 +2218,7 @@ function CompetitorsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch>
           message={
             search || threat !== "all"
               ? "No competitors match these filters. Try broadening your search."
-              : "No competitors discovered yet. Run POST /extract-entities or complete a Discovery scan to populate this tab."
+              : "No competitors discovered yet. Trigger a Discovery scan from the Keyword Gaps tab to start populating this list."
           }
         />
       )}

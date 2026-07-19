@@ -514,12 +514,13 @@ router.get("/api/competitor-intelligence/competitors", async (req, res) => {
   const minScore  = parseInt(String(req.query["minScore"] ?? "0"), 10) || 0;
   const threatFlt = String(req.query["threatLevel"] ?? "").trim().toLowerCase();
 
-  const validOrder = ["opportunityScore", "keywordGapCount", "lastSeenAt"];
+  const validOrder = ["opportunityScore", "keywordGapCount", "lastSeenAt", "topKeywordRank"];
   const safeOrder  = validOrder.includes(orderBy) ? orderBy : "opportunityScore";
 
   const orderSql =
-    safeOrder === "keywordGapCount" ? "keyword_gap_count DESC" :
-    safeOrder === "lastSeenAt"      ? "last_seen_at DESC"      :
+    safeOrder === "keywordGapCount" ? "keyword_gap_count DESC"               :
+    safeOrder === "lastSeenAt"      ? "last_seen_at DESC"                    :
+    safeOrder === "topKeywordRank"  ? "top_keyword_rank ASC NULLS LAST"      :
                                       "opportunity_score DESC";
 
   try {

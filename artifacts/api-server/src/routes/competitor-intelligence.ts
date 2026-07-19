@@ -658,8 +658,12 @@ router.get("/api/competitor-intelligence/competitors/:domain/observations", asyn
   }
 
   try {
-    const compRes = await pool.query<{ id: string }>(
-      `SELECT id FROM competitors
+    const compRes = await pool.query<{
+      id: string;
+      business_name: string | null;
+      confidence_score: number;
+    }>(
+      `SELECT id, business_name, confidence_score FROM competitors
        WHERE client_id = $1 AND domain = $2 AND canonical_status = 'active'
        LIMIT 1`,
       [client.id, domain],
@@ -670,11 +674,16 @@ router.get("/api/competitor-intelligence/competitors/:domain/observations", asyn
       return;
     }
 
-    const competitorId = compRes.rows[0]!.id;
+    const compRow      = compRes.rows[0]!;
+    const competitorId = compRow.id;
     const observations = await enrichmentService.enrichCompetitor(
       client.id,
       competitorId,
       domain,
+      {
+        businessName:    compRow.business_name ?? undefined,
+        confidenceScore: compRow.confidence_score,
+      },
     );
 
     res.json({ ok: true, domain, competitorId, observations });

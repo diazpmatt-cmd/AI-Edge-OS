@@ -226,22 +226,31 @@ describe("CompetitorEnrichmentService", () => {
       expect(s.score).toBeLessThanOrEqual(100);
       expect(Array.isArray(s.signals)).toBe(true);
       expect(s.signals.length).toBeGreaterThan(0);
-      expect(s.isMock).toBe(true);
+      // isMock varies by provider: mock providers return true, real providers return false.
+      // The ai_visibility category is now served by the real AiEdgeVisibilityProvider.
+      expect(typeof s.isMock).toBe("boolean");
       expect(typeof s.attribution.providerName).toBe("string");
       expect(typeof s.attribution.methodology).toBe("string");
       expect(typeof s.normalized).toBe("object");
     }
   });
 
-  it("second call returns cached summaries (isMock still true)", async () => {
+  it("second call returns cached summaries (same isMock as first call)", async () => {
     const first  = await service.enrichCompetitor(TEST_CLIENT, TEST_COMP_ID, TEST_DOMAIN);
     const second = await service.enrichCompetitor(TEST_CLIENT, TEST_COMP_ID, TEST_DOMAIN);
 
     expect(second).toHaveLength(first.length);
-    for (const s of second) {
-      expect(s.isMock).toBe(true);
+    // Cached observations preserve the isMock value from the originating provider.
+    // Mock providers stay true; the real AiEdgeVisibilityProvider stays false.
+    for (let i = 0; i < first.length; i++) {
+      const f = first[i]!;
+      const s = second[i]!;
+      expect(s.category).toBe(f.category);
+      expect(s.providerId).toBe(f.providerId);
+      // isMock should be consistent between live and cached reads
+      expect(s.isMock).toBe(f.isMock);
     }
-    // Scores should be identical (deterministic mock)
+    // Scores should be identical (deterministic mock / no-match sparse = 0)
     const firstScores  = first.map(s => s.score).sort((a, b) => a - b);
     const secondScores = second.map(s => s.score).sort((a, b) => a - b);
     expect(firstScores).toEqual(secondScores);

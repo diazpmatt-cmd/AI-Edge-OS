@@ -152,7 +152,11 @@ describe("CompetitorDiscoveryService.extractCompetitorsFromLatestRun()", () => {
     expect(arrow!.top_keyword_rank).toBe(1);
     expect(arrow!.threat_level).toBe("critical"); // rank≤3 AND gaps≥3
     expect(arrow!.discovery_source).toBe("serp_organic");
-    expect(arrow!.confidence_score).toBe(10);
+    // P6.1 elevates confidence from base 10:
+    //   +10 keywordGapCount ≥ 3  (3 signals collapsed to 1 domain)
+    //   +5  topKeywordRank = 1 (≤ 5)
+    //   = 25 (businessName/city/category not in fixture signals)
+    expect(arrow!.confidence_score).toBe(25);
     expect(arrow!.canonical_status).toBe("active");
 
     // orkin.com: 2 gap signals, best rank = 1

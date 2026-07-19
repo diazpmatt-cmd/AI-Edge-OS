@@ -68,6 +68,45 @@ interface HistoryData {
   history: HistoryRun[]; count: number;
 }
 
+interface CompetitorItem {
+  id: string;
+  domain: string;
+  businessName: string;
+  website: string | null;
+  primaryCategory: string | null;
+  city: string | null;
+  state: string | null;
+  reviewCount: number | null;
+  avgRating: number | null;
+  topKeywordRank: number | null;
+  keywordGapCount: number;
+  opportunityScore: number;
+  threatLevel: string | null;
+  confidenceScore: number;
+  discoverySource: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  domainAuthority: number | null;
+  backlinkCount: number | null;
+  localPresenceScore: number | null;
+  gbpHealthScore: number | null;
+  aiVisibilityScore: number | null;
+  citationScore: number | null;
+  primaryPhotoUrl: string | null;
+  logoUrl: string | null;
+  canonicalStatus: string;
+}
+
+interface CompetitorsListData {
+  ok: boolean;
+  clientId: string;
+  total: number;
+  limit: number;
+  offset: number;
+  count: number;
+  competitors: CompetitorItem[];
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ACCENT        = "#8B5CF6";
@@ -194,6 +233,7 @@ const TABS = [
   { id: "gaps",          label: "Keyword Gaps",     icon: "🎯" },
   { id: "opportunities", label: "Opportunities",    icon: "⚡" },
   { id: "history",       label: "Run History",      icon: "📅" },
+  { id: "competitors",   label: "Competitors",      icon: "🏆" },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -1607,6 +1647,571 @@ function RunScanButton({
   );
 }
 
+// ── Competitor tab helpers ────────────────────────────────────────────────────
+
+const THREAT_CFG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  critical: { label: "CRITICAL", color: "#EF4444", bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.28)"  },
+  high:     { label: "HIGH",     color: "#F97316", bg: "rgba(249,115,22,0.12)", border: "rgba(249,115,22,0.28)" },
+  medium:   { label: "MEDIUM",   color: "#EAB308", bg: "rgba(234,179,8,0.12)",  border: "rgba(234,179,8,0.28)"  },
+  low:      { label: "LOW",      color: "#22C55E", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.28)"  },
+};
+const THREAT_UNKNOWN = { label: "UNKNOWN", color: "rgba(148,163,184,0.55)", bg: "rgba(148,163,184,0.07)", border: "rgba(148,163,184,0.18)" };
+
+function ThreatBadge({ level }: { level: string | null }) {
+  const cfg = level ? (THREAT_CFG[level] ?? THREAT_UNKNOWN) : THREAT_UNKNOWN;
+  return (
+    <span style={{
+      fontSize: 8, fontWeight: 900, letterSpacing: "0.5px",
+      padding: "3px 8px", borderRadius: 8, whiteSpace: "nowrap",
+      color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`,
+    }}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function MiniScoreBar({ score, color }: { score: number; color: string }) {
+  return (
+    <div style={{ width: 72, flexShrink: 0 }}>
+      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", borderRadius: 3, width: `${Math.min(100, score)}%`,
+          background: color, transition: "width 0.5s ease",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function PlaceholderSection({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div style={{
+      flex: "1 1 140px", minWidth: 140,
+      background: "rgba(255,255,255,0.02)",
+      border: "1px dashed rgba(255,255,255,0.08)",
+      borderRadius: 10, padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(148,163,184,0.55)", letterSpacing: "0.2px" }}>
+          {title}
+        </span>
+      </div>
+      <div style={{ fontSize: 9, color: "rgba(148,163,184,0.3)", fontStyle: "italic" }}>
+        Available in Phase 6
+      </div>
+    </div>
+  );
+}
+
+function ScoreSection({ icon, title, score }: { icon: string; title: string; score: number | null }) {
+  if (score == null) return <PlaceholderSection icon={icon} title={title} />;
+  const color = score >= 70 ? "#22C55E" : score >= 40 ? "#EAB308" : "#EF4444";
+  return (
+    <div style={{
+      flex: "1 1 140px", minWidth: 140,
+      background: "rgba(255,255,255,0.03)",
+      border: `1px solid rgba(255,255,255,0.08)`,
+      borderRadius: 10, padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(148,163,184,0.55)", letterSpacing: "0.2px" }}>
+          {title}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 22, fontWeight: 900, color, lineHeight: 1 }}>{score}</span>
+        <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>/100</span>
+      </div>
+      <div style={{ marginTop: 6, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${score}%`, background: color, borderRadius: 2 }} />
+      </div>
+    </div>
+  );
+}
+
+function CompetitorCard({
+  c, expanded, onToggle,
+}: {
+  c: CompetitorItem;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const cfg      = c.threatLevel ? (THREAT_CFG[c.threatLevel] ?? THREAT_UNKNOWN) : THREAT_UNKNOWN;
+  const scoreCol = c.opportunityScore >= 70 ? "#22C55E" : c.opportunityScore >= 40 ? "#EAB308" : ACCENT;
+  const location = [c.city, c.state].filter(Boolean).join(", ");
+  const fmtDate  = (s: string) => {
+    try { return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+    catch { return s; }
+  };
+
+  return (
+    <div style={{
+      background: BG_CARD,
+      border: `1px solid ${expanded ? cfg.border : ACCENT_BORDER}`,
+      borderRadius: 12,
+      transition: "border-color 0.15s",
+      overflow: "hidden",
+    }}>
+      {/* ── Collapsed row ── */}
+      <div
+        onClick={onToggle}
+        style={{
+          padding: "14px 16px",
+          display: "flex", alignItems: "center", gap: 14,
+          cursor: "pointer",
+        }}
+      >
+        {/* Threat badge */}
+        <div style={{ flexShrink: 0, width: 64, display: "flex", justifyContent: "center" }}>
+          <ThreatBadge level={c.threatLevel} />
+        </div>
+
+        {/* Name + domain + category */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 800, color: "#E2E8F0",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            marginBottom: 2,
+          }}>
+            {c.businessName}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", fontFamily: "monospace" }}>
+              {c.domain}
+            </span>
+            {c.primaryCategory && (
+              <span style={{
+                fontSize: 9, color: "rgba(148,163,184,0.4)",
+                padding: "1px 6px", borderRadius: 6,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}>
+                {c.primaryCategory}
+              </span>
+            )}
+            {location && (
+              <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)" }}>
+                📍 {location}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Stats chips */}
+        <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+          <span style={{
+            fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
+            background: "rgba(139,92,246,0.12)", color: ACCENT,
+            border: `1px solid ${ACCENT_BORDER}`,
+          }}>
+            🎯 {c.keywordGapCount} {c.keywordGapCount === 1 ? "gap" : "gaps"}
+          </span>
+          {c.topKeywordRank != null && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 8,
+              background: "rgba(255,255,255,0.05)", color: "rgba(148,163,184,0.65)",
+              border: "1px solid rgba(255,255,255,0.09)",
+            }}>
+              #{c.topKeywordRank}
+            </span>
+          )}
+        </div>
+
+        {/* Opportunity score */}
+        <div style={{ textAlign: "right", flexShrink: 0, width: 44 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: scoreCol, lineHeight: 1 }}>
+            {c.opportunityScore}
+          </div>
+          <div style={{ fontSize: 8, color: "rgba(148,163,184,0.35)", marginTop: 1 }}>score</div>
+        </div>
+
+        {/* Score bar */}
+        <MiniScoreBar score={c.opportunityScore} color={scoreCol} />
+
+        {/* Expand toggle */}
+        <div style={{
+          flexShrink: 0, width: 24, height: 24, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          borderRadius: 6, background: expanded ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+          border: `1px solid ${expanded ? ACCENT_BORDER : "rgba(255,255,255,0.07)"}`,
+          color: expanded ? ACCENT : "rgba(148,163,184,0.45)",
+          fontSize: 10, fontWeight: 900,
+          transition: "all 0.15s",
+        }}>
+          {expanded ? "▲" : "▼"}
+        </div>
+      </div>
+
+      {/* ── Expanded detail panel ── */}
+      {expanded && (
+        <div style={{
+          borderTop: `1px solid rgba(255,255,255,0.06)`,
+          padding: "16px 16px 20px",
+          display: "flex", flexDirection: "column", gap: 16,
+        }}>
+          {/* Provenance row */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+            gap: 10,
+          }}>
+            {/* Canonical domain */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
+                CANONICAL DOMAIN
+              </div>
+              <a
+                href={c.website ?? `https://${c.domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{
+                  fontSize: 11, color: "#60A5FA",
+                  fontFamily: "monospace", textDecoration: "none",
+                  wordBreak: "break-all",
+                }}
+              >
+                {c.domain}
+              </a>
+            </div>
+
+            {/* Discovery source */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
+                DISCOVERY SOURCE
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 6,
+                background: ACCENT_DIM, color: ACCENT, border: `1px solid ${ACCENT_BORDER}`,
+              }}>
+                {c.discoverySource.replace(/_/g, " ")}
+              </span>
+            </div>
+
+            {/* Confidence */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4 }}>
+                CONFIDENCE
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <span style={{ fontSize: 18, fontWeight: 900, color: c.confidenceScore >= 60 ? "#22C55E" : "#EAB308", lineHeight: 1 }}>
+                  {c.confidenceScore}
+                </span>
+                <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>/100</span>
+              </div>
+              <div style={{ marginTop: 4, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${c.confidenceScore}%`, borderRadius: 2,
+                  background: c.confidenceScore >= 60 ? "#22C55E" : "#EAB308",
+                }} />
+              </div>
+            </div>
+
+            {/* Seen dates */}
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ fontSize: 9, color: "rgba(148,163,184,0.45)", fontWeight: 700, letterSpacing: "0.3px", marginBottom: 6 }}>
+                OBSERVATION WINDOW
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.8 }}>
+                <span style={{ color: "rgba(148,163,184,0.4)" }}>First seen </span>
+                {fmtDate(c.firstSeenAt)}
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.6)", lineHeight: 1.8 }}>
+                <span style={{ color: "rgba(148,163,184,0.4)" }}>Last seen </span>
+                {fmtDate(c.lastSeenAt)}
+              </div>
+            </div>
+          </div>
+
+          {/* Intelligence scores — Phase 6 placeholders */}
+          <div>
+            <div style={{
+              fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.4)",
+              letterSpacing: "0.4px", marginBottom: 8,
+            }}>
+              COMPETITIVE INTELLIGENCE
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <ScoreSection icon="🌐" title="WEBSITE INTEL"    score={null} />
+              <ScoreSection icon="📍" title="LOCAL PRESENCE"   score={c.localPresenceScore} />
+              <ScoreSection icon="⭐" title="REVIEWS"          score={c.avgRating != null ? Math.round(c.avgRating * 20) : null} />
+              <ScoreSection icon="🔗" title="AUTHORITY"        score={c.citationScore} />
+              <ScoreSection icon="🤖" title="AI VISIBILITY"    score={c.aiVisibilityScore} />
+            </div>
+          </div>
+
+          {/* Reviews / authority details — only if available */}
+          {(c.reviewCount != null || c.domainAuthority != null || c.backlinkCount != null) && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {c.reviewCount != null && (
+                <span style={{
+                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
+                  background: "rgba(234,179,8,0.1)", color: "#EAB308",
+                  border: "1px solid rgba(234,179,8,0.2)",
+                }}>
+                  ⭐ {c.avgRating?.toFixed(1) ?? "?"} · {c.reviewCount} reviews
+                </span>
+              )}
+              {c.domainAuthority != null && (
+                <span style={{
+                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
+                  background: "rgba(96,165,250,0.1)", color: "#60A5FA",
+                  border: "1px solid rgba(96,165,250,0.2)",
+                }}>
+                  🔗 DA {c.domainAuthority}
+                </span>
+              )}
+              {c.backlinkCount != null && (
+                <span style={{
+                  fontSize: 9, padding: "3px 8px", borderRadius: 6,
+                  background: "rgba(56,189,248,0.1)", color: "#38BDF8",
+                  border: "1px solid rgba(56,189,248,0.2)",
+                }}>
+                  {c.backlinkCount.toLocaleString()} backlinks
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Competitors tab ────────────────────────────────────────────────────────────
+
+const THREAT_FILTERS = [
+  { id: "all",      label: "All" },
+  { id: "critical", label: "Critical" },
+  { id: "high",     label: "High"     },
+  { id: "medium",   label: "Medium"   },
+  { id: "low",      label: "Low"      },
+];
+
+const SORT_OPTIONS = [
+  { id: "opportunityScore", label: "Opportunity Score" },
+  { id: "keywordGapCount",  label: "Keyword Gaps"      },
+  { id: "lastSeenAt",       label: "Last Seen"         },
+];
+
+const PAGE_SIZE = 20;
+
+function CompetitorsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch> }) {
+  const [search,    setSearch]    = useState("");
+  const [debSearch, setDebSearch] = useState("");
+  const [threat,    setThreat]    = useState("all");
+  const [orderBy,   setOrderBy]   = useState("opportunityScore");
+
+  const [list,        setList]        = useState<CompetitorItem[]>([]);
+  const [total,       setTotal]       = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
+  const [expandedId,  setExpandedId]  = useState<string | null>(null);
+
+  // fetchParams: single object drives both filter resets and load-more
+  const [fetchParams, setFetchParams] = useState({
+    search: "", threatLevel: "all", orderBy: "opportunityScore",
+    page: 0, resetList: true,
+  });
+
+  // Debounce search → 380ms
+  const debTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    clearTimeout(debTimerRef.current);
+    debTimerRef.current = setTimeout(() => setDebSearch(search), 380);
+    return () => clearTimeout(debTimerRef.current);
+  }, [search]);
+
+  // When filter params change (after mount) reset pagination
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) { hasMountedRef.current = true; return; }
+    setFetchParams({ search: debSearch, threatLevel: threat, orderBy, page: 0, resetList: true });
+  }, [debSearch, threat, orderBy]);
+
+  // Fetch whenever fetchParams changes
+  useEffect(() => {
+    const { search: s, threatLevel: tl, orderBy: ob, page, resetList } = fetchParams;
+    let cancelled = false;
+
+    if (resetList) { setLoading(true); setList([]); setTotal(0); setError(null); }
+    else            setLoadingMore(true);
+
+    const qs = new URLSearchParams({
+      limit:  String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
+      orderBy: ob,
+      ...(s  ? { search: s }           : {}),
+      ...(tl !== "all" ? { threatLevel: tl } : {}),
+    });
+
+    apiFetch(`/api/competitor-intelligence/competitors?${qs}`)
+      .then((data: CompetitorsListData) => {
+        if (cancelled) return;
+        if (resetList) setList(data.competitors ?? []);
+        else           setList(prev => [...prev, ...(data.competitors ?? [])]);
+        setTotal(data.total ?? 0);
+        setLoading(false);
+        setLoadingMore(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load competitors");
+        setLoading(false);
+        setLoadingMore(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [fetchParams, apiFetch]);
+
+  const handleLoadMore = () =>
+    setFetchParams(prev => ({ ...prev, page: prev.page + 1, resetList: false }));
+
+  const hasMore = list.length < total;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Controls ── */}
+      <div style={{
+        display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+        background: BG_CARD, border: `1px solid ${ACCENT_BORDER}`,
+        borderRadius: 12, padding: "12px 14px",
+      }}>
+        {/* Search */}
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name or domain…"
+          style={{
+            flex: "1 1 180px", padding: "7px 12px",
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, color: "#E2E8F0", fontSize: 11,
+            outline: "none",
+          }}
+        />
+
+        {/* Threat filter chips */}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {THREAT_FILTERS.map(f => {
+            const cfg = f.id === "all" ? null : THREAT_CFG[f.id];
+            const active = threat === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setThreat(f.id)}
+                style={{
+                  padding: "5px 11px", borderRadius: 8, cursor: "pointer",
+                  fontSize: 9, fontWeight: 800, letterSpacing: "0.3px",
+                  background: active
+                    ? (cfg ? cfg.bg : ACCENT_DIM)
+                    : "rgba(255,255,255,0.04)",
+                  color: active
+                    ? (cfg ? cfg.color : ACCENT)
+                    : "rgba(148,163,184,0.5)",
+                  border: `1px solid ${active ? (cfg ? cfg.border : ACCENT_BORDER) : "rgba(255,255,255,0.07)"}`,
+                  transition: "all 0.12s",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sort selector */}
+        <select
+          value={orderBy}
+          onChange={e => setOrderBy(e.target.value)}
+          style={{
+            padding: "6px 10px",
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, color: "#E2E8F0", fontSize: 10,
+            cursor: "pointer", outline: "none",
+          }}
+        >
+          {SORT_OPTIONS.map(o => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+
+        {/* Count badge */}
+        {!loading && (
+          <span style={{
+            marginLeft: "auto", fontSize: 10,
+            color: "rgba(148,163,184,0.45)", whiteSpace: "nowrap",
+          }}>
+            {list.length} of {total}
+          </span>
+        )}
+      </div>
+
+      {/* ── States ── */}
+      {loading && <LoadingSpinner />}
+
+      {!loading && error && (
+        <div style={{
+          background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)",
+          borderRadius: 10, padding: "14px 16px",
+          fontSize: 11, color: "#EF4444",
+        }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && list.length === 0 && (
+        <EmptyState
+          message={
+            search || threat !== "all"
+              ? "No competitors match these filters. Try broadening your search."
+              : "No competitors discovered yet. Run POST /extract-entities or complete a Discovery scan to populate this tab."
+          }
+        />
+      )}
+
+      {/* ── Card list ── */}
+      {!loading && !error && list.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {list.map(c => (
+            <CompetitorCard
+              key={c.id}
+              c={c}
+              expanded={expandedId === c.id}
+              onToggle={() => setExpandedId(prev => prev === c.id ? null : c.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Load more ── */}
+      {!loading && hasMore && (
+        <div style={{ textAlign: "center", paddingTop: 4 }}>
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            style={{
+              padding: "9px 28px", borderRadius: 10, cursor: loadingMore ? "default" : "pointer",
+              background: ACCENT_DIM, color: ACCENT,
+              border: `1px solid ${ACCENT_BORDER}`,
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.2px",
+              opacity: loadingMore ? 0.6 : 1,
+              transition: "opacity 0.15s",
+            }}
+          >
+            {loadingMore ? "Loading…" : `Load more (${total - list.length} remaining)`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CompetitorIntelligencePage() {
@@ -1626,6 +2231,8 @@ export default function CompetitorIntelligencePage() {
     queryClient.invalidateQueries({ queryKey: ["ci-opportunities"] });
     queryClient.invalidateQueries({ queryKey: ["ci-history"] });
   }, [queryClient]);
+  // Note: CompetitorsTab manages its own fetch state (not react-query),
+  // so it re-fetches when the user navigates to it or triggers load-more.
 
   return (
     <AppShell>
@@ -1719,6 +2326,7 @@ export default function CompetitorIntelligencePage() {
             {tab === "gaps"          && <GapsTab apiFetch={apiFetch} onRunComplete={handleRunComplete} />}
             {tab === "opportunities" && <OpportunitiesTab apiFetch={apiFetch} />}
             {tab === "history"       && <HistoryTab apiFetch={apiFetch} />}
+            {tab === "competitors"   && <CompetitorsTab apiFetch={apiFetch} />}
           </>
         )}
       </div>

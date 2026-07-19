@@ -18,10 +18,8 @@
  * liveData.errors.* rather than throwing, so partial results are preserved.
  */
 
-import { db } from "@workspace/db";
-import { socialConnectionsTable } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
 import type { GbpLiveData } from "@workspace/db";
+import { resolveGoogleToken } from "./google-token.js";
 
 // ── Types (raw API response shapes — local to this file) ─────────────────────
 
@@ -83,83 +81,6 @@ type AccountsResponse = {
 type LocationsListResponse = {
   locations?: Array<{ name?: string; title?: string }>;
 };
-
-// ── Token refresh ─────────────────────────────────────────────────────────────
-
-async function refreshGoogleToken(
-  refreshToken: string,
-  userId: string,
-): Promise<string | null> {
-  try {
-    const r = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID     ?? "",
-        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
-        refresh_token: refreshToken,
-        grant_type:    "refresh_token",
-      }).toString(),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      console.warn(`[GBP-LIVE] token refresh HTTP ${r.status}: ${body.slice(0, 200)}`);
-      return null;
-    }
-
-    const data = await r.json() as { access_token?: string; expires_in?: number };
-    if (!data.access_token) {
-      console.warn("[GBP-LIVE] token refresh: no access_token in response");
-      return null;
-    }
-
-    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : undefined;
-
-    try {
-      await db.update(socialConnectionsTable)
-        .set({
-          accessToken: data.access_token,
-          ...(expiresAt ? { expiresAt } : {}),
-          updatedAt: new Date(),
-        })
-        .where(and(
-          eq(socialConnectionsTable.userId, userId),
-          eq(socialConnectionsTable.provider, "google_business"),
-        ));
-      console.log(`[GBP-LIVE] refreshed token saved to DB, expiresIn=${data.expires_in}`);
-    } catch (dbErr: any) {
-      console.warn(`[GBP-LIVE] token refresh DB save failed (non-fatal): ${dbErr?.message}`);
-    }
-
-    return data.access_token;
-  } catch (e: any) {
-    console.warn(`[GBP-LIVE] token refresh exception: ${e?.message}`);
-    return null;
-  }
-}
-
-// ── Resolve a valid access token ──────────────────────────────────────────────
-// Guard: refresh when refreshToken exists AND expiresAt is null OR expired.
-// (expiresAt is NULL in dev DB — dev-sync drops it; must not block refresh.)
-
-async function resolveAccessToken(opts: {
-  accessToken:  string;
-  refreshToken: string | null;
-  expiresAt:    Date | null;
-  userId:       string;
-}): Promise<string> {
-  const now       = new Date();
-  const isExpired = !opts.expiresAt || opts.expiresAt < now;
-  const needsRefresh = !!(opts.refreshToken && isExpired);
-
-  if (!needsRefresh) return opts.accessToken;
-
-  console.log("[GBP-LIVE] access token expired or expiresAt null — refreshing...");
-  const fresh = await refreshGoogleToken(opts.refreshToken!, opts.userId);
-  return fresh ?? opts.accessToken;
-}
 
 // ── Business Information API ──────────────────────────────────────────────────
 
@@ -303,12 +224,16 @@ export interface GbpTokenConn {
 export async function fetchGbpLiveData(conn: GbpTokenConn): Promise<GbpLiveData> {
   const errors: GbpLiveData["errors"] = {};
 
-  const token = await resolveAccessToken({
+  const tokenResult = await resolveGoogleToken({
     accessToken:  conn.accessToken,
     refreshToken: conn.refreshToken,
     expiresAt:    conn.expiresAt,
     userId:       conn.userId,
   });
+  if (!tokenResult.ok) {
+    console.warn(`[GBP-LIVE] token refresh failed (${tokenResult.reason}) — using stored token as fallback`);
+  }
+  const token = tokenResult.ok ? tokenResult.token : conn.accessToken;
 
   console.log(`[GBP-LIVE] fetching live data for locationName=${conn.locationName}`);
 

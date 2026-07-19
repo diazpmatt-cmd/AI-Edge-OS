@@ -206,7 +206,10 @@ async function gatherAuditInput(
   const [reviewRow] = await db
     .select()
     .from(reviewPlatformStatsTable)
-    .where(eq(reviewPlatformStatsTable.platform, "google"));
+    .where(and(
+      eq(reviewPlatformStatsTable.platform, "google"),
+      eq(reviewPlatformStatsTable.clientId, clientId),
+    ));
 
   const reviewStats: GbpAuditInput["reviewStats"] = reviewRow
     ? {
@@ -228,7 +231,7 @@ async function gatherAuditInput(
           AND published_at > NOW() - INTERVAL '30 days'
       )                                                                          AS with_image_30
     FROM social_posts
-    WHERE user_id     = ${userId}
+    WHERE (client_id = ${clientId} OR (client_id IS NULL AND user_id = ${userId}))
       AND status      = 'published'
       AND published_at > NOW() - INTERVAL '30 days'
       AND platforms::jsonb ? 'google'
@@ -575,6 +578,7 @@ router.patch("/gbp/audit/optimizations/:id", async (req, res) => {
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   const { id }   = req.params;
+  const clientId = (req.body?.clientId as string | undefined) || "default";
   const resolved = req.body?.resolved as boolean | undefined;
 
   if (resolved === undefined) {
@@ -588,7 +592,10 @@ router.patch("/gbp/audit/optimizations/:id", async (req, res) => {
         resolved,
         resolvedAt: resolved ? new Date() : null,
       })
-      .where(eq(gbpOptimizationOpportunitiesTable.id, id))
+      .where(and(
+        eq(gbpOptimizationOpportunitiesTable.id, id),
+        eq(gbpOptimizationOpportunitiesTable.clientId, clientId),
+      ))
       .returning();
 
     if (!updated) return res.status(404).json({ error: "Opportunity not found" });
@@ -679,14 +686,28 @@ async function generateAndPersistAlerts(
       score_after:  number | null;
     }> = [];
 
-    if (prevScore !== null && currScore - prevScore <= -10) {
-      alerts.push({
-        alert_type:   "score_drop",
-        message:      `GBP score dropped ${Math.abs(currScore - prevScore)} points (${prevScore}% → ${currScore}%). Review optimization opportunities to recover.`,
-        severity:     currScore < 40 ? "critical" : "warning",
-        score_before: prevScore,
-        score_after:  currScore,
-      });
+    // Read client-configured alert threshold; default = 10 points.
+    const schedRow = await client.query<{ alert_on_drop: number | null }>(
+      `SELECT alert_on_drop FROM gbp_audit_schedules WHERE client_id = $1 LIMIT 1`,
+      [clientId],
+    );
+    const rawThreshold = schedRow.rows[0]?.alert_on_drop;
+    const alertOnDrop  = (typeof rawThreshold === "number" && rawThreshold > 0) ? rawThreshold : 10;
+
+    if (prevScore !== null && currScore - prevScore <= -alertOnDrop) {
+      const dupeCheck = await client.query(
+        `SELECT 1 FROM gbp_alert_log WHERE snapshot_id = $1 AND alert_type = 'score_drop' LIMIT 1`,
+        [snapshotId],
+      );
+      if ((dupeCheck.rowCount ?? 0) === 0) {
+        alerts.push({
+          alert_type:   "score_drop",
+          message:      `GBP score dropped ${Math.abs(currScore - prevScore)} points (${prevScore}% → ${currScore}%). Review optimization opportunities to recover.`,
+          severity:     currScore < 40 ? "critical" : "warning",
+          score_before: prevScore,
+          score_after:  currScore,
+        });
+      }
     }
     if (criticalNew > 0) {
       alerts.push({
@@ -784,13 +805,19 @@ router.patch("/gbp/audit/alerts/:id/acknowledge", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { id } = req.params;
+  const { id }   = req.params;
+  const clientId = (req.body?.clientId as string | undefined)
+    || (req.query.clientId as string | undefined)
+    || "default";
 
   try {
-    await pool.query(
-      `UPDATE gbp_alert_log SET acknowledged = TRUE WHERE id = $1`,
-      [id],
+    const result = await pool.query(
+      `UPDATE gbp_alert_log SET acknowledged = TRUE WHERE id = $1 AND client_id = $2`,
+      [id, clientId],
     );
+    if ((result.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "Alert not found" });
+    }
     return res.json({ ok: true });
   } catch (err) {
     console.error("[gbp-audit] acknowledge error:", err);

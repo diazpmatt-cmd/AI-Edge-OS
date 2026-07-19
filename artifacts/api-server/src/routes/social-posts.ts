@@ -14,6 +14,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { resolveGoogleToken } from "../lib/google-token.js";
 
 const router = Router();
 const objectStorageService = new ObjectStorageService();
@@ -417,7 +418,16 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };
     } else {
       try {
-        const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });
+        const tokenResult = await resolveGoogleToken({
+          userId:       gbpConn.userId,
+          accessToken:  gbpConn.accessToken!,
+          refreshToken: gbpConn.refreshToken ?? null,
+          expiresAt:    gbpConn.expiresAt    ?? null,
+        });
+        if (!tokenResult.ok) {
+          throw new Error(`Google token refresh failed: ${tokenResult.reason}. Re-connect your Google account.`);
+        }
+        const token = tokenResult.token;
         const googleCaption = post.captionGoogle ?? post.caption;
         const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
         const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);
@@ -692,52 +702,6 @@ function captureGbpResponseHeaders(res: Response): Record<string, string> {
   return out;
 }
 
-async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
-  const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
-  const needsRefresh = isExpired && !!conn.refreshToken;
-  console.log("[GOOGLE-REFRESH]", JSON.stringify({
-    attempt: needsRefresh,
-    reason: !conn.expiresAt ? "no_expiry_stored" : isExpired ? "token_expired" : "token_still_valid",
-    expiresAt: conn.expiresAt ?? null,
-    hasRefreshToken: !!conn.refreshToken,
-  }));
-  if (!conn.expiresAt || conn.expiresAt > new Date()) return conn.accessToken;
-  if (!conn.refreshToken) {
-    console.warn("[GOOGLE-REFRESH] skipping — no refresh token stored");
-    return conn.accessToken;
-  }
-  try {
-    const r = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
-        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
-        refresh_token: conn.refreshToken,
-        grant_type:    "refresh_token",
-      }),
-    });
-    const refreshBody = await r.text();
-    if (!r.ok) {
-      console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, status: r.status, error: refreshBody.slice(0, 300) }));
-      return conn.accessToken;
-    }
-    const data = JSON.parse(refreshBody) as { access_token: string; expires_in?: number; scope?: string };
-    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
-    console.log("[GOOGLE-REFRESH]", JSON.stringify({
-      success: true,
-      newAccessTokenLength: data.access_token?.length ?? 0,
-      scope: data.scope ?? "(not returned)",
-      expiresAt,
-    }));
-    await db.update(socialConnectionsTable).set({ accessToken: data.access_token, expiresAt, updatedAt: new Date() })
-      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
-    return data.access_token;
-  } catch (e: any) {
-    console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, error: e?.message }));
-    return conn.accessToken;
-  }
-}
 
 async function publishToGBP(
   token: string,

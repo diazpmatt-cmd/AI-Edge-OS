@@ -16,6 +16,7 @@ export const reviewRequestsTable = pgTable("review_requests", {
 
 export const reviewPlatformStatsTable = pgTable("review_platform_stats", {
   id:            serial("id").primaryKey(),
+  clientId:      text("client_id").notNull().default("default"),
   platform:      text("platform").notNull().unique(),
   reviewCount:   integer("review_count").notNull().default(0),
   averageRating: numeric("average_rating", { precision: 3, scale: 2 }).notNull().default("0.00"),

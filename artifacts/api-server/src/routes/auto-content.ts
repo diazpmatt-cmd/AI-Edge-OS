@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { autoContentSettingsTable, socialPostsTable, imageAssetsTable } from "@workspace/db/schema";
+import { autoContentSettingsTable, socialPostsTable, imageAssetsTable, clientsTable } from "@workspace/db/schema";
 import {
   normalizeTopics,
   validateTopicForGeneration,
@@ -496,6 +496,19 @@ router.post("/auto-content/generate", async (req, res) => {
     resolvedIndustry   = clientResult.context.industry;
   }
 
+  // Resolve canonical clientId for tenant-scoped post inserts.
+  // Non-fatal: posts insert successfully without clientId (backward compat).
+  let resolvedClientId: string | null = null;
+  try {
+    const [clientRow] = await db
+      .select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(eq(clientsTable.userId, userId));
+    resolvedClientId = clientRow?.id ?? null;
+  } catch {
+    // non-fatal — backward-compatible, posts insert without clientId
+  }
+
   const {
     clientName: bodyClientName, industry: bodyIndustry,
     serviceAreas: bodyServiceAreas, topics: bodyTopics,
@@ -794,7 +807,9 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       ? `${post.caption}\n\n${post.hashtags.join(" ")}`
       : post.caption;
 
-    const captionGoogle = `${effectiveClient} proudly servicing ${post.city}.`;
+    const captionGoogle = Array.isArray(platforms) && platforms.includes("google")
+      ? `${post.caption}\n\n${effectiveClient} — Serving ${post.city.split(",")[0].trim()} and surrounding areas.`
+      : `${effectiveClient} proudly servicing ${post.city}.`;
 
     // V3: Compute scoring fields
     const dupRisk = calcDuplicateRisk(post.city, post.topic, post.angle, [
@@ -814,6 +829,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
 
     const [ins] = await db.insert(socialPostsTable).values({
       userId,
+      clientId: resolvedClientId,
       clientName: effectiveClient,
       platforms: JSON.stringify(Array.isArray(platforms) && platforms.length ? platforms : ["facebook"]),
       caption: captionFull,

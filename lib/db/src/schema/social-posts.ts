@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const socialPostsTable = pgTable("social_posts", {
   id:           uuid("id").primaryKey().defaultRandom(),
   userId:       text("user_id").notNull(),
+  clientId:     text("client_id"),
   clientName:   text("client_name").notNull().default(""),
   platforms:    text("platforms").notNull().default("[]"),
   imageData:    text("image_data"),

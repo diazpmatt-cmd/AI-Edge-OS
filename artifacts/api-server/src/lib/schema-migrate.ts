@@ -211,6 +211,7 @@ export async function migrateSchema(): Promise<void> {
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS client_id TEXT`);
 
   // ── Auto Content Settings ──────────────────────────────────────────────────
   await pool.query(`
@@ -374,6 +375,7 @@ export async function migrateSchema(): Promise<void> {
       last_updated   TIMESTAMPTZ    NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE review_platform_stats ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL DEFAULT 'default'`);
 
   // ── Calls ──────────────────────────────────────────────────────────────────
   // These tables may have been created by a prior raw-SQL bootstrap with a

@@ -996,7 +996,7 @@ export default function GbpAuditPage() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.8px", color: "#2DD4BF", textTransform: "uppercase" }}>
-                  📍 Local Presence Engine
+                  🌎 Local Edge Presence
                 </div>
                 <span style={{ color: "rgba(100,116,139,0.5)", fontSize: 11 }}>›</span>
                 <div style={{ fontSize: 11, color: "rgba(148,163,184,0.5)", letterSpacing: "0.4px" }}>
@@ -1004,7 +1004,7 @@ export default function GbpAuditPage() {
                 </div>
               </div>
               <h1 style={{ margin: "6px 0 4px", fontSize: 22, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.3px" }}>
-                Google Business Profile Health
+                Business Edge Profile Health
               </h1>
               <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.65)", lineHeight: 1.5 }}>
                 25 checks · AI recommendations · competitive intelligence · automated monitoring
@@ -1151,7 +1151,7 @@ export default function GbpAuditPage() {
             <div style={{ fontSize: 40, marginBottom: 14 }}>🏥</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "rgba(226,232,240,0.8)", marginBottom: 8 }}>No audit yet</div>
             <div style={{ fontSize: 12, color: "rgba(148,163,184,0.55)", marginBottom: 20 }}>
-              Run your first GBP Health Audit to see how your Google Business Profile scores across 25 checks.
+              Run your first GBP Health Audit to see how your Business Edge Profile scores across 25 checks.
             </div>
             <button onClick={() => runAudit()} disabled={isRunning}
               style={{ padding: "10px 24px", borderRadius: 9, border: "none", cursor: "pointer",

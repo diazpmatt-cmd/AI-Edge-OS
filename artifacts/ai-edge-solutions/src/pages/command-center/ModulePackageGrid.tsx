@@ -48,7 +48,7 @@ const SECTIONS: SectionDef[] = [
     tagline: "Your executive command hub",
     accentColor: "#E2E8F0",
     tiles: [
-      { to: "/admin/dashboard", icon: "🏠", label: "Command Center", sub: "Executive dashboard", family: "home" },
+      { to: "/admin/dashboard", icon: "🏠", label: "Command Edge Center", sub: "Executive dashboard", family: "home" },
     ],
   },
   {
@@ -64,9 +64,9 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "gbp-engine",
-    headerEmoji: "🥇",
-    name: "GBP Audit & Optimization Engine",
-    tagline: "Flagship · Google Business Profile health scoring and optimization",
+    headerEmoji: "📍",
+    name: "Business Edge Profile Engine",
+    tagline: "Flagship · Business Edge Profile health scoring and optimization",
     accentColor: "#EAB308",
     tiles: [
       { to: "/admin/gbp-audit", icon: "🏥", label: "GBP Health Audit", sub: "Profile optimization", family: "gbpEngine" },
@@ -74,19 +74,19 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "local-presence",
-    headerEmoji: "🥈",
-    name: "Local Presence Engine",
+    headerEmoji: "🌎",
+    name: "Local Edge Presence Engine",
     tagline: "Maps, listings, and reputation management",
     accentColor: "#94A3B8",
     tiles: [
-      { to: "/admin/local-presence", icon: "📍", label: "Local Presence",  sub: "Maps & listings",       family: "localPresence" },
-      { to: "/admin/reviews",        icon: "⭐", label: "Reviews Engine",  sub: "Reputation management", family: "localPresence" },
+      { to: "/admin/local-presence", icon: "📍", label: "Local Edge Presence", sub: "Maps & listings",       family: "localPresence" },
+      { to: "/admin/reviews",        icon: "⭐", label: "Reviews Engine",      sub: "Reputation management", family: "localPresence" },
     ],
   },
   {
     id: "ai-visibility",
-    headerEmoji: "🥉",
-    name: "AI Visibility Engine",
+    headerEmoji: "🤖",
+    name: "AI Edge Visibility Engine",
     tagline: "Voice search, AI presence, and search intelligence",
     accentColor: "#C4945A",
     tiles: [
@@ -96,8 +96,8 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "competitor-intel",
-    headerEmoji: "🏅",
-    name: "Competitor Intelligence",
+    headerEmoji: "⚔️",
+    name: "Competitive Edge Intelligence",
     tagline: "Market intelligence and competitive positioning",
     accentColor: "#8B5CF6",
     tiles: [
@@ -106,8 +106,8 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "authority-backlink",
-    headerEmoji: "🏅",
-    name: "Authority & Backlink Engine",
+    headerEmoji: "🔗",
+    name: "Edge Authority",
     tagline: "Domain authority building and link acquisition",
     accentColor: "#38BDF8",
     tiles: [
@@ -116,8 +116,8 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "opportunity-workflow",
-    headerEmoji: "🏅",
-    name: "Opportunity-to-Action Workflow",
+    headerEmoji: "📈",
+    name: "Edge Opportunities",
     tagline: "Convert market signals into revenue-generating actions",
     accentColor: "#34D399",
     comingSoon: true,
@@ -127,8 +127,8 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "creative-studio",
-    headerEmoji: "🏅",
-    name: "Creative Studio",
+    headerEmoji: "🎨",
+    name: "Creative Edge Studio",
     tagline: "Content creation, publishing, and brand asset management",
     accentColor: "#FB923C",
     tiles: [
@@ -140,8 +140,8 @@ const SECTIONS: SectionDef[] = [
   },
   {
     id: "ai-cmo",
-    headerEmoji: "🏅",
-    name: "AI CMO",
+    headerEmoji: "🧠",
+    name: "AI Edge CMO",
     tagline: "Strategic AI marketing intelligence and campaign orchestration",
     accentColor: "#F472B6",
     tiles: [
@@ -293,15 +293,15 @@ function ModuleTileCard({ tile, location }: { tile: ModuleTile; location: string
 
 // ── Section header emoji sizing per rank ──────────────────────────────────────
 function medalFontSize(emoji: string): number {
-  if (emoji === "🥇" || emoji === "🥈" || emoji === "🥉") return 22;
-  if (emoji === "🏅") return 20;
+  if (emoji === "📍" || emoji === "🌎" || emoji === "🤖") return 22;
+  if (emoji === "⚔️" || emoji === "🔗" || emoji === "📈" || emoji === "🎨" || emoji === "🧠") return 20;
   return 18;
 }
 
 // ── Section card ──────────────────────────────────────────────────────────────
 function SectionCard({ section, location }: { section: SectionDef; location: string }) {
   const { accentColor, comingSoon } = section;
-  const isRanked = ["🥇","🥈","🥉","🏅"].includes(section.headerEmoji);
+  const isRanked = ["📍","🌎","🤖","⚔️","🔗","🎨","🧠"].includes(section.headerEmoji);
 
   return (
     <div style={{
@@ -348,9 +348,9 @@ function SectionCard({ section, location }: { section: SectionDef; location: str
                 border: `1px solid ${accentColor}30`, borderRadius: 5,
                 padding: "1px 5px",
               }}>
-                {section.headerEmoji === "🥇" ? "FLAGSHIP" :
-                 section.headerEmoji === "🥈" ? "CORE" :
-                 section.headerEmoji === "🥉" ? "CORE" : "ADVANCED"}
+                {section.headerEmoji === "📍" ? "FLAGSHIP" :
+                 section.headerEmoji === "🌎" ? "CORE" :
+                 section.headerEmoji === "🤖" ? "CORE" : "ADVANCED"}
               </span>
             )}
             {comingSoon && (

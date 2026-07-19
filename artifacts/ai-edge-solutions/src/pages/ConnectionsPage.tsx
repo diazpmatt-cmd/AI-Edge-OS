@@ -634,7 +634,7 @@ export default function ConnectionsPage() {
             borderRadius: 20, padding: "4px 14px", marginBottom: 14,
           }}>
             <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              ⬡ Command Center
+              ⬡ Command Edge Center
             </span>
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>

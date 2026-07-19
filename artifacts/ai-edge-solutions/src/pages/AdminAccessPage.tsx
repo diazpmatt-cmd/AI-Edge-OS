@@ -158,10 +158,10 @@ export default function AdminAccessPage() {
           fontSize: 22, fontWeight: 800, color: "#FFFFFF",
           letterSpacing: "-0.5px", margin: "0 0 8px",
         }}>
-          Command Center
+          Command Edge Center
         </h1>
         <p style={{ fontSize: 13.5, color: "#4B5563", margin: "0 0 32px", lineHeight: 1.5 }}>
-          Secure access to AI Edge Command Center.<br />Enter your 6-digit passcode to continue.
+          Secure access to AI Edge Command Edge Center.<br />Enter your 6-digit passcode to continue.
         </p>
 
         {/* Visual digit boxes — click anywhere here to activate input */}
@@ -246,7 +246,7 @@ export default function AdminAccessPage() {
             (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
           }}
         >
-          Access Command Center →
+          Access Command Edge Center →
         </button>
 
         {/* Back link */}

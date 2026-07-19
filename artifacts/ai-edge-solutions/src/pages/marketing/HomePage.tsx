@@ -8,7 +8,7 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const SERVICES = [
   { icon: "📞", title: "Lead Recovery AI", tagline: "Never lose a missed call again", description: "Instant text-back, 2-way SMS, and automated follow-up sequences that convert missed calls into booked jobs — in seconds." },
   { icon: "🤖", title: "AI Receptionist", tagline: "24/7 intelligent call handling", description: "An AI that answers every call, qualifies leads, books appointments, and handles FAQs — so you never miss a customer again." },
-  { icon: "📍", title: "Google Business Profile", tagline: "Optimize local visibility", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile prominently ranked in local search." },
+  { icon: "📍", title: "Business Edge Profile", tagline: "Optimize local visibility", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile prominently ranked in local search." },
   { icon: "⭐", title: "Review Generation", tagline: "More 5-star reviews, on autopilot", description: "Automatically request reviews from satisfied customers via SMS. Respond intelligently and build a reputation that sells." },
   { icon: "🔍", title: "Local SEO", tagline: "Rank where it counts", description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need." },
   { icon: "🌐", title: "Website Design", tagline: "Sites that convert visitors", description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand." },

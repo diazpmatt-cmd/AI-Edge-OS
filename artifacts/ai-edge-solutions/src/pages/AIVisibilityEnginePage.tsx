@@ -335,13 +335,13 @@ export default function AIVisibilityEnginePage() {
             borderRadius: 20, padding: "4px 14px", marginBottom: 12,
           }}>
             <span style={{ fontSize: 12, color: "#FBBF24", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              ✨ AI Visibility Engine
+              🤖 AI Edge Visibility
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 5px" }}>
-                AI Visibility Engine
+                AI Edge Visibility
               </h1>
               <p style={{ fontSize: 13, color: t.text2, margin: 0, maxWidth: 620 }}>
                 {isClientView && audit.businessName

@@ -294,7 +294,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "1")}
               onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "0.75")}
             >
-              ← Command Center
+              ← Command Edge Center
             </Link>
           </div>
         )}

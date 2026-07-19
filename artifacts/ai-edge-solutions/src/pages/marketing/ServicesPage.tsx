@@ -37,7 +37,7 @@ const SERVICES = [
   },
   {
     icon: "📍",
-    title: "Google Business Profile Automation",
+    title: "Business Edge Profile Automation",
     tagline: "Own your local presence",
     description: "Your GBP is your most powerful free marketing asset. We automate consistent posting, photo uploads, Q&A responses, and profile optimization to keep you ranked at the top of local search.",
     features: [

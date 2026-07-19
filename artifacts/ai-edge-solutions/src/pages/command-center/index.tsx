@@ -200,9 +200,9 @@ export default function CommandCenter() {
               </div>
               <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
                 {([
-                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
+                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Edge Presence","Reviews Engine","Daily Command"], price: "Included" },
                   { id: "growth",     name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
-                  { id: "enterprise", name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
+                  { id: "enterprise", name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitive Edge Intelligence","Edge Authority","AI Edge CMO","All Engines"], price: "Custom" },
                 ] as const).map(pkg => {
                   const isActive = activeBusiness.currentTier === pkg.id;
                   return (
@@ -275,9 +275,9 @@ export default function CommandCenter() {
                   { icon: "📞", name: "Lead Recovery AI",          sub: "Missed call conversion",     color: "#22C55E", status: "available", to: "/admin/lead-recovery"     },
                   { icon: "🤖", name: "AI Receptionist",           sub: "24/7 automated call handling",color: "#38BDF8", status: "available", to: "/admin/ai-receptionist"   },
                   { icon: "📊", name: "Call Intelligence",         sub: "Call tracking & analytics",  color: "#60A5FA", status: "available", to: "/admin/call-intelligence"  },
-                  { icon: "🕵️", name: "Competitor Intelligence",   sub: "Market positioning analysis", color: "#8B5CF6", status: "soon",      to: "#"                        },
-                  { icon: "🔗", name: "Authority & Backlink Engine",sub: "Domain authority building",  color: "#38BDF8", status: "soon",      to: "#"                        },
-                  { icon: "🧠", name: "AI CMO",                    sub: "Strategic AI marketing",     color: "#F472B6", status: "available", to: "/admin/apollos"           },
+                  { icon: "⚔️", name: "Competitive Edge Intelligence", sub: "Market positioning analysis", color: "#8B5CF6", status: "soon",      to: "#"                        },
+                  { icon: "🔗", name: "Edge Authority",             sub: "Domain authority building",  color: "#38BDF8", status: "soon",      to: "#"                        },
+                  { icon: "🧠", name: "AI Edge CMO",                sub: "Strategic AI marketing",     color: "#F472B6", status: "available", to: "/admin/apollos"           },
                 ].map(svc => (
                   <div key={svc.name} style={{
                     display: "flex", alignItems: "center", gap: 10,

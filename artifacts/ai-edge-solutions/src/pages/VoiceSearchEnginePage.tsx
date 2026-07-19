@@ -24,7 +24,7 @@ const SIRI_SIGNALS: Signal[] = [
     points: 35,
     platform: "Apple Business Connect",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "yelp_siri",
@@ -33,7 +33,7 @@ const SIRI_SIGNALS: Signal[] = [
     points: 30,
     platform: "Yelp for Business",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "reviews_siri",
@@ -42,7 +42,7 @@ const SIRI_SIGNALS: Signal[] = [
     points: 20,
     platform: "Google / Yelp",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "schema_siri",
@@ -61,7 +61,7 @@ const ALEXA_SIGNALS: Signal[] = [
     points: 35,
     platform: "Bing Places for Business",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "yelp_alexa",
@@ -70,7 +70,7 @@ const ALEXA_SIGNALS: Signal[] = [
     points: 25,
     platform: "Yelp for Business",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "nap_alexa",
@@ -96,7 +96,7 @@ const GOOGLE_SIGNALS: Signal[] = [
     points: 40,
     platform: "Google Business Profile",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "reviews_google",
@@ -105,7 +105,7 @@ const GOOGLE_SIGNALS: Signal[] = [
     points: 25,
     platform: "Google Business Profile",
     actionPath: "/admin/local-presence",
-    actionLabel: "Local Presence Engine",
+    actionLabel: "Local Edge Presence Engine",
   },
   {
     id: "website_seo",

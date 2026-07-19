@@ -66,7 +66,7 @@ function HealthRowCard({ row }: { row: HealthRow }) {
 const HEALTH_ROWS: HealthRow[] = [
   {
     id: "gbp",
-    label: "Google Business Profile",
+    label: "Business Edge Profile",
     status: "healthy",
     explanation: "GBP connected and verified. Publishing active.",
     link: "/admin/local-presence",

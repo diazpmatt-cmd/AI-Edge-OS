@@ -12,7 +12,7 @@ const PACKAGE_LABELS: Record<string, string> = {
 const SERVICES = [
   "Lead Recovery AI",
   "AI Receptionist",
-  "Google Business Profile Automation",
+  "Business Edge Profile Automation",
   "Review Generation",
   "Local SEO",
   "Website Design",

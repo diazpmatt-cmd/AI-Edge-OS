@@ -44,7 +44,7 @@ const OPPORTUNITIES: Opportunity[] = [
   {
     id: "local-listings",
     title: "Local Directory Expansion",
-    source: "Local Presence Engine",
+    source: "Local Edge Presence Engine",
     impact: "Est. pending baseline",
     effort: "low",
     confidence: "high",

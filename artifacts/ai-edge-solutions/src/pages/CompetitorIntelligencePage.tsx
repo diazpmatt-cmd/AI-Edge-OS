@@ -1762,7 +1762,7 @@ const OBS_CATEGORIES: ObsCategory[] = [
 
 const OBS_CAT_META: Record<ObsCategory, { label: string; icon: string }> = {
   website_intel:  { label: "Website Intel",  icon: "🌐" },
-  local_presence: { label: "Local Presence", icon: "📍" },
+  local_presence: { label: "Local Edge Presence", icon: "📍" },
   reviews:        { label: "Reviews",        icon: "⭐" },
   authority:      { label: "Authority",      icon: "🔗" },
   ai_visibility:  { label: "AI Visibility",  icon: "🤖" },

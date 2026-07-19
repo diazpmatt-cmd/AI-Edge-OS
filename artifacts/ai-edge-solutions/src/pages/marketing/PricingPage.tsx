@@ -39,14 +39,14 @@ const PLANS: Plan[] = [
     price: "$997",
     priceNote: "$1,197/mo month-to-month",
     period: "/mo",
-    bestFor: "Local businesses that want to dominate Google Business Profile, automate reputation management, and get a daily operational view.",
+    bestFor: "Local businesses that want to dominate Business Edge Profile, automate reputation management, and get a daily operational view.",
     cta: "Get Started with Core",
     ctaStyle: "primary",
     modules: [
-      { name: "GBP Audit Engine",   icon: "🔍", description: "Automated Google Business Profile health scoring, issue detection, and optimization recommendations." },
-      { name: "Local Presence",      icon: "📍", description: "Listing consistency management across Google, Apple, Bing, and Nextdoor." },
-      { name: "Reviews Engine",      icon: "⭐", description: "Automated review request campaigns and reputation monitoring with AI sentiment analysis." },
-      { name: "Daily Command Center",icon: "📊", description: "Unified dashboard with KPIs, AI executive brief, and action queue updated every 24 hours." },
+      { name: "GBP Audit Engine",      icon: "🔍", description: "Automated Business Edge Profile health scoring, issue detection, and optimization recommendations." },
+      { name: "Local Edge Presence",   icon: "📍", description: "Listing consistency management across Google, Apple, Bing, and Nextdoor." },
+      { name: "Reviews Engine",        icon: "⭐", description: "Automated review request campaigns and reputation monitoring with AI sentiment analysis." },
+      { name: "Daily Command Edge Center", icon: "📊", description: "Unified dashboard with KPIs, AI executive brief, and action queue updated every 24 hours." },
     ],
     extras: [
       "Done-with-you GBP setup & optimization",
@@ -93,10 +93,10 @@ const PLANS: Plan[] = [
     cta: "Request Enterprise Quote",
     ctaStyle: "purple",
     modules: [
-      { name: "Competitor Intelligence", icon: "🔬", description: "Keyword gap analysis, competitor GBP tracking, and real-time market positioning data." },
-      { name: "Authority & Backlink",    icon: "🔗", description: "Citation management, backlink strategy, and local authority building at scale." },
-      { name: "AI CMO",                  icon: "🧠", description: "AI-generated monthly strategy briefs, content calendar automation, and growth roadmap recommendations." },
-      { name: "All Engines Included",    icon: "⚡", description: "Everything in Core + Growth plus custom workflow automation and multi-location support." },
+      { name: "Competitive Edge Intelligence", icon: "⚔️", description: "Keyword gap analysis, competitor GBP tracking, and real-time market positioning data." },
+      { name: "Edge Authority",                icon: "🔗", description: "Citation management, backlink strategy, and local authority building at scale." },
+      { name: "AI Edge CMO",                   icon: "🧠", description: "AI-generated monthly strategy briefs, content calendar automation, and growth roadmap recommendations." },
+      { name: "All Engines Included",          icon: "⚡", description: "Everything in Core + Growth plus custom workflow automation and multi-location support." },
     ],
     extras: [
       "Everything in Core + Growth",
@@ -108,20 +108,20 @@ const PLANS: Plan[] = [
 ];
 
 const MODULE_COMPARISON = [
-  { module: "GBP Audit Engine",        core: true,  growth: false, enterprise: true  },
-  { module: "Local Presence",           core: true,  growth: false, enterprise: true  },
-  { module: "Reviews Engine",           core: true,  growth: false, enterprise: true  },
-  { module: "Daily Command Center",     core: true,  growth: true,  enterprise: true  },
-  { module: "Lead Recovery AI",         core: false, growth: true,  enterprise: true  },
-  { module: "Call Intelligence",        core: false, growth: true,  enterprise: true  },
-  { module: "Growth Execution Engine",  core: false, growth: true,  enterprise: true  },
-  { module: "AI Receptionist",          core: "Add-on", growth: true, enterprise: true },
-  { module: "Competitor Intelligence",  core: false, growth: false, enterprise: true  },
-  { module: "Authority & Backlink",     core: false, growth: false, enterprise: true  },
-  { module: "AI CMO",                   core: false, growth: false, enterprise: true  },
-  { module: "Multi-Location Support",   core: false, growth: false, enterprise: true  },
-  { module: "Custom Automations",       core: false, growth: false, enterprise: true  },
-  { module: "Dedicated Strategy Team",  core: false, growth: false, enterprise: true  },
+  { module: "GBP Audit Engine",              core: true,  growth: false, enterprise: true  },
+  { module: "Local Edge Presence",           core: true,  growth: false, enterprise: true  },
+  { module: "Reviews Engine",               core: true,  growth: false, enterprise: true  },
+  { module: "Daily Command Edge Center",     core: true,  growth: true,  enterprise: true  },
+  { module: "Lead Recovery AI",             core: false, growth: true,  enterprise: true  },
+  { module: "Call Intelligence",            core: false, growth: true,  enterprise: true  },
+  { module: "Growth Execution Engine",      core: false, growth: true,  enterprise: true  },
+  { module: "AI Receptionist",              core: "Add-on", growth: true, enterprise: true },
+  { module: "Competitive Edge Intelligence",core: false, growth: false, enterprise: true  },
+  { module: "Edge Authority",               core: false, growth: false, enterprise: true  },
+  { module: "AI Edge CMO",                  core: false, growth: false, enterprise: true  },
+  { module: "Multi-Location Support",       core: false, growth: false, enterprise: true  },
+  { module: "Custom Automations",           core: false, growth: false, enterprise: true  },
+  { module: "Dedicated Strategy Team",      core: false, growth: false, enterprise: true  },
 ];
 
 const ADDONS = [
@@ -284,9 +284,9 @@ export default function PricingPage() {
           {/* Connector line */}
           <div style={{ position: "absolute", left: 28, top: 36, bottom: 36, width: 2, background: "linear-gradient(to bottom, #00AEEF44, #22C55E44, #A78BFA44)", borderRadius: 2 }} />
           {[
-            { step: "1", title: "Core Package", sub: "GBP · Presence · Reviews · Command Center", color: "#00AEEF", note: "Start here — get your local foundation right." },
+            { step: "1", title: "Core Package", sub: "GBP · Local Edge Presence · Reviews · Command Edge Center", color: "#00AEEF", note: "Start here — get your local foundation right." },
             { step: "2", title: "+ Growth Package", sub: "Lead Recovery · Call AI · Growth Execution · AI Receptionist", color: "#22C55E", note: "Layer in when you're ready to convert more leads." },
-            { step: "3", title: "+ Enterprise", sub: "Competitor Intelligence · Authority · AI CMO · All Engines", color: "#A78BFA", note: "Scale to full AI Growth OS when you want to dominate your market." },
+            { step: "3", title: "+ Enterprise", sub: "Competitive Edge Intelligence · Edge Authority · AI Edge CMO · All Engines", color: "#A78BFA", note: "Scale to full AI Growth OS when you want to dominate your market." },
           ].map((item, i) => (
             <div key={i} className="stack-row" style={{ display: "flex", alignItems: "flex-start", gap: 20, padding: "20px 0", marginLeft: 0 }}>
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: `${item.color}15`, border: `2px solid ${item.color}40`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative", zIndex: 1 }}>

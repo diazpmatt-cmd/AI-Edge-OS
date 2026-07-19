@@ -1,6 +1,6 @@
 import { useListKeywords, type Keyword } from "@workspace/api-client-react";
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Linking,
@@ -36,22 +36,34 @@ function useKeywordGaps() {
   const [gaps, setGaps] = useState<GapSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchGaps = async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(false);
     try {
-      setLoading(true);
-      setError(false);
-      const res = await customFetch("/api/competitor-intelligence/gaps?limit=50");
+      const res = await customFetch("/api/competitor-intelligence/gaps?limit=50", {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         setError(true);
         return;
       }
       const data: GapsResponse = await res.json();
+      if (controller.signal.aborted) return;
       setGaps(data.hasData ? data.gaps : []);
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(true);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 

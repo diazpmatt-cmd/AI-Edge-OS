@@ -298,6 +298,89 @@ describe("Keyword Gaps — error UI visibility after retry", () => {
   });
 });
 
+describe("Keyword Gaps — AbortController / out-of-order protection", () => {
+  it("ignores a late-resolving first response when a retry has already succeeded", async () => {
+    let currentController: AbortController | null = null;
+    let gaps: GapSignal[] = [];
+
+    async function fetchGaps(
+      fetchImpl: (signal: AbortSignal) => Promise<Response>,
+    ): Promise<void> {
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
+      try {
+        const res = await fetchImpl(controller.signal);
+        if (controller.signal.aborted) return;
+        if (!res.ok) return;
+        const data: GapsResponse = await res.json();
+        if (controller.signal.aborted) return;
+        gaps = data.hasData ? data.gaps : [];
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+      }
+    }
+
+    const staleGaps = [makeGap({ id: "stale", keyword: "stale keyword" })];
+    const freshGaps = [makeGap({ id: "fresh", keyword: "fresh keyword" })];
+
+    let resolveFirst!: (r: Response) => void;
+    const firstResponsePromise = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    const firstFetch = fetchGaps((_signal) => firstResponsePromise);
+
+    await fetchGaps((_signal) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ hasData: true, gaps: freshGaps, count: 1 } satisfies GapsResponse),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].keyword).toBe("fresh keyword");
+
+    resolveFirst(
+      new Response(
+        JSON.stringify({ hasData: true, gaps: staleGaps, count: 1 } satisfies GapsResponse),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await firstFetch;
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].keyword).toBe("fresh keyword");
+  });
+
+  it("aborted fetch signal is observable by the caller before the response is consumed", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it("a second fetchGaps call aborts the first controller before starting its own", () => {
+    const controllers: AbortController[] = [];
+    let currentController: AbortController | null = null;
+
+    function startFetch() {
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
+      controllers.push(controller);
+    }
+
+    startFetch();
+    startFetch();
+
+    expect(controllers).toHaveLength(2);
+    expect(controllers[0].signal.aborted).toBe(true);
+    expect(controllers[1].signal.aborted).toBe(false);
+  });
+});
+
 describe("Keyword Gaps — error state", () => {
   it("sets error=true and gaps=[] when fetch throws a network error", async () => {
     const { gaps, loading, error } = await simulateFetch(() =>

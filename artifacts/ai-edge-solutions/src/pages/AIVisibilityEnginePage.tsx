@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { useAuth } from "@clerk/react";
+import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -196,6 +197,23 @@ export default function AIVisibilityEnginePage() {
   const [emailLoading,  setEmailLoading]  = useState(false);
   const [emailStatus,   setEmailStatus]   = useState<{ ok: boolean; msg: string } | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+
+  // ── Read model (Opportunities tab) ──────────────────────────────────────────
+  const [activeTab, setActiveTab]  = useState<"opportunities" | "legacy">("opportunities");
+  const [rmTrigger, setRmTrigger]  = useState(0);
+  const [readModel, setReadModel]  = useState<RMReadModel | null>(null);
+  const [rmLoading, setRmLoading]  = useState(false);
+  const [rmError,   setRmError]    = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== "opportunities") return;
+    setRmLoading(true);
+    setRmError(null);
+    apiFetch<RMReadModel>(`/ai-visibility/read-model/${clientId}`)
+      .then(data => setReadModel(data))
+      .catch(() => setRmError("Failed to load AI visibility data. Please try again."))
+      .finally(() => setRmLoading(false));
+  }, [activeTab, clientId, apiFetch, rmTrigger]);
 
   useEffect(() => {
     setLoading(true);
@@ -493,6 +511,42 @@ export default function AIVisibilityEnginePage() {
           </div>
         )}
 
+        {/* ── Tab navigation ── */}
+        <div style={{ display: "flex", gap: 0, marginBottom: 28, borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
+          {([ { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
+              { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "9px 18px", background: "none", border: "none",
+                cursor: "pointer", fontSize: 12, fontWeight: 700,
+                color: activeTab === tab.id ? tab.color : (isDark ? "#475569" : "#9CA3AF"),
+                borderBottom: activeTab === tab.id ? `2px solid ${tab.color}` : "2px solid transparent",
+                marginBottom: -1, transition: "all 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Opportunities view ── */}
+        {activeTab === "opportunities" && (
+          <AiVisibilityReadModelView
+            model={readModel}
+            loading={rmLoading}
+            error={rmError}
+            onRetry={() => setRmTrigger(n => n + 1)}
+            isDark={isDark}
+            colors={t}
+          />
+        )}
+
+        {/* ── Legacy Audit view ── */}
+        {activeTab === "legacy" && (<>
+
         {/* ── 1. KPI Score Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, marginBottom: 30 }}>
           {kpiCards.map(k => (
@@ -749,6 +803,8 @@ export default function AIVisibilityEnginePage() {
             })}
           </div>
         </div>
+
+        </>)}
 
       </div>
     </AppShell>

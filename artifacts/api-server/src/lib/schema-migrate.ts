@@ -493,6 +493,27 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
 
+  // ── AI Visibility Run Results (C9R-2) ─────────────────────────────────────
+  // Persisted output of AiVisibilityExecutionService.execute().
+  // result_json holds the full serialised AiVisibilityReadModel.
+  // The summary columns (counts) enable the history endpoint to return
+  // lightweight paginated records without deserialising result_json.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_visibility_run_results (
+      id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id              TEXT        NOT NULL,
+      generated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      result_json            TEXT        NOT NULL,
+      recommendation_count   INTEGER     NOT NULL DEFAULT 0,
+      rejected_count         INTEGER     NOT NULL DEFAULT 0,
+      available_source_count INTEGER     NOT NULL DEFAULT 0,
+      created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_visibility_runs_client
+      ON ai_visibility_run_results(client_id, generated_at DESC);
+  `);
+
   // ── Revenue Attribution ────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS revenue_attribution (

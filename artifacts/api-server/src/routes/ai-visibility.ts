@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { aiVisibilityAuditsTable, auditExportsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import { generateAuditPDF } from "../services/pdf-generator.js";
+import { AiVisibilityExecutionService } from "../lib/ai-visibility-execution-service.js";
+import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
 
@@ -300,6 +302,65 @@ router.post("/ai-visibility/email-report", async (req, res) => {
   } catch (err) {
     console.error("[ai-visibility] email-report error:", err);
     res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+// ── GET /api/ai-visibility/read-model/:clientId ───────────────────────────────
+// Returns a live AiVisibilityReadModel composed from real canonical source data.
+// Requires the authenticated userId to own the requested client slug.
+
+router.get("/ai-visibility/read-model/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+  if (!requestedSlug) { res.status(400).json({ error: "client_id_required" }); return; }
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc   = new AiVisibilityExecutionService(pool, db);
+    const model = await svc.execute({ clientId: clientCheck.clientId, userId });
+    res.json(model);
+  } catch (err) {
+    console.error("[ai-visibility] read-model error:", err);
+    res.status(500).json({ error: "execution_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/read-model/:clientId/history ───────────────────────
+// Returns lightweight paginated run summaries — no result_json in list.
+
+router.get("/ai-visibility/read-model/:clientId/history", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc     = new AiVisibilityExecutionService(pool, db);
+    const records = await svc.listHistory(clientCheck.clientId, limit);
+    res.json({ runs: records, total: records.length });
+  } catch (err) {
+    console.error("[ai-visibility] history error:", err);
+    res.status(500).json({ error: "history_query_failed" });
   }
 });
 

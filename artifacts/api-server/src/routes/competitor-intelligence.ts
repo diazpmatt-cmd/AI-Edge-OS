@@ -17,8 +17,9 @@
 
 import { Router }  from "express";
 import { getAuth } from "@clerk/express";
-import { pool }    from "@workspace/db";
+import { pool, db, DrizzleCompetitorRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
+import { competitorDiscoveryService }          from "../lib/competitor-discovery-service.js";
 
 const router = Router();
 
@@ -463,6 +464,200 @@ router.get("/api/competitor-intelligence/history", async (req, res) => {
   } catch (err) {
     if (isRelationMissingError(err)) {
       res.json({ clientId: auth.client.id, history: [], count: 0, reason: "tables_not_initialized" });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "db_error", message: msg });
+  }
+});
+
+// ── POST /api/competitor-intelligence/extract-entities ────────────────────────
+/**
+ * Manually trigger competitor entity extraction from the latest discovery run.
+ * Useful for backfilling before the next automated discovery run fires.
+ */
+router.post("/api/competitor-intelligence/extract-entities", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  try {
+    const result = await competitorDiscoveryService.extractCompetitorsFromLatestRun(client.id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "extraction_failed", message: msg });
+  }
+});
+
+// ── GET /api/competitor-intelligence/competitors ───────────────────────────────
+/**
+ * List canonical competitor entities for the authenticated client.
+ *
+ * Query params:
+ *   limit       integer  max results (default 50, max 200)
+ *   offset      integer  pagination offset (default 0)
+ *   orderBy     "opportunityScore" | "keywordGapCount" | "lastSeenAt"
+ *   search      string   filter by domain or business_name (case-insensitive)
+ *   minScore    integer  minimum opportunity_score (0–100)
+ *   threatLevel "low" | "medium" | "high" | "critical"  (exact match)
+ */
+router.get("/api/competitor-intelligence/competitors", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  const limit     = Math.min(parseInt(String(req.query["limit"]  ?? "50"),  10) || 50,  200);
+  const offset    = Math.max(parseInt(String(req.query["offset"] ?? "0"),   10) || 0,   0);
+  const orderBy   = String(req.query["orderBy"] ?? "opportunityScore");
+  const search    = String(req.query["search"]  ?? "").trim().toLowerCase();
+  const minScore  = parseInt(String(req.query["minScore"] ?? "0"), 10) || 0;
+  const threatFlt = String(req.query["threatLevel"] ?? "").trim().toLowerCase();
+
+  const validOrder = ["opportunityScore", "keywordGapCount", "lastSeenAt"];
+  const safeOrder  = validOrder.includes(orderBy) ? orderBy : "opportunityScore";
+
+  const orderSql =
+    safeOrder === "keywordGapCount" ? "keyword_gap_count DESC" :
+    safeOrder === "lastSeenAt"      ? "last_seen_at DESC"      :
+                                      "opportunity_score DESC";
+
+  try {
+    // Build WHERE clause for optional filters
+    const conditions: string[] = [
+      "client_id = $1",
+      "canonical_status = 'active'",
+      "opportunity_score >= $2",
+    ];
+    const params: unknown[] = [client.id, minScore];
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(LOWER(domain) LIKE $${params.length} OR LOWER(COALESCE(business_name,'')) LIKE $${params.length})`);
+    }
+
+    if (threatFlt && ["low","medium","high","critical"].includes(threatFlt)) {
+      params.push(threatFlt);
+      conditions.push(`threat_level = $${params.length}`);
+    }
+
+    const where = conditions.join(" AND ");
+
+    // Count total for pagination
+    const countRes = await pool.query<{ total: string }>(
+      `SELECT COUNT(*) AS total FROM competitors WHERE ${where}`,
+      params,
+    );
+    const total = parseInt(countRes.rows[0]?.total ?? "0", 10);
+
+    // Fetch page
+    params.push(limit, offset);
+    const rowRes = await pool.query<{
+      id: string; domain: string; business_name: string | null;
+      website: string | null; primary_category: string | null;
+      city: string | null; state: string | null;
+      review_count: number | null; avg_rating: string | null;
+      top_keyword_rank: number | null; keyword_gap_count: number;
+      opportunity_score: number; threat_level: string | null;
+      confidence_score: number; discovery_source: string;
+      first_seen_at: Date; last_seen_at: Date;
+      domain_authority: number | null; backlink_count: number | null;
+      local_presence_score: number | null; gbp_health_score: number | null;
+      ai_visibility_score: number | null; citation_score: number | null;
+      primary_photo_url: string | null; logo_url: string | null;
+      canonical_status: string;
+    }>(
+      `SELECT id, domain, business_name, website, primary_category,
+              city, state, review_count, avg_rating,
+              top_keyword_rank, keyword_gap_count,
+              opportunity_score, threat_level, confidence_score,
+              discovery_source, first_seen_at, last_seen_at,
+              domain_authority, backlink_count,
+              local_presence_score, gbp_health_score,
+              ai_visibility_score, citation_score,
+              primary_photo_url, logo_url, canonical_status
+       FROM competitors
+       WHERE ${where}
+       ORDER BY ${orderSql}
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    res.json({
+      ok:          true,
+      clientId:    client.id,
+      total,
+      limit,
+      offset,
+      count:       rowRes.rows.length,
+      competitors: rowRes.rows.map(r => ({
+        id:                  r.id,
+        domain:              r.domain,
+        businessName:        r.business_name ?? r.domain,
+        website:             r.website,
+        primaryCategory:     r.primary_category,
+        city:                r.city,
+        state:               r.state,
+        reviewCount:         r.review_count,
+        avgRating:           r.avg_rating != null ? parseFloat(r.avg_rating) : null,
+        topKeywordRank:      r.top_keyword_rank,
+        keywordGapCount:     r.keyword_gap_count,
+        opportunityScore:    r.opportunity_score,
+        threatLevel:         r.threat_level,
+        confidenceScore:     r.confidence_score,
+        discoverySource:     r.discovery_source,
+        firstSeenAt:         r.first_seen_at,
+        lastSeenAt:          r.last_seen_at,
+        domainAuthority:     r.domain_authority,
+        backlinkCount:       r.backlink_count,
+        localPresenceScore:  r.local_presence_score,
+        gbpHealthScore:      r.gbp_health_score,
+        aiVisibilityScore:   r.ai_visibility_score,
+        citationScore:       r.citation_score,
+        primaryPhotoUrl:     r.primary_photo_url,
+        logoUrl:             r.logo_url,
+        canonicalStatus:     r.canonical_status,
+      })),
+    });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ ok: true, clientId: client.id, total: 0, limit, offset, count: 0, competitors: [] });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "db_error", message: msg });
+  }
+});
+
+// ── GET /api/competitor-intelligence/competitors/:domain ──────────────────────
+/**
+ * Full competitor profile for a single domain.
+ * :domain is URL-encoded, e.g. "arrowexterminators.com"
+ */
+router.get("/api/competitor-intelligence/competitors/:domain", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  const domain = decodeURIComponent(req.params["domain"] ?? "").trim().toLowerCase();
+  if (!domain) {
+    res.status(400).json({ error: "bad_request", message: "domain param required" });
+    return;
+  }
+
+  try {
+    const repo    = new DrizzleCompetitorRepository(db);
+    const profile = await repo.getByDomain(client.id, domain);
+
+    if (!profile) {
+      res.status(404).json({ error: "not_found", domain, clientId: client.id });
+      return;
+    }
+
+    res.json({ ok: true, competitor: profile });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.status(404).json({ error: "not_found", reason: "tables_not_initialized" });
       return;
     }
     const msg = err instanceof Error ? err.message : String(err);

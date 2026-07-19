@@ -15,7 +15,7 @@ const GBP_MONITOR_INTERVAL  = 6 * 60 * 60_000; // GBP audit monitor: every 6h
 
 // Tracks posts currently being published — prevents duplicate publishes if a
 // tick fires while a previous publish is still in flight (e.g. slow GBP upload).
-const inFlight = new Set<string>();
+export const inFlight = new Set<string>();
 
 function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
@@ -35,7 +35,7 @@ interface SchedulerCycleSummary {
 
 // ── Post publishing ───────────────────────────────────────────────────────────
 
-async function publishDuePosts(): Promise<void> {
+export async function publishDuePosts(): Promise<void> {
   // Query for posts whose scheduled time has passed and are still "scheduled"
   // T6 approval gate: only publish posts that have been explicitly approved.
   // Posts with approvalStatus='pending' or null are held until a human (or

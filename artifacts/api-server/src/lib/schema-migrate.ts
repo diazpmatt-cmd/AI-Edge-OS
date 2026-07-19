@@ -376,6 +376,11 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
   await pool.query(`ALTER TABLE review_platform_stats ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL DEFAULT 'default'`);
+  // Migrate from single-column UNIQUE on platform to composite (client_id, platform).
+  // This supports multi-tenant isolation: different clients can have the same platform name.
+  // Safe to run repeatedly: DROP IF EXISTS + CREATE IF NOT EXISTS are both idempotent.
+  await pool.query(`ALTER TABLE review_platform_stats DROP CONSTRAINT IF EXISTS review_platform_stats_platform_unique`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS rps_client_platform_uniq ON review_platform_stats (client_id, platform)`);
 
   // ── Calls ──────────────────────────────────────────────────────────────────
   // These tables may have been created by a prior raw-SQL bootstrap with a

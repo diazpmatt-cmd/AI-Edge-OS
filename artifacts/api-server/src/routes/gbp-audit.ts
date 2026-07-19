@@ -573,6 +573,29 @@ router.get("/gbp/audit/optimizations", async (req, res) => {
 
 // ── PATCH /api/gbp/audit/optimizations/:id ────────────────────────────────────
 
+/**
+ * Update an optimization's resolved status for the owning client.
+ * Returns the updated row when id+clientId both match; null otherwise.
+ * Exported for unit testing — enforces cross-tenant ownership at DB level via
+ * a compound WHERE (id AND client_id). A foreign tenant's id resolves to null,
+ * indistinguishable from a missing record, revealing no cross-tenant information.
+ */
+export async function updateOptimizationOwned(
+  id:       string,
+  clientId: string,
+  resolved: boolean,
+): Promise<typeof gbpOptimizationOpportunitiesTable.$inferSelect | null> {
+  const [updated] = await db
+    .update(gbpOptimizationOpportunitiesTable)
+    .set({ resolved, resolvedAt: resolved ? new Date() : null })
+    .where(and(
+      eq(gbpOptimizationOpportunitiesTable.id, id),
+      eq(gbpOptimizationOpportunitiesTable.clientId, clientId),
+    ))
+    .returning();
+  return updated ?? null;
+}
+
 router.patch("/gbp/audit/optimizations/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -586,18 +609,7 @@ router.patch("/gbp/audit/optimizations/:id", async (req, res) => {
   }
 
   try {
-    const [updated] = await db
-      .update(gbpOptimizationOpportunitiesTable)
-      .set({
-        resolved,
-        resolvedAt: resolved ? new Date() : null,
-      })
-      .where(and(
-        eq(gbpOptimizationOpportunitiesTable.id, id),
-        eq(gbpOptimizationOpportunitiesTable.clientId, clientId),
-      ))
-      .returning();
-
+    const updated = await updateOptimizationOwned(id, clientId, resolved);
     if (!updated) return res.status(404).json({ error: "Opportunity not found" });
     return res.json({ opportunity: updated });
   } catch (err) {
@@ -668,7 +680,7 @@ router.get("/gbp/audit/trend", async (req, res) => {
 
 // ── Phase 5: alert generation helper ─────────────────────────────────────────
 
-async function generateAndPersistAlerts(
+export async function generateAndPersistAlerts(
   clientId:    string,
   snapshotId:  string,
   currScore:   number,
@@ -801,6 +813,25 @@ router.get("/gbp/audit/alerts", async (req, res) => {
 
 // ── PATCH /api/gbp/audit/alerts/:id/acknowledge ───────────────────────────────
 
+/**
+ * Acknowledge an alert for the owning client.
+ * Returns { acknowledged: true } when the row exists and belongs to clientId.
+ * Returns { acknowledged: false } when id+clientId has no match — the same
+ * response is returned for "not found" and "wrong tenant", leaking no information
+ * about records belonging to other clients.
+ * Exported for unit testing — ownership enforced via SQL WHERE clause.
+ */
+export async function acknowledgeAlertOwned(
+  alertId:  string,
+  clientId: string,
+): Promise<{ acknowledged: boolean }> {
+  const result = await pool.query(
+    `UPDATE gbp_alert_log SET acknowledged = TRUE WHERE id = $1 AND client_id = $2`,
+    [alertId, clientId],
+  );
+  return { acknowledged: (result.rowCount ?? 0) > 0 };
+}
+
 router.patch("/gbp/audit/alerts/:id/acknowledge", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -811,13 +842,8 @@ router.patch("/gbp/audit/alerts/:id/acknowledge", async (req, res) => {
     || "default";
 
   try {
-    const result = await pool.query(
-      `UPDATE gbp_alert_log SET acknowledged = TRUE WHERE id = $1 AND client_id = $2`,
-      [id, clientId],
-    );
-    if ((result.rowCount ?? 0) === 0) {
-      return res.status(404).json({ error: "Alert not found" });
-    }
+    const { acknowledged } = await acknowledgeAlertOwned(id, clientId);
+    if (!acknowledged) return res.status(404).json({ error: "Alert not found" });
     return res.json({ ok: true });
   } catch (err) {
     console.error("[gbp-audit] acknowledge error:", err);

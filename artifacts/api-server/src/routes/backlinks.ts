@@ -573,8 +573,14 @@ router.get("/api/backlinks/runs", async (req, res): Promise<void> => {
     const result = await pool.query(
       `SELECT id, client_id, provider_id, provider_revision, mode, status, capabilities,
               attempt_count, started_at, attempt_started_at, completed_at,
-              counts_observed, counts_accepted, counts_rejected, counts_merged_evidence,
-              counts_prospect_count, counts_evidence_count, counts_opportunity_count, counts_workflow_count,
+              observed_count          AS counts_observed,
+              accepted_count          AS counts_accepted,
+              rejected_count          AS counts_rejected,
+              merged_evidence_count   AS counts_merged_evidence,
+              prospect_count          AS counts_prospect_count,
+              evidence_count          AS counts_evidence_count,
+              opportunity_count       AS counts_opportunity_count,
+              workflow_count          AS counts_workflow_count,
               failure_stage, failure_code
        FROM backlink_ingestion_runs
        WHERE client_id = $1

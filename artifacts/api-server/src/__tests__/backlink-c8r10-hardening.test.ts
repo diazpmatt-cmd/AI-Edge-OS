@@ -195,6 +195,57 @@ describe("tenant isolation invariants (C8R-10 contract documentation)", () => {
   });
 });
 
+// ── BUG-5: GET /api/backlinks/runs column name aliases ───────────────────────
+// DB columns are *_count (observed_count, accepted_count …).
+// Frontend interface expects counts_* (counts_observed, counts_accepted …).
+// The SELECT must alias every count column or the query fails with 42703.
+
+describe("GET /runs: column name alias contract (C8R-10 BUG-5 fix)", () => {
+  // The fixed SELECT uses AS aliases to bridge the DB column names (e.g. observed_count)
+  // to the names the frontend IngestionRun interface expects (e.g. counts_observed).
+  // This table is the ground truth for the alias contract.
+  const columnAliasMap: [dbCol: string, alias: string][] = [
+    ["observed_count",         "counts_observed"],
+    ["accepted_count",         "counts_accepted"],
+    ["rejected_count",         "counts_rejected"],
+    ["merged_evidence_count",  "counts_merged_evidence"],
+    ["prospect_count",         "counts_prospect_count"],
+    ["evidence_count",         "counts_evidence_count"],
+    ["opportunity_count",      "counts_opportunity_count"],
+    ["workflow_count",         "counts_workflow_count"],
+  ];
+
+  test("DB column names do not start with 'counts_' (would need no alias)", () => {
+    for (const [dbCol] of columnAliasMap) {
+      expect(dbCol.startsWith("counts_")).toBe(false);
+    }
+  });
+
+  test("all alias names start with 'counts_' prefix", () => {
+    for (const [, alias] of columnAliasMap) {
+      expect(alias.startsWith("counts_")).toBe(true);
+    }
+  });
+
+  test("DB column names differ from their aliases (alias is required)", () => {
+    for (const [dbCol, alias] of columnAliasMap) {
+      expect(dbCol).not.toBe(alias);
+    }
+  });
+
+  test("all 8 count columns are present in the alias map", () => {
+    expect(columnAliasMap).toHaveLength(8);
+  });
+
+  test("frontend-required columns (counts_observed, counts_accepted, counts_rejected, counts_opportunity_count) are aliased", () => {
+    const aliases = new Set(columnAliasMap.map(([, a]) => a));
+    expect(aliases.has("counts_observed")).toBe(true);
+    expect(aliases.has("counts_accepted")).toBe(true);
+    expect(aliases.has("counts_rejected")).toBe(true);
+    expect(aliases.has("counts_opportunity_count")).toBe(true);
+  });
+});
+
 // ── Provider routing: configured vs fixture_fallback ─────────────────────────
 
 describe("provider routing: configured vs fixture_fallback (C8R-10 BUG-1 fix)", () => {

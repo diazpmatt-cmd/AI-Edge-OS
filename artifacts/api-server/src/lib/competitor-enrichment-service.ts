@@ -1,5 +1,5 @@
 /**
- * Competitor Enrichment Service — Phase 5 + P6.2
+ * Competitor Enrichment Service — Phase 5 + P6.2 + P6.3
  *
  * Orchestrates all registered CompetitorEnrichmentProviders for a given
  * competitor. Caches results in competitor_observations (24h TTL) so
@@ -18,6 +18,13 @@
  * - After enrichment, if the ai_visibility observation is real and has a
  *   derivedScore, competitors.ai_visibility_score is persisted and confidence
  *   is bumped using the shared applyAiVisibilityConfidenceBoost() helper.
+ *
+ * P6.3 change:
+ * - EdgeAuthorityProvider (Path C) replaces MockAuthorityProvider.
+ * - After enrichment, if the authority observation is real and has hasMatch:true,
+ *   competitors.domain_authority and backlink_count are persisted and confidence
+ *   is bumped using applyAuthorityConfidenceBoost().
+ * - In Path C, hasMatch is always false so no persistence or confidence bump occurs.
  */
 
 import { pool as defaultPool, db as defaultDb, DrizzleCompetitorRepository, EnrichmentProviderRegistry } from "@workspace/db";
@@ -33,6 +40,10 @@ import {
   AiEdgeVisibilityProvider,
   applyAiVisibilityConfidenceBoost,
 } from "./competitor-ai-visibility-provider.js";
+import {
+  EdgeAuthorityProvider,
+  applyAuthorityConfidenceBoost,
+} from "./competitor-authority-provider.js";
 
 type Pool = typeof defaultPool;
 type Db   = typeof defaultDb;
@@ -156,8 +167,9 @@ export class CompetitorEnrichmentService {
     // 3. Persist (upsert — newer observation overwrites stale one)
     await this.persist(observations);
 
-    // 4. Persist canonical score + confidence boost for real AI Visibility match (P6.2)
+    // 4. Persist canonical scores + confidence boosts for real provider matches.
     await this.persistAiVisibilityScore(clientId, domain, observations, existingData);
+    await this.persistAuthorityScore(clientId, domain, observations, existingData);
 
     return observations.map(obsToSummary);
   }
@@ -203,6 +215,53 @@ export class CompetitorEnrichmentService {
       aiVisibilityScore:  derivedScore,
       confidenceScore:    applyAiVisibilityConfidenceBoost(existingConfidence),
     });
+  }
+
+  /**
+   * After real authority enrichment, write domainAuthority and/or backlinkCount
+   * to the competitors canonical row and bump confidence using the shared helper.
+   *
+   * Guard conditions (all must hold before any write):
+   *   a. An authority observation exists and is real (isMock === false).
+   *   b. rawObservation.hasMatch === true (a live lookup returned verified data).
+   *   c. At least one of domainAuthority or backlinkCount is a number.
+   *
+   * Only confirmed numeric values are written — null/undefined values do NOT
+   * overwrite existing DB data. This prevents Path C's sparse observations
+   * from clearing real scores written by a previous Path A/B run.
+   *
+   * citationScore is NOT written here — that belongs to the backlink engine.
+   */
+  private async persistAuthorityScore(
+    clientId:     string,
+    domain:       string,
+    observations: ProviderObservation<unknown>[],
+    existingData: Record<string, unknown>,
+  ): Promise<void> {
+    const authObs = observations.find(o => o.category === "authority" && !o.isMock);
+    if (!authObs) return;
+
+    const raw = authObs.rawObservation as Record<string, unknown>;
+    if (raw["hasMatch"] !== true) return;
+
+    const rawDA = raw["domainAuthority"];
+    const rawBC = raw["backlinkCount"];
+
+    if (typeof rawDA !== "number" && typeof rawBC !== "number") return;
+
+    const existingConfidence =
+      typeof existingData["confidenceScore"] === "number"
+        ? existingData["confidenceScore"]
+        : 10;
+
+    const scores: Parameters<DrizzleCompetitorRepository["updateScores"]>[2] = {
+      confidenceScore: applyAuthorityConfidenceBoost(existingConfidence),
+    };
+    if (typeof rawDA === "number") scores.domainAuthority = rawDA;
+    if (typeof rawBC === "number") scores.backlinkCount   = rawBC;
+
+    const repo = new DrizzleCompetitorRepository(this.db);
+    await repo.updateScores(clientId, domain, scores);
   }
 
   private async loadCached(
@@ -272,8 +331,9 @@ export class CompetitorEnrichmentService {
 /**
  * Creates a CompetitorEnrichmentService with:
  *   - Real AiEdgeVisibilityProvider registered for the ai_visibility category.
- *   - All other mock providers unchanged (website_intel, local_presence, reviews, authority).
- *   - MockAiVisibilityProvider is excluded from registration.
+ *   - Real EdgeAuthorityProvider (Path C) registered for the authority category.
+ *   - Remaining mock providers for website_intel, local_presence, reviews.
+ *   - MockAiVisibilityProvider and MockAuthorityProvider excluded.
  *
  * Call once at API server startup; reuse the instance across requests.
  */
@@ -285,17 +345,20 @@ export function createEnrichmentService(
   const activeDb   = overrideDb   ?? defaultDb;
   const registry   = new EnrichmentProviderRegistry();
 
-  // Register all mock providers EXCEPT ai_visibility (replaced by real provider).
-  const mockWithoutAiVisibility = ALL_MOCK_PROVIDERS.filter(
-    p => p.category !== "ai_visibility",
+  // Register mock providers for categories that don't yet have a real provider.
+  const realCategories = new Set<string>(["ai_visibility", "authority"]);
+  const remainingMocks = ALL_MOCK_PROVIDERS.filter(
+    p => !realCategories.has(p.category),
   ) as ReadonlyArray<CompetitorEnrichmentProvider<unknown>>;
 
-  for (const provider of mockWithoutAiVisibility) {
+  for (const provider of remainingMocks) {
     registry.register(provider);
   }
 
-  // Register the real AI Edge Visibility provider.
+  // Register real providers.
   registry.register(new AiEdgeVisibilityProvider(activePool));
+  // Path C: no live lookup adapter — returns sparse non-mock observations.
+  registry.register(new EdgeAuthorityProvider());
 
   return new CompetitorEnrichmentService(registry, activePool, activeDb);
 }

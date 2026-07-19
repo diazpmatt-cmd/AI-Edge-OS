@@ -110,6 +110,43 @@ No live task-ledger file, database, migration, schema, API, UI, scheduler, webho
 
 ## Growth Engine C8R Status
 
+### C8R-6 — Backlink API Routes (implemented and verified)
+
+Completed scope:
+
+- Five production-ready Express routes: `GET /api/backlinks/opportunities` (pagination + category + workflowStatus filters), `GET /api/backlinks/opportunities/:id` (detail + evidence + workflow), `PATCH /api/backlinks/workflows/:opportunityId` (FSM transition), `GET /api/backlinks/runs` (ingestion history), `POST /api/backlinks/ingest/fixture` (fixture trigger).
+- Tenant isolation via `resolveClientContentContextFromDb` on every route. All handlers typed `Promise<void>` to satisfy TypeScript strict mode.
+- All 127 C8R-1 through C8R-5 tests preserved passing.
+
+### C8R-7 — Authority & Backlink Production UX (implemented and verified)
+
+Completed scope:
+
+- **Loading states**: spinner overlay with icon during opportunity fetch; per-drawer loading state for detail panel.
+- **Error states**: red banner with message + Retry button on opportunity fetch failure; drawer-scoped error for detail fetch failure.
+- **Pagination**: Prev / Next controls with `offset` state; page indicator shows "Showing X–Y items · end of results"; disabled states derived from `isPageEnd()`.
+- **Filtering**: category chips for all 10 `BacklinkOpportunityCategory` values; workflow status chips for all 7 statuses; both filters reset offset to 0 on change; both passed explicitly to `fetchOpportunities()` to avoid React closure bugs.
+- **Workflow status display**: color-coded badges using `wfStatusColor()` in table rows and detail drawer.
+- **Opportunity detail drawer**: slide-in panel (position: fixed) with backdrop dismiss; shows attainability + potential value scores, rationale, recommended action, workflow status + next action + due date + outcome summary, and evidence list.
+- **Evidence display**: per-evidence cards with sourceDomain, sourceUrl, category badge, authority/local-relevance/service-relevance/freshness-days metrics, and provider attribution.
+- **Ingestion history viewer**: collapsible section with full run table (run ID, provider, mode, status badge, accepted/rejected/observed counts, timestamp).
+- **Fixture ingest controls**: clearly labelled "DEV / DEMO ONLY" badge; ingest success/error feedback inline.
+- **Placeholder banners**: amber "PLACEHOLDER DATA" banner at top of Citations, NAP, Schema, and Actions tabs — clearly communicates no live backend exists for those sections.
+- **Backlink score sub-text**: dynamically reflects real data ("N active · M opps") instead of hardcoded "1 active link".
+- **`backlink-ui-helpers.ts`**: pure helper module with 9 exported functions + 4 exported constants; no React dependencies.
+- **`backlink-c8r7.test.ts`**: 63 new tests covering all helpers, all canonical category/status values, edge cases, and constant invariants.
+- TypeScript: api-server clean; frontend clean (pre-existing ReferralProgramPage.tsx errors unrelated to this work).
+- Tests: 127/127 C8R-1–C8R-5 regressions + 63/63 C8R-7 = **190 tests passing**.
+
+### Remaining Placeholder Areas (no backend yet)
+
+| Tab | Data Source | Backend Needed |
+|-----|-------------|----------------|
+| Citations | Hardcoded `CITATION_DIRS` array | Citation-scan engine |
+| NAP Consistency | Hardcoded `NAP_CHECKS` array | NAP-audit engine |
+| Schema.org | Hardcoded `SCHEMA_ITEMS` array | Schema-detection engine |
+| Action Plan | Hardcoded action steps | AI-generated recommendations engine |
+
 ### C8R-5 — Tenant-Safe AI Visibility Read Model (implemented and verified)
 
 Completed scope:
@@ -403,3 +440,57 @@ The canonical Local Presence Engine data model and orchestration layer is now in
 - [ ] Implement Bing Places read adapter
 - [ ] Add `PUT /api/local-presence/sync/:channelName` endpoint for on-demand sync
 - [ ] Surface `healthScore` and `issuesJson` in LocalPresenceEnginePage.tsx channel cards
+
+---
+
+## Referral Growth Engine — RGE Status
+
+### Planned Implementation Order
+
+Growth Engine phases are executed sequentially. Each phase depends on the previous one being live and verified.
+
+| Phase | Engine | Status |
+|-------|--------|--------|
+| C8R (1–7) | Authority & Backlink Engine | ✅ **COMPLETE** |
+| AI Visibility | AI Visibility Read Model + Collection | 🔵 Planned (C8R-5 read model done; live collection deferred) |
+| Content Autopilot | Multi-Platform Content Generation | 🟡 Active (BB&B pilot) |
+| **RGE-1** | **Local Opportunity Radar** | 🔵 **Planned** |
+
+---
+
+### RGE-1 — Local Opportunity Radar (🔵 Planned)
+
+**Summary:** A hyper-local lead-generation and referral surface that surfaces the highest-conversion
+offline and online opportunities specific to Bed Bugs & Beyond's Baldwin County service area.
+Unlike the backlink authority engine (domain-level signals), the Local Opportunity Radar focuses
+on real-world referral relationships, community trust, and geo-targeted discovery.
+
+**Proposed scope:**
+
+1. **Referral Partner Map** — Identify and rank hotel chains, rental property managers, apartment complexes,
+   and moving companies in the service area that are likely bed-bug referral sources. Track outreach
+   status (discovered → contacted → partner → active → churned).
+
+2. **Geo-Rank Tracker** — Monitor Google Maps pack position for target keywords
+   ("bed bug exterminator Las Vegas", "bed bug treatment Henderson NV", etc.) across the service area.
+   Surface rank changes week-over-week so Matthew can see which GBP optimizations moved the needle.
+
+3. **Review Velocity Monitor** — Track 5-star review accumulation rate vs. top competitors.
+   Alert when a competitor's review count crosses a threshold relative to BBB's count.
+   Surface a one-click "ask for review" action linked to Google review URL.
+
+4. **Local Event Radar** — Surface Baldwin County community events (home shows, real estate agent
+   open houses, Chamber of Commerce events) as high-value sponsorship / networking opportunities.
+   Connects to the backlink engine — event sponsorships produce local authority backlinks.
+
+5. **Google Maps Competitor Pulse** — Weekly snapshot of top-3 competitors (name, review count,
+   photo count, Q&A count, post recency). Shows exactly what BBB needs to do to pass them.
+
+**Dependencies before RGE-1 can start:**
+
+- Backlink engine (C8R-6/7) — COMPLETE ✅
+- GBP connection verified and quota confirmed (GCP project 474786012895) — BLOCKED on Matthew
+- Content Autopilot pilot stable (social posting confirmed live) — IN PROGRESS
+
+**No implementation scope in this entry.** RGE-1 is recorded as a future bounded phase. No schema,
+API, UI, scheduler, or data collection is implied by this entry.

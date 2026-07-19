@@ -200,7 +200,7 @@ describe("OpportunityCenter — live states", () => {
       data: { hasData: true, opportunities: [HIGH_OPP, MED_OPP], count: 2, runId: "r1" },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     render(<OpportunityCenter />);
     expect(screen.getByText("High-Value Keyword Gap")).toBeTruthy();
@@ -212,7 +212,7 @@ describe("OpportunityCenter — live states", () => {
       data: { hasData: true, opportunities: [HIGH_OPP, MED_OPP], count: 5, runId: "r1" },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     render(<OpportunityCenter />);
     const viewAllLink = document.querySelector('a[href="/admin/edge-opportunities"]');
@@ -225,7 +225,7 @@ describe("OpportunityCenter — live states", () => {
       data: undefined,
       isLoading: true,
       isError: false,
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { OpportunityCenter } = await import("../pages/command-center/OpportunityCenter");
     const { container } = render(<OpportunityCenter />);
     expect(screen.queryByText(/No opportunities scored yet/i)).toBeNull();
@@ -243,7 +243,7 @@ describe("EdgeOpportunitiesPage — loading state", () => {
       isLoading: true,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     const { container } = render(<EdgeOpportunitiesPage />);
     expect(container.querySelector("[style*='animation']")).toBeTruthy();
@@ -259,7 +259,7 @@ describe("EdgeOpportunitiesPage — empty state", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getByText(/No opportunities scored yet/i)).toBeTruthy();
@@ -272,7 +272,7 @@ describe("EdgeOpportunitiesPage — empty state", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     const link = document.querySelector('a[href="/admin/competitor-intelligence"]');
@@ -288,7 +288,7 @@ describe("EdgeOpportunitiesPage — error state", () => {
       isLoading: false,
       isError: true,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getByText(/Failed to load opportunities/i)).toBeTruthy();
@@ -302,7 +302,7 @@ describe("EdgeOpportunitiesPage — error state", () => {
       isLoading: false,
       isError: true,
       refetch: mockRefetch,
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     const retryBtn = screen.getByRole("button", { name: /Retry/i });
@@ -323,7 +323,7 @@ describe("EdgeOpportunitiesPage — live data", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getByText("High-Value Keyword Gap")).toBeTruthy();
@@ -338,7 +338,7 @@ describe("EdgeOpportunitiesPage — live data", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getByRole("button", { name: /^All/i })).toBeTruthy();
@@ -354,7 +354,7 @@ describe("EdgeOpportunitiesPage — live data", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
 
@@ -373,7 +373,7 @@ describe("EdgeOpportunitiesPage — live data", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getByText("Week of Jul 14")).toBeTruthy();
@@ -386,7 +386,7 @@ describe("EdgeOpportunitiesPage — live data", () => {
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
-    } as ReturnType<typeof useQuery>);
+    } as unknown as ReturnType<typeof useQuery>);
     const { default: EdgeOpportunitiesPage } = await import("../pages/EdgeOpportunitiesPage");
     render(<EdgeOpportunitiesPage />);
     expect(screen.getAllByText("High Priority").length).toBeGreaterThanOrEqual(1);

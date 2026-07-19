@@ -1,10 +1,36 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+type DimensionKey =
+  | "searchDemand"
+  | "competitorGap"
+  | "revenueImpact"
+  | "contentFeasibility"
+  | "seasonalRelevance"
+  | "aiSearchPotential";
+
+interface ScoreCardExplanations extends Partial<Record<DimensionKey, string>> {}
+
+interface ScoreCardEnrichment {
+  competitorDomainCount?: number;
+  paaQuestionCount?:      number;
+  cpcUsd?:                number | null;
+  coverageState?:         string;
+}
+
+interface ScoreCard extends Partial<Record<DimensionKey, number>> {
+  composite?:    number;
+  confidence?:   string;
+  explanations?: ScoreCardExplanations;
+  version?:      string;
+  enrichment?:   ScoreCardEnrichment;
+}
 
 interface Opportunity {
   id: string;
@@ -14,7 +40,7 @@ interface Opportunity {
   targetEngine: string;
   compositeScore: number;
   priority: string;
-  scoreCard: Record<string, unknown>;
+  scoreCard: ScoreCard;
   status: string;
   createdAt: string;
 }
@@ -28,6 +54,9 @@ interface OpportunitiesData {
   reason?: string;
 }
 
+type PriorityFilter = "all" | "high" | "medium" | "low";
+type SortKey = "composite_score" | "search_demand" | "revenue_impact" | "newest" | "oldest";
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ACCENT        = "#34D399";
@@ -37,33 +66,84 @@ const BG_PAGE       = "#030612";
 const BG_CARD       = "rgba(5,16,12,0.9)";
 
 const PRIORITY_CONFIG: Record<string, { color: string; label: string; icon: string }> = {
-  high:   { color: "#22C55E", label: "High Priority",   icon: "🔥" },
-  medium: { color: "#F59E0B", label: "Medium Priority", icon: "⚡" },
-  low:    { color: "#8B5CF6", label: "Low Priority",    icon: "💡" },
+  critical: { color: "#FF4444",  label: "Critical",        icon: "🚨" },
+  high:     { color: "#22C55E",  label: "High Priority",   icon: "🔥" },
+  medium:   { color: "#F59E0B",  label: "Medium Priority", icon: "⚡" },
+  low:      { color: "#8B5CF6",  label: "Low Priority",    icon: "💡" },
 };
 
 const ENGINE_COLOR: Record<string, string> = {
-  content:      "#FB923C",
-  optimization: "#00AEEF",
-  backlink:     "#38BDF8",
-  review:       "#EAB308",
-  social:       "#F472B6",
+  content:     "#FB923C",
+  authority:   "#00AEEF",
+  optimization:"#38BDF8",
+  measurement: "#EAB308",
+};
+
+const OPPORTUNITY_TYPE_LABELS: Record<string, string> = {
+  keyword_rank:       "Keyword Rank",
+  ai_citation_gap:    "AI Citation Gap",
+  competitor_gap:     "Competitor Gap",
+  content_topic:      "Content Topic",
+  local_listing:      "Local Listing",
+  review_velocity:    "Review Velocity",
+  schema_markup:      "Schema Markup",
+  seasonal_push:      "Seasonal Push",
+  voice_optimization: "Voice Optimization",
 };
 
 const OPPORTUNITY_TYPE_ICON: Record<string, string> = {
-  content:       "📝",
-  optimization:  "⚙️",
-  backlink:      "🔗",
-  review:        "⭐",
-  social:        "📱",
-  keyword:       "🔑",
-  visibility:    "👁",
-  gap:           "📊",
+  keyword_rank:       "🔑",
+  ai_citation_gap:    "🤖",
+  competitor_gap:     "📊",
+  content_topic:      "📝",
+  local_listing:      "📍",
+  review_velocity:    "⭐",
+  schema_markup:      "🗂",
+  seasonal_push:      "📅",
+  voice_optimization: "🎙",
 };
 
-type PriorityFilter = "all" | "high" | "medium" | "low";
+const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
+  pending:     { color: "#94A3B8", label: "Pending" },
+  assigned:    { color: "#00AEEF", label: "Assigned" },
+  in_progress: { color: "#F59E0B", label: "In Progress" },
+  complete:    { color: "#22C55E", label: "Complete" },
+  suppressed:  { color: "#EF4444", label: "Suppressed" },
+};
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+const SCORE_DIMENSIONS: { key: DimensionKey; label: string; icon: string }[] = [
+  { key: "searchDemand",       label: "Search Demand",       icon: "🔍" },
+  { key: "competitorGap",      label: "Competitor Gap",      icon: "📊" },
+  { key: "revenueImpact",      label: "Revenue Impact",      icon: "💰" },
+  { key: "contentFeasibility", label: "Content Feasibility", icon: "✏️" },
+  { key: "aiSearchPotential",  label: "AI Search Potential", icon: "🤖" },
+  { key: "seasonalRelevance",  label: "Seasonal Relevance",  icon: "📅" },
+];
+
+// ── Pure helpers (exported for unit tests) ────────────────────────────────────
+
+export function scoreColor(score: number): string {
+  if (score >= 70) return "#22C55E";
+  if (score >= 40) return "#F59E0B";
+  return "#8B5CF6";
+}
+
+export function priorityColor(p: string): string {
+  return PRIORITY_CONFIG[p]?.color ?? ACCENT;
+}
+
+export function groupByPriority(opps: Opportunity[]): Record<string, Opportunity[]> {
+  const grouped: Record<string, Opportunity[]> = { high: [], medium: [], low: [] };
+  for (const opp of opps) {
+    const key = opp.priority in grouped ? opp.priority : "low";
+    grouped[key].push(opp);
+  }
+  return grouped;
+}
+
+function confidenceColor(c: string): string {
+  return c === "high" ? "#22C55E" : c === "medium" ? "#F59E0B" : "#8B5CF6";
+}
 
 function formatDate(iso: string): string {
   try {
@@ -73,18 +153,12 @@ function formatDate(iso: string): string {
   }
 }
 
-function priorityColor(p: string): string {
-  return PRIORITY_CONFIG[p]?.color ?? ACCENT;
-}
-
 function engineColor(e: string): string {
   return ENGINE_COLOR[e] ?? "#8B5CF6";
 }
 
-function scoreColor(score: number): string {
-  if (score >= 70) return "#22C55E";
-  if (score >= 40) return "#F59E0B";
-  return "#8B5CF6";
+function uniqueSorted(arr: string[]): string[] {
+  return [...new Set(arr)].sort();
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -137,6 +211,30 @@ function EmptyState({ weekLabel }: { weekLabel?: string }) {
   );
 }
 
+function NoResultsState({ onClear }: { onClear: () => void }) {
+  return (
+    <div style={{
+      background: BG_CARD, border: "1px dashed rgba(255,255,255,0.08)",
+      borderRadius: 16, padding: "40px 28px", textAlign: "center",
+    }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F0", marginBottom: 6 }}>
+        No results match your filters
+      </div>
+      <div style={{ fontSize: 12, color: "rgba(148,163,184,0.5)", marginBottom: 18 }}>
+        Try adjusting your search or filter criteria.
+      </div>
+      <button onClick={onClear} style={{
+        padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700,
+        background: ACCENT_DIM, border: `1px solid ${ACCENT_BORDER}`,
+        color: ACCENT, cursor: "pointer",
+      }}>
+        Clear all filters
+      </button>
+    </div>
+  );
+}
+
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div style={{
@@ -150,11 +248,15 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <div style={{ fontSize: 12, color: "rgba(148,163,184,0.6)", marginBottom: 18 }}>
         There was an error connecting to the Edge Opportunities backend. Check your connection and try again.
       </div>
-      <button onClick={onRetry} style={{
-        padding: "8px 20px", borderRadius: 9, fontSize: 12, fontWeight: 700,
-        background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
-        color: "#EF4444", cursor: "pointer",
-      }}>
+      <button
+        onClick={onRetry}
+        aria-label="Retry"
+        style={{
+          padding: "8px 20px", borderRadius: 9, fontSize: 12, fontWeight: 700,
+          background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
+          color: "#EF4444", cursor: "pointer",
+        }}
+      >
         ↺ Retry
       </button>
     </div>
@@ -164,9 +266,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 function PriorityGroupHeader({ priority, count }: { priority: string; count: number }) {
   const cfg = PRIORITY_CONFIG[priority] ?? { color: ACCENT, label: priority, icon: "•" };
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10, marginBottom: 12, marginTop: 8,
-    }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, marginTop: 8 }}>
       <span style={{ fontSize: 14 }}>{cfg.icon}</span>
       <span style={{ fontSize: 13, fontWeight: 800, color: cfg.color, letterSpacing: "0.2px" }}>
         {cfg.label}
@@ -181,12 +281,47 @@ function PriorityGroupHeader({ priority, count }: { priority: string; count: num
   );
 }
 
+function ScoreDimRow({ label, icon, score, explanation }: {
+  label: string; icon: string; score: number; explanation?: string;
+}) {
+  const color = scoreColor(score);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+        <span style={{ fontSize: 11, color: "rgba(148,163,184,0.7)", display: "flex", alignItems: "center", gap: 5 }}>
+          <span>{icon}</span>{label}
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 800, color }}>{score}</span>
+      </div>
+      <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", borderRadius: 2,
+          width: `${Math.min(score, 100)}%`,
+          background: color,
+          transition: "width 0.5s ease",
+        }} />
+      </div>
+      {explanation && (
+        <div style={{ fontSize: 10, color: "rgba(148,163,184,0.45)", marginTop: 4, lineHeight: 1.5 }}>
+          {explanation}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const pc   = PRIORITY_CONFIG[opp.priority] ?? { color: ACCENT, label: opp.priority, icon: "•" };
-  const ec   = engineColor(opp.targetEngine);
-  const sc   = scoreColor(opp.compositeScore);
-  const icon = OPPORTUNITY_TYPE_ICON[opp.opportunityType] ?? "⚡";
+  const [showDetails, setShowDetails] = useState(false);
+  const pc  = PRIORITY_CONFIG[opp.priority] ?? { color: ACCENT, label: opp.priority, icon: "•" };
+  const ec  = engineColor(opp.targetEngine);
+  const sc  = scoreColor(opp.compositeScore);
+  const icon      = OPPORTUNITY_TYPE_ICON[opp.opportunityType] ?? "⚡";
+  const typeLabel = OPPORTUNITY_TYPE_LABELS[opp.opportunityType] ?? opp.opportunityType;
+  const statusCfg = STATUS_CONFIG[opp.status] ?? { color: "rgba(148,163,184,0.4)", label: opp.status };
+  const card      = opp.scoreCard;
+
+  const hasDimensions = SCORE_DIMENSIONS.some(d => typeof card[d.key] === "number");
+  const hasDetails    = hasDimensions || !!card.explanations || !!card.enrichment;
 
   return (
     <div style={{
@@ -199,27 +334,28 @@ function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
       flexDirection: "column",
       gap: 12,
     }}>
+
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        {rank !== undefined && (
+        {rank !== undefined ? (
           <div style={{
             width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
             background: rank === 0 ? "rgba(234,179,8,0.15)" : rank === 1 ? "rgba(148,163,184,0.1)" : rank === 2 ? "rgba(196,148,90,0.12)" : `${pc.color}12`,
-            border: `2px solid ${rank === 0 ? "#EAB308" : rank === 1 ? "#94A3B8" : rank === 2 ? "#C4945A" : pc.color}50`,
+            border: `2px solid ${(rank === 0 ? "#EAB308" : rank === 1 ? "#94A3B8" : rank === 2 ? "#C4945A" : pc.color)}50`,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 11, fontWeight: 800,
             color: rank === 0 ? "#EAB308" : rank === 1 ? "#94A3B8" : rank === 2 ? "#C4945A" : pc.color,
           }}>
             #{rank + 1}
           </div>
-        )}
-        {rank === undefined && (
+        ) : (
           <span style={{
             fontSize: 18, width: 34, height: 34, borderRadius: 10, flexShrink: 0,
             background: `${pc.color}0E`, border: `1px solid ${pc.color}22`,
             display: "inline-flex", alignItems: "center", justifyContent: "center",
           }}>{icon}</span>
         )}
+
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#E2E8F0", marginBottom: 4, lineHeight: 1.35 }}>
             {opp.title}
@@ -233,23 +369,36 @@ function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
               fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
               background: `${pc.color}12`, color: pc.color, border: `1px solid ${pc.color}28`,
             }}>{pc.label}</span>
-            {opp.status && (
+            <span style={{
+              fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
+              background: "rgba(255,255,255,0.04)", color: statusCfg.color,
+              border: `1px solid ${statusCfg.color}28`,
+            }}>{statusCfg.label}</span>
+            {card.confidence && (
               <span style={{
-                fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-                background: "rgba(255,255,255,0.04)", color: "rgba(148,163,184,0.55)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}>{opp.status}</span>
+                fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
+                color: confidenceColor(card.confidence),
+                background: `${confidenceColor(card.confidence)}12`,
+                border: `1px solid ${confidenceColor(card.confidence)}28`,
+              }}>
+                {card.confidence} confidence
+              </span>
+            )}
+            {card.version === "c5" && (
+              <span style={{
+                fontSize: 8, fontWeight: 700, padding: "1px 6px", borderRadius: 8,
+                color: "#00AEEF", background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)",
+              }}>ENRICHED</span>
             )}
           </div>
         </div>
-        {/* Score badge */}
+
+        {/* Composite score badge */}
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 24, fontWeight: 900, lineHeight: 1, color: sc }}>
             {opp.compositeScore}
           </div>
-          <div style={{ fontSize: 8, color: "rgba(148,163,184,0.4)", marginTop: 2, letterSpacing: "0.4px" }}>
-            SCORE
-          </div>
+          <div style={{ fontSize: 8, color: "rgba(148,163,184,0.4)", marginTop: 2, letterSpacing: "0.4px" }}>SCORE</div>
         </div>
       </div>
 
@@ -266,20 +415,74 @@ function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
       {/* Description */}
       {opp.description && (
         <div style={{ fontSize: 12, color: "rgba(148,163,184,0.75)", lineHeight: 1.6 }}>
-          {expanded || opp.description.length <= 140
-            ? opp.description
-            : `${opp.description.slice(0, 140)}…`}
-          {opp.description.length > 140 && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              style={{
-                background: "none", border: "none", color: ACCENT, cursor: "pointer",
-                fontSize: 11, fontWeight: 700, padding: "0 0 0 6px",
-              }}
-            >
-              {expanded ? "Show less" : "Show more"}
-            </button>
+          {opp.description}
+        </div>
+      )}
+
+      {/* C5 enrichment quick stats */}
+      {card.enrichment && (
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {card.enrichment.competitorDomainCount != null && (
+            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.6)" }}>
+              <span style={{ fontWeight: 700, color: "#E2E8F0" }}>{card.enrichment.competitorDomainCount}</span>{" "}competitors ranking
+            </span>
           )}
+          {!!card.enrichment.paaQuestionCount && (
+            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.6)" }}>
+              <span style={{ fontWeight: 700, color: "#E2E8F0" }}>{card.enrichment.paaQuestionCount}</span>{" "}PAA questions
+            </span>
+          )}
+          {card.enrichment.cpcUsd != null && (
+            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.6)" }}>
+              CPC{" "}<span style={{ fontWeight: 700, color: "#22C55E" }}>${card.enrichment.cpcUsd.toFixed(2)}</span>
+            </span>
+          )}
+          {card.enrichment.coverageState && (
+            <span style={{ fontSize: 10, color: "rgba(148,163,184,0.6)" }}>
+              Coverage:{" "}<span style={{ fontWeight: 600, color: "#E2E8F0" }}>{card.enrichment.coverageState}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Expandable details panel */}
+      {showDetails && (
+        <div style={{
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 10, padding: "14px 16px",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: ACCENT, marginBottom: 12, letterSpacing: "0.4px" }}>
+            WHY THIS OPPORTUNITY EXISTS
+          </div>
+          {hasDimensions ? (
+            SCORE_DIMENSIONS.map(({ key, label, icon: dimIcon }) => {
+              const val = card[key];
+              if (typeof val !== "number") return null;
+              return (
+                <ScoreDimRow
+                  key={key}
+                  label={label}
+                  icon={dimIcon}
+                  score={val}
+                  explanation={card.explanations?.[key]}
+                />
+              );
+            })
+          ) : (
+            <div style={{ fontSize: 12, color: "rgba(148,163,184,0.5)", fontStyle: "italic" }}>
+              Detailed dimension scores not available for this opportunity (scored before enrichment).
+            </div>
+          )}
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ fontSize: 10, color: "rgba(148,163,184,0.4)", lineHeight: 1.6 }}>
+              <strong style={{ color: "rgba(148,163,184,0.6)" }}>Target engine:</strong>{" "}{opp.targetEngine}
+              {card.version && (
+                <span style={{ marginLeft: 12 }}>
+                  <strong style={{ color: "rgba(148,163,184,0.6)" }}>Scoring version:</strong>{" "}{card.version}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -287,7 +490,7 @@ function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: `${ec}90`, letterSpacing: "0.3px", textTransform: "uppercase" }}>
-            {opp.opportunityType}
+            {typeLabel}
           </span>
           {opp.createdAt && (
             <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>
@@ -295,53 +498,204 @@ function OpportunityCard({ opp, rank }: { opp: Opportunity; rank?: number }) {
             </span>
           )}
         </div>
-        <Link to="/admin/competitor-intelligence">
-          <button
-            aria-label={`Take action on: ${opp.title}`}
-            style={{
-              padding: "7px 16px", borderRadius: 8, fontSize: 10, fontWeight: 800,
-              cursor: "pointer", background: `${pc.color}0E`, border: `1px solid ${pc.color}30`,
-              color: pc.color, letterSpacing: "0.3px", whiteSpace: "nowrap",
-            }}
-          >
-            View in Intelligence →
-          </button>
-        </Link>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {hasDetails && (
+            <button
+              onClick={() => setShowDetails(v => !v)}
+              aria-label={showDetails ? "Hide details" : "View details"}
+              style={{
+                padding: "6px 13px", borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                background: showDetails ? ACCENT_DIM : "rgba(255,255,255,0.04)",
+                border: `1px solid ${showDetails ? ACCENT_BORDER : "rgba(255,255,255,0.1)"}`,
+                color: showDetails ? ACCENT : "rgba(148,163,184,0.55)",
+              }}
+            >
+              {showDetails ? "Hide Details" : "View Details"}
+            </button>
+          )}
+          <Link to="/admin/competitor-intelligence">
+            <button
+              aria-label={`Take action on: ${opp.title}`}
+              style={{
+                padding: "6px 14px", borderRadius: 8, fontSize: 10, fontWeight: 800,
+                cursor: "pointer", background: `${pc.color}0E`, border: `1px solid ${pc.color}30`,
+                color: pc.color, letterSpacing: "0.3px", whiteSpace: "nowrap",
+              }}
+            >
+              Take Action →
+            </button>
+          </Link>
+        </div>
       </div>
     </div>
   );
 }
 
-function SummaryBar({
+// ── Summary stat cards ────────────────────────────────────────────────────────
+
+function SummaryStatCards({
   total, highCount, medCount, lowCount, weekLabel,
+  activePriority, onSelectPriority,
 }: {
   total: number; highCount: number; medCount: number; lowCount: number; weekLabel?: string;
+  activePriority: PriorityFilter; onSelectPriority: (p: PriorityFilter) => void;
 }) {
+  const cards: { key: PriorityFilter; label: string; value: number; color: string; icon: string }[] = [
+    { key: "all",    label: "Total Opportunities", value: total,     color: ACCENT,    icon: "📈" },
+    { key: "high",   label: "High Priority",        value: highCount, color: "#22C55E", icon: "🔥" },
+    { key: "medium", label: "Medium Priority",      value: medCount,  color: "#F59E0B", icon: "⚡" },
+    { key: "low",    label: "Low Priority",         value: lowCount,  color: "#8B5CF6", icon: "💡" },
+  ];
+
   return (
-    <div style={{
-      display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 20,
-    }}>
+    <div style={{ marginBottom: 20 }}>
       {weekLabel && (
-        <span style={{
-          fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
-          background: ACCENT_DIM, color: ACCENT, border: `1px solid ${ACCENT_BORDER}`,
-          borderRadius: 20, padding: "3px 11px",
-        }}>
-          {weekLabel}
-        </span>
+        <div style={{ marginBottom: 10 }}>
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
+            background: ACCENT_DIM, color: ACCENT, border: `1px solid ${ACCENT_BORDER}`,
+            borderRadius: 20, padding: "3px 11px",
+          }}>
+            {weekLabel}
+          </span>
+        </div>
       )}
-      {[
-        { label: `${total} total`,  color: ACCENT },
-        { label: `${highCount} high`,   color: "#22C55E" },
-        { label: `${medCount} medium`,  color: "#F59E0B" },
-        { label: `${lowCount} low`,     color: "#8B5CF6" },
-      ].map(({ label, color }) => (
-        <span key={label} style={{
-          fontSize: 10, fontWeight: 700, color,
-          background: `${color}10`, border: `1px solid ${color}25`,
-          borderRadius: 20, padding: "3px 11px",
-        }}>{label}</span>
-      ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        {cards.map(c => {
+          const active = activePriority === c.key;
+          return (
+            <button
+              key={c.key}
+              onClick={() => onSelectPriority(c.key)}
+              aria-pressed={active}
+              style={{
+                background: active ? `${c.color}12` : BG_CARD,
+                border: `1px solid ${active ? `${c.color}40` : "rgba(255,255,255,0.07)"}`,
+                borderTop: `2px solid ${active ? c.color : "rgba(255,255,255,0.07)"}`,
+                borderRadius: 12, padding: "14px 16px",
+                cursor: "pointer", textAlign: "left",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div style={{ fontSize: 16, marginBottom: 6 }}>{c.icon}</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: active ? c.color : "#E2E8F0", lineHeight: 1, marginBottom: 4 }}>
+                {c.value}
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: active ? c.color : "rgba(148,163,184,0.45)", letterSpacing: "0.2px", lineHeight: 1.3 }}>
+                {c.label}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Filter + sort bar ─────────────────────────────────────────────────────────
+
+function FilterBar({
+  engines, types, statuses,
+  engineFilter, typeFilter, statusFilter, sortKey, searchQuery,
+  onEngine, onType, onStatus, onSort, onSearch, onClear, activeFilterCount,
+}: {
+  engines: string[]; types: string[]; statuses: string[];
+  engineFilter: string; typeFilter: string; statusFilter: string;
+  sortKey: SortKey; searchQuery: string;
+  onEngine: (v: string) => void; onType: (v: string) => void;
+  onStatus: (v: string) => void; onSort: (v: SortKey) => void;
+  onSearch: (v: string) => void; onClear: () => void;
+  activeFilterCount: number;
+}) {
+  const selectStyle: CSSProperties = {
+    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+    color: "rgba(148,163,184,0.85)", borderRadius: 9, padding: "6px 10px",
+    fontSize: 11, fontWeight: 600, cursor: "pointer", outline: "none",
+    minWidth: 110,
+  };
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      {/* Search */}
+      <div style={{ position: "relative", marginBottom: 10 }}>
+        <span style={{
+          position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+          fontSize: 13, color: "rgba(148,163,184,0.35)", pointerEvents: "none",
+        }}>🔍</span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => onSearch(e.target.value)}
+          placeholder="Search opportunities…"
+          aria-label="Search opportunities"
+          style={{
+            width: "100%", boxSizing: "border-box",
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)",
+            borderRadius: 10, padding: "9px 36px 9px 34px",
+            fontSize: 12, color: "#E2E8F0", outline: "none", fontFamily: "inherit",
+          }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => onSearch("")}
+            aria-label="Clear search"
+            style={{
+              position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", cursor: "pointer",
+              color: "rgba(148,163,184,0.5)", fontSize: 16, padding: 0, lineHeight: 1,
+            }}
+          >×</button>
+        )}
+      </div>
+
+      {/* Filter + sort selects */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select value={engineFilter} onChange={e => onEngine(e.target.value)} style={selectStyle} aria-label="Filter by engine">
+          <option value="">All Engines</option>
+          {engines.map(e => (
+            <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>
+          ))}
+        </select>
+
+        <select value={typeFilter} onChange={e => onType(e.target.value)} style={selectStyle} aria-label="Filter by opportunity type">
+          <option value="">All Types</option>
+          {types.map(t => (
+            <option key={t} value={t}>{OPPORTUNITY_TYPE_LABELS[t] ?? t}</option>
+          ))}
+        </select>
+
+        <select value={statusFilter} onChange={e => onStatus(e.target.value)} style={selectStyle} aria-label="Filter by status">
+          <option value="">All Statuses</option>
+          {statuses.map(s => (
+            <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+          ))}
+        </select>
+
+        <div style={{ flex: 1 }} />
+
+        <select
+          value={sortKey}
+          onChange={e => onSort(e.target.value as SortKey)}
+          style={{ ...selectStyle, minWidth: 148 }}
+          aria-label="Sort by"
+        >
+          <option value="composite_score">↓ Composite Score</option>
+          <option value="search_demand">↓ Search Demand</option>
+          <option value="revenue_impact">↓ Revenue Impact</option>
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+        </select>
+
+        {activeFilterCount > 0 && (
+          <button onClick={onClear} style={{
+            padding: "6px 12px", borderRadius: 9, fontSize: 10, fontWeight: 700,
+            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+            color: "#EF4444", cursor: "pointer",
+          }}>
+            Clear {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -351,38 +705,84 @@ function SummaryBar({
 export default function EdgeOpportunitiesPage() {
   const apiFetch    = useApiFetch();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<PriorityFilter>("all");
+
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [engineFilter,   setEngineFilter]   = useState("");
+  const [typeFilter,     setTypeFilter]     = useState("");
+  const [statusFilter,   setStatusFilter]   = useState("");
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [sortKey,        setSortKey]        = useState<SortKey>("composite_score");
 
   const { data, isLoading, isError, refetch } = useQuery<OpportunitiesData>({
     queryKey: ["edge-opportunities"],
     queryFn:  () => apiFetch("/api/competitor-intelligence/opportunities?limit=50") as Promise<OpportunitiesData>,
   });
 
-  const opportunities = data?.opportunities ?? [];
+  const allOpportunities = data?.opportunities ?? [];
 
-  const grouped: Record<string, Opportunity[]> = { high: [], medium: [], low: [] };
-  for (const opp of opportunities) {
-    const key = opp.priority in grouped ? opp.priority : "low";
-    grouped[key].push(opp);
-  }
+  const engineOptions = useMemo(() => uniqueSorted(allOpportunities.map(o => o.targetEngine).filter(Boolean)), [allOpportunities]);
+  const typeOptions   = useMemo(() => uniqueSorted(allOpportunities.map(o => o.opportunityType).filter(Boolean)), [allOpportunities]);
+  const statusOptions = useMemo(() => uniqueSorted(allOpportunities.map(o => o.status).filter(Boolean)), [allOpportunities]);
 
-  const visible = filter === "all"
-    ? opportunities
-    : (grouped[filter] ?? []);
+  const grouped = useMemo(() => groupByPriority(allOpportunities), [allOpportunities]);
 
-  const FILTERS: { key: PriorityFilter; label: string; count: number; color: string }[] = [
-    { key: "all",    label: "All",    count: opportunities.length,   color: ACCENT     },
-    { key: "high",   label: "High",   count: grouped.high.length,    color: "#22C55E"  },
-    { key: "medium", label: "Medium", count: grouped.medium.length,  color: "#F59E0B"  },
-    { key: "low",    label: "Low",    count: grouped.low.length,     color: "#8B5CF6"  },
-  ];
+  const visible = useMemo(() => {
+    let list = priorityFilter === "all"
+      ? allOpportunities
+      : (grouped[priorityFilter] ?? []);
+
+    if (engineFilter)        list = list.filter(o => o.targetEngine   === engineFilter);
+    if (typeFilter)          list = list.filter(o => o.opportunityType === typeFilter);
+    if (statusFilter)        list = list.filter(o => o.status          === statusFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(o =>
+        o.title.toLowerCase().includes(q) || o.description.toLowerCase().includes(q)
+      );
+    }
+
+    return [...list].sort((a, b) => {
+      switch (sortKey) {
+        case "search_demand":
+          return ((b.scoreCard.searchDemand ?? 0) - (a.scoreCard.searchDemand ?? 0));
+        case "revenue_impact":
+          return ((b.scoreCard.revenueImpact ?? 0) - (a.scoreCard.revenueImpact ?? 0));
+        case "newest":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        default:
+          return b.compositeScore - a.compositeScore;
+      }
+    });
+  }, [allOpportunities, grouped, priorityFilter, engineFilter, typeFilter, statusFilter, searchQuery, sortKey]);
+
+  const visibleGrouped = useMemo(() => groupByPriority(visible), [visible]);
+
+  const activeFilterCount = [engineFilter, typeFilter, statusFilter, searchQuery.trim()].filter(Boolean).length;
+  const isDefaultView     = priorityFilter === "all" && !engineFilter && !typeFilter && !statusFilter && !searchQuery && sortKey === "composite_score";
 
   function handleRefresh() {
     queryClient.invalidateQueries({ queryKey: ["edge-opportunities"] });
     refetch();
   }
 
+  function clearAllFilters() {
+    setEngineFilter("");
+    setTypeFilter("");
+    setStatusFilter("");
+    setSearchQuery("");
+    setSortKey("composite_score");
+  }
+
   const isUninitialized = !data?.hasData && data?.reason === "tables_not_initialized";
+
+  const PRIORITY_TABS: { key: PriorityFilter; label: string; count: number; color: string }[] = [
+    { key: "all",    label: "All",    count: allOpportunities.length, color: ACCENT    },
+    { key: "high",   label: "High",   count: grouped.high.length,    color: "#22C55E" },
+    { key: "medium", label: "Medium", count: grouped.medium.length,  color: "#F59E0B" },
+    { key: "low",    label: "Low",    count: grouped.low.length,     color: "#8B5CF6" },
+  ];
 
   return (
     <AppShell>
@@ -443,7 +843,7 @@ export default function EdgeOpportunitiesPage() {
           {/* Error */}
           {!isLoading && isError && <ErrorState onRetry={handleRefresh} />}
 
-          {/* Uninitialized tables */}
+          {/* Uninitialized */}
           {!isLoading && !isError && isUninitialized && (
             <div style={{
               background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
@@ -471,28 +871,30 @@ export default function EdgeOpportunitiesPage() {
           {/* Has data */}
           {!isLoading && !isError && data?.hasData && (
             <>
-              {/* Summary bar */}
-              <SummaryBar
-                total={opportunities.length}
+              {/* Summary stat cards (clickable, also set priority filter) */}
+              <SummaryStatCards
+                total={allOpportunities.length}
                 highCount={grouped.high.length}
                 medCount={grouped.medium.length}
                 lowCount={grouped.low.length}
                 weekLabel={data.weekLabel}
+                activePriority={priorityFilter}
+                onSelectPriority={setPriorityFilter}
               />
 
               {/* Priority filter tabs */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
-                {FILTERS.map(f => (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                {PRIORITY_TABS.map(f => (
                   <button
                     key={f.key}
-                    onClick={() => setFilter(f.key)}
-                    aria-pressed={filter === f.key}
+                    onClick={() => setPriorityFilter(f.key)}
+                    aria-pressed={priorityFilter === f.key}
                     style={{
                       padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700,
                       cursor: "pointer",
-                      background: filter === f.key ? `${f.color}18` : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${filter === f.key ? `${f.color}40` : "rgba(255,255,255,0.08)"}`,
-                      color: filter === f.key ? f.color : "rgba(148,163,184,0.55)",
+                      background: priorityFilter === f.key ? `${f.color}18` : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${priorityFilter === f.key ? `${f.color}40` : "rgba(255,255,255,0.08)"}`,
+                      color: priorityFilter === f.key ? f.color : "rgba(148,163,184,0.55)",
                       transition: "all 0.15s ease",
                     }}
                   >
@@ -504,14 +906,35 @@ export default function EdgeOpportunitiesPage() {
                 ))}
               </div>
 
+              {/* Search + additional filters + sort */}
+              <FilterBar
+                engines={engineOptions}
+                types={typeOptions}
+                statuses={statusOptions}
+                engineFilter={engineFilter}
+                typeFilter={typeFilter}
+                statusFilter={statusFilter}
+                sortKey={sortKey}
+                searchQuery={searchQuery}
+                onEngine={setEngineFilter}
+                onType={setTypeFilter}
+                onStatus={setStatusFilter}
+                onSort={setSortKey}
+                onSearch={setSearchQuery}
+                onClear={clearAllFilters}
+                activeFilterCount={activeFilterCount}
+              />
+
               {/* Opportunity list */}
               {visible.length === 0 ? (
-                <EmptyState weekLabel={data.weekLabel} />
-              ) : filter === "all" ? (
-                /* Grouped view when showing all */
+                activeFilterCount > 0 || searchQuery.trim()
+                  ? <NoResultsState onClear={clearAllFilters} />
+                  : <EmptyState weekLabel={data.weekLabel} />
+              ) : isDefaultView ? (
+                /* Grouped by priority when no additional filters/sort active */
                 <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
                   {(["high", "medium", "low"] as const).map(tier => {
-                    const tierOpps = grouped[tier];
+                    const tierOpps = visibleGrouped[tier] ?? [];
                     if (tierOpps.length === 0) return null;
                     return (
                       <div key={tier}>
@@ -526,7 +949,7 @@ export default function EdgeOpportunitiesPage() {
                   })}
                 </div>
               ) : (
-                /* Flat list when filtering by a single tier */
+                /* Flat sorted list when any filter/sort is active */
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {visible.map((opp, i) => (
                     <OpportunityCard key={opp.id} opp={opp} rank={i} />
@@ -536,7 +959,7 @@ export default function EdgeOpportunitiesPage() {
             </>
           )}
 
-          {/* No data — discovery has run but returned nothing */}
+          {/* No data — discovery ran but returned nothing */}
           {!isLoading && !isError && data && !data.hasData && !isUninitialized && (
             <EmptyState weekLabel={data.weekLabel} />
           )}

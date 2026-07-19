@@ -1,14 +1,14 @@
 # AI Edge Visibility — Architecture Reference
 
-**Status:** C8R-5 pure layer complete; execution/API/frontend wiring pending (C9R-2+)
+**Status:** C9R-4 complete — all 7 source adapters wired, execution service live, read-model API operational, AI query evidence panel shipped
 **Last updated:** 2026-07-19
 **ADR:** [ADR-007](adr/ADR-007-c8r5-ai-visibility-read-model.md)
 
 ---
 
-## Two Parallel Systems
+## Three Parallel Systems
 
-The engine currently has two parallel, partially independent layers:
+The engine has three parallel layers operating concurrently:
 
 ### Layer 1 — Legacy Audit System (operational, demo-backed)
 
@@ -17,22 +17,22 @@ The engine currently has two parallel, partially independent layers:
 | `lib/db/src/schema/ai-visibility.ts` | `ai_visibility_audits` table — 7 integer scores + 3 JSON blob columns |
 | `lib/db/src/schema/audit-exports.ts` | `audit_exports` table — PDF/email export log |
 | `artifacts/api-server/src/routes/ai-visibility.ts` | CRUD + random-bump `generate-report` + PDF/email delivery |
-| `artifacts/ai-edge-solutions/src/pages/AIVisibilityEnginePage.tsx` | 811-line frontend; reads `GET /api/ai-visibility/:clientId`, falls back to hardcoded `DEMO` |
+| `artifacts/ai-edge-solutions/src/pages/AIVisibilityEnginePage.tsx` | Frontend; reads `GET /api/ai-visibility/:clientId`, falls back to hardcoded `DEMO` |
 
 The legacy system is operational. Its `generate-report` produces random-bump scores — **not AI-generated, not sourced from canonical systems.** The demo fallback is indistinguishable from real data at the API level.
 
-### Layer 2 — C8R-5 Pure Read Model (complete, not yet wired)
+### Layer 2 — C8R-5 Read Model + C9R-2/C9R-3 Execution (operational, live)
 
 | Artifact | Purpose |
 |---|---|
 | `lib/db/src/ai-visibility-read-model-types.ts` | TypeScript contracts — all interfaces and discriminated union types |
 | `lib/db/src/ai-visibility-read-model.ts` | `composeAiVisibilityReadModel()` — pure, deterministic, tenant-safe composer |
-| `lib/db/src/ai-visibility-read-model-adapters.ts` | 6 source adapters (see below) |
+| `lib/db/src/ai-visibility-read-model-adapters.ts` | 6 canonical source adapters (see below) |
 | `lib/db/src/ai-visibility-prioritizer.ts` | Dual-axis scoring engine (potentialValue + attainability) |
 | `lib/db/src/ai-visibility-fixtures.ts` | BBB golden-template fixtures for test coverage |
-| `lib/db/src/index.ts` | Exports all C8R-5 symbols from `@workspace/db` |
-
-**The C8R-5 read model is NOT wired to any API route, execution service, persistence table, or frontend component.**
+| `artifacts/api-server/src/lib/ai-visibility-execution-service.ts` | Collects all 7 adapter inputs, calls `composeAiVisibilityReadModel`, persists result |
+| `GET /api/ai-visibility/read-model/:clientId` | Live read model endpoint — returns real tenant-safe recommendations |
+| `AIVisibilityEnginePage.tsx` — "Opportunities" tab | Renders C9R-2 read model; "AI Query" tab renders C9R-4 evidence panel |
 
 ### Layer 3 — Competitor AI Visibility Provider (operational, P6.2)
 
@@ -44,18 +44,94 @@ Real provider (`isMock: false`). Wired into the competitor enrichment registry. 
 
 ---
 
-## C8R-5 Source Adapters
+## C8R-5 + C9R-4 Source Adapters
 
-| Adapter | Function | Input Type | Coverage Source |
-|---|---|---|---|
-| Local Presence | `adaptLocalPresenceSources()` | `LocalPresenceChannel[]` + `LocalPresenceProfile` | `local_presence` |
-| Discovery | `adaptDiscoverySources()` | `DiscoveryOpportunityObservation[]` | `discovery` |
-| Backlinks | `adaptBacklinkSources()` | `BacklinkOpportunityObservation[]` | `backlink` |
-| Content | `adaptContentSources()` | `ContentPostObservation[]` | `content` |
-| Reviews | `adaptTenantSafeReviews()` | `TenantSafeReviewSummary[] \| null` | `reviews` |
-| Google Connected | `adaptConnectedGoogle()` | `ConnectedGoogleSummary` | `google_business`, `google_search_console`, `google_analytics` |
+| # | Adapter | Function | Input Type | Coverage Source |
+|---|---|---|---|---|
+| 1 | Local Presence | `adaptLocalPresenceSources()` | `LocalPresenceChannel[]` + `LocalPresenceProfile` | `local_presence` |
+| 2 | Discovery | `adaptDiscoverySources()` | `DiscoveryOpportunityObservation[]` | `discovery` |
+| 3 | Backlinks | `adaptBacklinkSources()` | `BacklinkOpportunityObservation[]` | `backlink` |
+| 4 | Content | `adaptContentSources()` | `ContentPostObservation[]` | `content` |
+| 5 | Reviews | `adaptTenantSafeReviews()` | `TenantSafeReviewSummary[] \| null` | `reviews` |
+| 6 | Google Connected | `adaptConnectedGoogle()` | `ConnectedGoogleSummary` | `google_business`, `google_search_console`, `google_analytics` |
+| 7 | AI Query | `adaptAiQuerySources()` | `AiQueryAdapterInput` (scan + results) | `ai_query` |
 
-Passing `null` to `adaptTenantSafeReviews` explicitly reports `not_tenant_safe` (the review tables are not yet tenant-safe). `searchConsole` and `analytics` report `not_implemented`.
+Passing `null` to `adaptTenantSafeReviews` explicitly reports `not_tenant_safe`. `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
+
+---
+
+## C9R-4 AI Query Provider System
+
+### Architecture Overview
+
+```
+[AiQueryScanService.execute({ clientId })]
+         │
+         ├─ buildTenantContext()          ← queries local_presence_profiles + competitors table
+         │   └─ AiQueryTenantContext
+         │
+         ├─ generateAiQueries(context)    ← deterministic, prohibited-phrase filtered, capped at 12
+         │   └─ readonly string[]
+         │
+         ├─ OpenAiQueryProvider.execute() ← sequential (cost control), 15 s timeout per query
+         │   └─ AiQueryResult             ← detectBusinessMention + detectCompetitorMentions + extractCitations
+         │
+         ├─ persistScan()                 ← ai_query_scans (header) + ai_query_results (per query)
+         │
+         └─ adaptAiQuerySources()         ← wired as 7th adapter in AiVisibilityExecutionService
+             └─ { observations, coverage }
+```
+
+### Pure Functions (lib/db)
+
+| Function | Location | Purpose |
+|---|---|---|
+| `generateAiQueries(ctx)` | `ai-query-generation.ts` | Deterministic, sorted, deduped query list — lexicographically ordered, limited to `AI_QUERY_GENERATION_LIMIT` (12) |
+| `humanizeServiceId(id)` | `ai-query-generation.ts` | Converts `"bed-bug-treatment"` → `"bed bug treatment"` |
+| `detectBusinessMention(text, ctx)` | `ai-query-detection.ts` | Checks exact name → normalized (&→and) → domain → phone; returns `{mentioned, mentionType, position}` |
+| `detectCompetitorMentions(text, ctx)` | `ai-query-detection.ts` | Finds all competitor names and domains in response text |
+| `extractCitations(text)` | `ai-query-detection.ts` | Extracts HTTPS URLs, strips `www.`, deduplicates |
+| `adaptAiQuerySources(input)` | `ai-query-read-model-adapter.ts` | Maps scan + results to coverage diagnostics + observations |
+
+### Detection Priority
+
+`detectBusinessMention` evaluates signals in this priority order (highest wins):
+
+1. **exact** — case-insensitive business name literal
+2. **normalized** — name with `&` replaced by `and` (or vice versa)
+3. **domain** — `businessDomain` substring match (after stripping `www.`)
+4. **phone** — `businessPhone` digit normalization match
+
+### Provider Configuration
+
+See [AI-VISIBILITY-PROVIDER-CONFIGURATION.md](AI-VISIBILITY-PROVIDER-CONFIGURATION.md) for environment variables and enable/disable instructions.
+
+---
+
+## Execution Flow (C9R-2 + C9R-4)
+
+```
+GET /api/ai-visibility/read-model/:clientId
+         │
+         └─ AiVisibilityExecutionService.execute()
+               │
+               ├─ Parallel queries (7 adapters):
+               │   ├─ adaptLocalPresenceSources()
+               │   ├─ adaptDiscoverySources()
+               │   ├─ adaptBacklinkSources()
+               │   ├─ adaptContentSources()
+               │   ├─ adaptTenantSafeReviews()
+               │   ├─ adaptConnectedGoogle()
+               │   └─ adaptAiQuerySources()   ← reads latest completed scan from DB
+               │
+               ├─ composeAiVisibilityReadModel()
+               │
+               ├─ Persist → ai_visibility_run_results
+               │
+               └─ Returns AiVisibilityReadModel
+```
+
+The `adaptAiQuerySources()` adapter in the execution service reads the **most recent completed scan** from `ai_query_scans`. It does NOT trigger a new scan on every read-model fetch. New scans are triggered explicitly via `POST /api/ai-visibility/query-scan/:clientId`.
 
 ---
 
@@ -100,6 +176,8 @@ Five pre-prioritization rejection rules enforced by `validateInput()`:
 
 Rejected observations are returned in the model's `rejected[]` array with the rejection code and reason — never silently dropped.
 
+The `AiQueryTenantContext.prohibitedPhrases` field is passed through to query generation — no query will contain a prohibited phrase. For BBB, `prohibitedPhrases: []` in V1 (the "termite" prohibition is a service-registry rule, not a query prohibition for the AI scan).
+
 ---
 
 ## Coverage Diagnostics
@@ -118,34 +196,27 @@ Missing data is **never converted to a zero score**. Coverage affects the comple
 
 ---
 
-## Execution Gap (C9R-2 Target)
-
-The missing execution path is:
-
-```
-[Canonical DB tables]
-       ↓  (SQL queries per source)
-[AiVisibilityExecutionService]
-       ↓  (collects all 6 adapter inputs)
-[composeAiVisibilityReadModel()]   ← exists today
-       ↓  (AiVisibilityReadModel)
-[ai_visibility_run_results table]  ← does not exist yet
-       ↓
-[GET /api/ai-visibility/read-model/:clientId]  ← does not exist yet
-       ↓
-[AIVisibilityEnginePage — C8R-5 tab]  ← does not exist yet
-```
-
----
-
 ## Database Schema (production-bootstrapped via schema-migrate.ts)
 
 ```sql
+-- Legacy audit
 ai_visibility_audits (id, client_id, business_name, overall_score, search_score, maps_score,
   ai_search_score, authority_score, review_score, competitor_gap_score,
   channels_json, competitors_json, recommendations_json, created_at, updated_at)
 
 audit_exports (id, client_id, export_type, recipient_email, created_at)
+
+-- C9R-2 read model persistence
+ai_visibility_run_results (id, client_id, generated_at, result_json,
+  recommendation_count, rejected_count, available_source_count)
+
+-- C9R-4 AI query persistence
+ai_query_scans (id, client_id, status, provider, model, query_count, completed_count,
+  mention_count, error, started_at, completed_at, created_at)
+
+ai_query_results (id, scan_id, client_id, query, provider, model, response_text,
+  latency_ms, generated_at, success, failure_reason, business_mentioned, mention_type,
+  mention_position, competitor_mentions_json, citations_json, created_at)
 ```
 
-No persistence table exists yet for C8R-5 read model results.
+Indexes: `ai_query_scans(client_id, started_at DESC)`, `ai_query_results(scan_id)`, `ai_query_results(client_id, created_at DESC)`.

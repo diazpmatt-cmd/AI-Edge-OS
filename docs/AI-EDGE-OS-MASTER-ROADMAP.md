@@ -45,7 +45,12 @@
 - Pure computation layer complete: types, 6 adapters, composer, prioritizer, fixtures
 - 60 tests: 32 frontend + 28 API provider
 - ADR-007 accepted
-- **Not yet wired to execution, API, or frontend**
+
+### AI Visibility V1 — C9R-2 through C9R-4 ✅
+- **C9R-1:** Assessment + architecture docs + roadmap (34%)
+- **C9R-2:** `AiVisibilityExecutionService` + `ai_visibility_run_results` table + read-model API (54%)
+- **C9R-3:** Frontend Opportunities tab + Coverage panel + legacy tab preserved (66%)
+- **C9R-4:** Real AI query provider (OpenAI) + evidence panel + 7th adapter + 63 new tests (91%)
 
 ### Infrastructure & Integrations
 - Clerk auth (Replit-managed, pk_test_* confirmed operational in production)
@@ -71,18 +76,18 @@
 
 ---
 
-## Active: AI Visibility V1 (C9R-1 → C9R-6)
+## Active: AI Visibility V1 (C9R-5 → C9R-6)
 
-**Current status:** C9R-1 (assessment) complete. C9R-2 is next.
-**V1 completion:** 34%
+**Current status:** C9R-4 complete. C9R-5 is next.
+**V1 completion:** 91%
 
 | Phase | Status | Description |
 |---|---|---|
 | C9R-1 | ✅ COMPLETE | Assessment + architecture docs + roadmap |
-| C9R-2 | NEXT | Execution service + persistence + API route |
-| C9R-3 | PENDING | Frontend read model integration |
-| C9R-4 | PENDING | Real AI query provider (OpenAI) |
-| C9R-5 | PENDING | Scheduled monitoring + history |
+| C9R-2 | ✅ COMPLETE | Execution service + persistence + API route |
+| C9R-3 | ✅ COMPLETE | Frontend Opportunities tab + Coverage panel |
+| C9R-4 | ✅ COMPLETE | Real AI query provider (OpenAI) + evidence panel |
+| C9R-5 | **NEXT** | Scheduled monitoring + run history |
 | C9R-6 | PENDING (parallel) | Review intelligence tenant safety |
 
 See [AI-VISIBILITY-V1-ROADMAP.md](AI-VISIBILITY-V1-ROADMAP.md) for full phase specs.

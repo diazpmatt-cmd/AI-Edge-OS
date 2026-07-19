@@ -36,6 +36,7 @@ import gbpAiRouter from "./gbp-ai";
 import competitorIntelligenceRouter from "./competitor-intelligence";
 import contactRouter from "./contact";
 import referralsRouter from "./referrals";
+import backlinksRouter from "./backlinks";
 
 const router: IRouter = Router();
 
@@ -76,5 +77,6 @@ router.use(gbpAiRouter);
 router.use(competitorIntelligenceRouter);
 router.use(contactRouter);
 router.use(referralsRouter);
+router.use(backlinksRouter);
 
 export default router;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useApiFetch } from "@/lib/api";
-import { AdminLayout } from "@/components/AdminLayout";
+import { AppShell } from "@/components/app-shell";
 
 interface AuditData {
   id: number;
@@ -19,6 +19,54 @@ interface ActionItem {
   reason: string;
   impact: string;
   status: string;
+}
+
+interface LiveOpportunity {
+  opportunity: {
+    id: string;
+    clientId: string;
+    prospectId: string;
+    category: string;
+    serviceId: string | null;
+    potentialValue: number;
+    attainability: number;
+    rationale: string;
+    recommendedAction: string;
+    evidenceIds: string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+  workflow: {
+    id: string;
+    status: string;
+    ownerId: string | null;
+    nextAction: string | null;
+    dueAt: string | null;
+    outcomeSummary: string | null;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+    completedAt: string | null;
+  };
+}
+
+interface LiveOpportunitiesResult {
+  items: LiveOpportunity[];
+  limit: number;
+  offset: number;
+}
+
+interface IngestionRun {
+  id: string;
+  provider_id: string;
+  mode: string;
+  status: string;
+  counts_observed: number;
+  counts_accepted: number;
+  counts_rejected: number;
+  started_at: string;
+  completed_at: string | null;
+  failure_code: string | null;
 }
 
 interface CitationDir {
@@ -68,14 +116,6 @@ const CITATION_STATUS_CFG = {
 const TIER_LABELS = { 1: "Tier 1 — Critical", 2: "Tier 2 — High Value", 3: "Tier 3 — Supplemental" };
 const TIER_COLORS = { 1: "#EF4444", 2: "#F59E0B", 3: "#64748B" };
 
-const BACKLINKS = [
-  { source: "Las Vegas Review-Journal",      url: "lvrj.com",              da: 78, type: "Media",    status: "active"  },
-  { source: "NPMA Member Listing",           url: "npmapestworld.org",     da: 55, type: "Industry", status: "missing" },
-  { source: "Henderson Chamber of Commerce", url: "hendersonchamber.com",  da: 48, type: "Local",    status: "missing" },
-  { source: "Nevada Pest Control Assoc.",    url: "nevadapest.org",        da: 41, type: "Industry", status: "missing" },
-  { source: "Vegas Valley Homeowners Blog",  url: "vegasvalleyhomes.com",  da: 31, type: "Local",    status: "missing" },
-  { source: "BBB News Mention",              url: "bbb.org",               da: 91, type: "Authority",status: "missing" },
-];
 
 const SCHEMA_ITEMS = [
   { type: "LocalBusiness",          status: "missing",    impact: "Critical" },
@@ -144,6 +184,11 @@ export default function AuthorityEnginePage() {
 
   const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "bbb";
 
+  const [liveOpps, setLiveOpps]             = useState<LiveOpportunitiesResult | null>(null);
+  const [liveRuns, setLiveRuns]             = useState<IngestionRun[]>([]);
+  const [backlinksLoading, setBacklinksLoading] = useState(false);
+  const [ingesting, setIngesting]           = useState(false);
+
   const fetchAudit = useCallback(async () => {
     setLoading(true);
     try {
@@ -156,11 +201,44 @@ export default function AuthorityEnginePage() {
     }
   }, [apiFetch, clientId]);
 
+  const fetchBacklinks = useCallback(async () => {
+    setBacklinksLoading(true);
+    try {
+      const [opps, runsData] = await Promise.all([
+        apiFetch<LiveOpportunitiesResult>(`/backlinks/opportunities?limit=50`),
+        apiFetch<{ runs: IngestionRun[] }>(`/backlinks/runs?limit=10`),
+      ]);
+      setLiveOpps(opps);
+      setLiveRuns(runsData.runs ?? []);
+    } catch {
+      setLiveOpps(null);
+      setLiveRuns([]);
+    } finally {
+      setBacklinksLoading(false);
+    }
+  }, [apiFetch]);
+
+  const triggerIngest = useCallback(async () => {
+    setIngesting(true);
+    try {
+      await apiFetch<unknown>(`/backlinks/ingest/fixture`, { method: "POST" });
+      await fetchBacklinks();
+    } catch {
+      // ignore — fetchBacklinks will show current state
+    } finally {
+      setIngesting(false);
+    }
+  }, [apiFetch, fetchBacklinks]);
+
   useEffect(() => { fetchAudit(); }, [fetchAudit]);
+  useEffect(() => { fetchBacklinks(); }, [fetchBacklinks]);
 
   const authorityScore = audit?.authorityScore ?? 29;
   const napScore       = 71;
-  const backlinkScore  = audit ? Math.min(100, Math.round((BACKLINKS.filter(b => b.status === "active").length / 10) * 100)) : 19;
+  const liveItems      = liveOpps?.items ?? [];
+  const backlinkScore  = liveItems.length > 0
+    ? Math.min(100, Math.round(liveItems.reduce((s, o) => s + o.opportunity.attainability, 0) / liveItems.length))
+    : 10;
   const schemaScore    = 0;
   const overallAuth    = Math.round((authorityScore + napScore + backlinkScore + schemaScore) / 4);
 
@@ -188,7 +266,7 @@ export default function AuthorityEnginePage() {
   ];
 
   return (
-    <AdminLayout>
+    <AppShell>
       <div style={{ minHeight: "100vh", background: "#030612", padding: "28px 24px 48px" }}>
         {/* ── Header ── */}
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -502,15 +580,16 @@ export default function AuthorityEnginePage() {
           {/* ── Tab: Backlinks ── */}
           {tab === "backlinks" && (
             <div>
+              {/* Stats row */}
               <div style={{
                 display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
                 gap: 10, marginBottom: 18,
               }}>
                 {[
-                  { label: "Active Backlinks",    value: BACKLINKS.filter(b => b.status === "active").length,  color: "#22C55E" },
-                  { label: "Opportunities",        value: BACKLINKS.filter(b => b.status === "missing").length, color: "#F59E0B" },
-                  { label: "Target (competitive)", value: "20+",                                                color: "#38BDF8" },
-                  { label: "Backlink Score",       value: `${backlinkScore}/100`,                              color: statusColor(backlinkScore) },
+                  { label: "Opportunities",        value: liveItems.length,                                                               color: "#22C55E" },
+                  { label: "Won / Pursuing",        value: liveItems.filter(o => o.workflow.status === "won" || o.workflow.status === "pursuing").length, color: "#38BDF8" },
+                  { label: "Target (competitive)", value: "20+",                                                                         color: "#F59E0B" },
+                  { label: "Opportunity Score",    value: `${backlinkScore}/100`,                                                        color: statusColor(backlinkScore) },
                 ].map(s => (
                   <div key={s.label} style={{
                     background: "rgba(11,22,41,0.8)", border: `1px solid ${s.color}20`,
@@ -520,6 +599,30 @@ export default function AuthorityEnginePage() {
                     <div style={{ fontSize: 11, color: "rgba(148,163,184,0.6)", marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Ingest controls */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 14, flexWrap: "wrap", gap: 8,
+              }}>
+                <div style={{ fontSize: 11, color: "#64748B" }}>
+                  {backlinksLoading ? "Loading…" : liveRuns.length > 0
+                    ? `Last ingestion: ${new Date(liveRuns[0].started_at).toLocaleString()} · ${liveRuns[0].counts_accepted ?? 0} accepted`
+                    : "No ingestion runs yet"}
+                </div>
+                <button
+                  onClick={triggerIngest}
+                  disabled={ingesting || backlinksLoading}
+                  style={{
+                    padding: "7px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                    cursor: ingesting || backlinksLoading ? "default" : "pointer",
+                    background: ingesting ? "rgba(56,189,248,0.04)" : "rgba(56,189,248,0.1)",
+                    border: "1px solid rgba(56,189,248,0.3)", color: "#38BDF8",
+                  }}
+                >
+                  {ingesting ? "Running…" : "⟳ Run Fixture Ingest"}
+                </button>
               </div>
 
               <div style={{
@@ -533,52 +636,87 @@ export default function AuthorityEnginePage() {
                 }}>
                   Backlink Opportunities
                 </div>
+
+                {backlinksLoading && (
+                  <div style={{ padding: "24px", textAlign: "center", color: "#475569", fontSize: 12 }}>
+                    Loading opportunities…
+                  </div>
+                )}
+
+                {!backlinksLoading && liveItems.length === 0 && (
+                  <div style={{ padding: "28px 24px", textAlign: "center" }}>
+                    <div style={{ fontSize: 14, color: "#64748B", marginBottom: 8 }}>No backlink opportunities yet</div>
+                    <div style={{ fontSize: 11, color: "#475569", marginBottom: 16 }}>
+                      Click "Run Fixture Ingest" above to populate demo data from the Baldwin County fixture provider.
+                    </div>
+                  </div>
+                )}
+
+                {!backlinksLoading && liveItems.length > 0 && (
                 <div style={{ padding: "8px 0" }}>
                   <div style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 80px 120px 90px",
+                    gridTemplateColumns: "1fr 80px 100px 80px 100px",
                     padding: "6px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)",
                   }}>
-                    {["Source", "DA", "Type", "Status"].map(h => (
+                    {["Domain", "Attain.", "Category", "Potential", "Workflow"].map(h => (
                       <div key={h} style={{ fontSize: 9, fontWeight: 700, color: "rgba(100,116,139,0.8)", letterSpacing: "0.5px", textTransform: "uppercase" }}>{h}</div>
                     ))}
                   </div>
-                  {BACKLINKS.map((b, i) => (
-                    <div key={b.source} style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 80px 120px 90px",
-                      padding: "12px 18px",
-                      background: i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent",
-                      borderBottom: "1px solid rgba(255,255,255,0.03)",
-                      alignItems: "center",
-                    }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>{b.source}</div>
-                        <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>{b.url}</div>
+                  {liveItems.map((item, i) => {
+                    const opp = item.opportunity;
+                    const wf  = item.workflow;
+                    const wfColor = wf.status === "won" ? "#22C55E"
+                      : wf.status === "pursuing" || wf.status === "approved" ? "#38BDF8"
+                      : wf.status === "reviewing" ? "#F59E0B"
+                      : wf.status === "rejected" || wf.status === "expired" ? "#EF4444"
+                      : "#64748B";
+                    return (
+                      <div key={opp.id} style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 80px 100px 80px 100px",
+                        padding: "11px 18px",
+                        background: i % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent",
+                        borderBottom: "1px solid rgba(255,255,255,0.03)",
+                        alignItems: "center",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#CBD5E1" }}>
+                            {opp.category.replace(/_/g, " ")}
+                          </div>
+                          {opp.serviceId && (
+                            <div style={{ fontSize: 9.5, color: "#475569", marginTop: 1 }}>
+                              {opp.serviceId.replace(/_/g, " ")}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: opp.attainability >= 70 ? "#22C55E" : opp.attainability >= 40 ? "#F59E0B" : "#94A3B8",
+                        }}>{opp.attainability}</div>
+                        <div style={{
+                          fontSize: 9.5, color: "#64748B",
+                          background: "rgba(255,255,255,0.04)", borderRadius: 5,
+                          padding: "2px 7px", display: "inline-block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}>{opp.category.split("_")[0]}</div>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: opp.potentialValue >= 70 ? "#22C55E" : opp.potentialValue >= 40 ? "#F59E0B" : "#94A3B8",
+                        }}>{opp.potentialValue}</div>
+                        <div>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700,
+                            color: wfColor,
+                            background: `${wfColor}18`,
+                            border: `1px solid ${wfColor}30`,
+                            borderRadius: 20, padding: "2px 8px",
+                          }}>{wf.status}</span>
+                        </div>
                       </div>
-                      <div style={{
-                        fontSize: 11, fontWeight: 700,
-                        color: b.da >= 70 ? "#22C55E" : b.da >= 40 ? "#F59E0B" : "#94A3B8",
-                      }}>{b.da}</div>
-                      <div style={{
-                        fontSize: 10, color: "#64748B",
-                        background: "rgba(255,255,255,0.04)", borderRadius: 5,
-                        padding: "2px 8px", display: "inline-block",
-                      }}>{b.type}</div>
-                      <div>
-                        <span style={{
-                          fontSize: 9, fontWeight: 700,
-                          color: b.status === "active" ? "#22C55E" : "#F59E0B",
-                          background: b.status === "active" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
-                          border: `1px solid ${b.status === "active" ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)"}`,
-                          borderRadius: 20, padding: "2px 8px",
-                        }}>
-                          {b.status === "active" ? "● Active" : "○ Opportunity"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -769,6 +907,6 @@ export default function AuthorityEnginePage() {
           )}
         </div>
       </div>
-    </AdminLayout>
+    </AppShell>
   );
 }

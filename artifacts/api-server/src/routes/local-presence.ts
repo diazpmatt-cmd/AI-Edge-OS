@@ -17,7 +17,19 @@ async function bootstrapLocalPresenceColumns(): Promise<void> {
     await pool.query(`
       ALTER TABLE local_presence_channels
         ADD COLUMN IF NOT EXISTS completeness_score INTEGER NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ;
+        ADD COLUMN IF NOT EXISTS last_sync_at       TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS provider_id        TEXT,
+        ADD COLUMN IF NOT EXISTS next_sync_at       TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS health_score       INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS issues_json        TEXT;
+
+      ALTER TABLE local_presence_profiles
+        ADD COLUMN IF NOT EXISTS description        TEXT,
+        ADD COLUMN IF NOT EXISTS categories_json    TEXT,
+        ADD COLUMN IF NOT EXISTS hours_json         TEXT,
+        ADD COLUMN IF NOT EXISTS service_areas_json TEXT,
+        ADD COLUMN IF NOT EXISTS attributes_json    TEXT,
+        ADD COLUMN IF NOT EXISTS photos_json        TEXT;
     `);
   } catch (err) {
     console.warn("[local-presence] bootstrap columns warning:", err);
@@ -29,16 +41,35 @@ bootstrapLocalPresenceColumns().catch(e => console.warn("[local-presence] bootst
 // Aligned with LOCAL_PRESENCE_PROVIDERS. Add entries here when extending
 // the provider registry in lib/db/src/local-presence-providers.ts.
 const DEFAULT_CHANNELS = [
-  { channelName: "google_business", status: "connected",          score: 35, verificationStatus: "verified",    recommendedAction: "Maintain photos, posts, and review responses" },
-  { channelName: "apple_business",  status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Awaiting Apple verification — check business.apple.com" },
-  { channelName: "bing_places",     status: "verified_publishing", score: 10, verificationStatus: "verified",    recommendedAction: "Monitor Bing Places for live confirmation (7–12 days)" },
-  { channelName: "facebook",        status: "not_started",         score: 0,  verificationStatus: "not_started", recommendedAction: "Create Facebook Business page at facebook.com/pages/create" },
+  { channelName: "google_business", status: "setup_in_progress", score: 0,  verificationStatus: "pending",     recommendedAction: "Connect Google Business Profile via OAuth in Connected Accounts" },
+  { channelName: "apple_business",  status: "setup_in_progress", score: 2,  verificationStatus: "pending",     recommendedAction: "Awaiting Apple verification — check business.apple.com" },
+  { channelName: "bing_places",     status: "verified_publishing",score: 10, verificationStatus: "verified",    recommendedAction: "Monitor Bing Places for live confirmation (7–12 days)" },
+  { channelName: "facebook",        status: "not_started",        score: 0,  verificationStatus: "not_started", recommendedAction: "Create Facebook Business page at facebook.com/pages/create" },
   { channelName: "yelp",            status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Claim and verify at biz.yelp.com" },
   { channelName: "nextdoor",        status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Claim business at business.nextdoor.com" },
-  { channelName: "waze",            status: "not_started",         score: 0,  verificationStatus: "not_started", recommendedAction: "Add business at business.waze.com after GBP is optimized" },
+  { channelName: "waze",            status: "not_started",        score: 0,  verificationStatus: "not_started", recommendedAction: "Add business at business.waze.com after GBP is optimized" },
   { channelName: "angi",            status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Complete Angi Pro profile at pro.angi.com" },
   { channelName: "thumbtack",       status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Complete profile approval at thumbtack.com/pro" },
 ];
+
+// ── Tenant ownership guard ─────────────────────────────────────────────────────
+// Validates that the requesting user owns the requested clientId.
+// "default" is always allowed (backward compatibility with legacy rows).
+// Any other value must match a `slug` in the clients table for this userId.
+// Returns the validated clientId on success, or null on unauthorized.
+async function resolveAndValidateClientId(
+  userId: string,
+  rawId: string | undefined,
+): Promise<string | null> {
+  const id = (rawId ?? "").trim() || "default";
+  if (id === "default") return id;
+
+  const { rows } = await pool.query<{ slug: string }>(
+    "SELECT slug FROM clients WHERE user_id = $1 AND slug = $2 LIMIT 1",
+    [userId, id],
+  );
+  return rows.length > 0 ? id : null;
+}
 
 // ── Ensure profile + channels exist for clientId ──────────────────────────────
 async function ensureClient(clientId: string) {
@@ -86,7 +117,8 @@ router.get("/local-presence", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const clientId = (req.query.clientId as string) || "default";
+  const clientId = await resolveAndValidateClientId(userId, req.query.clientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -113,12 +145,13 @@ router.get("/local-presence", async (req, res) => {
 
 // ── GET /api/local-presence/dashboard ────────────────────────────────────────
 // Structured response including provider metadata, per-channel completeness
-// scores, and the overall Local Presence Score. Designed for the Phase 1 UI.
+// scores, GBP audit bridge, and the overall Local Presence Score.
 router.get("/local-presence/dashboard", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const clientId = (req.query.clientId as string) || "default";
+  const clientId = await resolveAndValidateClientId(userId, req.query.clientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -135,7 +168,8 @@ router.get("/local-presence/score", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const clientId = (req.query.clientId as string) || "default";
+  const clientId = await resolveAndValidateClientId(userId, req.query.clientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -158,12 +192,14 @@ router.get("/local-presence/score", async (req, res) => {
 });
 
 // ── GET /api/local-presence/providers ────────────────────────────────────────
-// Returns the canonical provider list with current channel status for a client.
+// Returns the canonical provider list with current channel status and
+// adapter capabilities for a client.
 router.get("/local-presence/providers", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const clientId = (req.query.clientId as string) || "default";
+  const clientId = await resolveAndValidateClientId(userId, req.query.clientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -195,7 +231,7 @@ router.put("/local-presence/channel", async (req, res) => {
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   const {
-    clientId = "default",
+    clientId: rawClientId,
     channelName,
     status,
     score,
@@ -204,9 +240,16 @@ router.put("/local-presence/channel", async (req, res) => {
     recommendedAction,
     metadataJson,
     lastSyncAt,
+    providerId,
+    nextSyncAt,
+    healthScore,
+    issuesJson,
   } = req.body;
 
   if (!channelName) return res.status(400).json({ error: "channelName required" });
+
+  const clientId = await resolveAndValidateClientId(userId, rawClientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -219,6 +262,10 @@ router.put("/local-presence/channel", async (req, res) => {
       recommendedAction,
       metadataJson,
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt) : undefined,
+      providerId,
+      nextSyncAt: nextSyncAt ? new Date(nextSyncAt) : undefined,
+      healthScore,
+      issuesJson,
     });
 
     return res.json(row);
@@ -233,7 +280,14 @@ router.put("/local-presence/profile", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { clientId = "default", businessName, phone, website, address, city, state, zip, napJson } = req.body;
+  const {
+    clientId: rawClientId,
+    businessName, phone, website, address, city, state, zip, napJson,
+    description, categoriesJson, hoursJson, serviceAreasJson, attributesJson, photosJson,
+  } = req.body;
+
+  const clientId = await resolveAndValidateClientId(userId, rawClientId as string);
+  if (clientId === null) return res.status(403).json({ error: "Forbidden" });
 
   try {
     await ensureClient(clientId);
@@ -241,14 +295,20 @@ router.put("/local-presence/profile", async (req, res) => {
     const [row] = await db
       .update(localPresenceProfilesTable)
       .set({
-        ...(businessName !== undefined && { businessName }),
-        ...(phone        !== undefined && { phone }),
-        ...(website      !== undefined && { website }),
-        ...(address      !== undefined && { address }),
-        ...(city         !== undefined && { city }),
-        ...(state        !== undefined && { state }),
-        ...(zip          !== undefined && { zip }),
-        ...(napJson      !== undefined && { napJson }),
+        ...(businessName    !== undefined && { businessName }),
+        ...(phone           !== undefined && { phone }),
+        ...(website         !== undefined && { website }),
+        ...(address         !== undefined && { address }),
+        ...(city            !== undefined && { city }),
+        ...(state           !== undefined && { state }),
+        ...(zip             !== undefined && { zip }),
+        ...(napJson         !== undefined && { napJson }),
+        ...(description     !== undefined && { description }),
+        ...(categoriesJson  !== undefined && { categoriesJson }),
+        ...(hoursJson       !== undefined && { hoursJson }),
+        ...(serviceAreasJson !== undefined && { serviceAreasJson }),
+        ...(attributesJson  !== undefined && { attributesJson }),
+        ...(photosJson      !== undefined && { photosJson }),
         updatedAt: new Date(),
       })
       .where(eq(localPresenceProfilesTable.clientId, clientId))

@@ -22,6 +22,7 @@ export * from "./scheduler-eligibility";
 export * from "./gbp-audit-engine";
 export * from "./gbp-optimization-engine";
 export * from "./local-presence-providers";
+export * from "./local-presence-adapters";
 
 // ── Phase C2: Discovery Engine ────────────────────────────────────────────────
 export * from "./discovery-types";

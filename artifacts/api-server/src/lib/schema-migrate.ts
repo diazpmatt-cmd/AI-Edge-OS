@@ -566,6 +566,22 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    ALTER TABLE local_presence_profiles
+      ADD COLUMN IF NOT EXISTS description        TEXT,
+      ADD COLUMN IF NOT EXISTS categories_json    TEXT,
+      ADD COLUMN IF NOT EXISTS hours_json         TEXT,
+      ADD COLUMN IF NOT EXISTS service_areas_json TEXT,
+      ADD COLUMN IF NOT EXISTS attributes_json    TEXT,
+      ADD COLUMN IF NOT EXISTS photos_json        TEXT;
+
+    ALTER TABLE local_presence_channels
+      ADD COLUMN IF NOT EXISTS provider_id    TEXT,
+      ADD COLUMN IF NOT EXISTS next_sync_at   TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS health_score   INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS issues_json    TEXT;
+  `);
+
   // ── Asset Library ──────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assets (

@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-14
+Last updated: 2026-07-19
 
 ---
 
@@ -361,3 +361,45 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 - [ ] Copy content from Content Autopilot Nextdoor draft
 - [ ] Paste into business.nextdoor.com
 - [ ] Document the Nextdoor business page URL for the record
+
+---
+
+## Local Presence Engine — Foundation Knockout (2026-07-19)
+
+The canonical Local Presence Engine data model and orchestration layer is now in place. All future providers (GBP, Apple, Bing, Yelp, Facebook, Nextdoor) share this foundation.
+
+### Completed Phases
+
+**Phase 1 — Audit**: Confirmed existing infrastructure (local_presence_profiles/channels tables, LOCAL_PRESENCE_PROVIDERS registry with 6 providers, /api/local-presence routes, 5746-line LocalPresenceEnginePage.tsx, fully-built siloed GBP engine).
+
+**Phase 2 — Schema Extension**: Added 6 columns to `local_presence_profiles` (description, categories_json, hours_json, service_areas_json, attributes_json, photos_json) and 4 columns to `local_presence_channels` (provider_id, next_sync_at, health_score, issues_json). All migrations use `ALTER TABLE … ADD COLUMN IF NOT EXISTS` in schema-migrate.ts.
+
+**Phase 3 — Provider Adapter Contracts**: Created `lib/db/src/local-presence-adapters.ts` with:
+- `ProviderAdapterCapabilities` interface (syncSupported, writeSupported, oauthRequired, fetchHours, fetchPhotos, fetchReviews, fetchCategories)
+- `NormalizedListingUpdate` and `NormalizedListingIssue` types for cross-provider normalization
+- `mapGbpSnapshotToChannelUpdate()` — pure function bridging GBP audit snapshots to channel health
+- `NO_GBP_AUDIT_UPDATE` fallback constant
+- All 6 providers updated with `capabilities` field in `local-presence-providers.ts`
+
+**Phase 4 — Dashboard GBP Bridge**: `LocalPresenceRepository.getDashboard()` fetches the latest complete `gbp_audit_snapshots` row at read time and overlays the `google_business` channel score/status/healthScore with live GBP audit data. No backfill needed — the bridge is read-only.
+
+**Phase 5 — Tenant Isolation (IDOR Fix)**: Routes now enforce ownership via `resolveAndValidateClientId(userId, rawId)`. "default" passes unconditionally (backward compat); any other slug is validated against `SELECT slug FROM clients WHERE user_id=$1 AND slug=$2`. All 6 route handlers (GET /local-presence, /dashboard, /score, /providers; PUT /channel, /profile) use this guard.
+
+**Phase 6 — Behavioral Tests (27 tests)**:
+- `local-presence-mapping.test.ts` — 17 tests covering mapGbpSnapshotToChannelUpdate, NO_GBP_AUDIT_UPDATE, computeChannelCompletenessScore, and computeOverallPresenceScore
+- `local-presence-tenant.test.ts` — 10 tests documenting tenant ownership contract, IDOR prevention invariant, and provider capability registry invariants
+
+### Architectural Decisions
+
+- **Read-time GBP bridge** (not write): GBP audit data is never written back to local_presence_channels. The dashboard overwrites the google_business channel at query time using the latest complete audit snapshot. This avoids stale data and dual-write complexity.
+- **"default" slug backward compat**: Existing rows keyed to "default" continue to work without migration. New clients use their slug from the clients table.
+- **Capabilities registry**: `ProviderAdapterCapabilities` is the single source of truth for what each provider supports. UI feature flags and route guards should consult this interface.
+- **Score weighting**: Overall presence score is weighted by `scoreWeight` in `LOCAL_PRESENCE_PROVIDERS`. GBP carries the highest weight (40/100). NAP bonus (+2 to +5) rewards NAP consistency across 3+ active channels.
+
+### Next Steps (Phase 2 — Provider Sync)
+
+- [ ] Wire the GBP OAuth token into `mapGbpSnapshotToChannelUpdate` so the bridge auto-triggers on new audit completions
+- [ ] Implement Apple Business Connect read adapter (scrape or API when available)
+- [ ] Implement Bing Places read adapter
+- [ ] Add `PUT /api/local-presence/sync/:channelName` endpoint for on-demand sync
+- [ ] Surface `healthScore` and `issuesJson` in LocalPresenceEnginePage.tsx channel cards

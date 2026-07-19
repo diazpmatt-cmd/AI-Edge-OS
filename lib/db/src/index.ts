@@ -429,6 +429,10 @@ export * from "./competitor-types";
 export * from "./competitor-extractor";
 export { DrizzleCompetitorRepository } from "./competitor-repository";
 
+// Phase 5: Provider Intelligence Foundation — observation types + provider interface
+export * from "./competitor-observation-types";
+export * from "./competitor-enrichment-provider";
+
 // Phase C8R-5: tenant-safe, pure AI Visibility read model (legacy audits remain noncanonical)
 export * from "./ai-visibility-read-model-types";
 export * from "./ai-visibility-prioritizer";

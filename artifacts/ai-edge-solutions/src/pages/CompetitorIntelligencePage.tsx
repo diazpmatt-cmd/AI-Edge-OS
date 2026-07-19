@@ -1731,17 +1731,156 @@ function ScoreSection({ icon, title, score }: { icon: string; title: string; sco
   );
 }
 
+// ── Phase 5: Provider observation local types ─────────────────────────────────
+
+type ObsCategory =
+  | "website_intel" | "local_presence" | "reviews" | "authority" | "ai_visibility";
+
+interface ObsSummary {
+  category:     ObsCategory;
+  providerId:   string;
+  providerName: string;
+  observedAt:   string;
+  confidence:   number;
+  sourceUrl:    string | null;
+  score:        number;
+  signals:      string[];
+  isMock:       boolean;
+  attribution:  { providerName: string; methodology: string };
+  normalized:   Record<string, unknown>;
+}
+
+type ObsState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; data: ObsSummary[] }
+  | { status: "error" };
+
+const OBS_CATEGORIES: ObsCategory[] = [
+  "website_intel", "local_presence", "reviews", "authority", "ai_visibility",
+];
+
+const OBS_CAT_META: Record<ObsCategory, { label: string; icon: string }> = {
+  website_intel:  { label: "Website Intel",  icon: "🌐" },
+  local_presence: { label: "Local Presence", icon: "📍" },
+  reviews:        { label: "Reviews",        icon: "⭐" },
+  authority:      { label: "Authority",      icon: "🔗" },
+  ai_visibility:  { label: "AI Visibility",  icon: "🤖" },
+};
+
+function ObsLoadingTile({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div style={{
+      flex: "1 1 140px", minWidth: 140,
+      background: "rgba(255,255,255,0.02)",
+      border: "1px dashed rgba(255,255,255,0.07)",
+      borderRadius: 10, padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(148,163,184,0.45)", letterSpacing: "0.2px" }}>
+          {title}
+        </span>
+      </div>
+      <div style={{
+        height: 18, borderRadius: 4,
+        background: "rgba(255,255,255,0.05)",
+        marginBottom: 6,
+      }} />
+      <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.04)" }} />
+    </div>
+  );
+}
+
+function ProviderObservationTile({
+  obs, meta,
+}: {
+  obs: ObsSummary;
+  meta: { label: string; icon: string };
+}) {
+  const color = obs.score >= 70 ? "#22C55E" : obs.score >= 40 ? "#EAB308" : "#EF4444";
+  return (
+    <div style={{
+      flex: "1 1 140px", minWidth: 140,
+      background: "rgba(255,255,255,0.03)",
+      border: `1px solid rgba(255,255,255,0.09)`,
+      borderRadius: 10, padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 13 }}>{meta.icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(148,163,184,0.55)", letterSpacing: "0.2px", flex: 1 }}>
+          {meta.label.toUpperCase()}
+        </span>
+        {obs.isMock && (
+          <span style={{
+            fontSize: 7, fontWeight: 800, padding: "1px 5px", borderRadius: 4, letterSpacing: "0.3px",
+            background: "rgba(234,179,8,0.12)", color: "#EAB308",
+            border: "1px solid rgba(234,179,8,0.22)",
+          }}>
+            DEMO
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 22, fontWeight: 900, color, lineHeight: 1 }}>{obs.score}</span>
+        <span style={{ fontSize: 9, color: "rgba(148,163,184,0.4)" }}>/100</span>
+      </div>
+      <div style={{ marginTop: 5, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${obs.score}%`, background: color, borderRadius: 2 }} />
+      </div>
+      {obs.signals.length > 0 && (
+        <div style={{ marginTop: 7, display: "flex", flexDirection: "column", gap: 2 }}>
+          {obs.signals.slice(0, 3).map((sig, i) => (
+            <div key={i} style={{ fontSize: 8.5, color: "rgba(148,163,184,0.5)", display: "flex", gap: 4 }}>
+              <span style={{ color: "rgba(148,163,184,0.2)", flexShrink: 0 }}>·</span>
+              <span style={{ lineHeight: 1.3 }}>{sig}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: 6, fontSize: 7.5, color: "rgba(148,163,184,0.25)" }}>
+        via {obs.providerName}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function CompetitorCard({
-  c, expanded, onToggle,
+  c, expanded, onToggle, apiFetch,
 }: {
   c: CompetitorItem;
   expanded: boolean;
   onToggle: () => void;
+  apiFetch: ReturnType<typeof useApiFetch>;
 }) {
   const cfg      = c.threatLevel ? (THREAT_CFG[c.threatLevel] ?? THREAT_UNKNOWN) : THREAT_UNKNOWN;
   const scoreCol = c.opportunityScore >= 70 ? "#22C55E" : c.opportunityScore >= 40 ? "#EAB308" : ACCENT;
   const confCol  = c.confidenceScore >= 60 ? "#22C55E" : "#EAB308";
   const location = [c.city, c.state].filter(Boolean).join(", ");
+
+  const [obsState, setObsState] = useState<ObsState>({ status: "idle" });
+  const hasLoadedRef = useRef(false);
+  const BASE = import.meta.env.BASE_URL ?? "/";
+
+  useEffect(() => {
+    if (!expanded || hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+    setObsState({ status: "loading" });
+    apiFetch(
+      `${BASE}api/competitor-intelligence/competitors/${encodeURIComponent(c.domain)}/observations`,
+    )
+      .then(async r => {
+        const d = await (r as Response).json() as { ok?: boolean; observations?: ObsSummary[] };
+        if (d?.ok && Array.isArray(d.observations)) {
+          setObsState({ status: "ready", data: d.observations });
+        } else {
+          setObsState({ status: "error" });
+        }
+      })
+      .catch(() => setObsState({ status: "error" }));
+  }, [expanded, apiFetch]);
 
   const fmtDate = (s: string | Date) => {
     try { return new Date(s as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
@@ -2003,20 +2142,50 @@ function CompetitorCard({
             </div>
           </div>
 
-          {/* Competitive intelligence — Phase 6 placeholder tiles */}
+          {/* Competitive intelligence — Phase 5 provider observations */}
           <div>
-            <div style={{
-              fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.4)",
-              letterSpacing: "0.4px", marginBottom: 8,
-            }}>
-              COMPETITIVE INTELLIGENCE
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{
+                fontSize: 9, fontWeight: 700, color: "rgba(148,163,184,0.4)",
+                letterSpacing: "0.4px",
+              }}>
+                COMPETITIVE INTELLIGENCE
+              </div>
+              {obsState.status === "ready" && obsState.data.some(d => d.isMock) && (
+                <span style={{
+                  fontSize: 7.5, fontWeight: 700, padding: "1px 6px", borderRadius: 4,
+                  background: "rgba(234,179,8,0.1)", color: "rgba(234,179,8,0.7)",
+                  border: "1px solid rgba(234,179,8,0.18)", letterSpacing: "0.3px",
+                }}>
+                  DEMO DATA
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <ScoreSection icon="🌐" title="WEBSITE INTEL"  score={null} />
-              <ScoreSection icon="📍" title="LOCAL PRESENCE" score={c.localPresenceScore} />
-              <ScoreSection icon="⭐" title="REVIEWS"        score={c.avgRating != null ? Math.round(c.avgRating * 20) : null} />
-              <ScoreSection icon="🔗" title="AUTHORITY"      score={c.citationScore} />
-              <ScoreSection icon="🤖" title="AI VISIBILITY"  score={c.aiVisibilityScore} />
+              {OBS_CATEGORIES.map(cat => {
+                const meta = OBS_CAT_META[cat];
+                if (obsState.status === "loading") {
+                  return <ObsLoadingTile key={cat} icon={meta.icon} title={meta.label.toUpperCase()} />;
+                }
+                if (obsState.status === "ready") {
+                  const obs = obsState.data.find(d => d.category === cat);
+                  if (obs) return <ProviderObservationTile key={cat} obs={obs} meta={meta} />;
+                }
+                // idle / error / category missing — fall back to canonical scores
+                if (cat === "local_presence") {
+                  return <ScoreSection key={cat} icon={meta.icon} title={meta.label.toUpperCase()} score={c.localPresenceScore} />;
+                }
+                if (cat === "reviews") {
+                  return <ScoreSection key={cat} icon={meta.icon} title={meta.label.toUpperCase()} score={c.avgRating != null ? Math.round(c.avgRating * 20) : null} />;
+                }
+                if (cat === "authority") {
+                  return <ScoreSection key={cat} icon={meta.icon} title={meta.label.toUpperCase()} score={c.citationScore} />;
+                }
+                if (cat === "ai_visibility") {
+                  return <ScoreSection key={cat} icon={meta.icon} title={meta.label.toUpperCase()} score={c.aiVisibilityScore} />;
+                }
+                return <ScoreSection key={cat} icon={meta.icon} title={meta.label.toUpperCase()} score={null} />;
+              })}
             </div>
           </div>
         </div>
@@ -2232,6 +2401,7 @@ function CompetitorsTab({ apiFetch }: { apiFetch: ReturnType<typeof useApiFetch>
               c={c}
               expanded={expandedId === c.id}
               onToggle={() => setExpandedId(prev => prev === c.id ? null : c.id)}
+              apiFetch={apiFetch}
             />
           ))}
         </div>

@@ -20,8 +20,12 @@ import { getAuth } from "@clerk/express";
 import { pool, db, DrizzleCompetitorRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { competitorDiscoveryService }          from "../lib/competitor-discovery-service.js";
+import { createEnrichmentService }             from "../lib/competitor-enrichment-service.js";
 
 const router = Router();
+
+// Singleton enrichment service — mock providers registered at startup
+const enrichmentService = createEnrichmentService();
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -627,6 +631,60 @@ router.get("/api/competitor-intelligence/competitors", async (req, res) => {
     }
     const msg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "db_error", message: msg });
+  }
+});
+
+// ── GET /api/competitor-intelligence/competitors/:domain/observations ─────────
+/**
+ * Phase 5: Provider observation summaries for a single competitor domain.
+ * Runs all active enrichment providers (currently mock) and caches results
+ * in competitor_observations for 24 h.
+ *
+ * Returns { ok, domain, competitorId, observations: ProviderObservationSummary[] }.
+ * observations is [] when the domain is not found in the canonical competitors table.
+ *
+ * Security: Clerk session required; clientId always scoped by userId.
+ * Tenant isolation: every DB query filters on client_id.
+ */
+router.get("/api/competitor-intelligence/competitors/:domain/observations", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const { client } = auth;
+
+  const domain = decodeURIComponent(req.params["domain"] ?? "").trim().toLowerCase();
+  if (!domain) {
+    res.status(400).json({ error: "bad_request", message: "domain param required" });
+    return;
+  }
+
+  try {
+    const compRes = await pool.query<{ id: string }>(
+      `SELECT id FROM competitors
+       WHERE client_id = $1 AND domain = $2 AND canonical_status = 'active'
+       LIMIT 1`,
+      [client.id, domain],
+    );
+
+    if (!compRes.rows.length) {
+      res.json({ ok: true, domain, competitorId: null, observations: [] });
+      return;
+    }
+
+    const competitorId = compRes.rows[0]!.id;
+    const observations = await enrichmentService.enrichCompetitor(
+      client.id,
+      competitorId,
+      domain,
+    );
+
+    res.json({ ok: true, domain, competitorId, observations });
+  } catch (err) {
+    if (isRelationMissingError(err)) {
+      res.json({ ok: true, domain, competitorId: null, observations: [] });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "enrichment_error", message: msg });
   }
 });
 

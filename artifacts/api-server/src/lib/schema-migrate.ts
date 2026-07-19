@@ -647,6 +647,33 @@ export async function migrateSchema(): Promise<void> {
       ON competitors (client_id, last_seen_at DESC);
   `);
 
+  // ── Phase 5: Provider observation log ─────────────────────────────────────
+  // One row per (client_id, competitor_id, category, provider_id).
+  // Providers upsert their observations; canonical competitors table is untouched.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS competitor_observations (
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT         NOT NULL,
+      competitor_id   TEXT         NOT NULL,
+      domain          TEXT         NOT NULL,
+      category        TEXT         NOT NULL,
+      provider_id     TEXT         NOT NULL,
+      observed_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      confidence      INTEGER      NOT NULL DEFAULT 50,
+      source_url      TEXT,
+      raw_observation JSONB        NOT NULL DEFAULT '{}',
+      normalized_obs  JSONB        NOT NULL DEFAULT '{}',
+      attribution     JSONB        NOT NULL DEFAULT '{}',
+      is_mock         BOOLEAN      NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS comp_obs_uniq
+      ON competitor_observations(client_id, competitor_id, category, provider_id);
+    CREATE INDEX IF NOT EXISTS comp_obs_competitor_idx
+      ON competitor_observations(client_id, competitor_id);
+  `);
+
   // ── Asset Library ──────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assets (

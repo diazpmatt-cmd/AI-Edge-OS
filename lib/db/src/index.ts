@@ -424,6 +424,11 @@ export * from "./backlink-fixture-provider";
 export * from "./backlink-ingestion";
 export * from "./backlink-ingestion-run";
 
+// Competitor Intelligence Engine — canonical entity layer
+export * from "./competitor-types";
+export * from "./competitor-extractor";
+export { DrizzleCompetitorRepository } from "./competitor-repository";
+
 // Phase C8R-5: tenant-safe, pure AI Visibility read model (legacy audits remain noncanonical)
 export * from "./ai-visibility-read-model-types";
 export * from "./ai-visibility-prioritizer";

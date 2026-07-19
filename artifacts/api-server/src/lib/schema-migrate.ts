@@ -582,6 +582,71 @@ export async function migrateSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS issues_json    TEXT;
   `);
 
+  // ── Competitor Intelligence Engine ────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS competitors (
+      id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id                   TEXT        NOT NULL,
+      domain                      TEXT        NOT NULL,
+      business_name               TEXT,
+      website                     TEXT,
+      gbp_place_id                TEXT,
+      primary_category            TEXT,
+      categories_json             TEXT,
+      address                     TEXT,
+      city                        TEXT,
+      state                       TEXT,
+      zip                         TEXT,
+      phone                       TEXT,
+      coordinates                 TEXT,
+      service_areas_json          TEXT,
+      years_in_business           INTEGER,
+      review_count                INTEGER,
+      avg_rating                  NUMERIC(3,1),
+      review_velocity             NUMERIC(6,2),
+      review_sentiment_score      INTEGER,
+      service_catalog_json        TEXT,
+      social_profiles_json        TEXT,
+      top_keyword_rank            INTEGER,
+      last_seen_rank              INTEGER,
+      keyword_gap_count           INTEGER     NOT NULL DEFAULT 0,
+      estimated_organic_traffic   INTEGER,
+      estimated_organic_keywords  INTEGER,
+      organic_visibility_score    INTEGER,
+      paid_visibility_score       INTEGER,
+      content_velocity_score      INTEGER,
+      local_presence_score        INTEGER,
+      gbp_health_score            INTEGER,
+      ai_visibility_score         INTEGER,
+      citation_score              INTEGER,
+      threat_level                TEXT,
+      opportunity_score           INTEGER     NOT NULL DEFAULT 0,
+      domain_authority            INTEGER,
+      backlink_count              INTEGER,
+      primary_photo_url           TEXT,
+      logo_url                    TEXT,
+      discovery_source            TEXT        NOT NULL DEFAULT 'serp_organic',
+      discovered_providers_json   TEXT,
+      provider_metadata_json      TEXT,
+      merged_from_domains_json    TEXT,
+      canonical_status            TEXT        NOT NULL DEFAULT 'active',
+      confidence_score            INTEGER     NOT NULL DEFAULT 10,
+      first_seen_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_crawled_at             TIMESTAMPTZ,
+      created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT competitors_client_domain_uniq UNIQUE (client_id, domain)
+    );
+
+    CREATE INDEX IF NOT EXISTS competitors_client_id_idx
+      ON competitors (client_id);
+    CREATE INDEX IF NOT EXISTS competitors_threat_level_idx
+      ON competitors (client_id, threat_level);
+    CREATE INDEX IF NOT EXISTS competitors_last_seen_idx
+      ON competitors (client_id, last_seen_at DESC);
+  `);
+
   // ── Asset Library ──────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assets (

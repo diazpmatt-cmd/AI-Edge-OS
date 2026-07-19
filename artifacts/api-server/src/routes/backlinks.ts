@@ -147,7 +147,9 @@ router.put("/api/backlinks/schedule", async (req, res): Promise<void> => {
   }
 
   const freq    = parseBacklinkScheduleFrequency(frequency);
-  const nextAt  = (enabled === true) ? calcNextRunAt(freq, new Date()) : null;
+  // Always compute nextAt based on the requested frequency so the CASE block can
+  // apply it in all "should advance" scenarios (enabling, or frequency change).
+  const nextAt  = calcNextRunAt(freq, new Date());
 
   try {
     const result = await pool.query(
@@ -158,9 +160,9 @@ router.put("/api/backlinks/schedule", async (req, res): Promise<void> => {
          enabled               = EXCLUDED.enabled,
          frequency             = EXCLUDED.frequency,
          next_run_at           = CASE
-           WHEN EXCLUDED.enabled = TRUE AND backlink_discovery_schedule.enabled = FALSE
-           THEN EXCLUDED.next_run_at
            WHEN EXCLUDED.enabled = FALSE THEN NULL
+           WHEN backlink_discovery_schedule.enabled = FALSE THEN EXCLUDED.next_run_at
+           WHEN EXCLUDED.frequency != backlink_discovery_schedule.frequency THEN EXCLUDED.next_run_at
            ELSE backlink_discovery_schedule.next_run_at
          END,
          max_retries           = EXCLUDED.max_retries,
@@ -196,14 +198,15 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     return;
   }
 
-  const now      = new Date();
-  const provider = _backlinkRegistry.resolve() ?? new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS);
-  const providerHealth = _backlinkRegistry.resolve() ? "configured" : "fixture_fallback";
+  const now               = new Date();
+  const resolvedProvider  = _backlinkRegistry.resolve();
+  const provider          = resolvedProvider ?? new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS);
+  const providerHealth    = resolvedProvider !== null ? "configured" : "fixture_fallback";
 
   try {
     const result = await ingestFixtureBacklinks({
       trustedClientId:     clientId.trim(),
-      provider:            new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS),
+      provider,
       discovery: {
         clientId:          clientId.trim(),
         clientDomain:      "bedbugsbeyond.com",
@@ -239,7 +242,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
         [
           clientId.trim(),
           snapshotDate,
-          Math.min(100, Math.max(0, summary.opportunityIds.length)),
+          0, // v1 placeholder: real domain authority requires a live DA provider
           summary.prospectIds.length,
           summary.opportunityIds.length,
           summary.workflowIds.length,
@@ -252,7 +255,6 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     console.error("[backlinks] scheduled ingest error:", err);
     res.status(500).json({ ok: false, error: "ingest_failed", message: err?.message ?? "Unknown error" });
   }
-  void provider;
 });
 
 // ── GET /api/backlinks/history/score ─────────────────────────────────────────

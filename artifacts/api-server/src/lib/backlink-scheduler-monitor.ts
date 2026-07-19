@@ -25,6 +25,7 @@ import {
   shouldAutoDisable,
   calcNextRunAt,
   parseBacklinkScheduleFrequency,
+  parseBacklinkSchedulerEnvConfig,
 } from "@workspace/db";
 import { SCHEDULER_SECRET } from "./scheduler-secret.js";
 import { logger } from "./logger.js";
@@ -44,6 +45,7 @@ interface ScheduledIngestResponse {
 }
 
 export async function runBacklinkSchedulerMonitor(): Promise<void> {
+  const envConfig = parseBacklinkSchedulerEnvConfig();
   let rows: ScheduleRow[];
 
   try {
@@ -54,7 +56,8 @@ export async function runBacklinkSchedulerMonitor(): Promise<void> {
          AND next_run_at IS NOT NULL
          AND next_run_at <= NOW()
        ORDER BY next_run_at ASC
-       LIMIT 5`,
+       LIMIT $1`,
+      [envConfig.maxPerTick],
     );
     rows = result.rows;
   } catch {

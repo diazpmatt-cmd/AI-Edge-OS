@@ -167,7 +167,7 @@ export function shortRunId(id: string): string {
 }
 
 export function runStatusColor(status: string): string {
-  if (status === "completed") return "#22C55E";
+  if (status === "succeeded" || status === "completed") return "#22C55E";
   if (status === "failed")    return "#EF4444";
   if (status === "in_progress" || status === "running") return "#38BDF8";
   return "#64748B";

@@ -449,6 +449,12 @@ export * from "./ai-visibility-read-model-adapters";
 export * from "./ai-visibility-read-model";
 export * from "./ai-visibility-fixtures";
 
+// Phase C9R-4: real AI query provider + mention/citation detection
+export * from "./ai-query-provider-types";
+export * from "./ai-query-generation";
+export * from "./ai-query-detection";
+export * from "./ai-query-read-model-adapter";
+
 // C7 repository (schedule CRUD + leadership + claiming)
 export {
   bootstrapC7Tables,

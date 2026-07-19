@@ -4,6 +4,7 @@ import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { useAuth } from "@clerk/react";
 import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
+import AiVisibilityQueryEvidencePanel, { type QEScan, type QEResult } from "@/components/AiVisibilityQueryEvidencePanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -199,11 +200,18 @@ export default function AIVisibilityEnginePage() {
   const emailRef = useRef<HTMLInputElement>(null);
 
   // ── Read model (Opportunities tab) ──────────────────────────────────────────
-  const [activeTab, setActiveTab]  = useState<"opportunities" | "legacy">("opportunities");
+  const [activeTab, setActiveTab]  = useState<"opportunities" | "ai_query" | "legacy">("opportunities");
   const [rmTrigger, setRmTrigger]  = useState(0);
   const [readModel, setReadModel]  = useState<RMReadModel | null>(null);
   const [rmLoading, setRmLoading]  = useState(false);
   const [rmError,   setRmError]    = useState<string | null>(null);
+
+  // ── AI Query scan state ───────────────────────────────────────────────────
+  const [qeScan,      setQeScan]      = useState<QEScan | null>(null);
+  const [qeResults,   setQeResults]   = useState<readonly QEResult[]>([]);
+  const [qeLoading,   setQeLoading]   = useState(false);
+  const [qeError,     setQeError]     = useState<string | null>(null);
+  const qeLoadedRef = useRef(false);
 
   useEffect(() => {
     if (activeTab !== "opportunities") return;
@@ -214,6 +222,44 @@ export default function AIVisibilityEnginePage() {
       .catch(() => setRmError("Failed to load AI visibility data. Please try again."))
       .finally(() => setRmLoading(false));
   }, [activeTab, clientId, apiFetch, rmTrigger]);
+
+  // Load latest scan when AI Query tab first becomes active
+  useEffect(() => {
+    if (activeTab !== "ai_query" || qeLoadedRef.current) return;
+    qeLoadedRef.current = true;
+    setQeLoading(true);
+    setQeError(null);
+    apiFetch<{ scan: QEScan; results: QEResult[] }>(`/ai-visibility/query-scan/${clientId}/latest`)
+      .then(data => { setQeScan(data.scan); setQeResults(data.results); })
+      .catch(err => {
+        const msg = err?.message ?? String(err);
+        if (msg.includes("404") || msg.includes("no_scan_found")) {
+          setQeScan(null); setQeResults([]);
+        } else {
+          setQeError("Failed to load scan data.");
+        }
+      })
+      .finally(() => setQeLoading(false));
+  }, [activeTab, clientId, apiFetch]);
+
+  async function handleRunScan() {
+    setQeLoading(true);
+    setQeError(null);
+    try {
+      const data = await apiFetch<QEScan & { results: QEResult[] }>(
+        `/ai-visibility/query-scan/${clientId}`,
+        { method: "POST" },
+      );
+      setQeScan(data);
+      setQeResults((data as any).results ?? []);
+      // Refresh the read model so ai_query coverage updates
+      setRmTrigger(n => n + 1);
+    } catch {
+      setQeError("Scan failed. Check that an AI provider is configured.");
+    } finally {
+      setQeLoading(false);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -513,8 +559,10 @@ export default function AIVisibilityEnginePage() {
 
         {/* ── Tab navigation ── */}
         <div style={{ display: "flex", gap: 0, marginBottom: 28, borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
-          {([ { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
-              { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
+          {([
+            { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
+            { id: "ai_query",      label: "🤖 AI Query",      color: "#A78BFA" },
+            { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -541,6 +589,19 @@ export default function AIVisibilityEnginePage() {
             onRetry={() => setRmTrigger(n => n + 1)}
             isDark={isDark}
             colors={t}
+          />
+        )}
+
+        {/* ── AI Query evidence view ── */}
+        {activeTab === "ai_query" && (
+          <AiVisibilityQueryEvidencePanel
+            scan={qeScan}
+            results={qeResults}
+            isLoading={qeLoading}
+            error={qeError}
+            clientId={clientId}
+            onRunScan={handleRunScan}
+            isDark={isDark}
           />
         )}
 

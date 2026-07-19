@@ -39,7 +39,7 @@ const reference = (
 ) => buildReference(source, recordType, recordId, clientId, observedAt);
 
 function buildReference(
-  source: "local_presence" | "google_business" | "discovery" | "backlink" | "reviews" | "content",
+  source: "local_presence" | "google_business" | "discovery" | "backlink" | "reviews" | "content" | "ai_query",
   recordType: string,
   recordId: string,
   clientId: string,

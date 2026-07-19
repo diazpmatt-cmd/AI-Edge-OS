@@ -6,6 +6,7 @@ import { eq, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import { generateAuditPDF } from "../services/pdf-generator.js";
 import { AiVisibilityExecutionService } from "../lib/ai-visibility-execution-service.js";
+import { AiQueryScanService } from "../lib/ai-query-scan-service.js";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
@@ -361,6 +362,97 @@ router.get("/ai-visibility/read-model/:clientId/history", async (req, res): Prom
   } catch (err) {
     console.error("[ai-visibility] history error:", err);
     res.status(500).json({ error: "history_query_failed" });
+  }
+});
+
+// ── POST /api/ai-visibility/query-scan/:clientId ───────────────────────────────
+// Triggers a live AI query scan for this tenant. Runs synchronously (all queries
+// execute before the response is returned). Typical latency: 15–60 s depending
+// on query count and provider speed.
+
+router.post("/ai-visibility/query-scan/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc     = new AiQueryScanService(pool, db);
+    const summary = await svc.execute({ clientId: clientCheck.clientId, userId });
+    res.status(201).json(summary);
+  } catch (err) {
+    console.error("[ai-visibility] query-scan error:", err);
+    res.status(500).json({ error: "scan_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/query-scan/:clientId/latest ────────────────────────
+// Returns the latest completed scan summary + results for this tenant.
+// Returns 404 if no scan has been run yet.
+
+router.get("/ai-visibility/query-scan/:clientId/latest", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc  = new AiQueryScanService(pool, db);
+    const data = await svc.getLatestScan(clientCheck.clientId);
+    if (!data.scan) {
+      res.status(404).json({ error: "no_scan_found" }); return;
+    }
+    res.json({ scan: data.scan, results: data.results });
+  } catch (err) {
+    console.error("[ai-visibility] query-scan latest error:", err);
+    res.status(500).json({ error: "scan_query_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/query-scan/evidence/:scanId ────────────────────────
+// Returns full evidence for a specific scan by UUID.
+// The scanId must belong to the authenticated tenant (IDOR guard).
+
+router.get("/ai-visibility/query-scan/evidence/:scanId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { scanId } = req.params;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+
+  try {
+    const svc  = new AiQueryScanService(pool, db);
+    const data = await svc.getScanEvidence(scanId, clientCheck.clientId);
+    if (!data.scan) {
+      res.status(404).json({ error: "scan_not_found" }); return;
+    }
+    res.json({ scan: data.scan, results: data.results });
+  } catch (err) {
+    console.error("[ai-visibility] query-scan evidence error:", err);
+    res.status(500).json({ error: "evidence_query_failed" });
   }
 });
 

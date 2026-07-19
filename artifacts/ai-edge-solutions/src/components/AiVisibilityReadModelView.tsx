@@ -11,7 +11,8 @@ export type RMCategory    = "local_presence" | "citation_directory" | "review_in
                           | "discovery" | "backlink" | "content" | "measurement";
 export type RMWorkflowKind = "local_presence" | "discovery" | "backlink" | "content_autopilot" | "measurement";
 export type RMSource       = "local_presence" | "google_business" | "discovery" | "backlink"
-                           | "reviews" | "content" | "google_search_console" | "google_analytics";
+                           | "reviews" | "content" | "google_search_console" | "google_analytics"
+                           | "ai_query";
 
 export interface RMCoverageDiagnostic {
   source: RMSource;
@@ -134,6 +135,7 @@ export function getSourceLabel(source: string): string {
     content:               "Content Autopilot",
     google_search_console: "Search Console",
     google_analytics:      "Google Analytics",
+    ai_query:              "AI Query Visibility",
   };
   return map[source] ?? source.replace(/_/g, " ");
 }

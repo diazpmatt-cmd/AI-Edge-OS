@@ -21,6 +21,7 @@ import {
   adaptContentSources,
   adaptTenantSafeReviews,
   adaptConnectedGoogle,
+  adaptAiQuerySources,
   localPresenceProfilesTable,
   localPresenceChannelsTable,
   discoveryOpportunitiesTable,
@@ -42,6 +43,7 @@ import {
   type DiscoveryOpportunity,
 } from "@workspace/db";
 import { eq, and, desc, notInArray } from "drizzle-orm";
+import { AiQueryScanService } from "./ai-query-scan-service.js";
 
 type Pool     = typeof defaultPool;
 type Db       = typeof defaultDb;
@@ -150,20 +152,29 @@ export class AiVisibilityExecutionService {
     const geography = derivePrimaryGeography(scope);
 
     // ── 3. Parallel canonical queries ─────────────────────────────────────────
-    const [discoveryItems, backlinkItems, contentItems, googleConn] = await Promise.all([
+    const aiQuerySvc = new AiQueryScanService(this.pool, this.db);
+    const [discoveryItems, backlinkItems, contentItems, googleConn, aiQueryData] = await Promise.all([
       this.queryDiscoveryObservations(clientId, geography),
       this.queryBacklinkObservations(clientId, geography),
       this.queryContentObservations(userId, clientId, geography),
       this.queryGoogleConnection(userId, clientId, geography),
+      aiQuerySvc.getLatestScan(clientId),
     ]);
 
-    // ── 4. Run all six adapters ────────────────────────────────────────────────
+    // ── 4. Run all seven adapters ──────────────────────────────────────────────
     const lpResult      = adaptLocalPresenceSources({ trustedClientId: clientId, profile, channels, geography, observedAt: generatedAt });
     const discResult    = adaptDiscoverySources(discoveryItems);
     const blResult      = adaptBacklinkSources(backlinkItems);
     const contentResult = adaptContentSources(contentItems);
     const reviewResult  = adaptTenantSafeReviews(null); // reviews remain not_tenant_safe until C9R-6
     const googleResult  = adaptConnectedGoogle(googleConn);
+    const aiQueryResult = adaptAiQuerySources({
+      scan:        aiQueryData.scan,
+      results:     aiQueryData.results,
+      geography,
+      clientId,
+      observedAt:  generatedAt,
+    });
 
     const observations = [
       ...lpResult.observations,
@@ -172,6 +183,7 @@ export class AiVisibilityExecutionService {
       ...contentResult.observations,
       ...reviewResult.observations,
       ...googleResult.observations,
+      ...aiQueryResult.observations,
     ];
     const coverage = [
       ...lpResult.coverage,
@@ -180,6 +192,7 @@ export class AiVisibilityExecutionService {
       ...contentResult.coverage,
       ...reviewResult.coverage,
       ...googleResult.coverage,
+      ...aiQueryResult.coverage,
     ];
 
     // ── 5. Compose ────────────────────────────────────────────────────────────

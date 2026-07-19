@@ -8,7 +8,8 @@ export type AiVisibilitySource =
   | "reviews"
   | "content"
   | "google_search_console"
-  | "google_analytics";
+  | "google_analytics"
+  | "ai_query";
 
 export type AiVisibilityCoverageStatus =
   | "available"

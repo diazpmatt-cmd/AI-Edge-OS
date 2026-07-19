@@ -514,6 +514,54 @@ export async function migrateSchema(): Promise<void> {
       ON ai_visibility_run_results(client_id, generated_at DESC);
   `);
 
+  // ── AI Query Scans + Results (C9R-4) ─────────────────────────────────────
+  // ai_query_scans: one scan run per tenant (header record).
+  // ai_query_results: one row per individual query within a scan.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_query_scans (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT        NOT NULL,
+      status          TEXT        NOT NULL DEFAULT 'running',
+      provider        TEXT        NOT NULL DEFAULT 'openai',
+      model           TEXT        NOT NULL DEFAULT 'gpt-4o-mini',
+      query_count     INTEGER     NOT NULL DEFAULT 0,
+      completed_count INTEGER     NOT NULL DEFAULT 0,
+      mention_count   INTEGER     NOT NULL DEFAULT 0,
+      error           TEXT,
+      started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_query_scans_client
+      ON ai_query_scans(client_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS ai_query_results (
+      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      scan_id             UUID        NOT NULL,
+      client_id           TEXT        NOT NULL,
+      query               TEXT        NOT NULL,
+      provider            TEXT        NOT NULL DEFAULT 'openai',
+      model               TEXT        NOT NULL DEFAULT 'gpt-4o-mini',
+      response_text       TEXT,
+      latency_ms          INTEGER,
+      generated_at        TIMESTAMPTZ,
+      success             BOOLEAN     NOT NULL DEFAULT FALSE,
+      failure_reason      TEXT,
+      business_mentioned  BOOLEAN     NOT NULL DEFAULT FALSE,
+      mention_type        TEXT,
+      mention_position    INTEGER,
+      competitor_mentions JSONB       NOT NULL DEFAULT '[]',
+      citations           JSONB       NOT NULL DEFAULT '[]',
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_query_results_scan
+      ON ai_query_results(scan_id);
+
+    CREATE INDEX IF NOT EXISTS ai_query_results_client
+      ON ai_query_results(client_id, created_at DESC);
+  `);
+
   // ── Revenue Attribution ────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS revenue_attribution (

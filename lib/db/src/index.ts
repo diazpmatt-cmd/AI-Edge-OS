@@ -459,6 +459,10 @@ export * from "./ai-query-read-model-adapter";
 export * from "./ai-visibility-scan-history-types";
 export * from "./ai-visibility-trend-normalization";
 
+// Phase C9R-6: tenant-safe review intelligence
+export * from "./tenant-safe-review-types";
+export { DrizzleTenantSafeReviewRepository } from "./tenant-safe-review-repository";
+
 // C7 repository (schedule CRUD + leadership + claiming)
 export {
   bootstrapC7Tables,

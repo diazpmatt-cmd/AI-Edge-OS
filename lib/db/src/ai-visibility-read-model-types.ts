@@ -16,7 +16,8 @@ export type AiVisibilityCoverageStatus =
   | "not_connected"
   | "not_implemented"
   | "not_tenant_safe"
-  | "no_observation";
+  | "no_observation"
+  | "provider_error";
 
 export type AiVisibilityCategory =
   | "local_presence"

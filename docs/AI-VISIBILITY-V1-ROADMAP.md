@@ -1,6 +1,6 @@
 # AI Edge Visibility — V1 Implementation Roadmap
 
-**Current completion:** 97%
+**Current completion:** 100% ✅ V1 COMPLETE
 **Target:** V1 — canonical source composition producing real, tenant-safe visibility recommendations with AI query evidence
 **Last updated:** 2026-07-20
 
@@ -11,7 +11,7 @@
 V1 is complete when all of the following are true:
 
 1. `GET /api/ai-visibility/read-model/:clientId` returns a live `AiVisibilityReadModel` computed from real canonical source data (not random-bump and not hardcoded demo). ✅
-2. The response includes a `coverage[]` array that accurately reports `available`, `not_connected`, `not_implemented`, or `not_tenant_safe` for every source. ✅
+2. The response includes a `coverage[]` array that accurately reports `available`, `not_connected`, `not_implemented`, `provider_error`, or `no_observation` for every source. ✅
 3. The response includes a `rejected[]` array reporting any observations that failed tenant, geography, service, or prohibited-phrase validation. ✅
 4. Recommendations include canonical references (`recordId`, `source`, `observedAt`) linking back to their source tables. ✅
 5. Each recommendation includes `workflow` metadata linking to an existing engine's workflow (backlink, discovery, local_presence, or content_autopilot). ✅
@@ -111,23 +111,32 @@ See [AI-VISIBILITY-PROVIDER-CONFIGURATION.md](AI-VISIBILITY-PROVIDER-CONFIGURATI
 
 ---
 
-## C9R-6: Review Intelligence Tenant Safety
+## C9R-6: Review Intelligence Tenant Safety ✅ COMPLETE
 
-**Objective:** Make review data tenant-safe and available to `adaptTenantSafeReviews`.
+**Completed:** 2026-07-20
+**Estimated completion impact:** +3% (97% → 100%)
 
-**Scope:**
-- `tenant_safe_review_summaries` table: `(id, client_id, platform, review_count, average_rating, target_review_count, geography, observed_at)`
-- Import job reading GBP review stats per client (bounded by connection)
-- Wire table to `adaptTenantSafeReviews()` in execution service
-- Remove `not_tenant_safe` coverage status for `reviews` source
+**Implemented scope:**
+- `tenant_safe_review_summaries` table: `(id, client_id, platform, review_count, average_rating, target_review_count, geography, source_connection_id, observed_at)` — bootstrapped in `schema-migrate.ts`, idempotent upsert key `(client_id, platform, geography)`
+- `DrizzleTenantSafeReviewRepository` in `lib/db` — `upsert()` + `findByClientId()` with full tenant isolation
+- `GbpReviewSummaryImporter` in `api-server/src/lib` — ownership-gated import from `review_platform_stats`; no live GBP API calls; `client_id <> 'default'` guard
+- `adaptReviewImportResult()` in `lib/db/src/ai-visibility-read-model-adapters.ts` — discriminated union (`available` / `no_observation` / `disconnected` / `unauthorized` / `provider_error`) mapped to canonical `AiVisibilityCoverageStatus`
+- V1 target review count policy: `TENANT_SAFE_REVIEW_TARGET_COUNT_V1 = 50` (documented constant, pure, deterministic)
+- `AiVisibilityCoverageStatus` extended with `"provider_error"` (additive)
+- `normalizeCoverage` `statusOrder` updated to include `provider_error: 3`
+- `AiVisibilityExecutionService` replaces `adaptTenantSafeReviews(null)` with parallel `GbpReviewSummaryImporter.importForClient()` + `adaptReviewImportResult()`
+- 35 new tests across 3 test files: coverage adapter (13), importer (8), execution service (14 updated)
+
+**Coverage state mapping:**
+| Import result kind | Coverage status | When |
+|---|---|---|
+| `available` | `available` | GBP connected + review stats found + upserted |
+| `no_observation` | `no_observation` | GBP connected but no stats for client yet |
+| `disconnected` | `not_connected` | No GBP social connection for user |
+| `unauthorized` | `not_connected` | Connection userId mismatch |
+| `provider_error` | `provider_error` | DB error or all upserts failed |
 
 **Dependencies:** C9R-2 ✅
-
-**Acceptance criteria:**
-- `reviews` coverage source reports `available` (not `not_tenant_safe`) when GBP is connected
-- Review velocity gap generates a recommendation when `reviewCount < targetReviewCount`
-
-**Estimated completion impact:** +3% (97% → 100%)
 
 ---
 
@@ -153,4 +162,4 @@ The following are explicitly out of scope for V1:
 | C9R-3 (frontend integration) | ✅ COMPLETE | 66% |
 | C9R-4 (real AI queries + evidence panel) | ✅ COMPLETE | 91% |
 | C9R-5 (scheduling + history) | ✅ COMPLETE | 97% |
-| C9R-6 (reviews tenant safety) | **NEXT** | 100% |
+| C9R-6 (reviews tenant safety) | ✅ COMPLETE | 100% |

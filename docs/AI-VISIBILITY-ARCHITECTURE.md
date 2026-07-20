@@ -52,11 +52,11 @@ Real provider (`isMock: false`). Wired into the competitor enrichment registry. 
 | 2 | Discovery | `adaptDiscoverySources()` | `DiscoveryOpportunityObservation[]` | `discovery` |
 | 3 | Backlinks | `adaptBacklinkSources()` | `BacklinkOpportunityObservation[]` | `backlink` |
 | 4 | Content | `adaptContentSources()` | `ContentPostObservation[]` | `content` |
-| 5 | Reviews | `adaptTenantSafeReviews()` | `TenantSafeReviewSummary[] \| null` | `reviews` |
+| 5 | Reviews | `adaptReviewImportResult()` → `adaptTenantSafeReviews()` | `ReviewImportResult` (from `GbpReviewSummaryImporter`) | `reviews` |
 | 6 | Google Connected | `adaptConnectedGoogle()` | `ConnectedGoogleSummary` | `google_business`, `google_search_console`, `google_analytics` |
 | 7 | AI Query | `adaptAiQuerySources()` | `AiQueryAdapterInput` (scan + results) | `ai_query` |
 
-Passing `null` to `adaptTenantSafeReviews` explicitly reports `not_tenant_safe`. `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
+C9R-6: `GbpReviewSummaryImporter.importForClient()` gates on GBP social connection ownership, sources from `review_platform_stats WHERE client_id = ? AND client_id <> 'default'`, persists to `tenant_safe_review_summaries`, and returns a `ReviewImportResult` discriminated union. `adaptReviewImportResult()` maps this to an `AiVisibilityAdapterResult`. Passing `null` directly to `adaptTenantSafeReviews` still reports `not_tenant_safe` (legacy path only). `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
 
 ---
 
@@ -245,8 +245,9 @@ Each adapter emits a `AiVisibilityCoverageDiagnostic` per source:
 | `available` | Source has canonical observations |
 | `not_connected` | Source integration exists but is not connected |
 | `not_implemented` | Source ingestion has not been built yet |
-| `not_tenant_safe` | Source exists but cannot provide tenant-safe observations |
+| `not_tenant_safe` | Source exists but cannot provide tenant-safe observations (legacy — never emitted by C9R-6 path) |
 | `no_observation` | Source is connected but returned zero records |
+| `provider_error` | Source query reached the provider but failed unexpectedly (DB error, all upserts failed) |
 
 Missing data is **never converted to a zero score**. Coverage affects the completeness summary only.
 

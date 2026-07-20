@@ -1248,5 +1248,31 @@ export async function migrateSchema(): Promise<void> {
       ON gbp_alert_log(client_id, created_at DESC);
   `);
 
+  // ── C9R-6: Tenant-Safe Review Summaries ───────────────────────────────────
+  // One row per (client_id, platform, geography). Populated by the GBP Review
+  // Summary Importer after verifying GBP connection ownership. Idempotent
+  // upsert key: (client_id, platform, geography).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tenant_safe_review_summaries (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            TEXT        NOT NULL,
+      platform             TEXT        NOT NULL,
+      review_count         INTEGER     NOT NULL,
+      average_rating       NUMERIC(3,2),
+      target_review_count  INTEGER     NOT NULL,
+      geography            TEXT        NOT NULL,
+      source_connection_id TEXT,
+      observed_at          TIMESTAMPTZ NOT NULL,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS tsrs_client_platform_geo_uniq
+      ON tenant_safe_review_summaries(client_id, platform, geography);
+
+    CREATE INDEX IF NOT EXISTS tsrs_client_observed
+      ON tenant_safe_review_summaries(client_id, observed_at DESC);
+  `);
+
   console.log("[SCHEMA] Core schema migration complete");
 }

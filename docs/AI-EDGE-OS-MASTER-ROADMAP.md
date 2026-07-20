@@ -77,10 +77,10 @@
 
 ---
 
-## Active: AI Visibility V1 (C9R-6 — final)
+## ✅ AI Visibility V1 — COMPLETE
 
-**Current status:** C9R-5 complete. C9R-6 is next.
-**V1 completion:** 97%
+**Status:** All 6 implementation phases complete. V1 at 100%.
+**Completed:** 2026-07-20
 
 | Phase | Status | Description |
 |---|---|---|
@@ -89,7 +89,9 @@
 | C9R-3 | ✅ COMPLETE | Frontend Opportunities tab + Coverage panel |
 | C9R-4 | ✅ COMPLETE | Real AI query provider (OpenAI) + evidence panel |
 | C9R-5 | ✅ COMPLETE | Scheduled monitoring + run history (ADR-016) |
-| C9R-6 | **NEXT** | Review intelligence tenant safety |
+| C9R-6 | ✅ COMPLETE | Review intelligence tenant safety |
+
+**Next step:** C9R-7 — AI Visibility V1 Release Acceptance (not a feature phase)
 
 See [AI-VISIBILITY-V1-ROADMAP.md](AI-VISIBILITY-V1-ROADMAP.md) for full phase specs.
 

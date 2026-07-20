@@ -176,13 +176,15 @@ describe("AiVisibilityExecutionService.execute", () => {
     expect(Array.isArray(model.coverage)).toBe(true);
   });
 
-  it("emits no_observation / not_tenant_safe / not_implemented when client has no data", async () => {
+  it("emits no_observation / not_connected / not_implemented when client has no data", async () => {
     const model = await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
     const statuses = model.coverage.map(c => c.status);
     expect(statuses.every(s => s !== "available")).toBe(true);
 
+    // C9R-6: reviews now report not_connected (no GBP social connection in mock),
+    // never the legacy not_tenant_safe status.
     const reviewCov = model.coverage.find(c => c.source === "reviews");
-    expect(reviewCov?.status).toBe("not_tenant_safe");
+    expect(reviewCov?.status).toBe("not_connected");
 
     const scCov = model.coverage.find(c => c.source === "google_search_console");
     expect(scCov?.status).toBe("not_implemented");

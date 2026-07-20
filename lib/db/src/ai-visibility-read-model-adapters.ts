@@ -8,6 +8,7 @@ import type {
   AiVisibilityLifecycleProjection,
   AiVisibilityNormalizedInput,
 } from "./ai-visibility-read-model-types";
+import type { ReviewImportResult } from "./tenant-safe-review-types";
 
 export interface AiVisibilityAdapterResult {
   observations: AiVisibilityNormalizedInput[];
@@ -273,6 +274,51 @@ export function adaptTenantSafeReviews(items: readonly TenantSafeReviewSummary[]
   return { observations, coverage: [{ source: "reviews", status: items.length ? "available" : "no_observation",
     detail: items.length ? `${items.length} tenant-safe review summaries were supplied.` : "No tenant-safe review observation is available.",
     observedAt: items.length ? [...items].map(item => item.observedAt.toISOString()).sort().at(-1) ?? null : null }] };
+}
+
+/**
+ * C9R-6: Maps a ReviewImportResult (from GbpReviewSummaryImporter) to an
+ * AiVisibilityAdapterResult, using the canonical AiVisibilityCoverageStatus
+ * values. The existing adaptTenantSafeReviews() handles the "available" and
+ * "no_observation" paths; this function handles failure/disconnected paths.
+ */
+export function adaptReviewImportResult(result: ReviewImportResult): AiVisibilityAdapterResult {
+  switch (result.kind) {
+    case "available":
+      return adaptTenantSafeReviews(result.summaries);
+    case "no_observation":
+      return adaptTenantSafeReviews([]);
+    case "disconnected":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "not_connected",
+          detail: result.reason,
+          observedAt: null,
+        }],
+      };
+    case "unauthorized":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "not_connected",
+          detail: `Unauthorized: ${result.reason}`,
+          observedAt: null,
+        }],
+      };
+    case "provider_error":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "provider_error",
+          detail: `Provider error: ${result.error}`,
+          observedAt: null,
+        }],
+      };
+  }
 }
 
 export interface ConnectedGoogleSummary {

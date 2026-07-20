@@ -146,7 +146,7 @@ function chooseWorkflow(inputs: readonly AiVisibilityNormalizedInput[]): AiVisib
 }
 
 function normalizeCoverage(coverage: readonly AiVisibilityCoverageDiagnostic[]): AiVisibilityCoverageDiagnostic[] {
-  const statusOrder = { no_observation: 1, not_connected: 2, not_implemented: 3, not_tenant_safe: 4, available: 5 } as const;
+  const statusOrder = { no_observation: 1, not_connected: 2, provider_error: 3, not_implemented: 4, not_tenant_safe: 5, available: 6 } as const;
   const bySource = new Map<string, AiVisibilityCoverageDiagnostic>();
   for (const item of coverage) {
     const normalized = {

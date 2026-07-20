@@ -19,9 +19,9 @@ import {
   adaptDiscoverySources,
   adaptBacklinkSources,
   adaptContentSources,
-  adaptTenantSafeReviews,
   adaptConnectedGoogle,
   adaptAiQuerySources,
+  adaptReviewImportResult,
   localPresenceProfilesTable,
   localPresenceChannelsTable,
   discoveryOpportunitiesTable,
@@ -44,6 +44,7 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, notInArray } from "drizzle-orm";
 import { AiQueryScanService } from "./ai-query-scan-service.js";
+import { GbpReviewSummaryImporter } from "./gbp-review-summary-importer.js";
 
 type Pool     = typeof defaultPool;
 type Db       = typeof defaultDb;
@@ -152,13 +153,15 @@ export class AiVisibilityExecutionService {
     const geography = derivePrimaryGeography(scope);
 
     // ── 3. Parallel canonical queries ─────────────────────────────────────────
-    const aiQuerySvc = new AiQueryScanService(this.pool, this.db);
-    const [discoveryItems, backlinkItems, contentItems, googleConn, aiQueryData] = await Promise.all([
+    const aiQuerySvc    = new AiQueryScanService(this.pool, this.db);
+    const reviewImporter = new GbpReviewSummaryImporter(this.pool, this.db);
+    const [discoveryItems, backlinkItems, contentItems, googleConn, aiQueryData, reviewImport] = await Promise.all([
       this.queryDiscoveryObservations(clientId, geography),
       this.queryBacklinkObservations(clientId, geography),
       this.queryContentObservations(userId, clientId, geography),
       this.queryGoogleConnection(userId, clientId, geography),
       aiQuerySvc.getLatestScan(clientId),
+      reviewImporter.importForClient({ clientId, userId, geography }),
     ]);
 
     // ── 4. Run all seven adapters ──────────────────────────────────────────────
@@ -166,7 +169,7 @@ export class AiVisibilityExecutionService {
     const discResult    = adaptDiscoverySources(discoveryItems);
     const blResult      = adaptBacklinkSources(backlinkItems);
     const contentResult = adaptContentSources(contentItems);
-    const reviewResult  = adaptTenantSafeReviews(null); // reviews remain not_tenant_safe until C9R-6
+    const reviewResult  = adaptReviewImportResult(reviewImport);
     const googleResult  = adaptConnectedGoogle(googleConn);
     const aiQueryResult = adaptAiQuerySources({
       scan:        aiQueryData.scan,

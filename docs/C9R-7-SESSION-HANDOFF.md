@@ -227,6 +227,46 @@ All 8 slots: distinct services in sort_order priority, distinct authorized geogr
 
 ---
 
+## Local-First Digital Intelligence Roadmap Update (2026-07-20)
+
+Documentation-only update. No features implemented. No existing V1 percentages changed. No accepted engines reopened.
+
+### Canonical Documents Updated
+
+| Document | Change |
+|---|---|
+| `docs/AI-EDGE-OS-MASTER-ROADMAP.md` | Baldwin County strategic invariant; 7 post-V1 workstreams; Geographic Expansion Gates; Explicit Exclusions; Similarweb-Inspired Boundary; Business Constraints; Existing Engine Ownership table |
+| `docs/adr/ADR-017-local-first-strategic-invariant.md` | New ADR recording the Baldwin County First invariant as a permanent governing constraint |
+| `docs/C9R-7-SESSION-HANDOFF.md` | This section |
+
+### Workstreams Added (Documentation Only — Not Started)
+
+| ID | Workstream |
+|---|---|
+| WS-1 | AI Traffic Attribution (ChatGPT/Perplexity/Gemini/Copilot/Claude/Grok/DeepSeek/AI Mode) |
+| WS-2 | First-Party Traffic and Channel Intelligence |
+| WS-3 | Baldwin County Search Intelligence |
+| WS-4 | Local Competitor Intelligence Expansion |
+| WS-5 | Advertising Intelligence |
+| WS-6 | Conversion Intelligence → future Conversion Edge |
+| WS-7 | Natural-Language Intelligence / Command Center |
+
+### Strategic Invariant
+
+> Conquer Baldwin County first. Geographic expansion occurs only after AI Edge demonstrates repeatable, measurable, profitable growth for Bed Bugs & Beyond within Baldwin County.
+
+Governed by ADR-017. Geographic expansion is gated at Stage 1 (Baldwin County), Stage 2 (adjacent Gulf Coast, 8-criterion gate), and Stage 3 (regional, requires Stage 2 evidence).
+
+### Explicit Exclusions Documented
+
+International expansion, global intelligence, retail pricing, Amazon consumer, stock market, cross-retailer, app-store, unapproved contact scraping, and unsupported competitor revenue claims are out of scope.
+
+### V1 Percentages Preserved
+
+All existing completion percentages are final. The new workstreams (WS-1 through WS-7) are marked ⬜ Not started.
+
+---
+
 ## Next Activity
 
 **Deploy both the query-context fix (session 1) and the representative-selection fix (session 2), then execute one authenticated DP-001 re-scan.**

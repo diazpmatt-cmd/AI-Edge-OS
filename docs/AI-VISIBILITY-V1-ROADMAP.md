@@ -113,30 +113,52 @@ See [AI-VISIBILITY-PROVIDER-CONFIGURATION.md](AI-VISIBILITY-PROVIDER-CONFIGURATI
 
 ## C9R-6: Review Intelligence Tenant Safety ✅ COMPLETE
 
-**Completed:** 2026-07-20
+**Completed:** 2026-07-20 (+ C9R-6 Acceptance Remediation: 2026-07-20, commit `9a3af27`)
 **Estimated completion impact:** +3% (97% → 100%)
 
 **Implemented scope:**
-- `tenant_safe_review_summaries` table: `(id, client_id, platform, review_count, average_rating, target_review_count, geography, source_connection_id, observed_at)` — bootstrapped in `schema-migrate.ts`, idempotent upsert key `(client_id, platform, geography)`
+- `tenant_safe_review_summaries` table: `(id, client_id UUID FK→clients, platform, review_count, average_rating, target_review_count NULLABLE, geography, source_connection_id, observed_at)` — bootstrapped in `schema-migrate.ts`, idempotent upsert key `(client_id, platform, geography)` (`tsrs_client_platform_geo_uniq`)
 - `DrizzleTenantSafeReviewRepository` in `lib/db` — `upsert()` + `findByClientId()` with full tenant isolation
-- `GbpReviewSummaryImporter` in `api-server/src/lib` — ownership-gated import from `review_platform_stats`; no live GBP API calls; `client_id <> 'default'` guard
+- `GbpReviewSummaryImporter` in `api-server/src/lib` — ownership-gated import from `review_platform_stats`; gates on (1) GBP social connection userId match, (2) `locationId` present in `conn.metadata`; no live GBP API calls; `client_id <> 'default'` guard; stores `conn.id` as `sourceConnectionId`
 - `adaptReviewImportResult()` in `lib/db/src/ai-visibility-read-model-adapters.ts` — discriminated union (`available` / `no_observation` / `disconnected` / `unauthorized` / `provider_error`) mapped to canonical `AiVisibilityCoverageStatus`
-- V1 target review count policy: `TENANT_SAFE_REVIEW_TARGET_COUNT_V1 = 50` (documented constant, pure, deterministic)
-- `AiVisibilityCoverageStatus` extended with `"provider_error"` (additive)
-- `normalizeCoverage` `statusOrder` updated to include `provider_error: 3`
+- V1 target review count policy: `computeTargetReviewCount()` returns `null` — no universal benchmark in V1; `targetReviewCount: number | null` in schema and types; review-gap observations suppressed when target is `null`
+- `AiVisibilityCoverageStatus` extended with `"unauthorized"` and `"provider_error"` (additive)
+- `normalizeCoverage` `statusOrder`: `{ no_observation:1, not_connected:2, unauthorized:3, provider_error:4, not_implemented:5, not_tenant_safe:6, available:7 }`
 - `AiVisibilityExecutionService` replaces `adaptTenantSafeReviews(null)` with parallel `GbpReviewSummaryImporter.importForClient()` + `adaptReviewImportResult()`
-- 35 new tests across 3 test files: coverage adapter (13), importer (8), execution service (14 updated)
+- 43 tests across 3 test files: coverage adapter (22), importer (12), execution service (9 updated)
+- Frontend `RMCoverageStatus` += `"unauthorized"` + `"provider_error"`; `getCoverageStatusConfig("unauthorized")` → amber, "Auth Required", 🔒 (distinct from `not_connected`); `getCoverageStatusConfig("provider_error")` → red, "Provider Error", ⚠
 
-**Coverage state mapping:**
+**Coverage state mapping (post-remediation):**
 | Import result kind | Coverage status | When |
 |---|---|---|
-| `available` | `available` | GBP connected + review stats found + upserted |
-| `no_observation` | `no_observation` | GBP connected but no stats for client yet |
+| `available` | `available` | GBP connected + locationId authorized + review stats found + upserted |
+| `no_observation` | `no_observation` | GBP connected but locationId absent or stats not yet present |
 | `disconnected` | `not_connected` | No GBP social connection for user |
-| `unauthorized` | `not_connected` | Connection userId mismatch |
+| `unauthorized` | `unauthorized` | Connection userId mismatch (cross-tenant attempt blocked) |
 | `provider_error` | `provider_error` | DB error or all upserts failed |
 
+`not_tenant_safe` is **never emitted** by the C9R-6 path. It is reachable only via the legacy `adaptTenantSafeReviews(null)` call, which the production execution service no longer invokes.
+
 **Dependencies:** C9R-2 ✅
+
+---
+
+## C9R-7: AI Visibility V1 Release Acceptance ✅ COMPLETE
+
+**Completed:** 2026-07-20
+**Activity type:** Release acceptance (not an implementation phase)
+
+**Result:** CONDITIONAL GO — AI Visibility V1 accepted for production deployment pending one bounded deployment prerequisite (live AI provider smoke test).
+
+**Verification performed:**
+- All 7 coverage states normalize deterministically (adversarial tests)
+- Tenant isolation verified: tenant_mismatch, outside_geography, unsupported_service, prohibited_phrase adversarial cases all fail closed
+- Scheduler safety properties verified: disabled by default, bounded batch, secret auth, exponential backoff, auto-disable
+- All 30 original __tests__ files + 2 route files + 1 new adversarial file = 33 files accounted for
+- 1081 total tests (1080 pass; 1 pre-existing flaky: discovery-c6 T8)
+- lib/db, api-server, frontend TypeScript all clean
+
+See [docs/C9R-7-AI-VISIBILITY-V1-RELEASE-ACCEPTANCE.md](C9R-7-AI-VISIBILITY-V1-RELEASE-ACCEPTANCE.md) for the full acceptance report.
 
 ---
 

@@ -251,6 +251,8 @@ Each adapter emits a `AiVisibilityCoverageDiagnostic` per source:
 
 Missing data is **never converted to a zero score**. Coverage affects the completeness summary only.
 
+The frontend-local mirror type `RMCoverageStatus` in `AiVisibilityReadModelView.tsx` must remain a superset of `AiVisibilityCoverageStatus`. As of C9R-6 formal closure it includes all six values above. `getCoverageStatusConfig()` renders `provider_error` as red (#EF4444, "Provider Error", ⚠) and retains a string-typed default fallback for forward compatibility.
+
 ---
 
 ## Database Schema (production-bootstrapped via schema-migrate.ts)

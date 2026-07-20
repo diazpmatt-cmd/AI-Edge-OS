@@ -34,6 +34,8 @@ with a real tenant-safe review import pipeline. AI Visibility V1 is now at 100%.
 | `artifacts/api-server/src/lib/schema-migrate.ts` | C9R-6 DDL: `tenant_safe_review_summaries` + two indexes |
 | `artifacts/api-server/src/lib/ai-visibility-execution-service.ts` | Replaced `adaptTenantSafeReviews(null)` with `GbpReviewSummaryImporter` + `adaptReviewImportResult()` |
 | `artifacts/api-server/src/__tests__/ai-visibility-execution.test.ts` | Test updated: `not_tenant_safe` → `not_connected` for reviews |
+| `artifacts/ai-edge-solutions/src/components/AiVisibilityReadModelView.tsx` | `RMCoverageStatus` += `"provider_error"`; `getCoverageStatusConfig` case added (red #EF4444, label "Provider Error", icon "⚠") |
+| `artifacts/ai-edge-solutions/src/__tests__/ai-visibility-read-model.test.tsx` | Test added: `getCoverageStatusConfig("provider_error")` returns red + correct label |
 | `docs/AI-VISIBILITY-V1-ROADMAP.md` | C9R-6 marked complete, 100% |
 | `docs/AI-EDGE-OS-MASTER-ROADMAP.md` | V1 marked complete, C9R-7 noted |
 | `docs/AI-VISIBILITY-ARCHITECTURE.md` | Adapter table + coverage status table updated |

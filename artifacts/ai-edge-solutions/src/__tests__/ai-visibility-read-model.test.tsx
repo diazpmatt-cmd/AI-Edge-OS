@@ -136,6 +136,13 @@ describe("getCoverageStatusConfig", () => {
     expect(cfg.label).toBe("No Data Yet");
   });
 
+  it("returns red for provider_error", () => {
+    const cfg = getCoverageStatusConfig("provider_error");
+    expect(cfg.color).toBe("#EF4444");
+    expect(cfg.label).toBe("Provider Error");
+    expect(cfg.icon).toBe("⚠");
+  });
+
   it("returns gray fallback for unknown status", () => {
     const cfg = getCoverageStatusConfig("mystery_status");
     expect(cfg.color).toBe("#64748B");

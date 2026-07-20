@@ -4,7 +4,7 @@ import React, { useState } from "react";
 
 export type RMCoverageStatus =
   | "available" | "not_connected" | "not_implemented"
-  | "not_tenant_safe" | "no_observation";
+  | "not_tenant_safe" | "no_observation" | "provider_error";
 
 export type RMPriority    = "critical" | "high" | "medium" | "low";
 export type RMCategory    = "local_presence" | "citation_directory" | "review_intelligence"
@@ -76,6 +76,7 @@ export function getCoverageStatusConfig(status: string): {
     case "not_implemented": return { color: "#6366F1", bgColor: "rgba(99,102,241,0.08)",  label: "Coming Soon",    icon: "🔜" };
     case "not_tenant_safe": return { color: "#00AEEF", bgColor: "rgba(0,174,239,0.08)",   label: "Setup Required", icon: "🔐" };
     case "no_observation":  return { color: "#64748B", bgColor: "rgba(100,116,139,0.08)", label: "No Data Yet",    icon: "○" };
+    case "provider_error":  return { color: "#EF4444", bgColor: "rgba(239,68,68,0.08)",   label: "Provider Error", icon: "⚠" };
     default:                return { color: "#64748B", bgColor: "rgba(100,116,139,0.08)", label: status,           icon: "?" };
   }
 }

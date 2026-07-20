@@ -3,9 +3,58 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { useAuth } from "@clerk/react";
+import { useActiveBusiness } from "@/contexts/business-context";
 import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
 import AiVisibilityQueryEvidencePanel, { type QEScan, type QEResult } from "@/components/AiVisibilityQueryEvidencePanel";
 import AiVisibilityHistoryPanel from "@/components/AiVisibilityHistoryPanel";
+
+// ─── Scan error classifier (exported for tests) ───────────────────────────────
+// Translates thrown errors into safe, user-readable messages.
+// A 401 or 403 must never be described as an AI-provider configuration failure.
+// No secrets, stack traces, raw payloads, or internal identifiers are exposed.
+
+export function classifyScanError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+
+  // apiFetch throws: "API {status}: {body}"
+  const statusMatch = msg.match(/^API (\d+):/);
+  if (statusMatch) {
+    const status = parseInt(statusMatch[1], 10);
+    if (status === 401) return "Session expired or authentication required. Please sign in again.";
+    if (status === 403) return "Access denied — this business is not authorized for your account.";
+    if (status === 404) return "Scan endpoint or business not found.";
+    if (status >= 500) return "Scan service error. Please try again.";
+    return `Request failed (${status}). Please try again.`;
+  }
+
+  // Network / connectivity failures (no HTTP response)
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("network error") ||
+    lower.includes("load failed")
+  ) {
+    return "Network error — could not reach the scan service. Check your connection.";
+  }
+
+  // Provider-specific failures that surface outside normal HTTP flow
+  if (lower.includes("not_configured") || lower.includes("provider not configured")) {
+    return "AI provider not configured. Contact your administrator.";
+  }
+  if (lower.includes("auth_failure") || lower.includes("invalid api key")) {
+    return "AI provider authentication failed. Contact your administrator.";
+  }
+  if (lower.includes("aborterror") || lower.includes("timed out") || lower.includes("timeout")) {
+    return "AI provider timed out. Please try again.";
+  }
+  if (lower.includes("rate_limit") || lower.includes("rate limit") || lower.includes("quota")) {
+    return "AI provider rate limit reached. Please try again shortly.";
+  }
+
+  // Safe generic fallback — never exposes raw error content
+  return "Scan failed. Please try again.";
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -183,9 +232,13 @@ export default function AIVisibilityEnginePage() {
   const apiFetch   = useApiFetch();
   const { getToken } = useAuth();
 
-  // Read clientId from URL query string (?clientId=xxx)
-  const clientId    = new URLSearchParams(window.location.search).get("clientId") ?? "default";
-  const isClientView = clientId !== "default";
+  // ── Canonical tenant identity — sourced from authenticated BusinessContext ──
+  // Must NOT be derived from window.location.search or any URL query parameter.
+  // activeBusiness.id is always the authorized slug for the signed-in user
+  // (e.g. "bed-bugs-and-beyond").  Never defaults to "default".
+  const { activeBusiness } = useActiveBusiness();
+  const clientId = activeBusiness.id;
+  const isClientView = Boolean(clientId);
 
   const [audit, setAudit]         = useState<AuditData>(DEMO);
   const [loading, setLoading]     = useState(true);
@@ -244,6 +297,10 @@ export default function AIVisibilityEnginePage() {
   }, [activeTab, clientId, apiFetch]);
 
   async function handleRunScan() {
+    if (!clientId) {
+      setQeError("Tenant identity unavailable. Please reload and try again.");
+      return;
+    }
     setQeLoading(true);
     setQeError(null);
     try {
@@ -255,8 +312,8 @@ export default function AIVisibilityEnginePage() {
       setQeResults((data as any).results ?? []);
       // Refresh the read model so ai_query coverage updates
       setRmTrigger(n => n + 1);
-    } catch {
-      setQeError("Scan failed. Check that an AI provider is configured.");
+    } catch (err) {
+      setQeError(classifyScanError(err));
     } finally {
       setQeLoading(false);
     }

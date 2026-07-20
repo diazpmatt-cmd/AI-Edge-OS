@@ -72,13 +72,62 @@ Acceptance documentation commit: TBD (committed at end of C9R-7 session)
 
 ---
 
+## DP-001 Diagnostic Findings (2026-07-20)
+
+Four production scan requests were made. All four were rejected before the scan service was reached. Zero rows written. Zero paid calls.
+
+| Request | Response | Root cause |
+|---|---|---|
+| `POST .../query-scan/bbb` × 2 | 401 | Bearer token absent — auth hook did not fire |
+| `POST .../query-scan/default` × 2 | 403 | Slug mismatch: resolved slug `"bed-bugs-and-beyond"` ≠ requested `"default"` |
+| `POST .../query-scan/bed-bugs-and-beyond` | — | Never attempted — page never built this URL |
+
+**Backend guard: correct.** `resolveClientActiveCheck` failed closed on every attempt.
+
+**Frontend defect:** `clientId` was read from `URLSearchParams` (`?clientId=` param → fallback `"default"`), not from `useActiveBusiness()`. Blanket catch showed "Scan failed. Check that an AI provider is configured." for every non-2xx, including 403 — a misleading diagnosis.
+
+**Latent environment risk:** `AI_INTEGRATIONS_OPENAI_BASE_URL=localhost:1106` and a dummy `AI_INTEGRATIONS_OPENAI_API_KEY` block the real `OPENAI_API_KEY`. Unconfirmable until a scan reaches the provider.
+
+---
+
+## DP-001 Tenant Resolution Correction (2026-07-20)
+
+Frontend correction applied. **DP-001 remains pending.** Release status remains **CONDITIONAL GO**.
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `artifacts/ai-edge-solutions/src/pages/AIVisibilityEnginePage.tsx` | Replace `URLSearchParams` clientId with `useActiveBusiness().activeBusiness.id`; export `classifyScanError`; fix `handleRunScan` catch |
+| `artifacts/ai-edge-solutions/src/__tests__/AIVisibilityEnginePage.test.ts` | New — 48 tests (tenant identity constants + error classification) |
+| `docs/C9R-7-AI-VISIBILITY-V1-RELEASE-ACCEPTANCE.md` | DP-001 diagnostic findings + correction record appended |
+| `docs/C9R-7-SESSION-HANDOFF.md` | This file — updated with DP-001 findings |
+
+### Correction Summary
+
+- `clientId` now sourced from `useActiveBusiness().activeBusiness.id` — same context as top nav and all other authenticated pages
+- No `"default"` fallback. No URL query string override for ordinary tenant users.
+- Scan button guard: `if (!clientId) return` in `handleRunScan`
+- Error classification: 401→session expired, 403→access denied, 404→not found, 5xx→service error, network→connection error, provider failures→specific messages. Never describes a 401 or 403 as a provider configuration failure.
+- `classifyScanError` exported for direct unit testing
+
+### Pre-Deployment Environment Fix Required
+
+Before republishing and retrying DP-001:
+1. **Remove** from production secrets: `AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`
+2. **Retain:** `OPENAI_API_KEY`
+3. Republish (picks up code correction + secret removal simultaneously)
+4. Do not enable `AI_VISIBILITY_SCHEDULER_ENABLED`
+
+---
+
 ## Next Activity
 
-**Production deployment of AI Visibility V1** — following completion of DP-001 (live provider smoke test).
+**Deploy the focused correction and execute one authenticated DP-001 scan.**
 
-Once smoke test passes:
+Once DP-001 smoke test passes:
 1. Announce AI Visibility V1 to authorized users
-2. Optionally enable scheduler for BBB: `PUT /api/ai-visibility/schedule/bbb { "enabled": true, "frequency": "weekly" }`
+2. Optionally enable scheduler for BBB: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }`
 3. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in production secrets
 4. Restart API Server
 5. Monitor `[ai-visibility-scheduler]` log lines

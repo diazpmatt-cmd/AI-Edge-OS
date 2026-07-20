@@ -313,15 +313,70 @@ Production deployment with scheduling **disabled** is safe without any additiona
 
 **Priority:** Must complete before enabling scheduling or user-facing AI query execution in production.
 
-**Reason:** Live provider execution was not verified during acceptance because no confirmed non-production or authorized BBB tenant environment with API credentials was available, and the acceptance brief requires this test to be bounded and identified as a live test.
+**Status: PENDING** — two controlled scan attempts were executed but the provider was never reached. See DP-001 Diagnostic Findings below.
 
-**Procedure:**
-1. Confirm `AI_INTEGRATIONS_OPENAI_API_KEY` (or `OPENAI_API_KEY`) is set in production secrets.
-2. Restart API Server.
-3. POST to `/api/ai-visibility/query-scan/<bbb-client-id>` with a valid Clerk Bearer token.
-4. Verify `GET /api/ai-visibility/query-scan/<bbb-client-id>/latest` returns a scan with `status: "completed"` and at least one result.
-5. Confirm no secrets are printed in API Server logs.
-6. Confirm no customer communications were triggered (BBB has no automated customer-facing AI responses).
+---
+
+### DP-001 Diagnostic Findings (2026-07-20)
+
+Two rounds of scan attempts (four total requests) were made from the authenticated production frontend. All four were rejected at the HTTP routing layer before `AiQueryScanService.execute()` was ever called. Zero scan rows were written. Zero paid provider calls occurred.
+
+**Attempt set 1 (two requests):**
+- Request: `POST /api/ai-visibility/query-scan/bbb`
+- Response: **401 Unauthorized** — Clerk token was absent from the request.
+- Cause: Frontend sent request without Bearer token (auth hook misconfiguration on that attempt).
+
+**Attempt set 2 (two requests):**
+- Request: `POST /api/ai-visibility/query-scan/default`
+- Response: **403 Forbidden** — auth succeeded but `clientCheck.slug ("bed-bugs-and-beyond") ≠ requestedSlug ("default")`.
+- Cause: Frontend `clientId` was derived from `window.location.search` (`?clientId=default` or absent param → fallback literal `"default"`), which is decoupled from the authenticated tenant context shown in the top navigation.
+
+**Backend behavior — correct:** The route guard (`resolveClientActiveCheck(userId)`) correctly failed closed on both slug mismatches. No data leaked. No scan was created.
+
+**Frontend behavior — defective:** `AIVisibilityEnginePage` read `clientId` from `new URLSearchParams(window.location.search).get("clientId") ?? "default"` — decoupled from the `useActiveBusiness()` context used by every other authenticated page. The blanket catch block then mapped the 403 to the misleading message "Scan failed. Check that an AI provider is configured." — obscuring the real routing failure.
+
+**Additional environment risk (latent, unconfirmed):** Production has `AI_INTEGRATIONS_OPENAI_BASE_URL=http://localhost:1106/modelfarm/openai` and `AI_INTEGRATIONS_OPENAI_API_KEY=_DU...` (15-char dummy key) set. If these environment variables remain when a scan does reach the provider, the real `OPENAI_API_KEY` (164-char key) will be silently blocked. The Replit modelserver sidecar at `localhost:1106` may not be present in the production deployment container. This risk cannot be confirmed until a scan reaches the provider.
+
+**Recommendation:** Remove `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` from production secrets before the next DP-001 attempt. Retain `OPENAI_API_KEY`. Republish.
+
+---
+
+### DP-001 Frontend Tenant Resolution Correction (2026-07-20)
+
+**Root cause:** `AIVisibilityEnginePage.tsx` derived `clientId` from `URLSearchParams` rather than from the authenticated `BusinessContext` used by all other pages and the top navigation.
+
+**Correction applied:**
+- Removed `new URLSearchParams(window.location.search).get("clientId") ?? "default"`.
+- Added `const { activeBusiness } = useActiveBusiness(); const clientId = activeBusiness.id;`
+- `activeBusiness.id` for the authenticated BBB user is always `"bed-bugs-and-beyond"` — never `"default"`, `"bbb"`, or any URL-supplied value.
+- Added `if (!clientId) return;` guard in `handleRunScan` for robustness.
+- Replaced blanket catch `"Scan failed. Check that an AI provider is configured."` with deterministic `classifyScanError(err)` — classifying 401, 403, 404, 5xx, network, and provider-specific failures into distinct safe messages. A 401 or 403 is never described as a provider configuration failure.
+- Exported `classifyScanError` for testing. Added 48 new frontend unit tests.
+
+**Files modified:**
+- `artifacts/ai-edge-solutions/src/pages/AIVisibilityEnginePage.tsx`
+- `artifacts/ai-edge-solutions/src/__tests__/AIVisibilityEnginePage.test.ts` (new — 48 tests)
+
+**Backend guard:** Unchanged. `resolveClientActiveCheck` continues to fail closed.
+
+---
+
+### DP-001 Updated Procedure
+
+**Environment preparation (before next attempt):**
+1. In production deployment secrets, **remove** `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY`.
+2. Confirm `OPENAI_API_KEY` (164-char real key) is present.
+3. Republish deployment to pick up both the secret removal and the frontend correction.
+
+**Smoke test execution:**
+1. Navigate to AI Visibility page as an authenticated BBB user (no `?clientId=` override needed).
+2. Confirm top navigation shows "Bed Bugs & Beyond".
+3. Switch to the "AI Query" tab.
+4. Click "Run Scan".
+5. Verify request goes to `POST /api/ai-visibility/query-scan/bed-bugs-and-beyond` (check browser Network tab).
+6. Verify `GET /api/ai-visibility/query-scan/bed-bugs-and-beyond/latest` returns a scan with `status: "completed"` and at least one result.
+7. Confirm no secrets are printed in API Server logs.
+8. Confirm no customer communications were triggered.
 
 **Bounded:** Single scan request. ~6–10 AI queries at gpt-4o-mini pricing. Total cost < $0.05.
 

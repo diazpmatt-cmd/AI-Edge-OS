@@ -10,6 +10,7 @@ import {
   parseAiScheduleFrequency,
   calcAiVisibilityNextRunAt,
   aiVisibilityBackoffMs,
+  AI_VISIBILITY_BACKOFF_MAX_MS,
   aiVisibilityShouldAutoDisable,
   parseAiVisibilitySchedulerEnvConfig,
 } from "@workspace/db";
@@ -81,6 +82,11 @@ describe("aiVisibilityBackoffMs", () => {
     expect(aiVisibilityBackoffMs(100)).toBe(maxCap);
     expect(aiVisibilityBackoffMs(9)).toBe(maxCap);
     expect(aiVisibilityBackoffMs(8)).toBe(maxCap);
+  });
+  test("AI_VISIBILITY_BACKOFF_MAX_MS constant equals actual clamp ceiling", () => {
+    expect(AI_VISIBILITY_BACKOFF_MAX_MS).toBe(15_360_000);
+    expect(aiVisibilityBackoffMs(8)).toBe(AI_VISIBILITY_BACKOFF_MAX_MS);
+    expect(aiVisibilityBackoffMs(100)).toBe(AI_VISIBILITY_BACKOFF_MAX_MS);
   });
   test("0 failures → 1 min (2^0 * 60 * 1000)", () => {
     expect(aiVisibilityBackoffMs(0)).toBe(1 * 60 * 1000);

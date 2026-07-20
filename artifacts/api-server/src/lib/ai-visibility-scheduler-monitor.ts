@@ -84,14 +84,13 @@ export async function runAiVisibilitySchedulerMonitor(): Promise<void> {
     const logCtx = { clientId: row.client_id, frequency: row.frequency };
 
     try {
-      const res = await fetch(`${base}/api/ai-visibility/query-scan/${row.client_id}`, {
+      const res = await fetch(`${base}/api/ai-visibility/ingest/scheduled`, {
         method:  "POST",
         headers: {
           "Content-Type":          "application/json",
           "x-scheduler-secret":    SCHEDULER_SECRET,
           "x-scheduler-client-id": row.client_id,
         },
-        body: JSON.stringify({ triggerSource: "scheduled" }),
       });
 
       let body: Record<string, unknown> = {};

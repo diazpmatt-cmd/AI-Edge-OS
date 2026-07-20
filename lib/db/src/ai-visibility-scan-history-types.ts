@@ -98,10 +98,19 @@ export function parseAiScheduleFrequency(raw: string): AiScheduleFrequency {
 }
 
 // ── Backoff for consecutive failures (matches backlink-scheduler pattern) ─────
+//
+// Failures are clamped at 8 before exponentiation, giving an effective maximum
+// of 2^8 × 60 s = 15 360 000 ms (≈ 256 min / 4.27 h).
+//
+// NOTE: the outer Math.min(..., 24h) that appeared in earlier versions was dead
+// code because 2^8 × 60s < 24h.  It has been removed to avoid misrepresenting
+// the actual cap.  The named constant below is the authoritative maximum.
+
+export const AI_VISIBILITY_BACKOFF_MAX_MS = Math.pow(2, 8) * 60 * 1000; // 15 360 000 ms
 
 export function aiVisibilityBackoffMs(consecutiveFailures: number): number {
   const clampedFails = Math.min(consecutiveFailures, 8);
-  return Math.min(Math.pow(2, clampedFails) * 60 * 1000, 24 * 60 * 60 * 1000);
+  return Math.pow(2, clampedFails) * 60 * 1000;
 }
 
 export function aiVisibilityShouldAutoDisable(

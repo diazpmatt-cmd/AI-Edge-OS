@@ -53,7 +53,8 @@ CREATE INDEX IF NOT EXISTS idx_ai_visibility_schedule_enabled_next
 **`lib/db/src/ai-visibility-scan-history-types.ts`** — schedule config pure functions:
 - `parseAiScheduleFrequency(v)` — safe parse with fallback to `"weekly"`
 - `calcAiVisibilityNextRunAt(freq, from)` — adds 1/7/14/30 days per frequency
-- `aiVisibilityBackoffMs(failures)` — exponential backoff `2^min(n,8) × 60s`
+- `aiVisibilityBackoffMs(failures)` — exponential backoff `2^min(n,8) × 60s`; effective max = `AI_VISIBILITY_BACKOFF_MAX_MS` = 15 360 000 ms (≈ 256 min)
+- `AI_VISIBILITY_BACKOFF_MAX_MS` — named constant (`2^8 × 60s = 15_360_000 ms`) documenting the actual cap
 - `aiVisibilityShouldAutoDisable(failures, maxRetries)` — threshold guard
 - `parseAiVisibilitySchedulerEnvConfig()` — reads `AI_VISIBILITY_SCHEDULER_ENABLED` / `AI_VISIBILITY_SCHEDULER_MAX_PER_TICK`
 
@@ -76,12 +77,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_visibility_schedule_enabled_next
 
 Follows the backlink scheduler monitor pattern exactly:
 - Queries `ai_visibility_schedule WHERE enabled = true AND next_run_at <= NOW()`
-- POSTs to `/api/ai-visibility/query-scan/:clientId` with `SCHEDULER_SECRET` header
+- POSTs to `/api/ai-visibility/ingest/scheduled` with `SCHEDULER_SECRET` + `x-scheduler-client-id` headers
 - On success: resets `consecutive_failures`, advances `next_run_at` via `calcAiVisibilityNextRunAt`
 - On failure: increments `consecutive_failures`, sets `next_run_at = NOW() + aiVisibilityBackoffMs(n)`
 - On auto-disable threshold: sets `enabled = false` (tenant must re-enable via PUT)
 - In-flight dedup: `Set<string>` guard prevents same client running twice in one tick
 - Registered in `scheduler.ts` guarded by `AI_VISIBILITY_SCHEDULER_ENABLED=true` (default **disabled**)
+
+### 5. Dedicated scheduler-auth endpoint
+
+`POST /api/ai-visibility/ingest/scheduled` — scheduler-secret only, never Clerk auth.
+Client identity comes from the `x-scheduler-client-id` header (UUID from `ai_visibility_schedule`).
+This mirrors `POST /api/backlinks/ingest/scheduled` exactly and keeps the scheduler's internal trust
+boundary separate from the user-facing `POST /api/ai-visibility/query-scan/:clientId` route.
 
 ### 5. API routes
 
@@ -128,4 +136,6 @@ All routes have tenant IDOR guard (`resolveClientActiveCheck` + slug match).
 - To enable scheduled scans for a tenant: `PUT /api/ai-visibility/schedule/:clientId { enabled: true, frequency: "weekly" }`
 - To activate the scheduler globally: set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in environment secrets
 - History tab is immediately visible; it shows an empty state when no scans exist
-- All C9R-5 tests are in `ai-visibility-scheduler-config.test.ts`, `ai-visibility-trend-normalization.test.ts`, `ai-visibility-scan-history.test.ts`, `AiVisibilityHistoryPanel.test.tsx`
+- All C9R-5 tests are in `ai-visibility-scheduler-config.test.ts` (28), `ai-visibility-trend-normalization.test.ts` (18), `ai-visibility-scan-history.test.ts` (15), `AiVisibilityHistoryPanel.test.tsx` (28) — 89 tests total
+- Backoff correction (closure review): removed dead `Math.min(..., 24h)` guard; actual cap is `2^8 × 60s = 15_360_000 ms`; named constant `AI_VISIBILITY_BACKOFF_MAX_MS` added and exported
+- Scheduler auth correction (closure review): dedicated endpoint `POST /api/ai-visibility/ingest/scheduled` added; scheduler monitor now targets this endpoint instead of the Clerk-protected user-facing route

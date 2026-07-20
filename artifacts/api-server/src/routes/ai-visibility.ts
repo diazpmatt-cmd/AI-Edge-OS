@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, pool } from "@workspace/db";
+import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
 import { aiVisibilityAuditsTable, auditExportsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
@@ -500,10 +501,39 @@ router.put("/ai-visibility/schedule/:clientId", async (req, res): Promise<void> 
   }
 });
 
+// ── POST /api/ai-visibility/ingest/scheduled ──────────────────────────────────
+// Scheduler-secret-authenticated endpoint for automated scan triggers.
+// Called by runAiVisibilitySchedulerMonitor() — NOT by the frontend.
+// Authentication: x-scheduler-secret header only (no Clerk token required).
+// Client identity: x-scheduler-client-id header (UUID from ai_visibility_schedule).
+
+router.post("/ai-visibility/ingest/scheduled", async (req, res): Promise<void> => {
+  if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
+    res.status(401).json({ error: "Unauthorized" }); return;
+  }
+
+  const clientIdHeader = req.headers["x-scheduler-client-id"];
+  if (!clientIdHeader || typeof clientIdHeader !== "string" || !clientIdHeader.trim()) {
+    res.status(400).json({ error: "x-scheduler-client-id header required" }); return;
+  }
+
+  const trustedClientId = clientIdHeader.trim();
+
+  try {
+    const svc     = new AiQueryScanService(pool, db);
+    const summary = await svc.execute({ clientId: trustedClientId, userId: "scheduler", triggerSource: "scheduled" });
+    res.status(201).json(summary);
+  } catch (err) {
+    console.error("[ai-visibility] scheduled ingest error:", err);
+    res.status(500).json({ error: "scan_failed" });
+  }
+});
+
 // ── POST /api/ai-visibility/query-scan/:clientId ───────────────────────────────
 // Triggers a live AI query scan for this tenant. Runs synchronously (all queries
 // execute before the response is returned). Typical latency: 15–60 s depending
 // on query count and provider speed.
+// Optional body: { triggerSource?: "manual" | "scheduled" }
 
 router.post("/ai-visibility/query-scan/:clientId", async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
@@ -520,9 +550,11 @@ router.post("/ai-visibility/query-scan/:clientId", async (req, res): Promise<voi
     res.status(403).json({ error: "forbidden" }); return;
   }
 
+  const triggerSource = req.body?.triggerSource === "scheduled" ? "scheduled" as const : "manual" as const;
+
   try {
     const svc     = new AiQueryScanService(pool, db);
-    const summary = await svc.execute({ clientId: clientCheck.clientId, userId });
+    const summary = await svc.execute({ clientId: clientCheck.clientId, userId, triggerSource });
     res.status(201).json(summary);
   } catch (err) {
     console.error("[ai-visibility] query-scan error:", err);

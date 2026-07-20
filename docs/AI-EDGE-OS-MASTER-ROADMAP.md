@@ -1,6 +1,6 @@
 # AI Edge OS — Master Roadmap
 
-**Last updated:** 2026-07-19
+**Last updated:** 2026-07-20
 **Deployed commit:** `e44141e5` (July 19, 2026)
 
 ---
@@ -46,11 +46,12 @@
 - 60 tests: 32 frontend + 28 API provider
 - ADR-007 accepted
 
-### AI Visibility V1 — C9R-2 through C9R-4 ✅
+### AI Visibility V1 — C9R-2 through C9R-5 ✅
 - **C9R-1:** Assessment + architecture docs + roadmap (34%)
 - **C9R-2:** `AiVisibilityExecutionService` + `ai_visibility_run_results` table + read-model API (54%)
 - **C9R-3:** Frontend Opportunities tab + Coverage panel + legacy tab preserved (66%)
 - **C9R-4:** Real AI query provider (OpenAI) + evidence panel + 7th adapter + 63 new tests (91%)
+- **C9R-5:** Scheduled monitoring + run history + paginated history API + trend normalization + History tab + ADR-016 (97%)
 
 ### Infrastructure & Integrations
 - Clerk auth (Replit-managed, pk_test_* confirmed operational in production)
@@ -76,10 +77,10 @@
 
 ---
 
-## Active: AI Visibility V1 (C9R-5 → C9R-6)
+## Active: AI Visibility V1 (C9R-6 — final)
 
-**Current status:** C9R-4 complete. C9R-5 is next.
-**V1 completion:** 91%
+**Current status:** C9R-5 complete. C9R-6 is next.
+**V1 completion:** 97%
 
 | Phase | Status | Description |
 |---|---|---|
@@ -87,8 +88,8 @@
 | C9R-2 | ✅ COMPLETE | Execution service + persistence + API route |
 | C9R-3 | ✅ COMPLETE | Frontend Opportunities tab + Coverage panel |
 | C9R-4 | ✅ COMPLETE | Real AI query provider (OpenAI) + evidence panel |
-| C9R-5 | **NEXT** | Scheduled monitoring + run history |
-| C9R-6 | PENDING (parallel) | Review intelligence tenant safety |
+| C9R-5 | ✅ COMPLETE | Scheduled monitoring + run history (ADR-016) |
+| C9R-6 | **NEXT** | Review intelligence tenant safety |
 
 See [AI-VISIBILITY-V1-ROADMAP.md](AI-VISIBILITY-V1-ROADMAP.md) for full phase specs.
 

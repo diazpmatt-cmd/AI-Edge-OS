@@ -1,7 +1,7 @@
 # AI Visibility — Provider Configuration
 
-**Last updated:** 2026-07-19
-**Covers:** C9R-4 OpenAI AI Query Provider environment variables and operational controls
+**Last updated:** 2026-07-20
+**Covers:** C9R-4 OpenAI AI Query Provider and C9R-5 Scheduler environment variables and operational controls
 
 ---
 
@@ -114,6 +114,30 @@ For the Bed Bugs & Beyond client:
 
 ---
 
-## C9R-5 Scheduler (Not Yet Implemented)
+## C9R-5 Scheduler
 
-The C9R-5 phase will add `AI_VISIBILITY_SCHEDULER_ENABLED` (default: `false`) to trigger automated periodic scans. Until C9R-5, all scans are manual via the POST endpoint or the "Run Scan" button in the AI Query tab.
+The scheduler is **disabled by default** in all environments.
+
+### Scheduler environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `AI_VISIBILITY_SCHEDULER_ENABLED` | `""` (disabled) | Set to the literal string `"true"` to activate the scheduler tick. Any other value keeps it off. |
+| `AI_VISIBILITY_SCHEDULER_MAX_PER_TICK` | `5` | Maximum tenants scanned per scheduler tick. Clamped to `[1, 20]`. |
+| `SCHEDULER_SECRET` | (auto-set) | Shared secret used by the scheduler tick to authenticate `POST /api/ai-visibility/ingest/scheduled`. Never log this value. |
+
+### Safe enablement sequence
+
+1. Set `AI_INTEGRATIONS_OPENAI_API_KEY` (or `OPENAI_API_KEY`) — required for live scans.
+2. Enable at least one tenant: `PUT /api/ai-visibility/schedule/:clientId { "enabled": true, "frequency": "weekly" }`
+3. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in Replit Secrets.
+4. Restart the API Server workflow.
+5. Monitor `[ai-visibility-scheduler]` log lines.
+
+### Backoff behaviour
+
+Consecutive scan failures trigger exponential backoff capped at `AI_VISIBILITY_BACKOFF_MAX_MS = 15_360_000 ms` (≈ 256 min). When `consecutive_failures >= max_retries` (default: 3) the schedule row is auto-disabled. Re-enable via `PUT /api/ai-visibility/schedule/:clientId { "enabled": true }`, which resets `consecutive_failures` to 0.
+
+### Rollback
+
+Remove `AI_VISIBILITY_SCHEDULER_ENABLED` from Replit Secrets (or set to any value other than `"true"`) and restart the API server. No schedule data is deleted; rows retain state for re-enablement.

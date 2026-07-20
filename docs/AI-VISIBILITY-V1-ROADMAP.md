@@ -1,8 +1,8 @@
 # AI Edge Visibility — V1 Implementation Roadmap
 
-**Current completion:** 91%
+**Current completion:** 97%
 **Target:** V1 — canonical source composition producing real, tenant-safe visibility recommendations with AI query evidence
-**Last updated:** 2026-07-19
+**Last updated:** 2026-07-20
 
 ---
 
@@ -74,28 +74,44 @@ See [AI-VISIBILITY-PROVIDER-CONFIGURATION.md](AI-VISIBILITY-PROVIDER-CONFIGURATI
 
 ---
 
-## C9R-5: Scheduled Monitoring & Run History
+## C9R-5: Scheduled Monitoring & Run History ✅ COMPLETE
 
-**Objective:** Automate periodic AI visibility scans and provide historical trend data.
+**Completed:** 2026-07-20
+**Estimated completion impact:** +6% (91% → 97%)
 
-**Scope:**
-- Scheduler integration: cron job calls `AiVisibilityExecutionService` (and internally `AiQueryScanService`) for each active client on a configurable schedule
-- `GET /api/ai-visibility/read-model/:clientId/history` returns paginated run summaries with recommendation counts over time
-- Frontend "History" tab: sparkline of `recommendation_count` and `available_source_count` over time
-- Scheduler enabled/disabled via `AI_VISIBILITY_SCHEDULER_ENABLED` env var (default: `false`)
+**Implemented scope:**
+
+- `ai_visibility_schedule` table — per-tenant schedule config (`enabled`, `frequency`, `next_run_at`, `consecutive_failures`, `max_retries`)
+- `ai_query_scans.trigger_source` column — `"manual"` or `"scheduled"` (backfilled default `"manual"`)
+- `ai_query_scans.competitor_mention_count` + `citation_count` columns (aggregate helpers)
+- `ai_visibility_run_results.trigger_source` column — mirrors scan trigger classification
+- `AiQueryScanService.listHistory()` — paginated, newest-first, optional status filter
+- `GET /api/ai-visibility/read-model/:clientId/history` — paginated scan history (`?page`, `?pageSize`, `?status`)
+- `GET /api/ai-visibility/schedule/:clientId` — schedule config (or disabled stub)
+- `PUT /api/ai-visibility/schedule/:clientId` — upsert schedule (`{ enabled, frequency }`)
+- `POST /api/ai-visibility/ingest/scheduled` — scheduler-secret-only internal endpoint (not Clerk-protected)
+- `ai-visibility-scheduler-monitor.ts` — scheduler tick; fetches eligible tenants, POSTs to ingest endpoint per tenant
+- Scheduler registered in `scheduler.ts` when `AI_VISIBILITY_SCHEDULER_ENABLED=true` (default: disabled)
+- `normalizeScanHistoryToTrendPoints()` — weighted day-level aggregation (prevents misleading per-scan averages)
+- `computeTrendSummary()` / `computeFullTrendSummary()` — direction detection (`up`/`down`/`stable`/`insufficient_data`)
+- `AI_VISIBILITY_BACKOFF_MAX_MS = 15_360_000` — named constant; exponential backoff capped at 2^8 × 60 s (≈ 256 min)
+- `AiVisibilityHistoryPanel.tsx` — History tab: sparkline, trend badge, pagination, status/source filters
+- 4th "📈 History" tab added to `AIVisibilityEnginePage.tsx`
+- 89 new tests (28 scheduler config + 18 trend normalization + 15 scan history + 28 frontend panel)
+- ADR-016: `artifacts/api-server/docs/ADR-016-c9r5-ai-visibility-scheduled-monitoring.md`
+
+**Closure bugs corrected (post-merge):**
+1. Scheduler was targeting Clerk-protected endpoint → added dedicated `POST /ingest/scheduled` (scheduler-secret auth)
+2. `triggerSource` ignored in user-facing route body → now read and passed to `svc.execute()`
+3. Dead `Math.min(..., 24h)` wrapper in `aiVisibilityBackoffMs` → removed; named constant added
+
+See [AI-VISIBILITY-PROVIDER-CONFIGURATION.md](AI-VISIBILITY-PROVIDER-CONFIGURATION.md) for scheduler environment variables.
 
 **Dependencies:** C9R-2 ✅, C9R-4 ✅
 
-**Acceptance criteria:**
-- When `AI_VISIBILITY_SCHEDULER_ENABLED=true`, scans run on schedule
-- History endpoint returns ≥ 2 runs for a client with prior runs
-- Frontend history chart renders correctly
-
-**Estimated completion impact:** +6% (91% → 97%)
-
 ---
 
-## C9R-6: Review Intelligence Tenant Safety (parallel with C9R-5)
+## C9R-6: Review Intelligence Tenant Safety
 
 **Objective:** Make review data tenant-safe and available to `adaptTenantSafeReviews`.
 
@@ -136,5 +152,5 @@ The following are explicitly out of scope for V1:
 | C9R-2 (execution service + API) | ✅ COMPLETE | 54% |
 | C9R-3 (frontend integration) | ✅ COMPLETE | 66% |
 | C9R-4 (real AI queries + evidence panel) | ✅ COMPLETE | 91% |
-| C9R-5 (scheduling + history) | NEXT | 97% |
-| C9R-6 (reviews, parallel) | PENDING | 100% |
+| C9R-5 (scheduling + history) | ✅ COMPLETE | 97% |
+| C9R-6 (reviews tenant safety) | **NEXT** | 100% |

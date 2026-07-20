@@ -1,7 +1,7 @@
 # AI Edge Visibility — Architecture Reference
 
-**Status:** C9R-4 complete — all 7 source adapters wired, execution service live, read-model API operational, AI query evidence panel shipped
-**Last updated:** 2026-07-19
+**Status:** C9R-5 complete — scheduled monitoring live, run history API + History tab shipped, 97% V1 complete
+**Last updated:** 2026-07-20
 **ADR:** [ADR-007](adr/ADR-007-c8r5-ai-visibility-read-model.md)
 
 ---
@@ -57,6 +57,62 @@ Real provider (`isMock: false`). Wired into the competitor enrichment registry. 
 | 7 | AI Query | `adaptAiQuerySources()` | `AiQueryAdapterInput` (scan + results) | `ai_query` |
 
 Passing `null` to `adaptTenantSafeReviews` explicitly reports `not_tenant_safe`. `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
+
+---
+
+## C9R-5 Scheduled Monitoring System
+
+### Architecture Overview
+
+```
+[scheduler.ts tick — AI_VISIBILITY_SCHEDULER_ENABLED=true]
+         │
+         └─ runAiVisibilitySchedulerMonitor()
+               │
+               ├─ SELECT from ai_visibility_schedule WHERE enabled=TRUE AND next_run_at <= NOW()
+               │   LIMIT maxPerTick (env: AI_VISIBILITY_SCHEDULER_MAX_PER_TICK, default 5, clamped [1,20])
+               │
+               ├─ inFlightClients Set<string> — per-client dedup within a tick
+               │
+               └─ per eligible tenant:
+                     POST /api/ai-visibility/ingest/scheduled
+                       x-scheduler-secret: <SCHEDULER_SECRET>
+                       x-scheduler-client-id: <clientId>
+                           │
+                           └─ AiQueryScanService.execute({ clientId, userId:"scheduler", triggerSource:"scheduled" })
+```
+
+### Authentication Model
+
+Two separate auth paths prevent credential confusion:
+
+| Path | Endpoint | Auth mechanism | Caller |
+|---|---|---|---|
+| User-facing | `POST /api/ai-visibility/query-scan/:clientId` | Clerk Bearer token | Frontend / manual API |
+| Scheduler | `POST /api/ai-visibility/ingest/scheduled` | `x-scheduler-secret` header | Scheduler tick only |
+
+The scheduler endpoint never accepts a Clerk token. The user-facing endpoint never accepts a scheduler secret.
+
+### Scheduler Safety Properties
+
+| Property | Mechanism |
+|---|---|
+| Disabled by default | `AI_VISIBILITY_SCHEDULER_ENABLED` guard; all schedule rows have `enabled=false` by default |
+| Bounded batch size | `maxPerTick ∈ [1, 20]` from `AI_VISIBILITY_SCHEDULER_MAX_PER_TICK` |
+| No overlapping cycles | `inFlightClients Set<string>` — per-client dedup within a single tick |
+| Tenant failure isolation | Per-row `consecutive_failures`; exceptions caught per-client in try/finally |
+| Auto-disable on repeated failure | `consecutive_failures >= max_retries` (default 3) → `enabled=false` |
+| Exponential backoff | `AI_VISIBILITY_BACKOFF_MAX_MS = 15_360_000 ms` (2^8 × 60 s ≈ 256 min) |
+
+### Run History
+
+`AiQueryScanService.listHistory(clientId, { page, pageSize, status })`:
+- `ORDER BY started_at DESC` — newest-first, stable pagination
+- `LIMIT` / `OFFSET` with `hasMore` flag
+- Optional `status` filter (`completed` / `failed` / `running`)
+- `42P01` guard — table not yet migrated → returns empty page (never throws)
+
+Trend normalization: `normalizeScanHistoryToTrendPoints()` groups completed scans by UTC calendar day and pools mentions/queries before computing a rate — prevents inflating or deflating rates when multiple scans run the same day.
 
 ---
 
@@ -212,11 +268,17 @@ ai_visibility_run_results (id, client_id, generated_at, result_json,
 
 -- C9R-4 AI query persistence
 ai_query_scans (id, client_id, status, provider, model, query_count, completed_count,
-  mention_count, error, started_at, completed_at, created_at)
+  mention_count, competitor_mention_count, citation_count, error,
+  trigger_source DEFAULT 'manual', started_at, completed_at, created_at)
 
 ai_query_results (id, scan_id, client_id, query, provider, model, response_text,
   latency_ms, generated_at, success, failure_reason, business_mentioned, mention_type,
   mention_position, competitor_mentions_json, citations_json, created_at)
+
+-- C9R-5 scheduling
+ai_visibility_schedule (id, client_id UNIQUE, enabled DEFAULT false,
+  frequency DEFAULT 'weekly', next_run_at, last_run_at, last_success_at,
+  consecutive_failures DEFAULT 0, max_retries DEFAULT 3, created_at, updated_at)
 ```
 
-Indexes: `ai_query_scans(client_id, started_at DESC)`, `ai_query_results(scan_id)`, `ai_query_results(client_id, created_at DESC)`.
+Indexes: `ai_query_scans(client_id, started_at DESC)`, `ai_query_results(scan_id)`, `ai_query_results(client_id, created_at DESC)`, `ai_visibility_schedule_due` partial index on `(enabled, next_run_at) WHERE enabled = TRUE`.

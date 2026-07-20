@@ -5,6 +5,7 @@ import { useApiFetch } from "@/lib/api";
 import { useAuth } from "@clerk/react";
 import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
 import AiVisibilityQueryEvidencePanel, { type QEScan, type QEResult } from "@/components/AiVisibilityQueryEvidencePanel";
+import AiVisibilityHistoryPanel from "@/components/AiVisibilityHistoryPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ export default function AIVisibilityEnginePage() {
   const emailRef = useRef<HTMLInputElement>(null);
 
   // ── Read model (Opportunities tab) ──────────────────────────────────────────
-  const [activeTab, setActiveTab]  = useState<"opportunities" | "ai_query" | "legacy">("opportunities");
+  const [activeTab, setActiveTab]  = useState<"opportunities" | "ai_query" | "legacy" | "history">("opportunities");
   const [rmTrigger, setRmTrigger]  = useState(0);
   const [readModel, setReadModel]  = useState<RMReadModel | null>(null);
   const [rmLoading, setRmLoading]  = useState(false);
@@ -562,6 +563,7 @@ export default function AIVisibilityEnginePage() {
           {([
             { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
             { id: "ai_query",      label: "🤖 AI Query",      color: "#A78BFA" },
+            { id: "history",       label: "📈 History",        color: "#22C55E" },
             { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
           ] as const).map(tab => (
             <button
@@ -603,6 +605,11 @@ export default function AIVisibilityEnginePage() {
             onRunScan={handleRunScan}
             isDark={isDark}
           />
+        )}
+
+        {/* ── History view ── */}
+        {activeTab === "history" && (
+          <AiVisibilityHistoryPanel clientId={clientId} />
         )}
 
         {/* ── Legacy Audit view ── */}

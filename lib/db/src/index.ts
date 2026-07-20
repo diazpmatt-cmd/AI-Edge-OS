@@ -455,6 +455,10 @@ export * from "./ai-query-generation";
 export * from "./ai-query-detection";
 export * from "./ai-query-read-model-adapter";
 
+// Phase C9R-5: scheduled monitoring + scan history types
+export * from "./ai-visibility-scan-history-types";
+export * from "./ai-visibility-trend-normalization";
+
 // C7 repository (schedule CRUD + leadership + claiming)
 export {
   bootstrapC7Tables,

@@ -562,6 +562,40 @@ export async function migrateSchema(): Promise<void> {
       ON ai_query_results(client_id, created_at DESC);
   `);
 
+  // ── C9R-5: Scheduled Monitoring — schema additions ────────────────────────
+  // Idempotent ALTER TABLE statements for trigger_source + aggregate columns.
+  await pool.query(`
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS trigger_source          TEXT    NOT NULL DEFAULT 'manual';
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS competitor_mention_count INTEGER;
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS citation_count          INTEGER;
+    ALTER TABLE ai_visibility_run_results
+      ADD COLUMN IF NOT EXISTS trigger_source          TEXT    NOT NULL DEFAULT 'manual';
+  `);
+
+  // ── C9R-5: AI Visibility Schedule ─────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_visibility_schedule (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            TEXT        NOT NULL UNIQUE,
+      enabled              BOOLEAN     NOT NULL DEFAULT FALSE,
+      frequency            TEXT        NOT NULL DEFAULT 'weekly',
+      next_run_at          TIMESTAMPTZ,
+      last_run_at          TIMESTAMPTZ,
+      last_success_at      TIMESTAMPTZ,
+      consecutive_failures INTEGER     NOT NULL DEFAULT 0,
+      max_retries          INTEGER     NOT NULL DEFAULT 3,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_visibility_schedule_due
+      ON ai_visibility_schedule(enabled, next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
   // ── Revenue Attribution ────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS revenue_attribution (

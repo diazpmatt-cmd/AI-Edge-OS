@@ -23,6 +23,7 @@ import {
   type AiQueryScanSummary,
   type PersistedAiQueryScan,
   type PersistedAiQueryResult,
+  type AiScanHistoryPage,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { OpenAiQueryProvider } from "./openai-ai-query-provider.js";
@@ -41,8 +42,9 @@ interface CompetitorRow {
 // ── Public contracts ───────────────────────────────────────────────────────────
 
 export interface AiQueryScanInput {
-  clientId: string;
-  userId: string;
+  clientId:      string;
+  userId:        string;
+  triggerSource?: "manual" | "scheduled";
 }
 
 // ── Scan service ───────────────────────────────────────────────────────────────
@@ -61,28 +63,32 @@ export class AiQueryScanService {
   // ── Run a new scan ──────────────────────────────────────────────────────────
 
   async execute(input: AiQueryScanInput): Promise<AiQueryScanSummary> {
-    const { clientId } = input;
+    const { clientId, triggerSource = "manual" } = input;
 
     // 1. Resolve tenant context
     const context = await this.buildTenantContext(clientId);
     const queries = generateAiQueries(context);
 
     // 2. Create scan record (status = running)
-    const scanId = await this.createScanRecord(clientId, queries.length);
+    const scanId = await this.createScanRecord(clientId, queries.length, triggerSource);
 
     const results: AiQueryResult[] = [];
-    let mentionCount = 0;
+    let mentionCount          = 0;
+    let competitorMentionCount = 0;
+    let citationCount          = 0;
 
     // 3. Execute queries sequentially (avoid parallel OpenAI calls to control costs)
     for (const query of queries) {
       const result = await this.provider.execute({ query, tenantContext: context });
       results.push(result);
       if (result.businessMentioned) mentionCount++;
+      competitorMentionCount += Array.isArray(result.competitorMentions) ? result.competitorMentions.length : 0;
+      citationCount          += Array.isArray(result.citations)           ? result.citations.length          : 0;
       await this.persistQueryResult(scanId, clientId, result);
     }
 
     // 4. Update scan record (completed)
-    await this.completeScanRecord(scanId, results.length, mentionCount, null);
+    await this.completeScanRecord(scanId, results.length, mentionCount, competitorMentionCount, citationCount, null);
 
     return {
       scanId,
@@ -255,29 +261,124 @@ export class AiQueryScanService {
 
   // ── Private: persist scan record ───────────────────────────────────────────
 
-  private async createScanRecord(clientId: string, queryCount: number): Promise<string> {
+  private async createScanRecord(
+    clientId:      string,
+    queryCount:    number,
+    triggerSource: "manual" | "scheduled" = "manual",
+  ): Promise<string> {
     const { rows } = await this.pool.query<{ id: string }>(
       `INSERT INTO ai_query_scans
-         (client_id, status, provider, model, query_count, started_at)
-       VALUES ($1, 'running', $2, $3, $4, NOW())
+         (client_id, status, provider, model, query_count, trigger_source, started_at)
+       VALUES ($1, 'running', $2, $3, $4, $5, NOW())
        RETURNING id`,
-      [clientId, this.provider.name, this.provider.model, queryCount],
+      [clientId, this.provider.name, this.provider.model, queryCount, triggerSource],
     );
     return rows[0].id;
   }
 
   private async completeScanRecord(
-    scanId: string,
-    completedCount: number,
-    mentionCount: number,
-    error: string | null,
+    scanId:                string,
+    completedCount:        number,
+    mentionCount:          number,
+    competitorMentionCount: number,
+    citationCount:         number,
+    error:                 string | null,
   ): Promise<void> {
     await this.pool.query(
       `UPDATE ai_query_scans
-       SET status = $2, completed_count = $3, mention_count = $4, error = $5, completed_at = NOW()
+       SET status = $2, completed_count = $3, mention_count = $4,
+           competitor_mention_count = $5, citation_count = $6,
+           error = $7, completed_at = NOW()
        WHERE id = $1`,
-      [scanId, error ? "failed" : "completed", completedCount, mentionCount, error],
+      [scanId, error ? "failed" : "completed", completedCount, mentionCount,
+       competitorMentionCount, citationCount, error],
     );
+  }
+
+  // ── listHistory — scan history page ────────────────────────────────────────
+
+  async listHistory(
+    clientId: string,
+    options: { page?: number; pageSize?: number; status?: string } = {},
+  ): Promise<AiScanHistoryPage> {
+    const page     = Math.max(1, options.page     ?? 1);
+    const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 20));
+    const offset   = (page - 1) * pageSize;
+
+    const whereClauses: string[] = [`client_id = $1`];
+    const params: unknown[] = [clientId];
+
+    if (options.status) {
+      params.push(options.status);
+      whereClauses.push(`status = $${params.length}`);
+    }
+
+    const whereClause = whereClauses.join(" AND ");
+
+    try {
+      const { rows: countRows } = await this.pool.query<{ cnt: string }>(
+        `SELECT COUNT(*) AS cnt FROM ai_query_scans WHERE ${whereClause}`,
+        params,
+      );
+      const total = parseInt(countRows[0]?.cnt ?? "0", 10);
+
+      params.push(pageSize);
+      params.push(offset);
+
+      const { rows } = await this.pool.query<{
+        id: string; client_id: string; trigger_source: string; provider: string;
+        model: string; status: string; query_count: number; completed_count: number;
+        mention_count: number; competitor_mention_count: number | null;
+        citation_count: number | null; error: string | null;
+        started_at: Date; completed_at: Date | null;
+      }>(
+        `SELECT id, client_id, trigger_source, provider, model, status,
+                query_count, completed_count, mention_count,
+                competitor_mention_count, citation_count, error,
+                started_at, completed_at
+         FROM ai_query_scans
+         WHERE ${whereClause}
+         ORDER BY started_at DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params,
+      );
+
+      const scans = rows.map(r => {
+        const startedAt   = r.started_at  instanceof Date ? r.started_at.toISOString()   : String(r.started_at);
+        const completedAt = r.completed_at instanceof Date ? r.completed_at.toISOString() : r.completed_at ? String(r.completed_at) : null;
+        const completedCount = Number(r.completed_count);
+        const mentionCount   = Number(r.mention_count);
+        const queryCount     = Number(r.query_count);
+        const durationMs     = (r.completed_at && r.started_at)
+          ? r.completed_at.getTime() - r.started_at.getTime()
+          : null;
+        return {
+          scanId:                 r.id,
+          clientId:               r.client_id,
+          triggerSource:          (r.trigger_source ?? "manual") as "manual" | "scheduled",
+          provider:               r.provider,
+          model:                  r.model,
+          status:                 r.status as "running" | "completed" | "failed",
+          queryCount,
+          completedCount,
+          failedCount:            Math.max(0, queryCount - completedCount),
+          mentionCount,
+          mentionRate:            completedCount > 0 ? Math.round((mentionCount / completedCount) * 1000) / 1000 : 0,
+          competitorMentionCount: r.competitor_mention_count !== null ? Number(r.competitor_mention_count) : null,
+          citationCount:          r.citation_count           !== null ? Number(r.citation_count)           : null,
+          startedAt,
+          completedAt,
+          durationMs,
+          errorMessage:           r.error ?? null,
+          evidenceHref:           `/api/ai-visibility/query-scan/evidence/${r.id}`,
+        };
+      });
+
+      return { scans, total, page, pageSize, hasMore: offset + scans.length < total };
+    } catch (err: any) {
+      if (err?.code === "42P01") return { scans: [], total: 0, page, pageSize, hasMore: false };
+      throw err;
+    }
   }
 
   // ── Private: persist query result ─────────────────────────────────────────

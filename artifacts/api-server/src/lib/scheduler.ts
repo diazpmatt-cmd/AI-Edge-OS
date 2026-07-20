@@ -6,6 +6,7 @@ import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
 import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
+import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
@@ -476,7 +477,7 @@ async function runGbpAuditMonitor(): Promise<void> {
 export { evaluateClientEligibility } from "@workspace/db";
 
 export function startScheduler(): void {
-  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h · backlink-scheduler every 15min");
+  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h · backlink-scheduler every 15min · ai-visibility-scheduler every 60min");
 
   // ── Post publishing ──
   publishDuePosts().catch((err: unknown) => {
@@ -549,4 +550,24 @@ export function startScheduler(): void {
       logger.error({ err: msg }, "[scheduler] backlink-scheduler tick error");
     });
   }, BACKLINK_SCHEDULER_INTERVAL);
+
+  // ── AI Visibility Scheduler Monitor (C9R-5) ───────────────────────────────
+  // Checks ai_visibility_schedule for due rows every 60 min.
+  // Disabled-by-default: AI_VISIBILITY_SCHEDULER_ENABLED must be "true".
+  // No rows have enabled=true until an admin calls PUT /api/ai-visibility/schedule/:clientId.
+  if (process.env.AI_VISIBILITY_SCHEDULER_ENABLED === "true") {
+    const AI_VISIBILITY_SCHEDULER_INTERVAL = 60 * 60_000;
+
+    runAiVisibilitySchedulerMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] startup ai-visibility-scheduler error");
+    });
+
+    setInterval(() => {
+      runAiVisibilitySchedulerMonitor().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error({ err: msg }, "[scheduler] ai-visibility-scheduler tick error");
+      });
+    }, AI_VISIBILITY_SCHEDULER_INTERVAL);
+  }
 }

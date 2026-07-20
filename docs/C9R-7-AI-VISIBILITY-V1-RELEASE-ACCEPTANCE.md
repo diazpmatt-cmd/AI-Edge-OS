@@ -313,7 +313,7 @@ Production deployment with scheduling **disabled** is safe without any additiona
 
 **Priority:** Must complete before enabling scheduling or user-facing AI query execution in production.
 
-**Status: QUERY-CONTEXT CORRECTED — READY TO RE-EXECUTE** — DP-001 scan executed (scan_id `49aff305`, 2026-07-20). Provider was reached; 4 queries executed and 4 results persisted. However all 4 queries were generic ("best local services in my area") due to a query-context failure, not a provider failure. Root causes diagnosed, all fixes applied and test-covered. See DP-001 Execution Findings and Correction below.
+**Status: QUERY-CONTEXT CORRECTED + REPRESENTATIVE SELECTION FIXED — READY TO RE-EXECUTE** — DP-001 scan executed (scan_id `49aff305`, 2026-07-20). Provider was reached; 4 queries executed and 4 results persisted. However all 4 queries were generic ("best local services in my area") due to a query-context failure, not a provider failure. Root causes diagnosed — including a representative-selection skew bug — all fixes applied and test-covered. See DP-001 Execution Findings and Correction below.
 
 ---
 
@@ -378,6 +378,10 @@ After the frontend tenant-resolution correction was deployed, DP-001 was success
 
 `buildTenantContext()` queried `local_presence_profiles WHERE client_id = $uuid`. In production, the profile row has `client_id = "default"` (a legacy slug, not a UUID). The lookup returned `null`. With no profile, geography fell back to `["my area"]`, producing queries like "best bed bug inspection in my area".
 
+**Additional fix (C9R-7 session 2):** The `city + state` fallback inside `buildTenantContext` (step 2 of 3) was removed. A business's headquarters city is not an authorized service geography unless it is also listed in `service_areas_json` or `clients.service_areas`. Using HQ city as a geography silently authorizes a mailing address as a service area, which is semantically incorrect. The authorized geography chain is now: (1) `local_presence_profiles.service_areas_json`, (2) `clients.service_areas`. If neither has data, `authorizedGeographies = []` and preflight fails.
+
+**Schema repair (C9R-7 session 2):** An idempotent `UPDATE local_presence_profiles SET client_id = c.id::text FROM clients c WHERE client_id = 'default' AND lower(business_name) = lower(c.client_name) AND NOT EXISTS(...)` migration was added to `schema-migrate.ts`. This reassigns the legacy `'default'` profile row to the real tenant UUID on next server restart, without hardcoding any tenant-specific identifiers and without touching other tenants' data.
+
 **Fix:** Added `queryClientRow()` fallback: when `local_presence_profiles` returns `null`, reads `clients.service_areas` (a JSON array of 11 Baldwin County locations) and `clients.client_name` directly from the `clients` table using the UUID. No "my area" fallback remains.
 
 #### Root Cause 3 — Unsafe silent fallbacks in `generateAiQueries`
@@ -399,7 +403,41 @@ After the frontend tenant-resolution correction was deployed, DP-001 was success
 - `preflightFailure?` field added to `AiQueryScanSummary`
 - `lib/db/tsconfig.json` excludes `src/__tests__` (fixes `tsc --build` clean pass)
 
-#### Tests added / corrected
+#### Root Cause 5 — Representative-selection skew: alpha-sort-then-cap (C9R-7 session 2)
+
+Even after Root Causes 1–4 were fixed, `generateAiQueries()` would have produced a skewed query list. The algorithm built all `services × geographies × templates` combinations, sorted them lexicographically, and returned the first `AI_QUERY_GENERATION_LIMIT` entries. With 16 active services, 11 geographies, and 4 templates (704 total candidates), the first 8 alpha-sorted entries would all be `"best ants in {geo}"` — because "ants" (sort_order=8) sorts alphabetically before "bed bug inspection" (sort_order=0). This would fill the entire scan budget with low-priority ant-control queries and omit every higher-priority service.
+
+**Fix (C9R-7 session 2):** Replaced alpha-sort with service-priority round-robin selection:
+- Services are consumed in caller-supplied order (sort_order ASC from client_services)
+- Each round iterates all services; geography is assigned as `(round × services.length + serviceIndex) % geos.length`
+- Template cycles by round index
+- No alpha-sort is applied; service-priority order is the ordering guarantee
+- Same input always produces same output (determinism preserved without alpha-sort)
+
+**Provider-free dry run (production BBB — 16 services × 11 geos × limit=8):**
+
+| Slot | Service | Geography | Template | Query |
+|---|---|---|---|---|
+| 0 | bed_bug_inspection (sort=0) | Foley, AL | best…in | best bed bug inspection in Foley, AL |
+| 1 | bed_bug_treatment (sort=1) | Daphne, AL | best…in | best bed bug treatment in Daphne, AL |
+| 2 | residential_pest_control (sort=2) | Loxley, AL | best…in | best residential pest control in Loxley, AL |
+| 3 | commercial_pest_control (sort=3) | Fairhope, AL | best…in | best commercial pest control in Fairhope, AL |
+| 4 | roaches (sort=4) | Gulf Shores, AL | best…in | best roaches in Gulf Shores, AL |
+| 5 | rodents (sort=5) | Orange Beach, AL | best…in | best rodents in Orange Beach, AL |
+| 6 | mosquitoes (sort=6) | Summerdale, AL | best…in | best mosquitoes in Summerdale, AL |
+| 7 | fumigation (sort=7) | Spanish Fort, AL | best…in | best fumigation in Spanish Fort, AL |
+
+ants (sort=8), fleas…wildlife_removal never appear — limit=8 fills exactly with the 8 highest-priority services. Termites (sort=14, revenue_weight=0) is also excluded by the prohibited-phrase filter.
+
+#### Tests added / corrected (C9R-7 session 2)
+
+| File | Tests (before → after) | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` | 28 → 39 (+11) | Round-robin production-scale (16×11), priority order, fumigation boundary, ants exclusion, exact dry-run output, geography diversity |
+| `ai-query-scan-preflight.test.ts` | 10 → 16 (+6) | HQ city not authorized, service_areas_json authorized, legacy 'default' profile isolation, 42703 regression, inactive-service filter, missing-service data |
+| `ai-visibility-query-provider.test.ts` | 2 corrected → 1 more corrected | "output is sorted lexicographically" → "output is deterministic — service-priority order" |
+
+#### Tests added / corrected (C9R-7 session 1)
 
 | File | Tests | What it covers |
 |---|---|---|
@@ -408,7 +446,7 @@ After the frontend tenant-resolution correction was deployed, DP-001 was success
 | `ai-visibility-query-provider.test.ts` (updated) | 2 corrected | Old "falls back to X" assertions replaced with fail-closed assertions |
 | `AIVisibilityEnginePage.test.ts` (extended) | 6 new (422 paths) | `classifyScanError` for 422 no_active_services / no_authorized_geography |
 
-All 201 AI-visibility-related tests pass after correction.
+**All 95 AI query / preflight tests pass. Total 39 + 40 + 16 = 95 across three test files.**
 
 ---
 
@@ -417,7 +455,7 @@ All 201 AI-visibility-related tests pass after correction.
 **Environment preparation (before next attempt):**
 1. Confirm `OPENAI_API_KEY` (real key) is present in production secrets.
 2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` have been removed from production secrets (done during prior DP-001 cycle).
-3. Republish to pick up the query-context fix (this session's code changes).
+3. Republish to pick up both the query-context fix (session 1) and the representative-selection fix (session 2).
 
 **Smoke test execution:**
 1. Navigate to AI Visibility page as an authenticated BBB user.
@@ -429,7 +467,7 @@ All 201 AI-visibility-related tests pass after correction.
 7. Confirm no secrets are printed in API Server logs.
 8. Confirm no customer communications were triggered.
 
-**Pass criteria (updated):** `status: "completed"`, at least one query contains a real service name (not "local services"), at least one query contains a real geography (not "my area").
+**Pass criteria (updated):** `status: "completed"`, at least one query contains a real BBB service name (not "local services"), at least one query contains a real Baldwin County geography (not "my area"), no single service dominates all 8 query slots.
 
 **Bounded:** Single scan request. ~6–12 AI queries at gpt-4o-mini pricing. Total cost < $0.05.
 

@@ -66,10 +66,15 @@ describe("generateAiQueries", () => {
     expect([...a]).toEqual([...b]);
   });
 
-  it("output is sorted lexicographically", () => {
-    const queries = generateAiQueries(BBB_CONTEXT);
-    const sorted = [...queries].sort();
-    expect([...queries]).toEqual(sorted);
+  it("output is deterministic — service-priority order, not alpha-sorted (C9R-7 representative selection)", () => {
+    // Round-robin by service priority: same input always produces same output.
+    // The output is intentionally NOT alpha-sorted; alpha-sorting caused
+    // low-priority alphabetically-early services to fill the limit first.
+    const a = generateAiQueries(BBB_CONTEXT);
+    const b = generateAiQueries(BBB_CONTEXT);
+    expect([...a]).toEqual([...b]);
+    // First query must correspond to the first service in priority order
+    expect(a[0]).toContain("bed bug treatment");
   });
 
   it("returns [] (not 'local services') when no services configured — fail-closed (C9R-7 correction)", () => {

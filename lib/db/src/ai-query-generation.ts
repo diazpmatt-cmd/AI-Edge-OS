@@ -9,6 +9,12 @@
  * Callers MUST run a preflight check before invoking this function.
  * An empty return signals a preflight failure; callers must not execute
  * paid provider queries when this function returns an empty list.
+ *
+ * Representative selection (C9R-7 acceptance):
+ * Queries are generated in service-priority round-robin order rather than
+ * alphabetical order. This prevents alphabetically-early services (e.g. "ants")
+ * from filling the limit before higher-priority services (e.g. "bed bug inspection")
+ * appear. See SELECTION POLICY below.
  */
 
 import type { AiQueryTenantContext } from "./ai-query-provider-types";
@@ -45,16 +51,40 @@ const QUERY_TEMPLATES: ReadonlyArray<(service: string, location: string) => stri
 ];
 
 /**
- * Generate a deterministic, de-duplicated, sorted list of AI queries for a tenant.
+ * Generate a deterministic, de-duplicated list of AI queries for a tenant.
  *
- * Rules applied in order:
+ * SELECTION POLICY — service-priority round-robin:
+ *
+ * The caller supplies `activeServiceIds` in canonical priority order
+ * (sort_order ASC from client_services). This function preserves that order.
+ *
+ * Iteration proceeds as nested loops:
+ *   outer: round = 0, 1, 2, ... (each round advances the template and geo offset)
+ *   inner: serviceIndex = 0 .. services.length-1 (one slot per service per round)
+ *
+ * Geography assignment: geoIndex = (round × services.length + serviceIndex) % geos.length
+ * This distributes geographies across services within each round so that no single
+ * geography fills the limit before others appear.
+ *
+ * Template assignment: templateIndex = round % templates.length
+ * All services in round 0 use template 0, round 1 uses template 1, etc.
+ *
+ * Outcome:
+ *   - The first AI_QUERY_GENERATION_LIMIT distinct, non-prohibited queries are returned.
+ *   - Higher-priority services always appear before lower-priority ones (sort_order is respected).
+ *   - If services.length >= limit, round 0 alone fills the list with one query per service.
+ *   - If services.length < limit, subsequent rounds add more queries per service using
+ *     different templates and rotated geographies.
+ *   - Output is deterministic: same input → same output.
+ *   - No alpha-sort is applied; service-priority order is the ordering guarantee.
+ *
+ * Rules applied:
  * 1. Return [] immediately if activeServiceIds or authorizedGeographies is empty
  *    (fail-closed — caller must run preflight before invoking this function).
- * 2. Build cross-product: service × geography × template.
+ * 2. Generate queries using round-robin service-priority order (described above).
  * 3. Remove queries whose lower-cased form contains any prohibited phrase.
  * 4. Deduplicate by lower-cased value.
- * 5. Sort lexicographically (determinism guarantee).
- * 6. Cap at AI_QUERY_GENERATION_LIMIT.
+ * 5. Cap at AI_QUERY_GENERATION_LIMIT.
  *
  * There are NO generic fallbacks. "local services" and "my area" are not
  * produced by this function under any circumstances.
@@ -67,30 +97,34 @@ export function generateAiQueries(context: AiQueryTenantContext): readonly strin
   }
 
   const services    = activeServiceIds.map(humanizeServiceId);
-  const geographies = [...authorizedGeographies];
+  const geos        = [...authorizedGeographies];
   const prohibited  = prohibitedPhrases.map(p => p.toLowerCase().trim()).filter(Boolean);
+  const templates   = QUERY_TEMPLATES;
 
-  const seen       = new Set<string>();
-  const candidates: string[] = [];
+  const seen    = new Set<string>();
+  const result: string[] = [];
 
-  for (const service of services) {
-    for (const geography of geographies) {
-      for (const template of QUERY_TEMPLATES) {
-        const query = clean(template(service, geography));
-        const lower = query.toLowerCase();
+  // Safety ceiling: enough rounds to exhaust all template × geography combinations
+  const maxRounds = templates.length * Math.max(services.length, geos.length) + 1;
 
-        if (prohibited.some(p => lower.includes(p))) continue;
-        if (seen.has(lower)) continue;
+  outer: for (let round = 0; round < maxRounds; round++) {
+    const templateIdx = round % templates.length;
+    const template    = templates[templateIdx];
 
-        seen.add(lower);
-        candidates.push(query);
-      }
+    for (let si = 0; si < services.length; si++) {
+      if (result.length >= AI_QUERY_GENERATION_LIMIT) break outer;
+
+      const gi    = (round * services.length + si) % geos.length;
+      const query = clean(template(services[si], geos[gi]));
+      const lower = query.toLowerCase();
+
+      if (prohibited.some(p => lower.includes(p))) continue;
+      if (seen.has(lower)) continue;
+
+      seen.add(lower);
+      result.push(query);
     }
   }
 
-  return Object.freeze(
-    candidates
-      .sort((a, b) => a.localeCompare(b))
-      .slice(0, AI_QUERY_GENERATION_LIMIT),
-  );
+  return Object.freeze(result);
 }

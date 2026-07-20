@@ -270,12 +270,18 @@ export class AiQueryScanService {
     // Business name: prefer local presence profile, fall back to clients table
     const businessName = profile?.businessName ?? clientRow?.clientName ?? "unknown";
 
-    // Geography resolution order:
-    //   1. local_presence_profiles.service_areas_json (parsed JSON array)
-    //   2. local_presence_profiles.city + state
-    //   3. clients.service_areas (canonical JSON array — always populated at seed time)
-    // "my area" is NEVER synthesised. If no geography is found, authorizedGeographies
-    // is empty and the preflight check will refuse the scan.
+    // Geography resolution order — authorized service areas only:
+    //   1. local_presence_profiles.service_areas_json (parsed JSON array, UUID match required)
+    //   2. clients.service_areas (canonical service-area definition, UUID match)
+    //
+    // IMPORTANT: local_presence_profiles.city + state is intentionally NOT used.
+    // A business's headquarters or mailing city is not an authorized service geography
+    // unless it also appears as an explicit service-area entry. Using the HQ city would
+    // silently authorize a geography that the tenant never designated as a service area.
+    //
+    // "my area" is NEVER synthesised. If no geography is found via the two sources
+    // above, authorizedGeographies will be empty and the preflight check will refuse
+    // the scan with reason "no_authorized_geography".
     const geographies: string[] = [];
 
     if (profile?.serviceAreasJson) {
@@ -285,10 +291,6 @@ export class AiQueryScanService {
           geographies.push(...parsed.filter((g): g is string => typeof g === "string" && g.length > 0));
         }
       } catch { /* ignore malformed JSON */ }
-    }
-
-    if (!geographies.length && profile?.city && profile?.state) {
-      geographies.push(`${profile.city}, ${profile.state}`);
     }
 
     if (!geographies.length && clientRow?.serviceAreas) {

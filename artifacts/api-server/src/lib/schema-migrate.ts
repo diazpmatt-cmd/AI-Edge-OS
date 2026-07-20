@@ -685,6 +685,29 @@ export async function migrateSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS issues_json    TEXT;
   `);
 
+  // ── Local Presence: idempotent client_id repair ────────────────────────────
+  // local_presence_profiles.client_id is TEXT and may contain legacy slug values
+  // (e.g. "default") from a pre-UUID era. This repair migrates any such row to
+  // the canonical client UUID by matching on business_name.
+  //
+  // Safety constraints:
+  //   - Only reassigns if client_id is literally 'default' (the known legacy value)
+  //   - Only matches if business_name (case-insensitive) equals clients.client_name
+  //   - NOT EXISTS guard prevents a UNIQUE violation if the UUID profile already exists
+  //   - Idempotent: after first run, the WHERE client_id = 'default' no longer matches
+  //   - Does not affect any other tenant's data
+  await pool.query(`
+    UPDATE local_presence_profiles lpp
+    SET    client_id = c.id::text
+    FROM   clients c
+    WHERE  lpp.client_id = 'default'
+      AND  lower(lpp.business_name) = lower(c.client_name)
+      AND  NOT EXISTS (
+             SELECT 1 FROM local_presence_profiles lpp2
+             WHERE  lpp2.client_id = c.id::text
+           );
+  `);
+
   // ── Competitor Intelligence Engine ────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS competitors (

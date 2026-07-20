@@ -262,7 +262,7 @@ describe("Fail-closed: empty return when context is missing", () => {
 
 // ── 7. Determinism ────────────────────────────────────────────────────────────
 
-describe("Determinism: same input → same sorted output", () => {
+describe("Determinism: same input → same output", () => {
   it("two identical calls produce identical results", () => {
     const ctx = makeBbbContext();
     const a = generateAiQueries(ctx);
@@ -270,10 +270,145 @@ describe("Determinism: same input → same sorted output", () => {
     expect([...a]).toEqual([...b]);
   });
 
-  it("output is in lexicographic order", () => {
+  it("output is NOT required to be alpha-sorted — service-priority order is the guarantee (C9R-7 representative selection correction)", () => {
+    // The old alpha-sort caused alphabetically-early low-priority services (e.g. "ants")
+    // to fill the limit before higher-priority services (bed bug inspection, fumigation).
+    // Output is now in service-priority (sort_order) round-robin order, which is
+    // deterministic but not necessarily alphabetical.
     const queries = generateAiQueries(makeBbbContext());
-    const sorted = [...queries].sort((a, b) => a.localeCompare(b));
-    expect([...queries]).toEqual(sorted);
+    // Determinism: same result on repeated calls
+    expect([...queries]).toEqual([...generateAiQueries(makeBbbContext())]);
+    // First query reflects the first service in priority order
+    expect(queries[0]).toContain("bed bug inspection");
+  });
+});
+
+// ── 8a. Representative selection — production-scale round-robin ───────────────
+
+describe("Representative selection: service-priority round-robin (C9R-7 acceptance)", () => {
+  const PROD_SERVICES_16 = [
+    "bed_bug_inspection",     // sort_order 0  — must appear
+    "bed_bug_treatment",      // sort_order 1  — must appear
+    "residential_pest_control", // 2
+    "commercial_pest_control",  // 3
+    "roaches",                // 4
+    "rodents",                // 5
+    "mosquitoes",             // 6
+    "fumigation",             // 7  — must appear (limit=8 boundary)
+    "ants",                   // 8  — must NOT appear (limit reached)
+    "fleas",                  // 9
+    "ticks",                  // 10
+    "wasps_hornets",          // 11
+    "spiders",                // 12
+    "moles",                  // 13
+    "termites",               // 14 (priority=99, revenue_weight=0)
+    "wildlife_removal",       // 15
+  ] as const;
+
+  const PROD_GEOS_11 = [
+    "Foley, AL", "Daphne, AL", "Loxley, AL", "Fairhope, AL",
+    "Gulf Shores, AL", "Orange Beach, AL", "Summerdale, AL",
+    "Spanish Fort, AL", "Elberta, AL", "Lillian, AL", "Perdido Beach, AL",
+  ] as const;
+
+  function makeProdContext(overrides: Partial<AiQueryTenantContext> = {}): AiQueryTenantContext {
+    return {
+      clientId:              "e87ddd9d-a6bf-4bf6-85b6-202467d952ee",
+      businessName:          "Bed Bugs & Beyond",
+      businessDomain:        null,
+      businessPhone:         null,
+      activeServiceIds:      [...PROD_SERVICES_16],
+      authorizedGeographies: [...PROD_GEOS_11],
+      prohibitedPhrases:     ["termite", "heat treatment", "whole-home heat treatment"],
+      competitors:           [],
+      ...overrides,
+    };
+  }
+
+  it("produces exactly AI_QUERY_GENERATION_LIMIT queries for production-scale input (16×11)", () => {
+    const queries = generateAiQueries(makeProdContext());
+    expect(queries.length).toBe(AI_QUERY_GENERATION_LIMIT);
+  });
+
+  it("each query in production-scale output contains a distinct service (no service monopolizes the limit)", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const serviceLabels = PROD_SERVICES_16.map(humanizeServiceId);
+    // Collect the services that appear in each query
+    const servicesUsed = queries.map(q => {
+      const lower = q.toLowerCase();
+      return serviceLabels.find(s => lower.includes(s)) ?? null;
+    });
+    const uniqueServices = new Set(servicesUsed.filter(Boolean));
+    // With 16 services and limit=8, each service should appear at most once in round 0
+    expect(uniqueServices.size).toBe(AI_QUERY_GENERATION_LIMIT);
+  });
+
+  it("bed_bug_inspection (sort_order=0) is the first service in production-scale output", () => {
+    const queries = generateAiQueries(makeProdContext());
+    expect(queries[0].toLowerCase()).toContain("bed bug inspection");
+  });
+
+  it("fumigation (sort_order=7) appears in production-scale output (at the limit boundary)", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const hasFumigation = queries.some(q => q.toLowerCase().includes("fumigation"));
+    expect(hasFumigation).toBe(true);
+  });
+
+  it("ants (sort_order=8) does NOT appear in production-scale output — limit=8 stops before it", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const hasAnts = queries.some(q => q.toLowerCase().includes("ants"));
+    expect(hasAnts).toBe(false);
+  });
+
+  it("termites (priority=99, revenue_weight=0) does NOT appear in output — excluded by prohibited phrase and sort_order=14", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const hasTermites = queries.some(q => q.toLowerCase().includes("termite"));
+    expect(hasTermites).toBe(false);
+  });
+
+  it("every query in production-scale output uses a real authorized geography (not 'my area')", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const geoLower = PROD_GEOS_11.map(g => g.toLowerCase());
+    for (const q of queries) {
+      const lower = q.toLowerCase();
+      const hasGeo = geoLower.some(g => lower.includes(g));
+      expect(hasGeo, `"${q}" contains no authorized geography`).toBe(true);
+    }
+  });
+
+  it("the 8 production queries cover at least 3 distinct geographies (geography diversification)", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const geoLower = PROD_GEOS_11.map(g => g.toLowerCase());
+    const geosUsed = new Set(
+      queries.map(q => {
+        const lower = q.toLowerCase();
+        return geoLower.find(g => lower.includes(g)) ?? null;
+      }).filter(Boolean)
+    );
+    // With 16 services and 11 geos, each slot rotates: geo[si % 11] for si=0..7 → 8 distinct geos
+    expect(geosUsed.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("Foley, AL (primary service area) appears in production output", () => {
+    const queries = generateAiQueries(makeProdContext());
+    const hasFoley = queries.some(q => q.toLowerCase().includes("foley, al"));
+    expect(hasFoley).toBe(true);
+  });
+
+  it("provider-free dry run: returns exact expected production queries", () => {
+    // This test documents the exact query list that would be sent to the AI provider
+    // when running a scan against the BBB production tenant after the C9R-7 correction.
+    // It is the canonical evidence for DP-001 provider-free dry run acceptance.
+    const queries = generateAiQueries(makeProdContext());
+    expect(queries).toHaveLength(8);
+    expect(queries[0]).toBe("best bed bug inspection in Foley, AL");
+    expect(queries[1]).toBe("best bed bug treatment in Daphne, AL");
+    expect(queries[2]).toBe("best residential pest control in Loxley, AL");
+    expect(queries[3]).toBe("best commercial pest control in Fairhope, AL");
+    expect(queries[4]).toBe("best roaches in Gulf Shores, AL");
+    expect(queries[5]).toBe("best rodents in Orange Beach, AL");
+    expect(queries[6]).toBe("best mosquitoes in Summerdale, AL");
+    expect(queries[7]).toBe("best fumigation in Spanish Fort, AL");
   });
 });
 

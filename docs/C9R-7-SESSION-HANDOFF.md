@@ -113,14 +113,14 @@ Frontend correction applied. **DP-001 remains pending.** Release status remains 
 
 ---
 
-## DP-001 Execution Findings — Query Context Failure (2026-07-20)
+## DP-001 Execution Findings — Query Context Failure (2026-07-20, session 1)
 
 After the frontend correction was deployed, DP-001 was executed and the provider was reached. **The scan completed but all 4 queries were generic** (e.g. "best local services in my area"), producing zero-value results. Three root causes were identified, fixed, and test-covered in this session.
 
 **Scan:** `scan_id = 49aff305`, `client_id = 0f15a60a-6277-4933-a17e-d3e453a4e291`
 **Result:** Completed, 4 queries, 4 results — all semantically wrong.
 
-### Root Causes and Fixes
+### Root Causes and Fixes (Session 1)
 
 | # | Root Cause | Fix |
 |---|---|---|
@@ -136,7 +136,7 @@ After the frontend correction was deployed, DP-001 was executed and the provider
 - `preflightFailure?` field on `AiQueryScanSummary`
 - `lib/db/tsconfig.json` excludes `src/__tests__` (fixes `tsc --build` clean pass)
 
-### Tests Added / Corrected
+### Tests Added / Corrected (Session 1)
 
 | File | Tests | Coverage |
 |---|---|---|
@@ -145,9 +145,9 @@ After the frontend correction was deployed, DP-001 was executed and the provider
 | `ai-visibility-query-provider.test.ts` (2 corrected) | — | Old "falls back to X" → new fail-closed assertions |
 | `AIVisibilityEnginePage.test.ts` (6 added) | — | `classifyScanError` for 422 no_active_services / no_authorized_geography |
 
-**All 201 AI-visibility-related tests pass after corrections.**
+**All 201 AI-visibility-related tests pass after session 1 corrections.**
 
-### Files Modified (Query Context Fix)
+### Files Modified (Session 1 — Query Context Fix)
 
 | File | Change |
 |---|---|
@@ -164,19 +164,84 @@ After the frontend correction was deployed, DP-001 was executed and the provider
 
 ---
 
+## DP-001 Representative Selection Fix (2026-07-20, session 2)
+
+Root causes 1–4 were corrected in session 1. A further analysis (session 2) revealed a fifth issue that would have produced poor-quality queries even with valid context data: the **representative-selection skew bug**.
+
+### Root Cause 5 — Alpha-sort-then-cap skew in `generateAiQueries`
+
+The algorithm built all `services × geographies × templates` combinations (16 × 11 × 4 = 704 for production BBB), sorted lexicographically, and capped at `AI_QUERY_GENERATION_LIMIT = 8`. With "ants" sorting before "bed bug inspection" alphabetically, the first 8 entries would all be ant-control queries, omitting every higher-priority BBB service. The `sort_order` column (tenant-canonical priority) was entirely ignored by the selection algorithm.
+
+### Fix — Service-priority round-robin
+
+`generateAiQueries()` now uses a **service-priority round-robin** algorithm:
+- Outer loop: rounds (0, 1, 2, …) — each round advances the template index
+- Inner loop: all services in caller-supplied order (sort_order ASC)
+- Geography: `(round × services.length + serviceIndex) % geos.length` — distributes geos across services per round
+- Deduplication via `Set<string>` on lower-cased queries
+- Output is deterministic (no random element) but no longer alpha-sorted
+
+### Geography integrity fix
+
+Removed `city + state` from the geography fallback chain in `buildTenantContext`. A business's HQ address is not an authorized service geography. Authorized sources: (1) `local_presence_profiles.service_areas_json`, (2) `clients.service_areas`.
+
+### Schema repair (idempotent)
+
+Added to `schema-migrate.ts`: reassign `local_presence_profiles.client_id = 'default'` → real UUID, matched by `lower(business_name) = lower(clients.client_name)`, guarded by NOT EXISTS. Runs on next server restart. Idempotent.
+
+### Provider-free dry run — exact production output (16 services × 11 geos × limit=8)
+
+```
+best bed bug inspection in Foley, AL
+best bed bug treatment in Daphne, AL
+best residential pest control in Loxley, AL
+best commercial pest control in Fairhope, AL
+best roaches in Gulf Shores, AL
+best rodents in Orange Beach, AL
+best mosquitoes in Summerdale, AL
+best fumigation in Spanish Fort, AL
+```
+
+All 8 slots: distinct services in sort_order priority, distinct authorized geographies, no prohibited phrases, no generic content.
+
+### Tests Added (Session 2)
+
+| File | Tests (before → after) | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` | 28 → 39 (+11) | Round-robin 16×11, priority order, fumigation boundary, ants exclusion, exact dry-run queries, geo diversity |
+| `ai-query-scan-preflight.test.ts` | 10 → 16 (+6) | HQ city not authorized, service_areas_json authorized, legacy 'default' profile isolation, 42703 regression, is_active filter, missing service data |
+| `ai-visibility-query-provider.test.ts` | +1 corrected | Alpha-sort assertion → service-priority-order determinism assertion |
+
+**95 tests across 3 files — all pass (39 + 40 + 16).**
+
+### Files Modified (Session 2)
+
+| File | Change |
+|---|---|
+| `lib/db/src/ai-query-generation.ts` | Round-robin selection (service-priority order); removed alpha-sort; full policy documentation |
+| `artifacts/api-server/src/lib/ai-query-scan-service.ts` | Removed `city + state` fallback; geography chain now: service_areas_json → clients.service_areas only |
+| `artifacts/api-server/src/lib/schema-migrate.ts` | Idempotent `UPDATE local_presence_profiles … WHERE client_id = 'default'` data repair |
+| `artifacts/api-server/src/__tests__/ai-query-generation-canonical.test.ts` | 28→39: determinism correction + 11 round-robin acceptance tests |
+| `artifacts/api-server/src/__tests__/ai-query-scan-preflight.test.ts` | 10→16: 6 geography/service-registry integrity tests |
+| `artifacts/api-server/src/__tests__/ai-visibility-query-provider.test.ts` | 1 alpha-sort assertion → service-priority-order determinism |
+
+---
+
 ## Next Activity
 
-**Deploy the query-context fix and execute one authenticated DP-001 re-scan.**
+**Deploy both the query-context fix (session 1) and the representative-selection fix (session 2), then execute one authenticated DP-001 re-scan.**
 
 **Pre-deployment checklist:**
 1. Confirm `OPENAI_API_KEY` (real key) present in production secrets
 2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` removed (done in prior cycle)
-3. Republish to pick up this session's code changes
+3. Republish to pick up both sessions' code changes
+4. On first restart, `schema-migrate.ts` repair automatically updates `local_presence_profiles.client_id` from `'default'` to the real UUID (idempotent — safe to redeploy)
 
 **Smoke test pass criteria:**
 - `status: "completed"`
-- At least one query contains a real service name (e.g. "bed bug inspection") — not "local services"
-- At least one query contains a real geography (e.g. "Foley, AL") — not "my area"
+- Queries contain real BBB service names (e.g. "bed bug inspection", "fumigation") — not "local services"
+- Queries contain real Baldwin County geographies (e.g. "Foley, AL") — not "my area"
+- No single service appears in all 8 query slots (representative diversity)
 
 **Once DP-001 re-scan passes:**
 1. Announce AI Visibility V1 to authorized users

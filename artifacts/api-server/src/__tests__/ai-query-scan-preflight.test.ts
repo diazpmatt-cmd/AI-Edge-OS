@@ -397,6 +397,261 @@ describe("buildTenantContext: clients.client_name fallback", () => {
   });
 });
 
+// ── 7a. Geography integrity: HQ city is NOT an authorized service geography ────
+
+describe("Geography integrity: HQ city (city+state) is never used as service geography", () => {
+  it("does NOT use profile.city+state when service_areas_json is absent — produces preflight_failed", async () => {
+    // Simulates a profile with a headquarters city but no service_areas_json.
+    // The city+state fallback was REMOVED in C9R-7 acceptance because it authorized
+    // an HQ address as a service geography without any explicit service-area declaration.
+    const profileWithCityOnly = {
+      clientId: "uuid-city-test",
+      businessName: "Test Pest Co",
+      city: "Foley",
+      state: "AL",
+      serviceAreasJson: null,   // no service-area list
+      website: null,
+      phone: null,
+    };
+
+    const pool = makePool({
+      "select service_key from client_services": {
+        rows: [{ service_key: "bed_bug_inspection" }],
+      },
+      // clients.service_areas is also absent
+      "select client_name, service_areas from clients": {
+        rows: [{ client_name: "Test Pest Co", service_areas: "null" }],
+      },
+    });
+
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([profileWithCityOnly]),
+          }),
+        }),
+      }),
+    };
+
+    const svc = new AiQueryScanService(pool as any, db as any);
+    const summary = await svc.execute({ clientId: "uuid-city-test", userId: "user-1" });
+
+    // Must fail closed: HQ city alone is not an authorized service geography
+    expect(summary.status).toBe("preflight_failed");
+    expect(summary.preflightFailure).toBe("no_authorized_geography");
+  });
+
+  it("DOES use profile.service_areas_json when present (explicit service-area declaration is authorized)", async () => {
+    const profileWithServiceAreas = {
+      clientId: "uuid-svc-area-test",
+      businessName: "Test Pest Co",
+      city: "Foley",
+      state: "AL",
+      serviceAreasJson: '["Foley, AL","Daphne, AL"]',  // explicit service areas
+      website: null,
+      phone: null,
+    };
+
+    const providerExecute = vi.fn().mockResolvedValue({
+      provider: "openai", model: "gpt-4o-mini",
+      query: "best bed bug inspection in Foley, AL",
+      responseText: "result", generatedAt: new Date().toISOString(), latencyMs: 100,
+      success: true, failureReason: null, businessMentioned: false,
+      mentionType: null, mentionPosition: null, competitorMentions: [], citations: [],
+    });
+
+    const pool = makePool({
+      "select service_key from client_services": {
+        rows: [{ service_key: "bed_bug_inspection" }],
+      },
+      "select client_name, service_areas from clients": {
+        rows: [{ client_name: "Test Pest Co", service_areas: "null" }],
+      },
+      "insert into ai_query_scans": { rows: [{ id: "scan-svc-area-001" }] },
+      "insert into ai_query_results": { rows: [] },
+      "update ai_query_scans": { rows: [] },
+      "select id, name, domain from competitors": { rows: [] },
+    });
+
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([profileWithServiceAreas]),
+          }),
+        }),
+      }),
+    };
+
+    const fakeProvider = { name: "openai", model: "gpt-4o-mini", isConfigured: true, execute: providerExecute };
+    const svc = new AiQueryScanService(pool as any, db as any, fakeProvider);
+    const summary = await svc.execute({ clientId: "uuid-svc-area-test", userId: "user-1" });
+
+    expect(summary.status).not.toBe("preflight_failed");
+    expect(summary.queryCount).toBeGreaterThan(0);
+  });
+
+  it("legacy 'default' profile is NOT matched by UUID lookup (tenant isolation)", async () => {
+    // The profile stored with client_id='default' must NOT be returned when
+    // querying by UUID. The Drizzle query uses WHERE client_id = $uuid, which
+    // correctly returns [] for the 'default' row. This test verifies that
+    // isolation — a UUID lookup must not leak the 'default' profile data.
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            // Simulates the prod state: profile exists but has client_id='default',
+            // so a UUID-based WHERE returns [] (not the profile row)
+            limit: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
+    };
+
+    const pool = makePool({
+      "select service_key from client_services": {
+        rows: [{ service_key: "bed_bug_inspection" }],
+      },
+      "select client_name, service_areas from clients": {
+        rows: [{ client_name: "Bed Bugs & Beyond", service_areas: '["Foley, AL"]' }],
+      },
+      "insert into ai_query_scans": { rows: [{ id: "scan-legacy-001" }] },
+      "insert into ai_query_results": { rows: [] },
+      "update ai_query_scans": { rows: [] },
+      "select id, name, domain from competitors": { rows: [] },
+    });
+
+    const providerExecute = vi.fn().mockResolvedValue({
+      provider: "openai", model: "gpt-4o-mini",
+      query: "best bed bug inspection in Foley, AL",
+      responseText: "ok", generatedAt: new Date().toISOString(), latencyMs: 100,
+      success: true, failureReason: null, businessMentioned: false,
+      mentionType: null, mentionPosition: null, competitorMentions: [], citations: [],
+    });
+
+    const fakeProvider = { name: "openai", model: "gpt-4o-mini", isConfigured: true, execute: providerExecute };
+    const svc = new AiQueryScanService(pool as any, db as any, fakeProvider);
+    const summary = await svc.execute({ clientId: "e87ddd9d-real-uuid", userId: "user-1" });
+
+    // Falls back to clients.service_areas, not the 'default' profile
+    expect(summary.status).not.toBe("preflight_failed");
+    // Geography must come from clients.service_areas, not from the legacy 'default' profile
+    const capturedQuery = providerExecute.mock.calls[0]?.[0]?.query ?? "";
+    expect(capturedQuery.toLowerCase()).toContain("foley, al");
+  });
+});
+
+// ── 7b. Service registry integrity ────────────────────────────────────────────
+
+describe("Service registry integrity", () => {
+  it("regression: service query uses service_key column — a query on service_id would throw 42703", async () => {
+    // This is the regression test for the root-cause-1 bug that produced generic queries.
+    // PostgreSQL error 42703 = undefined_column. If service_id were used (wrong column),
+    // the catch block returns [] and preflight fails with no_active_services.
+    // The correct column is service_key. Verified by inspecting the captured SQL.
+    let capturedServiceSql = "";
+    const pool = {
+      query: vi.fn().mockImplementation((sql: string, params: unknown[]) => {
+        const lower = sql.toLowerCase();
+        if (lower.includes("client_services")) {
+          capturedServiceSql = sql;
+          return Promise.resolve({ rows: [{ service_key: "bed_bug_inspection" }] });
+        }
+        if (lower.includes("client_name")) {
+          return Promise.resolve({ rows: [{ client_name: "BBB", service_areas: '["Foley, AL"]' }] });
+        }
+        if (lower.includes("insert into ai_query_scans")) {
+          return Promise.resolve({ rows: [{ id: "scan-reg-001" }] });
+        }
+        return Promise.resolve({ rows: [] });
+      }),
+    };
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) }) };
+    const fakeProvider = { name: "openai", model: "gpt-4o-mini", isConfigured: true, execute: vi.fn().mockResolvedValue({ provider: "openai", model: "gpt-4o-mini", query: "q", responseText: "ok", generatedAt: new Date().toISOString(), latencyMs: 10, success: true, failureReason: null, businessMentioned: false, mentionType: null, mentionPosition: null, competitorMentions: [], citations: [] }) };
+    const svc = new AiQueryScanService(pool as any, db as any, fakeProvider);
+    await svc.execute({ clientId: "uuid-reg", userId: "user-1" });
+
+    // The SQL must reference service_key (not service_id which is the wrong column)
+    expect(capturedServiceSql).toContain("service_key");
+    expect(capturedServiceSql).not.toContain("service_id");
+    // The SQL must filter by is_active = TRUE to exclude inactive services
+    expect(capturedServiceSql.toLowerCase()).toContain("is_active");
+    // The SQL must bind the clientId parameter (scope enforcement)
+    expect(capturedServiceSql.toLowerCase()).toContain("client_id");
+  });
+
+  it("a PostgreSQL 42703 error (wrong column name) on service query is caught and triggers preflight_failed", async () => {
+    // This simulates what happened in the original DP-001 scan:
+    // querying a non-existent column returns an error; the catch returns [];
+    // with no services, preflight fails (not a generic context).
+    const pool = {
+      query: vi.fn().mockImplementation((sql: string) => {
+        const lower = sql.toLowerCase();
+        if (lower.includes("client_services")) {
+          const err = new Error("column service_id does not exist") as any;
+          err.code = "42703";
+          return Promise.reject(err);
+        }
+        if (lower.includes("client_name")) {
+          return Promise.resolve({ rows: [{ client_name: "BBB", service_areas: '["Foley, AL"]' }] });
+        }
+        return Promise.resolve({ rows: [] });
+      }),
+    };
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) }) };
+    const svc = new AiQueryScanService(pool as any, db as any);
+    const summary = await svc.execute({ clientId: "uuid-42703", userId: "user-1" });
+
+    // DB error on service query → empty service list → preflight_failed (not a generic scan)
+    expect(summary.status).toBe("preflight_failed");
+    expect(summary.preflightFailure).toBe("no_active_services");
+  });
+
+  it("inactive services are not returned (is_active filter enforced)", async () => {
+    // The SQL query filters is_active = TRUE. If a service is inactive it should
+    // not appear in the query list. This test verifies via the SQL text.
+    let capturedSql = "";
+    const pool = {
+      query: vi.fn().mockImplementation((sql: string) => {
+        if (sql.toLowerCase().includes("client_services")) {
+          capturedSql = sql;
+          return Promise.resolve({ rows: [] }); // pretend all inactive
+        }
+        if (sql.toLowerCase().includes("client_name")) {
+          return Promise.resolve({ rows: [{ client_name: "BBB", service_areas: '["Foley, AL"]' }] });
+        }
+        return Promise.resolve({ rows: [] });
+      }),
+    };
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) }) };
+    const svc = new AiQueryScanService(pool as any, db as any);
+    const summary = await svc.execute({ clientId: "uuid-active", userId: "user-1" });
+
+    expect(capturedSql.toLowerCase()).toContain("is_active");
+    // No active services → preflight failure
+    expect(summary.status).toBe("preflight_failed");
+    expect(summary.preflightFailure).toBe("no_active_services");
+  });
+
+  it("missing service data (no rows) produces preflight_failed, not generic queries", async () => {
+    const pool = makePool({
+      "select service_key from client_services": { rows: [] },
+      "select client_name, service_areas from clients": {
+        rows: [{ client_name: "BBB", service_areas: '["Foley, AL"]' }],
+      },
+    });
+    const db = { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) }) };
+    const svc = new AiQueryScanService(pool as any, db as any);
+    const summary = await svc.execute({ clientId: "uuid-empty-svc", userId: "user-1" });
+
+    expect(summary.status).toBe("preflight_failed");
+    expect(summary.preflightFailure).toBe("no_active_services");
+    expect(summary.queryCount).toBe(0);
+    expect(summary.error).toContain("no_active_services");
+  });
+});
+
 // ── 7. Cross-tenant isolation ─────────────────────────────────────────────────
 
 describe("Cross-tenant isolation", () => {

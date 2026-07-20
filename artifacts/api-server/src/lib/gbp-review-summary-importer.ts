@@ -4,26 +4,36 @@
  * Imports tenant-safe review summaries for a client by:
  *   1. Verifying the client has an active Google Business Profile connection
  *      (ownership gate — no cross-tenant data ever read).
- *   2. Sourcing review count + average rating from review_platform_stats
+ *   2. Verifying the connection has a cached authorized location (locationId
+ *      present in social_connections.metadata). Fails to no_observation when
+ *      no locationId is available — never accepts caller-supplied geography
+ *      as proof of an authorized location.
+ *   3. Sourcing review count + average rating from review_platform_stats
  *      WHERE client_id = clientId (explicit, never falls back to "default").
- *   3. Computing the V1 target review count via the canonical policy function.
  *   4. Persisting (upsert) to tenant_safe_review_summaries via
- *      DrizzleTenantSafeReviewRepository.
+ *      DrizzleTenantSafeReviewRepository, including the source connection id.
  *
  * Data source rationale:
  *   review_platform_stats is already tenant-scoped by client_id and is
  *   populated by GBP audit runs that are themselves connection-gated.
  *   The ownership re-check here (step 1) ensures an orphaned stats row for
  *   a disconnected client is never surfaced as "available" data.
+ *   The location check (step 2) ensures every persisted summary is tied to
+ *   an authorized GBP location, not merely a matching client_id.
  *   No live GBP API calls are made; the importer is safe for high-frequency
  *   execution and test environments that cannot call external providers.
  *
  * Coverage state mapping:
  *   - No GBP social connection found          → disconnected
  *   - Connection userId ≠ resolved clientId   → unauthorized
+ *   - Connection has no authorized locationId  → no_observation
  *   - Connection exists, no review_platform_stats rows → no_observation
  *   - review_platform_stats query fails        → provider_error
  *   - review_platform_stats rows found         → available (after upsert)
+ *
+ * Target review count:
+ *   V1 policy returns null — no universal benchmark is assumed. The review
+ *   gap recommendation is suppressed when target is null.
  */
 
 import {
@@ -63,9 +73,17 @@ export class GbpReviewSummaryImporter {
     if (connectionCheck.kind !== "ok") {
       return connectionCheck.result;
     }
-    const connectionId = connectionCheck.connectionId;
+    const { connectionId, locationId } = connectionCheck;
 
-    // ── Step 2: Source review stats from review_platform_stats ────────────────
+    // ── Step 2: Verify the connection has a cached authorized location ────────
+    if (!locationId) {
+      return {
+        kind: "no_observation",
+        reason: "GBP location not yet authorized or cached. Run Refresh in Local Presence settings to authorize the business location.",
+      };
+    }
+
+    // ── Step 3: Source review stats from review_platform_stats ────────────────
     const statsResult = await this.readReviewPlatformStats(clientId);
     if (statsResult.kind === "error") {
       return { kind: "provider_error", error: statsResult.error };
@@ -74,7 +92,7 @@ export class GbpReviewSummaryImporter {
       return { kind: "no_observation", reason: "GBP connection is active but no review platform stats are available yet for this client." };
     }
 
-    // ── Step 3: Build + persist summaries ─────────────────────────────────────
+    // ── Step 4: Build + persist summaries ─────────────────────────────────────
     const observedAt = new Date();
     const summaries: ReviewImportSummary[] = [];
 
@@ -87,11 +105,12 @@ export class GbpReviewSummaryImporter {
         averageRating:    row.averageRating,
         targetReviewCount: computeTargetReviewCount(clientId),
         geography,
+        sourceConnectionId: connectionId,
         observedAt,
       };
 
       try {
-        const saved = await this.repo.upsert({ ...summary, id: connectionId ? summary.id : summary.id });
+        const saved = await this.repo.upsert(summary);
         summaries.push(saved);
       } catch (err: any) {
         console.warn(`[gbp-review-importer] upsert failed for client=${clientId} platform=${row.platform}:`, err?.message);
@@ -111,7 +130,7 @@ export class GbpReviewSummaryImporter {
     userId: string,
     clientId: string,
   ): Promise<
-    | { kind: "ok"; connectionId: string }
+    | { kind: "ok"; connectionId: string; locationId: string | undefined }
     | { kind: "fail"; result: ReviewImportResult }
   > {
     try {
@@ -135,8 +154,6 @@ export class GbpReviewSummaryImporter {
       }
 
       // Ownership guard: the connection's userId must match the requesting user.
-      // Callers from the execution service always pass a trusted userId, so this
-      // is a defence-in-depth check against stale or cross-tenant rows.
       if (conn.userId !== userId) {
         return {
           kind: "fail",
@@ -147,7 +164,15 @@ export class GbpReviewSummaryImporter {
         };
       }
 
-      return { kind: "ok", connectionId: conn.id };
+      // Extract authorized locationId from connection metadata.
+      // locationId is populated by the OAuth callback and refresh flows.
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(conn.metadata ?? "{}"); } catch { meta = {}; }
+      const locationId = typeof meta.locationId === "string" && meta.locationId.length > 0
+        ? meta.locationId
+        : undefined;
+
+      return { kind: "ok", connectionId: conn.id, locationId };
     } catch (err: any) {
       console.warn("[gbp-review-importer] GBP connection query failed:", err?.message);
       return {

@@ -246,16 +246,24 @@ export interface TenantSafeReviewSummary {
   platform: string;
   reviewCount: number;
   averageRating: number;
-  targetReviewCount: number;
+  /** Null means no defensible V1 target is available; observations suppressed when null. */
+  targetReviewCount: number | null;
   observedAt: Date;
   geography: string;
+  sourceConnectionId?: string;
+}
+
+type SummaryBelowTarget = TenantSafeReviewSummary & { targetReviewCount: number };
+
+function isBelowTarget(item: TenantSafeReviewSummary): item is SummaryBelowTarget {
+  return item.targetReviewCount !== null && item.reviewCount < item.targetReviewCount;
 }
 
 /** No adapter accepts the legacy global review tables; callers must provide a tenant-safe summary. */
 export function adaptTenantSafeReviews(items: readonly TenantSafeReviewSummary[] | null): AiVisibilityAdapterResult {
   if (items === null) return { observations: [], coverage: [{ source: "reviews", status: "not_tenant_safe",
     detail: "Existing review tables are global and are excluded until tenant-safe observations exist.", observedAt: null }] };
-  const observations = items.filter(item => item.reviewCount < item.targetReviewCount).map(item => ({
+  const observations = items.filter(isBelowTarget).map(item => ({
     clientId: item.clientId,
     dedupeKey: `review velocity ${item.platform}`,
     category: "review_intelligence" as const,
@@ -303,8 +311,8 @@ export function adaptReviewImportResult(result: ReviewImportResult): AiVisibilit
         observations: [],
         coverage: [{
           source: "reviews",
-          status: "not_connected",
-          detail: `Unauthorized: ${result.reason}`,
+          status: "unauthorized",
+          detail: "Account authorization error: the connected Google account does not have ownership access to this tenant's GBP location. Review the connected account in Local Presence settings.",
           observedAt: null,
         }],
       };

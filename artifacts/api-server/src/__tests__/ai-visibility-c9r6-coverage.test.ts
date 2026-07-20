@@ -6,7 +6,9 @@
  *  - "not_tenant_safe" is never emitted by the C9R-6 adapter path
  *  - "available" summaries pass through adaptTenantSafeReviews() correctly
  *  - provider_error is a valid coverage status in the read-model
- *  - target review count V1 policy returns 50
+ *  - "unauthorized" maps to the explicit "unauthorized" status (not "not_connected")
+ *  - target review count V1 policy returns null (no universal benchmark)
+ *  - observations are suppressed when targetReviewCount is null
  */
 
 import { describe, it, expect } from "vitest";
@@ -15,7 +17,6 @@ import {
   adaptTenantSafeReviews,
   composeAiVisibilityReadModel,
   computeTargetReviewCount,
-  TENANT_SAFE_REVIEW_TARGET_COUNT_V1,
   type ReviewImportResult,
   type TenantSafeReviewSummary,
 } from "@workspace/db";
@@ -33,7 +34,7 @@ function makeSummary(overrides: Partial<TenantSafeReviewSummary> = {}): TenantSa
     platform:          "google",
     reviewCount:       23,
     averageRating:     4.5,
-    targetReviewCount: 50,
+    targetReviewCount: null,
     observedAt:        NOW,
     geography:         GEO,
     ...overrides,
@@ -43,14 +44,10 @@ function makeSummary(overrides: Partial<TenantSafeReviewSummary> = {}): TenantSa
 // ── V1 target policy ──────────────────────────────────────────────────────────
 
 describe("V1 target review count policy", () => {
-  it("TENANT_SAFE_REVIEW_TARGET_COUNT_V1 is 50", () => {
-    expect(TENANT_SAFE_REVIEW_TARGET_COUNT_V1).toBe(50);
-  });
-
-  it("computeTargetReviewCount returns 50 for any clientId", () => {
-    expect(computeTargetReviewCount("client-a")).toBe(50);
-    expect(computeTargetReviewCount("client-b")).toBe(50);
-    expect(computeTargetReviewCount("")).toBe(50);
+  it("computeTargetReviewCount returns null for any clientId (no universal benchmark in V1)", () => {
+    expect(computeTargetReviewCount("client-a")).toBeNull();
+    expect(computeTargetReviewCount("client-b")).toBeNull();
+    expect(computeTargetReviewCount("")).toBeNull();
   });
 });
 
@@ -67,12 +64,19 @@ describe("adaptReviewImportResult", () => {
     expect(adapted.coverage[0].detail).toContain("No GBP connection found.");
   });
 
-  it("maps 'unauthorized' to not_connected coverage with Unauthorized prefix", () => {
+  it("maps 'unauthorized' to explicit 'unauthorized' coverage status (not 'not_connected')", () => {
     const result: ReviewImportResult = { kind: "unauthorized", reason: "userId mismatch." };
     const adapted = adaptReviewImportResult(result);
-    expect(adapted.coverage[0].status).toBe("not_connected");
-    expect(adapted.coverage[0].detail).toContain("Unauthorized:");
-    expect(adapted.coverage[0].detail).toContain("userId mismatch.");
+    expect(adapted.coverage[0].status).toBe("unauthorized");
+    expect(adapted.coverage[0].detail).toContain("authorization error");
+  });
+
+  it("unauthorized coverage does not describe it as an ordinary disconnected integration", () => {
+    const result: ReviewImportResult = { kind: "unauthorized", reason: "userId mismatch." };
+    const adapted = adaptReviewImportResult(result);
+    expect(adapted.coverage[0].status).not.toBe("not_connected");
+    expect(adapted.coverage[0].detail).not.toContain("Connect GBP");
+    expect(adapted.coverage[0].detail).not.toContain("No Google Business");
   });
 
   it("maps 'provider_error' to provider_error coverage", () => {
@@ -100,6 +104,14 @@ describe("adaptReviewImportResult", () => {
     expect(adapted.observations[0].title).toContain("google");
     expect(adapted.observations[0].whatWasObserved).toContain("23 reviews");
     expect(adapted.observations[0].whatWasObserved).toContain("50");
+  });
+
+  it("maps 'available' with null target to no observation (no universal benchmark in V1)", () => {
+    const summary = makeSummary({ reviewCount: 23, targetReviewCount: null });
+    const result: ReviewImportResult = { kind: "available", summaries: [summary] };
+    const adapted = adaptReviewImportResult(result);
+    expect(adapted.coverage[0].status).toBe("available");
+    expect(adapted.observations).toHaveLength(0);
   });
 
   it("maps 'available' with at-target count to no observation + available coverage", () => {
@@ -139,16 +151,35 @@ describe("adaptTenantSafeReviews direct", () => {
     expect(result.coverage[0].status).toBe("no_observation");
   });
 
-  it("returns available with one observation per below-target summary", () => {
+  it("returns available with zero observations when all summaries have null target", () => {
     const summaries: TenantSafeReviewSummary[] = [
-      makeSummary({ platform: "google",   reviewCount: 10 }),
-      makeSummary({ platform: "facebook", reviewCount: 55, id: "tsrs-002" }),
+      makeSummary({ platform: "google",   reviewCount: 10, targetReviewCount: null }),
+      makeSummary({ platform: "facebook", reviewCount: 55, id: "tsrs-002", targetReviewCount: null }),
+    ];
+    const result = adaptTenantSafeReviews(summaries);
+    expect(result.coverage[0].status).toBe("available");
+    expect(result.observations).toHaveLength(0);
+  });
+
+  it("returns available with one observation per below-target summary (explicit target)", () => {
+    const summaries: TenantSafeReviewSummary[] = [
+      makeSummary({ platform: "google",   reviewCount: 10, targetReviewCount: 50 }),
+      makeSummary({ platform: "facebook", reviewCount: 55, id: "tsrs-002", targetReviewCount: 50 }),
     ];
     const result = adaptTenantSafeReviews(summaries);
     expect(result.coverage[0].status).toBe("available");
     // Only google (10 < 50) generates an observation; facebook (55 >= 50) does not
     expect(result.observations).toHaveLength(1);
     expect(result.observations[0].title).toContain("google");
+  });
+
+  it("suppresses observations when targetReviewCount is null even for low counts", () => {
+    const summaries: TenantSafeReviewSummary[] = [
+      makeSummary({ reviewCount: 1, targetReviewCount: null }),
+    ];
+    const result = adaptTenantSafeReviews(summaries);
+    expect(result.coverage[0].status).toBe("available");
+    expect(result.observations).toHaveLength(0);
   });
 });
 
@@ -174,5 +205,26 @@ describe("composeAiVisibilityReadModel with provider_error reviews coverage", ()
     const reviewCov = model.coverage.find(c => c.source === "reviews");
     expect(reviewCov?.status).toBe("provider_error");
     expect(model.recommendations).toBeDefined();
+  });
+
+  it("accepts unauthorized as a valid coverage status distinct from not_connected", () => {
+    const scope = {
+      clientId: CLIENT_ID,
+      activeServiceIds: Object.freeze([] as string[]),
+      authorizedGeographies: Object.freeze([GEO]),
+      prohibitedPhrases: Object.freeze([] as string[]),
+    };
+    const coverage = adaptReviewImportResult({ kind: "unauthorized", reason: "mismatch" }).coverage;
+
+    const model = composeAiVisibilityReadModel({
+      scope,
+      observations: [],
+      coverage,
+      generatedAt: NOW,
+    });
+
+    const reviewCov = model.coverage.find(c => c.source === "reviews");
+    expect(reviewCov?.status).toBe("unauthorized");
+    expect(reviewCov?.status).not.toBe("not_connected");
   });
 });

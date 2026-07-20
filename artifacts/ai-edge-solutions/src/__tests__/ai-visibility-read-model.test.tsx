@@ -119,6 +119,13 @@ describe("getCoverageStatusConfig", () => {
     expect(cfg.label).toBe("Not Connected");
   });
 
+  it("returns amber for unauthorized with Auth Required label and lock icon", () => {
+    const cfg = getCoverageStatusConfig("unauthorized");
+    expect(cfg.color).toBe("#F59E0B");
+    expect(cfg.label).toBe("Auth Required");
+    expect(cfg.icon).toBe("🔒");
+  });
+
   it("returns indigo for not_implemented", () => {
     const cfg = getCoverageStatusConfig("not_implemented");
     expect(cfg.color).toBe("#6366F1");

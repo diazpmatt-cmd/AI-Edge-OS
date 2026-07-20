@@ -46,9 +46,20 @@ const CLIENT_ID = "uuid-test-client-c9r6";
 const USER_ID   = "clerk-user-c9r6";
 const GEO       = "Foley, AL";
 const NOW       = new Date("2026-07-20T10:00:00Z");
+const LOCATION_ID = "loc-001";
 
-const MOCK_GBP_CONN = {
+// Connection with an authorized locationId in metadata — passes the location check.
+const MOCK_GBP_CONN_WITH_LOCATION = {
   id: "conn-gbp-001", userId: USER_ID, provider: "google_business",
+  accountName: "BBB GBP", accountId: "gbp-001",
+  accessToken: null, refreshToken: null, expiresAt: null,
+  metadata: JSON.stringify({ locationId: LOCATION_ID, locationName: "accounts/123/locations/loc-001", locationTitle: "Bed Bugs & Beyond" }),
+  createdAt: NOW, updatedAt: NOW,
+};
+
+// Connection with no locationId — fails the location check with no_observation.
+const MOCK_GBP_CONN_NO_LOCATION = {
+  id: "conn-gbp-002", userId: USER_ID, provider: "google_business",
   accountName: "BBB GBP", accountId: "gbp-001",
   accessToken: null, refreshToken: null, expiresAt: null, metadata: null,
   createdAt: NOW, updatedAt: NOW,
@@ -106,8 +117,38 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
     expect((result as any).reason).toContain("No Google Business Profile connection");
   });
 
-  it("returns no_observation when GBP connection exists but no review stats", async () => {
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+  it("returns no_observation when GBP connection has no authorized locationId in metadata (null metadata)", async () => {
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_NO_LOCATION]));
+    const importer = new GbpReviewSummaryImporter(
+      { query: mockPoolQuery } as any,
+      { select: mockSelectFn } as any,
+      repo,
+    );
+
+    const result = await importer.importForClient({ clientId: CLIENT_ID, userId: USER_ID, geography: GEO });
+    expect(result.kind).toBe("no_observation");
+    expect((result as any).reason).toContain("GBP location not yet authorized");
+  });
+
+  it("returns no_observation when GBP connection metadata has empty locationId", async () => {
+    const connEmptyLoc = {
+      ...MOCK_GBP_CONN_NO_LOCATION,
+      metadata: JSON.stringify({ locationId: "", locationName: "accounts/123/locations/" }),
+    };
+    mockSelectFn.mockImplementation(makeSelectReturning([connEmptyLoc]));
+    const importer = new GbpReviewSummaryImporter(
+      { query: mockPoolQuery } as any,
+      { select: mockSelectFn } as any,
+      repo,
+    );
+
+    const result = await importer.importForClient({ clientId: CLIENT_ID, userId: USER_ID, geography: GEO });
+    expect(result.kind).toBe("no_observation");
+    expect((result as any).reason).toContain("GBP location not yet authorized");
+  });
+
+  it("returns no_observation when GBP connection has an authorized location but no review stats", async () => {
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockResolvedValue({ rows: [] });
 
     const importer = new GbpReviewSummaryImporter(
@@ -121,8 +162,8 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
     expect((result as any).reason).toContain("no review platform stats");
   });
 
-  it("returns available with summaries when GBP connection and stats both exist", async () => {
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+  it("returns available with summaries when GBP connection, location, and stats all exist", async () => {
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockResolvedValue({ rows: [MOCK_REVIEW_STAT_ROW] });
 
     const importer = new GbpReviewSummaryImporter(
@@ -138,9 +179,40 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
     expect(result.summaries[0].platform).toBe("google");
     expect(result.summaries[0].reviewCount).toBe(23);
     expect(result.summaries[0].averageRating).toBe(4.5);
-    expect(result.summaries[0].targetReviewCount).toBe(50);
+    expect(result.summaries[0].targetReviewCount).toBeNull();
     expect(result.summaries[0].geography).toBe(GEO);
     expect(result.summaries[0].clientId).toBe(CLIENT_ID);
+  });
+
+  it("stores conn.id as sourceConnectionId in each persisted summary", async () => {
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
+    mockPoolQuery.mockResolvedValue({ rows: [MOCK_REVIEW_STAT_ROW] });
+
+    const importer = new GbpReviewSummaryImporter(
+      { query: mockPoolQuery } as any,
+      { select: mockSelectFn } as any,
+      repo,
+    );
+
+    await importer.importForClient({ clientId: CLIENT_ID, userId: USER_ID, geography: GEO });
+    const upsertCalls = (repo.upsert as ReturnType<typeof vi.fn>).mock.calls;
+    expect(upsertCalls).toHaveLength(1);
+    expect(upsertCalls[0][0].sourceConnectionId).toBe(MOCK_GBP_CONN_WITH_LOCATION.id);
+  });
+
+  it("sets targetReviewCount to null (V1 policy: no universal benchmark)", async () => {
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
+    mockPoolQuery.mockResolvedValue({ rows: [MOCK_REVIEW_STAT_ROW] });
+
+    const importer = new GbpReviewSummaryImporter(
+      { query: mockPoolQuery } as any,
+      { select: mockSelectFn } as any,
+      repo,
+    );
+
+    const result = await importer.importForClient({ clientId: CLIENT_ID, userId: USER_ID, geography: GEO });
+    if (result.kind !== "available") throw new Error("expected available");
+    expect(result.summaries[0].targetReviewCount).toBeNull();
   });
 
   it("calls upsert once per review stat row", async () => {
@@ -148,7 +220,7 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
       { id: "rps-001", platform: "google",  review_count: 23, average_rating: "4.50" },
       { id: "rps-002", platform: "facebook", review_count: 11, average_rating: "4.20" },
     ];
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockResolvedValue({ rows: multiRows });
 
     const importer = new GbpReviewSummaryImporter(
@@ -163,7 +235,7 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
   });
 
   it("returns provider_error when pool.query throws an unexpected error", async () => {
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockRejectedValue(Object.assign(new Error("deadlock"), { code: "40P01" }));
 
     const importer = new GbpReviewSummaryImporter(
@@ -177,7 +249,7 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
   });
 
   it("returns no_observation (not throws) when table does not exist (42P01)", async () => {
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockRejectedValue(Object.assign(new Error("no relation"), { code: "42P01" }));
 
     const importer = new GbpReviewSummaryImporter(
@@ -191,7 +263,7 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
   });
 
   it("enforces clientId != default in review_platform_stats query", async () => {
-    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN]));
+    mockSelectFn.mockImplementation(makeSelectReturning([MOCK_GBP_CONN_WITH_LOCATION]));
     mockPoolQuery.mockResolvedValue({ rows: [] });
 
     const importer = new GbpReviewSummaryImporter(
@@ -210,7 +282,7 @@ describe("GbpReviewSummaryImporter.importForClient", () => {
     expect(sql).toContain("client_id <> 'default'");
   });
 
-  it("returns disconnected when db.select() throws during connection lookup", async () => {
+  it("returns provider_error when db.select() throws during connection lookup", async () => {
     mockSelectFn.mockImplementation(() => ({
       from: vi.fn(() => { throw new Error("connection_lost"); }),
     }));

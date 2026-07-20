@@ -8,22 +8,22 @@
 
 // ── V1 Target Review Count Policy ────────────────────────────────────────────
 //
-// V1 policy: a minimum of 50 verified reviews is the baseline target for a
-// local service business with a Google Business Profile. This threshold is
-// appropriate for a primary service market and is intentionally conservative
-// so clients see a motivating gap without an unreachable ceiling.
+// V1 policy: no universal benchmark is assumed. The target is null unless
+// explicitly configured for the tenant. Recommendations that depend on a
+// review gap (actual vs. target) are only generated when a non-null target
+// exists. Returning null for an unknown target is preferable to inventing an
+// unsupported industry figure.
 //
-// Future phases may derive per-category or per-geography targets from market
-// benchmarks; today the constant is the single source of truth.
-
-export const TENANT_SAFE_REVIEW_TARGET_COUNT_V1 = 50;
+// Future phases may set a per-client configured target, or derive one from
+// market data. For V1, the function always returns null.
 
 /**
  * Returns the V1 target review count for a given client.
+ * Returns null when no defensible target is available.
  * Pure function — no I/O, no side effects.
  */
-export function computeTargetReviewCount(_clientId: string): number {
-  return TENANT_SAFE_REVIEW_TARGET_COUNT_V1;
+export function computeTargetReviewCount(_clientId: string): number | null {
+  return null;
 }
 
 // ── ReviewImportInput ─────────────────────────────────────────────────────────
@@ -70,9 +70,12 @@ export interface ReviewImportSummary {
   platform: string;
   reviewCount: number;
   averageRating: number;
-  targetReviewCount: number;
+  /** Null when no defensible target is available for V1. */
+  targetReviewCount: number | null;
   observedAt: Date;
   geography: string;
+  /** The GBP social connection id that authorized this import. */
+  sourceConnectionId?: string;
 }
 
 // ── Repository interface ──────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # AI Edge Visibility — Architecture Reference
 
-**Status:** C9R-5 complete — scheduled monitoring live, run history API + History tab shipped, 97% V1 complete
+**Status:** C9R-6 complete — review intelligence tenant safety + acceptance remediation shipped, 100% V1 COMPLETE
 **Last updated:** 2026-07-20
 **ADR:** [ADR-007](adr/ADR-007-c8r5-ai-visibility-read-model.md)
 
@@ -56,7 +56,7 @@ Real provider (`isMock: false`). Wired into the competitor enrichment registry. 
 | 6 | Google Connected | `adaptConnectedGoogle()` | `ConnectedGoogleSummary` | `google_business`, `google_search_console`, `google_analytics` |
 | 7 | AI Query | `adaptAiQuerySources()` | `AiQueryAdapterInput` (scan + results) | `ai_query` |
 
-C9R-6: `GbpReviewSummaryImporter.importForClient()` gates on GBP social connection ownership, sources from `review_platform_stats WHERE client_id = ? AND client_id <> 'default'`, persists to `tenant_safe_review_summaries`, and returns a `ReviewImportResult` discriminated union. `adaptReviewImportResult()` maps this to an `AiVisibilityAdapterResult`. Passing `null` directly to `adaptTenantSafeReviews` still reports `not_tenant_safe` (legacy path only). `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
+C9R-6 + acceptance remediation: `GbpReviewSummaryImporter.importForClient()` gates on (1) GBP social connection ownership (userId match), (2) authorized location present in `social_connections.metadata.locationId` — no import proceeds without a cached locationId; sources from `review_platform_stats WHERE client_id = ? AND client_id <> 'default'`; persists to `tenant_safe_review_summaries` (UUID client_id FK → clients ON DELETE CASCADE; `source_connection_id` = `conn.id`; `target_review_count` is nullable — null in V1); returns `ReviewImportResult` discriminated union. `adaptReviewImportResult()` maps `unauthorized` → `AiVisibilityCoverageStatus("unauthorized")` (distinct from `not_connected`); null target suppresses review gap observations. Passing `null` directly to `adaptTenantSafeReviews` still reports `not_tenant_safe` (legacy path only). `searchConsole` and `analytics` report `not_implemented`. `adaptAiQuerySources` with `scan: null` reports `not_connected` for `ai_query`.
 
 ---
 
@@ -243,7 +243,8 @@ Each adapter emits a `AiVisibilityCoverageDiagnostic` per source:
 | Status | Meaning |
 |---|---|
 | `available` | Source has canonical observations |
-| `not_connected` | Source integration exists but is not connected |
+| `not_connected` | Source integration exists but is not connected (e.g. social connection absent) |
+| `unauthorized` | Connection exists but the account does not have ownership access to the tenant's authorized location |
 | `not_implemented` | Source ingestion has not been built yet |
 | `not_tenant_safe` | Source exists but cannot provide tenant-safe observations (legacy — never emitted by C9R-6 path) |
 | `no_observation` | Source is connected but returned zero records |
@@ -251,7 +252,7 @@ Each adapter emits a `AiVisibilityCoverageDiagnostic` per source:
 
 Missing data is **never converted to a zero score**. Coverage affects the completeness summary only.
 
-The frontend-local mirror type `RMCoverageStatus` in `AiVisibilityReadModelView.tsx` must remain a superset of `AiVisibilityCoverageStatus`. As of C9R-6 formal closure it includes all six values above. `getCoverageStatusConfig()` renders `provider_error` as red (#EF4444, "Provider Error", ⚠) and retains a string-typed default fallback for forward compatibility.
+The frontend-local mirror type `RMCoverageStatus` in `AiVisibilityReadModelView.tsx` must remain a superset of `AiVisibilityCoverageStatus`. As of C9R-6 acceptance remediation it includes all seven values above. `getCoverageStatusConfig()` renders `provider_error` as red (#EF4444, "Provider Error", ⚠), `unauthorized` as amber with label "Auth Required" and 🔒 icon (distinct from `not_connected`), and retains a string-typed default fallback for forward compatibility.
 
 ---
 

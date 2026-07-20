@@ -14,6 +14,7 @@ export type AiVisibilitySource =
 export type AiVisibilityCoverageStatus =
   | "available"
   | "not_connected"
+  | "unauthorized"
   | "not_implemented"
   | "not_tenant_safe"
   | "no_observation"

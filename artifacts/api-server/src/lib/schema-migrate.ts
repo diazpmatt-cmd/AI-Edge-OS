@@ -1250,16 +1250,20 @@ export async function migrateSchema(): Promise<void> {
 
   // ── C9R-6: Tenant-Safe Review Summaries ───────────────────────────────────
   // One row per (client_id, platform, geography). Populated by the GBP Review
-  // Summary Importer after verifying GBP connection ownership. Idempotent
-  // upsert key: (client_id, platform, geography).
+  // Summary Importer after verifying GBP connection ownership and confirming
+  // the connection has a cached authorized location.
+  //
+  // client_id is UUID referencing clients(id) ON DELETE CASCADE.
+  // target_review_count is nullable — null means no defensible V1 target.
+  // source_connection_id records which GBP social connection authorized import.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tenant_safe_review_summaries (
       id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      client_id            TEXT        NOT NULL,
+      client_id            UUID        NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
       platform             TEXT        NOT NULL,
       review_count         INTEGER     NOT NULL,
       average_rating       NUMERIC(3,2),
-      target_review_count  INTEGER     NOT NULL,
+      target_review_count  INTEGER,
       geography            TEXT        NOT NULL,
       source_connection_id TEXT,
       observed_at          TIMESTAMPTZ NOT NULL,
@@ -1272,6 +1276,34 @@ export async function migrateSchema(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS tsrs_client_observed
       ON tenant_safe_review_summaries(client_id, observed_at DESC);
+  `);
+
+  // ── C9R-6 schema remediation: fix pre-existing table if column types differ ─
+  // Environments where the table already existed with TEXT client_id + NOT NULL
+  // target need these ALTER TABLE statements applied idempotently.
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ALTER COLUMN client_id TYPE UUID USING client_id::uuid;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    END $$;
+
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ADD CONSTRAINT tsrs_client_fk
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    WHEN undefined_table THEN NULL;
+    END $$;
+
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ALTER COLUMN target_review_count DROP NOT NULL;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    WHEN SQLSTATE '42703' THEN NULL;
+    END $$;
   `);
 
   console.log("[SCHEMA] Core schema migration complete");

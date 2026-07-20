@@ -3,7 +3,7 @@ import React, { useState } from "react";
 // ── Frontend-local types (mirror API response shape) ──────────────────────────
 
 export type RMCoverageStatus =
-  | "available" | "not_connected" | "not_implemented"
+  | "available" | "not_connected" | "unauthorized" | "not_implemented"
   | "not_tenant_safe" | "no_observation" | "provider_error";
 
 export type RMPriority    = "critical" | "high" | "medium" | "low";
@@ -73,6 +73,7 @@ export function getCoverageStatusConfig(status: string): {
   switch (status) {
     case "available":       return { color: "#22C55E", bgColor: "rgba(34,197,94,0.08)",   label: "Available",      icon: "✓" };
     case "not_connected":   return { color: "#F59E0B", bgColor: "rgba(245,158,11,0.08)",  label: "Not Connected",  icon: "⚡" };
+    case "unauthorized":    return { color: "#F59E0B", bgColor: "rgba(245,158,11,0.08)",  label: "Auth Required",  icon: "🔒" };
     case "not_implemented": return { color: "#6366F1", bgColor: "rgba(99,102,241,0.08)",  label: "Coming Soon",    icon: "🔜" };
     case "not_tenant_safe": return { color: "#00AEEF", bgColor: "rgba(0,174,239,0.08)",   label: "Setup Required", icon: "🔐" };
     case "no_observation":  return { color: "#64748B", bgColor: "rgba(100,116,139,0.08)", label: "No Data Yet",    icon: "○" };
@@ -486,6 +487,18 @@ export default function AiVisibilityReadModelView({ model, loading, error, onRet
                     }}
                   >
                     Connect →
+                  </a>
+                )}
+                {c.status === "unauthorized" && (
+                  <a
+                    href={getWorkflowRoute("local_presence")}
+                    style={{
+                      display: "inline-block", marginTop: 8,
+                      fontSize: 9, fontWeight: 700, color: "#F59E0B",
+                      textDecoration: "none",
+                    }}
+                  >
+                    Review Account →
                   </a>
                 )}
               </div>

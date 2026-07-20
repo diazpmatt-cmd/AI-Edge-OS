@@ -4,6 +4,8 @@
  * Persists and reads tenant-safe review summaries via the canonical
  * tenant_safe_review_summaries Drizzle table. All operations are scoped
  * by clientId — no cross-tenant leakage is possible.
+ *
+ * targetReviewCount is nullable: null means no defensible V1 target is set.
  */
 
 import { eq, desc } from "drizzle-orm";
@@ -29,8 +31,9 @@ export class DrizzleTenantSafeReviewRepository implements TenantSafeReviewReposi
         platform:          row.platform,
         reviewCount:       row.reviewCount,
         averageRating:     String(row.averageRating),
-        targetReviewCount: row.targetReviewCount,
+        targetReviewCount: row.targetReviewCount ?? null,
         geography:         row.geography,
+        sourceConnectionId: row.sourceConnectionId ?? null,
         observedAt:        row.observedAt,
         updatedAt:         row.observedAt,
       })
@@ -43,7 +46,8 @@ export class DrizzleTenantSafeReviewRepository implements TenantSafeReviewReposi
         set: {
           reviewCount:       row.reviewCount,
           averageRating:     String(row.averageRating),
-          targetReviewCount: row.targetReviewCount,
+          targetReviewCount: row.targetReviewCount ?? null,
+          sourceConnectionId: row.sourceConnectionId ?? null,
           observedAt:        row.observedAt,
           updatedAt:         row.observedAt,
         },
@@ -74,8 +78,9 @@ function rowToSummary(
     platform:          row.platform,
     reviewCount:       row.reviewCount,
     averageRating:     row.averageRating !== null ? Number(row.averageRating) : 0,
-    targetReviewCount: row.targetReviewCount,
+    targetReviewCount: row.targetReviewCount ?? null,
     geography:         row.geography,
+    sourceConnectionId: row.sourceConnectionId ?? undefined,
     observedAt:        row.observedAt instanceof Date ? row.observedAt : new Date(row.observedAt),
   };
 }

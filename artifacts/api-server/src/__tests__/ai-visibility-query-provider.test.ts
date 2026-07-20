@@ -72,16 +72,18 @@ describe("generateAiQueries", () => {
     expect([...queries]).toEqual(sorted);
   });
 
-  it("falls back to 'local services' when no services configured", () => {
+  it("returns [] (not 'local services') when no services configured — fail-closed (C9R-7 correction)", () => {
     const ctx: AiQueryTenantContext = { ...BBB_CONTEXT, activeServiceIds: [] };
     const queries = generateAiQueries(ctx);
-    expect(queries.some(q => q.includes("local services"))).toBe(true);
+    expect(queries).toHaveLength(0);
+    expect(queries.some(q => q.includes("local services"))).toBe(false);
   });
 
-  it("falls back to 'my area' when no geographies configured", () => {
+  it("returns [] (not 'my area') when no geographies configured — fail-closed (C9R-7 correction)", () => {
     const ctx: AiQueryTenantContext = { ...BBB_CONTEXT, authorizedGeographies: [] };
     const queries = generateAiQueries(ctx);
-    expect(queries.some(q => q.includes("my area"))).toBe(true);
+    expect(queries).toHaveLength(0);
+    expect(queries.some(q => q.includes("my area"))).toBe(false);
   });
 
   it("deduplicates identical queries", () => {

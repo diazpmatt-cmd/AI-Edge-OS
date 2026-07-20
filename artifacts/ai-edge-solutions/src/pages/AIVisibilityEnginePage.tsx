@@ -23,6 +23,17 @@ export function classifyScanError(err: unknown): string {
     if (status === 401) return "Session expired or authentication required. Please sign in again.";
     if (status === 403) return "Access denied — this business is not authorized for your account.";
     if (status === 404) return "Scan endpoint or business not found.";
+    if (status === 422) {
+      // Preflight failure: tenant profile data is incomplete — do not suggest an API config issue.
+      const lower = msg.toLowerCase();
+      if (lower.includes("no_active_services")) {
+        return "Scan cannot run: no active services are configured for this business. Contact your administrator.";
+      }
+      if (lower.includes("no_authorized_geography")) {
+        return "Scan cannot run: no authorized service geography is configured for this business. Contact your administrator.";
+      }
+      return "Scan cannot run: tenant profile is incomplete. Contact your administrator.";
+    }
     if (status >= 500) return "Scan service error. Please try again.";
     return `Request failed (${status}). Please try again.`;
   }

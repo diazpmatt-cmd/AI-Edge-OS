@@ -2,14 +2,22 @@
  * C9R-4: AI Query Scan Service.
  *
  * Orchestrates a complete scan for one tenant:
- *   1. Resolves tenant context (business info, services, competitors)
- *   2. Generates deterministic query list
- *   3. Runs each query via the injected provider
- *   4. Persists scan record + individual results to DB
- *   5. Returns a full AiQueryScanSummary
+ *   1. Resolves tenant context (business info, services, geography)
+ *   2. Runs preflight validation — fails closed if services or geography are missing
+ *   3. Generates deterministic query list
+ *   4. Runs each query via the injected provider
+ *   5. Persists scan record + individual results to DB
+ *   6. Returns a full AiQueryScanSummary
  *
  * The route calls execute({ clientId, userId }) and receives the summary.
  * Reads the latest completed scan via getLatestScan({ clientId }).
+ *
+ * C9R-7 correction: queryActiveServiceIds now reads service_key (not the
+ * non-existent service_id column), and buildTenantContext falls back to
+ * clients.service_areas and clients.client_name when local_presence_profiles
+ * has no row for this clientId. "my area" and "local services" are never
+ * synthesised — if canonical data is unavailable the scan is refused with
+ * status "preflight_failed" and no provider call is made.
  */
 
 import {
@@ -21,6 +29,7 @@ import {
   type AiQueryProvider,
   type AiQueryResult,
   type AiQueryScanSummary,
+  type AiPreflightFailureReason,
   type PersistedAiQueryScan,
   type PersistedAiQueryResult,
   type AiScanHistoryPage,
@@ -37,6 +46,13 @@ interface CompetitorRow {
   id: string;
   name: string;
   domain: string | null;
+}
+
+// ── Clients row (geography + name fallback) ───────────────────────────────────
+
+interface ClientRow {
+  clientName:   string;
+  serviceAreas: string; // JSON array of geography strings
 }
 
 // ── Public contracts ───────────────────────────────────────────────────────────
@@ -64,20 +80,46 @@ export class AiQueryScanService {
 
   async execute(input: AiQueryScanInput): Promise<AiQueryScanSummary> {
     const { clientId, triggerSource = "manual" } = input;
+    const now = new Date().toISOString();
 
     // 1. Resolve tenant context
     const context = await this.buildTenantContext(clientId);
+
+    // 2. Preflight validation — fail closed if canonical data is unavailable
+    const preflight = this.validatePreflight(context);
+    if (!preflight.ok) {
+      console.warn(
+        `[ai-query-scan] preflight_failed clientId=${clientId} reason=${preflight.reason}`,
+      );
+      return {
+        scanId:           "",
+        clientId,
+        provider:         this.provider.name,
+        model:            this.provider.model,
+        status:           "preflight_failed",
+        preflightFailure: preflight.reason,
+        queryCount:       0,
+        completedCount:   0,
+        mentionCount:     0,
+        error:            `Preflight failed: ${preflight.reason}`,
+        startedAt:        now,
+        completedAt:      now,
+        results:          Object.freeze([]),
+      };
+    }
+
+    // 3. Generate queries
     const queries = generateAiQueries(context);
 
-    // 2. Create scan record (status = running)
+    // 4. Create scan record (status = running)
     const scanId = await this.createScanRecord(clientId, queries.length, triggerSource);
 
     const results: AiQueryResult[] = [];
-    let mentionCount          = 0;
+    let mentionCount           = 0;
     let competitorMentionCount = 0;
     let citationCount          = 0;
 
-    // 3. Execute queries sequentially (avoid parallel OpenAI calls to control costs)
+    // 5. Execute queries sequentially (avoid parallel OpenAI calls to control costs)
     for (const query of queries) {
       const result = await this.provider.execute({ query, tenantContext: context });
       results.push(result);
@@ -87,22 +129,22 @@ export class AiQueryScanService {
       await this.persistQueryResult(scanId, clientId, result);
     }
 
-    // 4. Update scan record (completed)
+    // 6. Update scan record (completed)
     await this.completeScanRecord(scanId, results.length, mentionCount, competitorMentionCount, citationCount, null);
 
     return {
       scanId,
       clientId,
-      provider: this.provider.name,
-      model: this.provider.model,
-      status: "completed",
-      queryCount: queries.length,
+      provider:       this.provider.name,
+      model:          this.provider.model,
+      status:         "completed",
+      queryCount:     queries.length,
       completedCount: results.length,
       mentionCount,
-      error: null,
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      results: Object.freeze(results),
+      error:          null,
+      startedAt:      new Date().toISOString(),
+      completedAt:    new Date().toISOString(),
+      results:        Object.freeze(results),
     };
   }
 
@@ -197,54 +239,113 @@ export class AiQueryScanService {
     }
   }
 
+  // ── Private: preflight validation ─────────────────────────────────────────
+
+  private validatePreflight(context: AiQueryTenantContext):
+    | { ok: true }
+    | { ok: false; reason: AiPreflightFailureReason }
+  {
+    if (context.activeServiceIds.length === 0) {
+      return { ok: false, reason: "no_active_services" };
+    }
+    if (context.authorizedGeographies.length === 0) {
+      return { ok: false, reason: "no_authorized_geography" };
+    }
+    return { ok: true };
+  }
+
   // ── Private: build tenant context ─────────────────────────────────────────
 
   private async buildTenantContext(clientId: string): Promise<AiQueryTenantContext> {
-    const [profiles, serviceIds, competitors] = await Promise.all([
+    const [profiles, serviceKeys, competitors, clientRow] = await Promise.all([
       this.db.select().from(localPresenceProfilesTable)
         .where(eq(localPresenceProfilesTable.clientId, clientId))
         .limit(1),
-      this.queryActiveServiceIds(clientId),
+      this.queryActiveServiceKeys(clientId),
       this.queryCompetitors(clientId),
+      this.queryClientRow(clientId),
     ]);
     const profile = profiles[0] ?? null;
 
+    // Business name: prefer local presence profile, fall back to clients table
+    const businessName = profile?.businessName ?? clientRow?.clientName ?? "unknown";
+
+    // Geography resolution order:
+    //   1. local_presence_profiles.service_areas_json (parsed JSON array)
+    //   2. local_presence_profiles.city + state
+    //   3. clients.service_areas (canonical JSON array — always populated at seed time)
+    // "my area" is NEVER synthesised. If no geography is found, authorizedGeographies
+    // is empty and the preflight check will refuse the scan.
     const geographies: string[] = [];
+
     if (profile?.serviceAreasJson) {
       try {
         const parsed = JSON.parse(profile.serviceAreasJson);
-        if (Array.isArray(parsed)) geographies.push(...parsed.filter((g): g is string => typeof g === "string" && g.length > 0));
-      } catch { /* ignore */ }
+        if (Array.isArray(parsed)) {
+          geographies.push(...parsed.filter((g): g is string => typeof g === "string" && g.length > 0));
+        }
+      } catch { /* ignore malformed JSON */ }
     }
+
     if (!geographies.length && profile?.city && profile?.state) {
       geographies.push(`${profile.city}, ${profile.state}`);
     }
-    if (!geographies.length) geographies.push("my area");
+
+    if (!geographies.length && clientRow?.serviceAreas) {
+      try {
+        const parsed = JSON.parse(clientRow.serviceAreas);
+        if (Array.isArray(parsed)) {
+          geographies.push(...parsed.filter((g): g is string => typeof g === "string" && g.length > 0));
+        }
+      } catch { /* ignore malformed JSON */ }
+    }
 
     return {
       clientId,
-      businessName:         profile?.businessName ?? "this business",
-      businessDomain:       profile?.website ?? null,
-      businessPhone:        profile?.phone ?? null,
-      activeServiceIds:     Object.freeze(serviceIds),
+      businessName,
+      businessDomain:        profile?.website ?? null,
+      businessPhone:         profile?.phone ?? null,
+      activeServiceIds:      Object.freeze(serviceKeys),
       authorizedGeographies: Object.freeze(geographies),
-      competitors:          Object.freeze(competitors),
-      prohibitedPhrases:    Object.freeze([] as string[]),
+      competitors:           Object.freeze(competitors),
+      prohibitedPhrases:     Object.freeze([] as string[]),
     };
   }
 
-  private async queryActiveServiceIds(clientId: string): Promise<string[]> {
+  // ── Private: service key resolution ───────────────────────────────────────
+  // Reads service_key (text slug) from client_services.
+  // The column is service_key — NOT service_id.
+
+  private async queryActiveServiceKeys(clientId: string): Promise<string[]> {
     try {
-      const { rows } = await this.pool.query<{ service_id: string }>(
-        `SELECT service_id FROM client_services WHERE client_id = $1 AND is_active = TRUE`,
+      const { rows } = await this.pool.query<{ service_key: string }>(
+        `SELECT service_key FROM client_services WHERE client_id = $1 AND is_active = TRUE ORDER BY sort_order ASC`,
         [clientId],
       );
-      return rows.map(r => r.service_id);
+      return rows.map(r => r.service_key);
     } catch (err: any) {
       if (err?.code === "42P01") return [];
+      console.warn("[ai-query-scan] service key query warning:", err?.message, "code:", err?.code);
       return [];
     }
   }
+
+  // ── Private: clients row (geography + name fallback) ──────────────────────
+
+  private async queryClientRow(clientId: string): Promise<ClientRow | null> {
+    try {
+      const { rows } = await this.pool.query<{ client_name: string; service_areas: string }>(
+        `SELECT client_name, service_areas FROM clients WHERE id = $1 LIMIT 1`,
+        [clientId],
+      );
+      if (!rows.length) return null;
+      return { clientName: rows[0].client_name, serviceAreas: rows[0].service_areas };
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Private: competitors ───────────────────────────────────────────────────
 
   private async queryCompetitors(clientId: string): Promise<CompetitorRow[]> {
     try {
@@ -277,12 +378,12 @@ export class AiQueryScanService {
   }
 
   private async completeScanRecord(
-    scanId:                string,
-    completedCount:        number,
-    mentionCount:          number,
+    scanId:                 string,
+    completedCount:         number,
+    mentionCount:           number,
     competitorMentionCount: number,
-    citationCount:         number,
-    error:                 string | null,
+    citationCount:          number,
+    error:                  string | null,
   ): Promise<void> {
     await this.pool.query(
       `UPDATE ai_query_scans

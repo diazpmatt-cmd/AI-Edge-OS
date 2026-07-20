@@ -111,23 +111,75 @@ Frontend correction applied. **DP-001 remains pending.** Release status remains 
 - Error classification: 401→session expired, 403→access denied, 404→not found, 5xx→service error, network→connection error, provider failures→specific messages. Never describes a 401 or 403 as a provider configuration failure.
 - `classifyScanError` exported for direct unit testing
 
-### Pre-Deployment Environment Fix Required
+---
 
-Before republishing and retrying DP-001:
-1. **Remove** from production secrets: `AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`
-2. **Retain:** `OPENAI_API_KEY`
-3. Republish (picks up code correction + secret removal simultaneously)
-4. Do not enable `AI_VISIBILITY_SCHEDULER_ENABLED`
+## DP-001 Execution Findings — Query Context Failure (2026-07-20)
+
+After the frontend correction was deployed, DP-001 was executed and the provider was reached. **The scan completed but all 4 queries were generic** (e.g. "best local services in my area"), producing zero-value results. Three root causes were identified, fixed, and test-covered in this session.
+
+**Scan:** `scan_id = 49aff305`, `client_id = 0f15a60a-6277-4933-a17e-d3e453a4e291`
+**Result:** Completed, 4 queries, 4 results — all semantically wrong.
+
+### Root Causes and Fixes
+
+| # | Root Cause | Fix |
+|---|---|---|
+| 1 | `queryActiveServiceIds` queried `client_services.service_id` (nonexistent column → PostgreSQL 42703 silently swallowed → `[]`) | Renamed to `queryActiveServiceKeys()`, queries `service_key` + `ORDER BY sort_order ASC` |
+| 2 | `buildTenantContext` looked up `local_presence_profiles WHERE client_id = $uuid` but prod profile has `client_id = "default"` (slug) → null → `["my area"]` fallback | Added `queryClientRow()` fallback reading `clients.service_areas` (JSON array, 11 locations) + `clients.client_name` by UUID |
+| 3 | `generateAiQueries()` contained `activeServiceIds=[] → "local services"` and `geographies=[] → "my area"` silent fallbacks that masked both bugs | Removed all fallbacks — fail-closed: returns `[]` when either input is empty |
+| 4 | No preflight gate — provider called even on empty context, spending API budget on zero-value scans | `validatePreflight()` in `execute()` → `{status:"preflight_failed", preflightFailure:...}` before any provider call; route returns 422 |
+
+### Type System Changes
+
+- `AiQueryScanStatus` ∪ `"preflight_failed"` added
+- `AiPreflightFailureReason` = `"no_active_services" | "no_authorized_geography"` exported from `lib/db`
+- `preflightFailure?` field on `AiQueryScanSummary`
+- `lib/db/tsconfig.json` excludes `src/__tests__` (fixes `tsc --build` clean pass)
+
+### Tests Added / Corrected
+
+| File | Tests | Coverage |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` (new) | 28 | Fail-closed generation, correct service/geography injection, query format |
+| `ai-query-scan-preflight.test.ts` (new) | 10 | `validatePreflight` logic, HTTP 422 response |
+| `ai-visibility-query-provider.test.ts` (2 corrected) | — | Old "falls back to X" → new fail-closed assertions |
+| `AIVisibilityEnginePage.test.ts` (6 added) | — | `classifyScanError` for 422 no_active_services / no_authorized_geography |
+
+**All 201 AI-visibility-related tests pass after corrections.**
+
+### Files Modified (Query Context Fix)
+
+| File | Change |
+|---|---|
+| `artifacts/api-server/src/lib/ai-query-scan-service.ts` | `queryActiveServiceKeys()` (correct column); `queryClientRow()` fallback; no "my area"/"local services" strings |
+| `lib/db/src/ai-query-generation.ts` | Fail-closed — returns `[]` when services or geographies empty; all fallback strings removed |
+| `lib/db/src/ai-query-provider-types.ts` | `AiQueryScanStatus` + `"preflight_failed"`; `AiPreflightFailureReason` type; `preflightFailure?` on summary |
+| `artifacts/api-server/src/routes/ai-visibility.ts` | HTTP 422 for `status === "preflight_failed"` |
+| `artifacts/ai-edge-solutions/src/pages/AIVisibilityEnginePage.tsx` | `classifyScanError` 422 branch with actionable admin messages |
+| `lib/db/tsconfig.json` | Excludes `src/__tests__` |
+| `artifacts/api-server/src/__tests__/ai-query-generation-canonical.test.ts` | New — 28 tests |
+| `artifacts/api-server/src/__tests__/ai-query-scan-preflight.test.ts` | New — 10 tests |
+| `artifacts/api-server/src/__tests__/ai-visibility-query-provider.test.ts` | 2 test assertions corrected |
+| `artifacts/ai-edge-solutions/src/__tests__/AIVisibilityEnginePage.test.ts` | 6 new 422 test cases |
 
 ---
 
 ## Next Activity
 
-**Deploy the focused correction and execute one authenticated DP-001 scan.**
+**Deploy the query-context fix and execute one authenticated DP-001 re-scan.**
 
-Once DP-001 smoke test passes:
+**Pre-deployment checklist:**
+1. Confirm `OPENAI_API_KEY` (real key) present in production secrets
+2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` removed (done in prior cycle)
+3. Republish to pick up this session's code changes
+
+**Smoke test pass criteria:**
+- `status: "completed"`
+- At least one query contains a real service name (e.g. "bed bug inspection") — not "local services"
+- At least one query contains a real geography (e.g. "Foley, AL") — not "my area"
+
+**Once DP-001 re-scan passes:**
 1. Announce AI Visibility V1 to authorized users
-2. Optionally enable scheduler for BBB: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }`
-3. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in production secrets
-4. Restart API Server
-5. Monitor `[ai-visibility-scheduler]` log lines
+2. Optionally enable scheduler: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }`
+3. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in production secrets + restart API Server
+4. Monitor `[ai-visibility-scheduler]` log lines

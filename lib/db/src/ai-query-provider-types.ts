@@ -92,11 +92,14 @@ export interface AiQueryCitation {
 // ── Scan summary (aggregate of all query results for one run) ──────────────────
 
 export interface AiQueryScanSummary {
+  /** UUID of the persisted scan record, or "" when status is "preflight_failed". */
   scanId: string;
   clientId: string;
   provider: string;
   model: string;
   status: AiQueryScanStatus;
+  /** Set only when status === "preflight_failed". */
+  preflightFailure?: AiPreflightFailureReason;
   queryCount: number;
   completedCount: number;
   mentionCount: number;
@@ -106,7 +109,11 @@ export interface AiQueryScanSummary {
   results: readonly AiQueryResult[];
 }
 
-export type AiQueryScanStatus = "running" | "completed" | "failed";
+export type AiQueryScanStatus = "running" | "completed" | "failed" | "preflight_failed";
+
+export type AiPreflightFailureReason =
+  | "no_active_services"
+  | "no_authorized_geography";
 
 // ── Provider interface ─────────────────────────────────────────────────────────
 

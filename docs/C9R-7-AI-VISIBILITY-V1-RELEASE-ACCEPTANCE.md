@@ -313,7 +313,7 @@ Production deployment with scheduling **disabled** is safe without any additiona
 
 **Priority:** Must complete before enabling scheduling or user-facing AI query execution in production.
 
-**Status: PENDING** — two controlled scan attempts were executed but the provider was never reached. See DP-001 Diagnostic Findings below.
+**Status: QUERY-CONTEXT CORRECTED — READY TO RE-EXECUTE** — DP-001 scan executed (scan_id `49aff305`, 2026-07-20). Provider was reached; 4 queries executed and 4 results persisted. However all 4 queries were generic ("best local services in my area") due to a query-context failure, not a provider failure. Root causes diagnosed, all fixes applied and test-covered. See DP-001 Execution Findings and Correction below.
 
 ---
 
@@ -361,24 +361,77 @@ Two rounds of scan attempts (four total requests) were made from the authenticat
 
 ---
 
+### DP-001 Execution Findings — Query Context Failure (2026-07-20)
+
+After the frontend tenant-resolution correction was deployed, DP-001 was successfully executed: the provider was reached and the scan completed. However, all 4 queries were generic (e.g. "best local services in my area"), producing useless results. The root cause was a query-context failure, not a provider failure.
+
+**Scan:** `scan_id = 49aff305`, `client_id = 0f15a60a-6277-4933-a17e-d3e453a4e291`
+**Result:** 4 queries executed, 4 results persisted, `status: "completed"` — but all queries were semantically wrong.
+
+#### Root Cause 1 — Wrong column in `queryActiveServiceIds`
+
+`AiQueryScanService.buildTenantContext()` called `queryActiveServiceIds()`, which queried `client_services.service_id` (a column that does not exist — PostgreSQL error 42703). The error was silently caught and swallowed, returning `[]`. With no active service IDs, `generateAiQueries()` fell back to the hardcoded string `"local services"`, producing queries like "best local services in Foley, AL".
+
+**Fix:** Renamed to `queryActiveServiceKeys()`, queries `service_key` (the correct column). Results `ORDER BY sort_order ASC`.
+
+#### Root Cause 2 — UUID vs. slug mismatch in `local_presence_profiles` lookup
+
+`buildTenantContext()` queried `local_presence_profiles WHERE client_id = $uuid`. In production, the profile row has `client_id = "default"` (a legacy slug, not a UUID). The lookup returned `null`. With no profile, geography fell back to `["my area"]`, producing queries like "best bed bug inspection in my area".
+
+**Fix:** Added `queryClientRow()` fallback: when `local_presence_profiles` returns `null`, reads `clients.service_areas` (a JSON array of 11 Baldwin County locations) and `clients.client_name` directly from the `clients` table using the UUID. No "my area" fallback remains.
+
+#### Root Cause 3 — Unsafe silent fallbacks in `generateAiQueries`
+
+`generateAiQueries()` contained explicit fallbacks: `activeServiceIds.length === 0 → ["local services"]` and `authorizedGeographies.length === 0 → ["my area"]`. These masked both bugs above, producing superficially-successful scans with semantically-generic queries.
+
+**Fix:** `generateAiQueries()` is now fail-closed — returns `[]` when either input is empty. No fallback strings remain.
+
+#### Root Cause 4 — No preflight gate
+
+`AiVisibilityExecutionService.execute()` called the provider even when context was empty, resulting in paid API calls for zero-value results.
+
+**Fix:** `validatePreflight()` added to `execute()` — returns `{ status: "preflight_failed", preflightFailure: "no_active_services" | "no_authorized_geography" }` before calling any provider. Route returns HTTP 422. `classifyScanError` handles 422 with actionable admin messages.
+
+#### Type system changes
+
+- `AiQueryScanStatus` extended with `"preflight_failed"`
+- `AiPreflightFailureReason` union type added: `"no_active_services" | "no_authorized_geography"`
+- `preflightFailure?` field added to `AiQueryScanSummary`
+- `lib/db/tsconfig.json` excludes `src/__tests__` (fixes `tsc --build` clean pass)
+
+#### Tests added / corrected
+
+| File | Tests | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` (new) | 28 | Fail-closed generation, correct service/geography injection, query format |
+| `ai-query-scan-preflight.test.ts` (new) | 10 | `validatePreflight` logic, route 422 response |
+| `ai-visibility-query-provider.test.ts` (updated) | 2 corrected | Old "falls back to X" assertions replaced with fail-closed assertions |
+| `AIVisibilityEnginePage.test.ts` (extended) | 6 new (422 paths) | `classifyScanError` for 422 no_active_services / no_authorized_geography |
+
+All 201 AI-visibility-related tests pass after correction.
+
+---
+
 ### DP-001 Updated Procedure
 
 **Environment preparation (before next attempt):**
-1. In production deployment secrets, **remove** `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY`.
-2. Confirm `OPENAI_API_KEY` (164-char real key) is present.
-3. Republish deployment to pick up both the secret removal and the frontend correction.
+1. Confirm `OPENAI_API_KEY` (real key) is present in production secrets.
+2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` have been removed from production secrets (done during prior DP-001 cycle).
+3. Republish to pick up the query-context fix (this session's code changes).
 
 **Smoke test execution:**
-1. Navigate to AI Visibility page as an authenticated BBB user (no `?clientId=` override needed).
+1. Navigate to AI Visibility page as an authenticated BBB user.
 2. Confirm top navigation shows "Bed Bugs & Beyond".
 3. Switch to the "AI Query" tab.
 4. Click "Run Scan".
-5. Verify request goes to `POST /api/ai-visibility/query-scan/bed-bugs-and-beyond` (check browser Network tab).
-6. Verify `GET /api/ai-visibility/query-scan/bed-bugs-and-beyond/latest` returns a scan with `status: "completed"` and at least one result.
+5. Verify request goes to `POST /api/ai-visibility/query-scan/bed-bugs-and-beyond` (browser Network tab).
+6. Verify `GET /api/ai-visibility/query-scan/bed-bugs-and-beyond/latest` returns a scan with `status: "completed"` and queries that reference real services (e.g. "bed bug inspection") and real geographies (e.g. "Foley, AL" or "Daphne, AL").
 7. Confirm no secrets are printed in API Server logs.
 8. Confirm no customer communications were triggered.
 
-**Bounded:** Single scan request. ~6–10 AI queries at gpt-4o-mini pricing. Total cost < $0.05.
+**Pass criteria (updated):** `status: "completed"`, at least one query contains a real service name (not "local services"), at least one query contains a real geography (not "my area").
+
+**Bounded:** Single scan request. ~6–12 AI queries at gpt-4o-mini pricing. Total cost < $0.05.
 
 ---
 

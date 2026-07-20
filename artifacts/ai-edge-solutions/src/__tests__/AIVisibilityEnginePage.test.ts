@@ -189,6 +189,9 @@ describe("classifyScanError — safety invariants", () => {
       new Error("API 401: x"),
       new Error("API 403: x"),
       new Error("API 404: x"),
+      new Error("API 422: no_active_services"),
+      new Error("API 422: no_authorized_geography"),
+      new Error("API 422: preflight_failed"),
       new Error("API 500: x"),
       new Error("Failed to fetch"),
       new Error("not_configured"),
@@ -204,5 +207,56 @@ describe("classifyScanError — safety invariants", () => {
       expect(typeof msg).toBe("string");
       expect(msg.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ─── classifyScanError — 422 preflight_failed (C9R-7 correction) ─────────────
+// A 422 must NEVER be misclassified as an AI-provider configuration failure.
+// The message must be actionable (contact administrator) without exposing internals.
+
+describe("classifyScanError — 422 preflight_failed", () => {
+  it("no_active_services → actionable message mentioning services", () => {
+    const msg = classifyScanError(new Error("API 422: no_active_services"));
+    expect(msg.toLowerCase()).toContain("service");
+    expect(msg).toContain("administrator");
+  });
+
+  it("no_active_services → does NOT suggest AI provider is misconfigured", () => {
+    const msg = classifyScanError(new Error("API 422: no_active_services"));
+    expect(msg).not.toContain("AI provider");
+    expect(msg).not.toContain("not configured");
+  });
+
+  it("no_authorized_geography → actionable message mentioning geography", () => {
+    const msg = classifyScanError(new Error("API 422: no_authorized_geography"));
+    expect(msg.toLowerCase()).toContain("geograph");
+    expect(msg).toContain("administrator");
+  });
+
+  it("no_authorized_geography → does NOT suggest AI provider is misconfigured", () => {
+    const msg = classifyScanError(new Error("API 422: no_authorized_geography"));
+    expect(msg).not.toContain("AI provider");
+    expect(msg).not.toContain("not configured");
+  });
+
+  it("generic 422 preflight_failed → admin message (no provider blame)", () => {
+    const msg = classifyScanError(new Error("API 422: preflight_failed"));
+    expect(msg).toContain("administrator");
+    expect(msg).not.toContain("AI provider");
+    expect(msg).not.toContain("rate limit");
+    expect(msg).not.toContain("timed out");
+  });
+
+  it("422 does NOT return the generic 'Scan failed. Please try again.' fallback", () => {
+    const msg = classifyScanError(new Error("API 422: no_active_services"));
+    expect(msg).not.toBe("Scan failed. Please try again.");
+  });
+
+  it("422 is distinct from 401 and 403 responses", () => {
+    const msg422 = classifyScanError(new Error("API 422: no_active_services"));
+    const msg401 = classifyScanError(new Error("API 401: Unauthorized"));
+    const msg403 = classifyScanError(new Error("API 403: forbidden"));
+    expect(msg422).not.toBe(msg401);
+    expect(msg422).not.toBe(msg403);
   });
 });

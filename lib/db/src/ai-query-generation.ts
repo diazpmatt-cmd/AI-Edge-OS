@@ -2,6 +2,13 @@
  * C9R-4: Deterministic tenant-scoped AI query generation.
  * Pure — no side-effects, no external dependencies.
  * The same tenant context always produces the same ordered list of queries.
+ *
+ * Fail-closed behaviour (C9R-7 correction):
+ * - No active services  → returns [].
+ * - No authorized geographies → returns [].
+ * Callers MUST run a preflight check before invoking this function.
+ * An empty return signals a preflight failure; callers must not execute
+ * paid provider queries when this function returns an empty list.
  */
 
 import type { AiQueryTenantContext } from "./ai-query-provider-types";
@@ -10,7 +17,7 @@ import type { AiQueryTenantContext } from "./ai-query-provider-types";
 export const AI_QUERY_GENERATION_LIMIT = 8;
 
 /**
- * Convert a service ID like "bed-bug-treatment" or "bed_bug_treatment"
+ * Convert a service key like "bed_bug_treatment" or "bed-bug-treatment"
  * to a human label like "bed bug treatment".
  */
 export function humanizeServiceId(serviceId: string): string {
@@ -41,30 +48,29 @@ const QUERY_TEMPLATES: ReadonlyArray<(service: string, location: string) => stri
  * Generate a deterministic, de-duplicated, sorted list of AI queries for a tenant.
  *
  * Rules applied in order:
- * 1. Build cross-product: service × geography × template.
- * 2. Remove queries whose lower-cased form contains any prohibited phrase.
- * 3. Deduplicate by lower-cased value.
- * 4. Sort lexicographically (determinism guarantee).
- * 5. Cap at AI_QUERY_GENERATION_LIMIT.
+ * 1. Return [] immediately if activeServiceIds or authorizedGeographies is empty
+ *    (fail-closed — caller must run preflight before invoking this function).
+ * 2. Build cross-product: service × geography × template.
+ * 3. Remove queries whose lower-cased form contains any prohibited phrase.
+ * 4. Deduplicate by lower-cased value.
+ * 5. Sort lexicographically (determinism guarantee).
+ * 6. Cap at AI_QUERY_GENERATION_LIMIT.
  *
- * Fallback behaviour:
- * - No active services → uses "local services".
- * - No authorized geographies → uses "my area".
+ * There are NO generic fallbacks. "local services" and "my area" are not
+ * produced by this function under any circumstances.
  */
 export function generateAiQueries(context: AiQueryTenantContext): readonly string[] {
   const { activeServiceIds, authorizedGeographies, prohibitedPhrases } = context;
 
-  const services = activeServiceIds.length > 0
-    ? activeServiceIds.map(humanizeServiceId)
-    : ["local services"];
+  if (activeServiceIds.length === 0 || authorizedGeographies.length === 0) {
+    return Object.freeze([]);
+  }
 
-  const geographies = authorizedGeographies.length > 0
-    ? [...authorizedGeographies]
-    : ["my area"];
+  const services    = activeServiceIds.map(humanizeServiceId);
+  const geographies = [...authorizedGeographies];
+  const prohibited  = prohibitedPhrases.map(p => p.toLowerCase().trim()).filter(Boolean);
 
-  const prohibited = prohibitedPhrases.map(p => p.toLowerCase().trim()).filter(Boolean);
-
-  const seen = new Set<string>();
+  const seen       = new Set<string>();
   const candidates: string[] = [];
 
   for (const service of services) {

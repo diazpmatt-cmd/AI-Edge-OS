@@ -555,6 +555,14 @@ router.post("/ai-visibility/query-scan/:clientId", async (req, res): Promise<voi
   try {
     const svc     = new AiQueryScanService(pool, db);
     const summary = await svc.execute({ clientId: clientCheck.clientId, userId, triggerSource });
+    if (summary.status === "preflight_failed") {
+      res.status(422).json({
+        error:            "preflight_failed",
+        preflightFailure: summary.preflightFailure,
+        message:          `Cannot execute scan: ${summary.preflightFailure}`,
+      });
+      return;
+    }
     res.status(201).json(summary);
   } catch (err) {
     console.error("[ai-visibility] query-scan error:", err);

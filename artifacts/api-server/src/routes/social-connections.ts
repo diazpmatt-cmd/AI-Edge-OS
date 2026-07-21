@@ -966,6 +966,7 @@ router.get("/social-connections/google-business-status", async (req, res) => {
 router.post("/social-connections/google-business-refresh-location", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const { forceLocationName }: { forceLocationName?: string } = req.body ?? {};
 
   const [row] = await db.select().from(socialConnectionsTable)
     .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
@@ -1114,7 +1115,86 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     const locs = locData.locations ?? [];
     if (!locs.length) { res.status(400).json({ error: "No locations found on this Google Business Profile account." }); return; }
 
-    const primaryLoc = locs[0];
+    // ── Explicit caller selection (from 409 location-picker UI) ─────────────────
+    // If the client sends { forceLocationName: "locations/..." }, validate it
+    // against the live list and use it immediately — skipping all heuristics.
+    if (forceLocationName) {
+      const forced = locs.find(l => l.name === forceLocationName) ?? null;
+      if (!forced) {
+        res.status(400).json({ error: `Requested location "${forceLocationName}" was not found on this account. Please refresh and try again.` });
+        return;
+      }
+      console.log(`[GBP-REFRESH-LOCATION] explicit selection by user — "${forced.title}" (${forceLocationName})`);
+      const sa2 = forced.storefrontAddress;
+      const address2 = sa2
+        ? [...(sa2.addressLines ?? []), [sa2.locality, sa2.administrativeArea].filter(Boolean).join(", "), sa2.postalCode].filter(Boolean).join(", ")
+        : null;
+      const accountId2 = account.name.split("/").pop() ?? null;
+      const locationId2 = forced.name.split("/").pop() ?? null;
+      const cooldownUntil2 = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+      const updatedMeta2 = {
+        ...metadata, accountName: account.name, accountId: accountId2,
+        locationName: forced.name, locationId: locationId2, locationTitle: forced.title,
+        address: address2, primaryLocationTitle: forced.title,
+        locationNames: locs.map((l: { title: string }) => l.title),
+        gbpAccountsFound: acctData.accounts!.length, gbpLocationsFound: locs.length,
+        cachedAt: now.toISOString(), cooldownUntil: cooldownUntil2, verifiedByApi: true,
+      };
+      await db.update(socialConnectionsTable)
+        .set({ metadata: JSON.stringify(updatedMeta2), updatedAt: now })
+        .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
+      console.log(`[GBP-REFRESH-LOCATION] userId=${userId} explicit "${forced.title}" locationId=${locationId2} verifiedByApi=true`);
+      res.json({ ok: true, accountName: account.name, accountId: accountId2, locationName: forced.name, locationId: locationId2, locationTitle: forced.title, address: address2, locationCount: locs.length, cooldownUntil: cooldownUntil2 });
+      return;
+    }
+
+    // ── Identity-preserving location selection ──────────────────────────────────
+    // Priority: (1) existing verified locationName still in API result,
+    //           (2) normalized title match against stored locationTitle,
+    //           (3) single location (unambiguous),
+    //           (4) 409 location_selection_required — ask the caller to pick.
+    const existingLocationName: string | null = (metadata.locationName as string) ?? null;
+    const existingVerifiedByApi: boolean      = metadata.verifiedByApi === true;
+    const existingTitle: string               = ((metadata.locationTitle ?? metadata.primaryLocationTitle) as string) ?? "";
+    const normalizeT = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    let primaryLoc: typeof locs[0] | null = null;
+
+    if (existingLocationName && existingVerifiedByApi) {
+      primaryLoc = locs.find(l => l.name === existingLocationName) ?? null;
+      if (primaryLoc) {
+        console.log(`[GBP-REFRESH-LOCATION] identity preserved — verified "${primaryLoc.title}" (${existingLocationName}) still in API`);
+      } else {
+        console.warn(`[GBP-REFRESH-LOCATION] verified location "${existingLocationName}" not returned by API — falling back to title match`);
+      }
+    }
+
+    // Title-match fallback ONLY when verifiedByApi was true (location may have been renamed/recreated).
+    // If the previous selection was NOT verified, the stored title could be wrong — do NOT use it.
+    if (!primaryLoc && existingVerifiedByApi && existingTitle) {
+      const normStored = normalizeT(existingTitle);
+      primaryLoc = locs.find(l => normalizeT(l.title) === normStored) ?? null;
+      if (primaryLoc) console.log(`[GBP-REFRESH-LOCATION] verified title match — selected "${primaryLoc.title}"`);
+    }
+
+    if (!primaryLoc && locs.length === 1) {
+      primaryLoc = locs[0];
+      console.log(`[GBP-REFRESH-LOCATION] single location — auto-selecting "${primaryLoc.title}"`);
+    }
+
+    if (!primaryLoc) {
+      console.warn(`[GBP-REFRESH-LOCATION] ambiguous: ${locs.length} locations, cannot auto-select — returning 409`);
+      const fmtAddr = (sa: typeof locs[0]["storefrontAddress"]) => sa
+        ? [...(sa.addressLines ?? []), [sa.locality, sa.administrativeArea].filter(Boolean).join(", "), sa.postalCode].filter(Boolean).join(", ")
+        : null;
+      res.status(409).json({
+        error:     "location_selection_required",
+        message:   `${locs.length} Google Business Profile locations found. Please select the one for your business.`,
+        locations: locs.map(l => ({ name: l.name, title: l.title, address: fmtAddr(l.storefrontAddress) })),
+      });
+      return;
+    }
+
     // Extract IDs from resource names (e.g. "accounts/123456789" → "123456789")
     const accountId = account.name.split("/").pop() ?? null;
     const locationId = primaryLoc.name.split("/").pop() ?? null;
@@ -1131,24 +1211,25 @@ router.post("/social-connections/google-business-refresh-location", async (req, 
     const cooldownUntil = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
     const updatedMeta = {
       ...metadata,
-      accountName: account.name,
+      accountName:          account.name,
       accountId,
-      locationName: primaryLoc.name,
+      locationName:         primaryLoc.name,
       locationId,
-      locationTitle: primaryLoc.title,
+      locationTitle:        primaryLoc.title,
       address,
       primaryLocationTitle: primaryLoc.title,
-      locationNames: locs.map((l: { title: string }) => l.title),
-      gbpAccountsFound: acctData.accounts!.length,
-      gbpLocationsFound: locs.length,
-      cachedAt: now.toISOString(),
+      locationNames:        locs.map((l: { title: string }) => l.title),
+      gbpAccountsFound:     acctData.accounts!.length,
+      gbpLocationsFound:    locs.length,
+      cachedAt:             now.toISOString(),
       cooldownUntil,
+      verifiedByApi:        true,
     };
     await db.update(socialConnectionsTable)
       .set({ metadata: JSON.stringify(updatedMeta), updatedAt: now })
       .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
 
-    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} location="${primaryLoc.title}" address="${address}" locationId=${locationId} cooldownUntil=${cooldownUntil}`);
+    console.log(`[GBP-REFRESH-LOCATION] userId=${userId} location="${primaryLoc.title}" locationId=${locationId} verifiedByApi=true cooldownUntil=${cooldownUntil}`);
     res.json({ ok: true, accountName: account.name, accountId, locationName: primaryLoc.name, locationId, locationTitle: primaryLoc.title, address, locationCount: locs.length, cooldownUntil });
   } catch (e: any) {
     console.error("[GBP-REFRESH-LOCATION] error:", e?.message);
@@ -1618,6 +1699,24 @@ router.post("/social-connections/youtube/test-upload", async (req, res) => {
       } else {
         const errBody = await r.text().catch(() => "");
         console.warn("[YOUTUBE-TEST-UPLOAD] token refresh failed:", r.status, errBody.slice(0, 200));
+        if (errBody.includes("invalid_grant")) {
+          try {
+            let m: Record<string, any> = {};
+            try { if (conn.metadata) m = JSON.parse(conn.metadata); } catch {}
+            m.needsReauthorization = true;
+            m.invalidGrantAt = new Date().toISOString();
+            await db.update(socialConnectionsTable)
+              .set({ metadata: JSON.stringify(m), updatedAt: new Date() })
+              .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+          } catch {}
+          res.status(401).json({
+            ok: false,
+            error: "YouTube authorization has expired and cannot be refreshed. Please reconnect your YouTube channel.",
+            needsReauthorization: true,
+            statusLabel: "needs_reauthorization",
+          });
+          return;
+        }
       }
     } catch (e: any) { console.warn("[YOUTUBE-TEST-UPLOAD] refresh attempt error:", e?.message); }
   }
@@ -1799,6 +1898,23 @@ router.get("/social-connections/youtube/channel-info", async (req, res) => {
       } else {
         const errBody = await r.text().catch(() => "");
         console.warn("[YOUTUBE-CHANNEL-INFO] token refresh failed:", r.status, errBody.slice(0, 200));
+        if (errBody.includes("invalid_grant")) {
+          try {
+            let m: Record<string, any> = {};
+            try { if (conn.metadata) m = JSON.parse(conn.metadata); } catch {}
+            m.needsReauthorization = true;
+            m.invalidGrantAt = new Date().toISOString();
+            await db.update(socialConnectionsTable)
+              .set({ metadata: JSON.stringify(m), updatedAt: new Date() })
+              .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "youtube")));
+          } catch {}
+          res.status(401).json({
+            error: "YouTube authorization has expired. Please reconnect your YouTube channel.",
+            needsReauthorization: true,
+            statusLabel: "needs_reauthorization",
+          });
+          return;
+        }
       }
     } catch (e: any) { console.warn("[YOUTUBE-CHANNEL-INFO] refresh attempt error:", e?.message); }
   }

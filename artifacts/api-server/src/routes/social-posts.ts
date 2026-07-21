@@ -829,9 +829,20 @@ async function publishToGBP(
       }));
       await saveCooldownAndThrow(locRes, locBody, "Business Information API", "mybusinessbusinessinformation.googleapis.com");
     }
-    const locData  = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
-    const location = locData.locations?.[0];
-    if (!location) throw new Error("No GBP location found — verify the account has at least one verified location.");
+    const locData = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
+    const allLocs = locData.locations ?? [];
+    if (!allLocs.length) throw new Error("No GBP location found — verify the account has at least one verified location.");
+    // Identity-preserving selection: title match first, then single-location auto, then ambiguous error
+    const _storedTitle = ((metadata.locationTitle ?? metadata.primaryLocationTitle ?? "") as string);
+    const _normT = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let location: { name: string; title: string } | null =
+      _storedTitle ? (allLocs.find(l => _normT(l.title) === _normT(_storedTitle)) ?? null) : null;
+    if (!location && allLocs.length === 1) location = allLocs[0];
+    if (!location) throw new Error(
+      `GBP location selection ambiguous: ${allLocs.length} locations found ` +
+      `(${allLocs.map(l => l.title).join(", ")}). ` +
+      `Please refresh your GBP location in Settings → Social Connections.`,
+    );
 
     // Verify location title matches the expected business before caching
     const EXPECTED_TITLE_RE = /bed\s+bugs.{0,10}beyond/i;
@@ -905,8 +916,11 @@ async function publishToGBP(
     body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
   }
 
-  // 3 — create local post (direct fetch — no silent retry on 429)
-  const postUrl = `https://mybusinessposts.googleapis.com/v1/${locationResourceName}/localPosts`;
+  // 3 — create local post via GBP v4 API
+  // mybusinessposts.googleapis.com/v1 was decommissioned; use mybusiness.googleapis.com/v4
+  // v4 requires the full account-prefixed path: accounts/{id}/locations/{id}/localPosts
+  const fullV4PostPath = `${accountResourceName}/${locationResourceName}`;
+  const postUrl        = `https://mybusiness.googleapis.com/v4/${fullV4PostPath}/localPosts`;
   console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));
   const postRes = await fetch(postUrl, {
     method:  "POST",
@@ -928,7 +942,7 @@ async function publishToGBP(
         retryAfterHeader: postRes.headers.get("retry-after"),
         httpStatus:       postRes.status,
         endpoint:         "Local Posts API",
-        service:          "mybusinessposts.googleapis.com",
+        service:          "mybusiness.googleapis.com",
       });
       const cleanMeta = stripLegacyCooldownFields(metadata);
       try {

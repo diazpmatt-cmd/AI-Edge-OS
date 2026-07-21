@@ -160,7 +160,7 @@ async function fetchReviews(
 async function fetchLocationCount(
   accessToken: string,
   accountName: string,
-): Promise<{ count: number | null; error: string | null }> {
+): Promise<{ count: number | null; titles: string[] | null; error: string | null }> {
   const url = `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name,title&pageSize=100`;
   try {
     const r = await fetch(url, {
@@ -170,13 +170,14 @@ async function fetchLocationCount(
     const body = await r.text();
     if (!r.ok) {
       console.warn(`[GBP-LIVE] locationCount HTTP ${r.status}: ${body.slice(0, 300)}`);
-      return { count: null, error: `HTTP ${r.status}` };
+      return { count: null, titles: null, error: `HTTP ${r.status}` };
     }
     const parsed = JSON.parse(body) as LocationsListResponse;
-    return { count: (parsed.locations ?? []).length, error: null };
+    const locs   = parsed.locations ?? [];
+    return { count: locs.length, titles: locs.map(l => l.title ?? "").filter(Boolean), error: null };
   } catch (e: any) {
     console.warn(`[GBP-LIVE] locationCount exception: ${e?.message}`);
-    return { count: null, error: e?.message ?? "fetch_error" };
+    return { count: null, titles: null, error: e?.message ?? "fetch_error" };
   }
 }
 
@@ -237,11 +238,18 @@ export async function fetchGbpLiveData(conn: GbpTokenConn): Promise<GbpLiveData>
 
   console.log(`[GBP-LIVE] fetching live data for locationName=${conn.locationName}`);
 
+  // v4 legacy APIs (media, reviews) require the FULL account-prefixed path:
+  //   accounts/{accountId}/locations/{locationId}
+  // conn.locationName may be short form "locations/{id}" or already full form.
+  const fullV4Path = conn.locationName.startsWith("accounts/")
+    ? conn.locationName
+    : `${conn.accountName}/${conn.locationName}`;
+
   // Fire all four sub-requests in parallel for speed
   const [biResult, mediaResult, reviewsResult, locCountResult] = await Promise.all([
     fetchBusinessInfo(token, conn.locationName),
-    fetchMedia(token, conn.locationName),
-    fetchReviews(token, conn.locationName),
+    fetchMedia(token, fullV4Path),
+    fetchReviews(token, fullV4Path),
     fetchLocationCount(token, conn.accountName),
   ]);
 
@@ -309,7 +317,8 @@ export async function fetchGbpLiveData(conn: GbpTokenConn): Promise<GbpLiveData>
   }
 
   // ── Duplicate listings ──
-  const locationCount = locCountResult.count;
+  const locationCount  = locCountResult.count;
+  const locationTitles = locCountResult.titles;
 
   const liveData: GbpLiveData = {
     primaryCategory,
@@ -328,6 +337,7 @@ export async function fetchGbpLiveData(conn: GbpTokenConn): Promise<GbpLiveData>
     reviewResponseRate,
     reviewsLast30Days,
     locationCount,
+    locationTitles,
     errors,
   };
 

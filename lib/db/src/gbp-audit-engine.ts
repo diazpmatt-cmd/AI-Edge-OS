@@ -92,8 +92,9 @@ export interface GbpLiveData {
   reviewResponseRate:   number | null;  // fraction 0-1 of reviews with owner reply
   reviewsLast30Days:    number | null;  // reviews created in the last 30 days
 
-  // Account Management API — location count for duplicate-listings heuristic
-  locationCount: number | null;
+  // Account Management API — location count + titles for duplicate-listings heuristic
+  locationCount:  number | null;
+  locationTitles: string[] | null;
 
   // Which sub-API calls failed (allows per-check data_pending fallback)
   errors: {
@@ -705,25 +706,81 @@ function checkSuspensionFree(def: CheckDefinition, live: GbpLiveData | null): Gb
   };
 }
 
+function normalizeTitle(t: string): string {
+  return t.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function checkDuplicateListings(def: CheckDefinition, live: GbpLiveData | null): GbpCheckResult {
   if (!live || live.errors.duplicates) {
     return pending(def, live?.errors.duplicates ? `API error: ${live.errors.duplicates}` : undefined);
   }
   if (live.locationCount === null) return pending(def);
   const count = live.locationCount;
-  const pass  = count <= 1;
-  const warn  = count <= 4;
+
+  if (count === 0) {
+    return {
+      category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+      evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+      status: "data_pending", score: 0,
+      currentValue: "No locations found",
+      recommendation: null,
+      rawData: { locationCount: count },
+    };
+  }
+
+  if (count === 1) {
+    return {
+      category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+      evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+      status: "pass", score: def.maxScore,
+      currentValue: "Single location — no duplicates detected",
+      recommendation: null,
+      rawData: { locationCount: count },
+    };
+  }
+
+  // Multiple locations — use title comparison to distinguish real duplicates from
+  // separate businesses on the same account (e.g. owner manages 2 distinct companies).
+  if (live.locationTitles && live.locationTitles.length >= 2) {
+    const seen = new Set<string>();
+    let hasDuplicate = false;
+    for (const t of live.locationTitles) {
+      const n = normalizeTitle(t);
+      if (seen.has(n)) { hasDuplicate = true; break; }
+      seen.add(n);
+    }
+    if (!hasDuplicate) {
+      return {
+        category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+        evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+        status: "pass", score: def.maxScore,
+        currentValue: `${count} locations — distinct businesses, no duplicates detected`,
+        recommendation: null,
+        rawData: { locationCount: count, locationTitles: live.locationTitles },
+      };
+    }
+    const warn = count <= 4;
+    return {
+      category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
+      evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
+      status: warn ? "warning" : "fail",
+      score:  warn ? Math.round(def.maxScore / 2) : 0,
+      currentValue: `${count} locations with duplicate names on this account`,
+      recommendation: `${count} locations found with similar names. Verify none are duplicate listings for the same address, which can dilute your ranking.`,
+      rawData: { locationCount: count, locationTitles: live.locationTitles },
+    };
+  }
+
+  // No titles — fall back to raw-count heuristic
+  const pass = count <= 1;
+  const warn = count <= 4;
   return {
     category: def.category, checkKey: def.checkKey, checkLabel: def.checkLabel,
     evidenceType: "gbp_api", priority: def.priority, maxScore: def.maxScore,
-    status:       count === 0 ? "data_pending" : pass ? "pass" : warn ? "warning" : "fail",
-    score:        count === 0 ? 0 : pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
-    currentValue: count === 0
-      ? "No locations found"
-      : count === 1
-      ? "Single location — no duplicates detected"
-      : `${count} locations on this account`,
-    recommendation: (count === 0 || pass)
+    status:       pass ? "pass" : warn ? "warning" : "fail",
+    score:        pass ? def.maxScore : warn ? Math.round(def.maxScore / 2) : 0,
+    currentValue: `${count} locations on this account`,
+    recommendation: pass
       ? null
       : `${count} locations found on this GBP account. Verify none are duplicate listings for the same address, which can dilute your ranking.`,
     rawData: { locationCount: count },

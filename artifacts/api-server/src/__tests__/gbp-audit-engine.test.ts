@@ -55,7 +55,8 @@ const fullLiveData: GbpLiveData = {
   hasVideo: true,
   reviewResponseRate: 0.95,
   reviewsLast30Days: 4,
-  locationCount: 1,
+  locationCount:  1,
+  locationTitles: ["Bed Bugs & Beyond"],
   errors: {},
 };
 
@@ -323,8 +324,42 @@ describe("evaluateGbpAudit — Phase 2 full live data", () => {
     expect(check.score).toBe(2);
   });
 
-  it("duplicate_listings warns with locationCount = 3", () => {
-    const live: GbpLiveData = { ...fullLiveData, locationCount: 3 };
+  it("duplicate_listings warns with locationCount = 3 (no titles — raw-count heuristic)", () => {
+    const live: GbpLiveData = { ...fullLiveData, locationCount: 3, locationTitles: null };
+    const result = evaluateGbpAudit(minimalInput, live);
+    const check = result.checks.find(c => c.checkKey === "duplicate_listings")!;
+    expect(check.status).toBe("warning");
+  });
+
+  it("duplicate_listings passes with 2 distinct titles (different businesses, no duplicate)", () => {
+    const live: GbpLiveData = {
+      ...fullLiveData, locationCount: 2,
+      locationTitles: ["Bed Bugs & Beyond", "MainStreet Web Co."],
+    };
+    const result = evaluateGbpAudit(minimalInput, live);
+    const check = result.checks.find(c => c.checkKey === "duplicate_listings")!;
+    expect(check.status).toBe("pass");
+    expect(check.score).toBe(2);
+    expect(check.currentValue).toMatch(/distinct businesses/);
+  });
+
+  it("duplicate_listings warns with 2 identical titles (real duplicate)", () => {
+    const live: GbpLiveData = {
+      ...fullLiveData, locationCount: 2,
+      locationTitles: ["Bed Bugs & Beyond", "Bed Bugs & Beyond"],
+    };
+    const result = evaluateGbpAudit(minimalInput, live);
+    const check = result.checks.find(c => c.checkKey === "duplicate_listings")!;
+    expect(check.status).toBe("warning");
+    expect(check.score).toBeLessThan(2);
+  });
+
+  it("duplicate_listings treats same title with different casing/punctuation as duplicate", () => {
+    const live: GbpLiveData = {
+      ...fullLiveData, locationCount: 2,
+      // Stripping non-alphanum and lowercasing makes these identical: "bed bugs beyond"
+      locationTitles: ["Bed Bugs & Beyond", "BED BUGS & BEYOND"],
+    };
     const result = evaluateGbpAudit(minimalInput, live);
     const check = result.checks.find(c => c.checkKey === "duplicate_listings")!;
     expect(check.status).toBe("warning");

@@ -59,6 +59,15 @@ function getAiModel() {
   return gw(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
 }
 
+/**
+ * Canonical OpenAI API-key resolver for direct fetch calls (image generation).
+ * Priority: AI_INTEGRATIONS_OPENAI_API_KEY (Replit-managed) → OPENAI_API_KEY (direct).
+ * Never log the returned value.
+ */
+export function resolveOpenAiApiKey(): string {
+  return process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+}
+
 const DEFAULT_SERVICE_AREAS = [
   "Foley, AL", "Daphne, AL", "Loxley, AL", "Fairhope, AL", "Gulf Shores, AL",
   "Orange Beach, AL", "Summerdale, AL", "Spanish Fort, AL", "Elberta, AL",
@@ -1575,6 +1584,24 @@ const SIGNED_URL_EXPIRY_SECONDS     = 15 * 60; // 15 minutes
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Build a server-side structured image prompt from authorized inputs.
+ * User-supplied creative brief is supplemental and never overrides the
+ * authorized service name or geography.
+ */
+export function buildImagePrompt(opts: {
+  serviceDisplayName: string;
+  city?: string;
+  creativeBrief?: string;
+}): string {
+  const parts: string[] = [
+    `Professional pest control marketing image for ${opts.serviceDisplayName}`,
+  ];
+  if (opts.city?.trim()) parts.push(`serving ${opts.city.trim()}`);
+  if (opts.creativeBrief?.trim()) parts.push(`Creative brief: ${opts.creativeBrief.trim()}`);
+  return parts.join(". ");
+}
+
 function parseBucketPath(privateDir: string): { bucketName: string; bucketPrefix: string } {
   const withoutScheme = privateDir.replace(/^gs:\/\//, "");
   const firstSlash    = withoutScheme.indexOf("/");
@@ -1589,6 +1616,22 @@ function makeObjectPath(bucketPrefix: string, imageId: string): string {
 }
 
 // ── POST /auto-content/generate-image ────────────────────────────────────────
+// Security controls (preflight order — provider is never called on any rejection):
+//   [S1]  Authentication
+//   [T1]  Tenant resolution
+//   [S2]  API key fail-fast
+//   [T2]  Post/draft ownership — postId must belong to authenticated user
+//   [SVC] Service authorization — serviceKey validated against active registry
+//   [S3]  Prompt / effectivePrompt validation
+//   [S4]  Prohibited-claim enforcement
+//   [S5]  Size allow-list
+//   [I1]  Idempotency: completed→200, pending→202, failed→atomic UPDATE then retry
+//   [R1]  Rate-limit: counts pending + completed + failed (all provider-boundary attempts)
+//   [P1]  Pending record INSERT (or reuse of I1 failed-row)
+//   [S6]  Provider call with AbortController timeout
+//   [S7–S10] Response / buffer / format guards
+//   [S13] Private object storage
+//   [S14] DB commit
 
 router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   // [S1] Authentication
@@ -1605,28 +1648,92 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   }
   const clientId = resolved.client.id;
 
-  // [S2] API key fail-fast
+  // [S2] API key fail-fast — canonical resolver (AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY)
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-  const apiKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "";
+  const apiKey  = resolveOpenAiApiKey();
   if (!apiKey) {
     res.status(503).json({ error: "Image generation not available (provider not configured)" });
     return;
   }
 
-  const { prompt, postId, size = "1024x1024", idempotencyKey, serviceKey } = req.body as {
+  const {
+    prompt, postId, size = "1024x1024",
+    idempotencyKey, serviceKey, city,
+  } = req.body as {
     prompt?: string; postId?: string; size?: string;
-    idempotencyKey?: string; serviceKey?: string;
+    idempotencyKey?: string; serviceKey?: string; city?: string;
   };
 
-  // [S3] Prompt validation
-  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
-  if (prompt.trim().length > PROMPT_MAX_LENGTH) {
+  // [T2] Post/draft ownership — if a postId is provided, verify it belongs to this user.
+  // Must run BEFORE any provider interaction; provider is never called on 404/403.
+  if (postId) {
+    const postRow = await pool.query<{ id: string; user_id: string }>(
+      `SELECT id, user_id FROM social_posts WHERE id = $1 LIMIT 1`,
+      [postId],
+    );
+    if (postRow.rows.length === 0) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+    if (postRow.rows[0]!.user_id !== userId) {
+      res.status(403).json({ error: "Forbidden: post does not belong to this user" });
+      return;
+    }
+  }
+
+  // [SVC] Service authorization — validate serviceKey against tenant's active registry.
+  // Unknown keys (not in registry) are also rejected (not-generatable by convention).
+  let resolvedServiceDisplayName: string | undefined;
+  if (serviceKey) {
+    const svcError = resolved.context.registry.validateTopic(serviceKey);
+    if (svcError !== null) {
+      const errorCode = svcError === "SERVICE_COMING_SOON" ? "service_coming_soon"
+                      : svcError === "SERVICE_DISABLED"    ? "service_disabled"
+                      : "service_not_generatable";
+      res.status(422).json({
+        error: errorCode,
+        message: `Service "${serviceKey}" is not available for image generation`,
+      });
+      return;
+    }
+    // Also reject keys not present in the registry at all —
+    // validateTopic allows unknown topics by design (forward-compat), but
+    // image generation must be explicitly authorized via a known serviceId.
+    const svcRecord = matchServiceByTopic(serviceKey);
+    if (!svcRecord) {
+      res.status(422).json({
+        error: "unknown_service",
+        message: `Service "${serviceKey}" is not recognized`,
+      });
+      return;
+    }
+    resolvedServiceDisplayName = svcRecord.displayName;
+  }
+
+  // [S3] Build effective prompt — server-side when serviceKey is provided; user prompt
+  // is treated as supplemental creative direction only and never overrides the service.
+  let effectivePrompt: string;
+  if (serviceKey && resolvedServiceDisplayName) {
+    effectivePrompt = buildImagePrompt({
+      serviceDisplayName: resolvedServiceDisplayName,
+      city: city?.trim(),
+      creativeBrief: prompt?.trim(),
+    });
+  } else {
+    effectivePrompt = prompt?.trim() ?? "";
+  }
+
+  if (!effectivePrompt) {
+    res.status(400).json({ error: "prompt or serviceKey is required" });
+    return;
+  }
+  if (effectivePrompt.length > PROMPT_MAX_LENGTH) {
     res.status(400).json({ error: `prompt must be ≤${PROMPT_MAX_LENGTH} characters` });
     return;
   }
 
-  // [S4] Prohibited-claim enforcement
-  if (isProhibitedImagePrompt(prompt)) {
+  // [S4] Prohibited-claim enforcement on the effective (server-built) prompt
+  if (isProhibitedImagePrompt(effectivePrompt)) {
     res.status(400).json({ error: "prompt contains a prohibited service or claim" });
     return;
   }
@@ -1638,7 +1745,11 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     return;
   }
 
-  // [I1] Idempotency — return existing record if (client_id, idempotency_key) matches
+  // [I1] Idempotency — resolve or claim existing record.
+  // completed → 200 (no provider call); pending → 202 (in-flight);
+  // failed → atomic UPDATE to 'pending' so the same row/id is reused (avoids unique-
+  //   constraint collision on re-INSERT) and the rate-limit row count remains accurate.
+  let reuseImageId: string | null = null;
   if (idempotencyKey) {
     const existing = await pool.query<{ id: string; status: string; storage_key: string | null }>(
       `SELECT id, status, storage_key
@@ -1657,15 +1768,46 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
         res.status(202).json({ ok: false, generationId: row.id, status: "pending", idempotent: true });
         return;
       }
-      // status === "failed" — fall through to allow fresh attempt
+      // status === "failed" — atomically reset to 'pending' for retry.
+      // Using WHERE id=$1 AND status='failed' prevents a race where two threads
+      // both try to claim the same failed row.
+      const updated = await pool.query<{ id: string }>(
+        `UPDATE content_image_generations
+            SET status = 'pending', failure_reason = NULL, updated_at = NOW()
+          WHERE id = $1 AND status = 'failed'
+          RETURNING id`,
+        [row.id],
+      );
+      if (updated.rows.length > 0) {
+        reuseImageId = updated.rows[0]!.id;
+      } else {
+        // Another concurrent thread already claimed this row — re-read current status
+        const recheck = await pool.query<{ id: string; status: string; storage_key: string | null }>(
+          `SELECT id, status, storage_key FROM content_image_generations WHERE id = $1`,
+          [row.id],
+        );
+        const recheckRow = recheck.rows[0];
+        if (recheckRow?.status === "completed") {
+          res.json({ ok: true, generationId: recheckRow.id, storageKey: recheckRow.storage_key, idempotent: true });
+          return;
+        }
+        if (recheckRow?.status === "pending") {
+          res.status(202).json({ ok: false, generationId: recheckRow.id, status: "pending", idempotent: true });
+          return;
+        }
+        res.status(409).json({ error: "Concurrent retry conflict — please use a new idempotency key" });
+        return;
+      }
     }
   }
 
-  // [R1] Rate-limit check — count billable (pending + completed) in the past hour
+  // [R1] Rate-limit — count ALL provider-boundary attempts (pending + completed + failed)
+  // in the past hour. Failed retries via the same idempotency key reuse the same row
+  // (from [I1] above) so they do not inflate the count beyond 1 per key.
   const windowStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const rateRow     = await pool.query<{ count: string }>(
     `SELECT COUNT(*) AS count FROM content_image_generations
-      WHERE client_id = $1 AND created_at > $2 AND status IN ('pending', 'completed')`,
+      WHERE client_id = $1 AND created_at > $2 AND status IN ('pending', 'completed', 'failed')`,
     [clientId, windowStart],
   );
   const recentCount = Number(rateRow.rows[0]?.count ?? 0);
@@ -1673,38 +1815,44 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     res.status(429).json({
       error: "rate_limit_exceeded",
       message: `Maximum ${IMAGE_RATE_LIMIT_PER_HOUR} image generations per hour`,
+      limit: IMAGE_RATE_LIMIT_PER_HOUR,
+      windowSeconds: 3600,
       retryAfter: 3600,
     });
     return;
   }
 
-  // [S14] / [P1] Insert 'pending' record BEFORE calling the provider
-  const imageId = randomUUID();
-  try {
-    await pool.query(
-      `INSERT INTO content_image_generations
-         (id, client_id, user_id, post_id, service_key, provider, model,
-          prompt, size, status, idempotency_key, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, '')`,
-      [imageId, clientId, userId, postId ?? null, serviceKey ?? null,
-       "openai", "gpt-image-1", prompt.trim(), size, idempotencyKey ?? null],
-    );
-  } catch (insertErr: any) {
-    // Concurrent duplicate hit the unique index — return the existing record
-    if (insertErr?.code === "23505" && idempotencyKey) {
-      const dup = await pool.query<{ id: string; status: string }>(
-        `SELECT id, status FROM content_image_generations
-          WHERE client_id = $1 AND idempotency_key = $2 LIMIT 1`,
-        [clientId, idempotencyKey],
+  // [P1] Insert 'pending' record BEFORE calling the provider.
+  // If we are retrying a failed row ([I1] above), the row already exists as 'pending' —
+  // skip the INSERT and reuse reuseImageId.
+  const imageId = reuseImageId ?? randomUUID();
+  if (!reuseImageId) {
+    try {
+      await pool.query(
+        `INSERT INTO content_image_generations
+           (id, client_id, user_id, post_id, service_key, provider, model,
+            prompt, size, status, idempotency_key, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, '')`,
+        [imageId, clientId, userId, postId ?? null, serviceKey ?? null,
+         "openai", "gpt-image-1", effectivePrompt, size, idempotencyKey ?? null],
       );
-      if (dup.rows.length > 0) {
-        res.status(202).json({ ok: false, generationId: dup.rows[0]!.id, status: dup.rows[0]!.status, idempotent: true });
-        return;
+    } catch (insertErr: any) {
+      // Concurrent duplicate hit the unique index — return the existing record
+      if (insertErr?.code === "23505" && idempotencyKey) {
+        const dup = await pool.query<{ id: string; status: string }>(
+          `SELECT id, status FROM content_image_generations
+            WHERE client_id = $1 AND idempotency_key = $2 LIMIT 1`,
+          [clientId, idempotencyKey],
+        );
+        if (dup.rows.length > 0) {
+          res.status(202).json({ ok: false, generationId: dup.rows[0]!.id, status: dup.rows[0]!.status, idempotent: true });
+          return;
+        }
       }
+      console.error("[auto-content/generate-image] pending insert error:", insertErr?.message);
+      res.status(500).json({ error: "Failed to initialize generation record" });
+      return;
     }
-    console.error("[auto-content/generate-image] pending insert error:", insertErr?.message);
-    res.status(500).json({ error: "Failed to initialize generation record" });
-    return;
   }
 
   // Helper: mark record as failed (fire-and-forget safe)
@@ -1730,7 +1878,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
         "Content-Type":  "application/json",
         "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
       },
-      body:   JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
+      body:   JSON.stringify({ model: "gpt-image-1", prompt: effectivePrompt, size, n: 1 }),
       signal: controller.signal,
     });
   } catch (fetchErr: any) {

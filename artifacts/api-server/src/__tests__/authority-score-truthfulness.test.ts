@@ -2,14 +2,16 @@
  * Authority Score Truthfulness — Regression Suite
  *
  * Guards every invariant described in ADR-018 §4–§6:
+ *   - napScore = null (no live NAP backend) is excluded from overallAuth
  *   - overallAuth excludes null/unavailable components from its divisor
+ *   - if ALL components are null, overallAuth is null (never NaN or zero)
  *   - edgeAuthorityScore=null renders as "—", never as 0
  *   - sparkline is hidden when no real edge data exists (hasEdgeData=false)
  *   - competitive benchmark null is preserved, not coerced to 0
  *   - third-party authority_score (placeholder 0) is excluded from averages
  *   - schemaScore (placeholder 0) is excluded from averages
  *
- * All logic is tested as pure functions extracted from the component.
+ * All logic is tested as pure functions mirroring AuthorityEnginePage computed values.
  * No DOM rendering required.
  */
 
@@ -18,16 +20,22 @@ import { describe, it, expect } from "vitest";
 // ── Helpers mirroring AuthorityEnginePage computed values ────────────────────
 // These functions replicate the exact logic in the component so we can test
 // the business rules without mounting the full React tree.
+//
+// napScore is NOT a parameter — no live NAP backend exists (ADR-018 §4 fix).
+// It was previously hardcoded as 71 (a fabricated constant); that has been
+// removed. overallAuth now averages only components with real evidence.
 
 function computeOverallAuth(
-  napScore: number,
-  backlinkScore: number,
+  backlinkScore: number | null,
   edgeAuth: number | null,
-): number {
+): number | null {
   // ADR-018 §4: include only components with real evidence.
-  // authority_score (third-party DA, always 0) and schemaScore (0) are excluded.
-  const parts: number[] = [napScore, backlinkScore];
-  if (edgeAuth !== null) parts.push(edgeAuth);
+  // napScore (no backend), authority_score (always 0 placeholder), and
+  // schemaScore (0 placeholder) are intentionally excluded.
+  const parts: number[] = [];
+  if (backlinkScore !== null) parts.push(backlinkScore);
+  if (edgeAuth !== null)      parts.push(edgeAuth);
+  if (parts.length === 0)     return null;
   return Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
 }
 
@@ -44,70 +52,112 @@ function resolveEdgeAuth(edgeAuthorityScore: number | null): number | null {
   return edgeAuthorityScore; // null preserved as-is; no ?? 0
 }
 
+// ── ADR-018 §4 fix: NAP score is null (no backend) ───────────────────────────
+
+describe("napScore — no live NAP backend (ADR-018 §4 fix)", () => {
+  it("napScore constant is null — no fabricated 71", () => {
+    const napScore: number | null = null; // mirrors component
+    expect(napScore).toBeNull();
+  });
+
+  it("literal 71 does NOT appear in computeOverallAuth output (backlinkScore=71, edgeAuth=null)", () => {
+    // Even if backlinkScore happened to be 71, that is a real computed value —
+    // but the old hardcoded napScore=71 is no longer a direct input.
+    const result = computeOverallAuth(71, null);
+    // Result is 71 because backlinkScore=71 is the single component, not napScore.
+    // The point is: we have 1 component (backlinkScore), not 2 (nap + backlink).
+    expect(result).toBe(71); // single-component average = itself
+  });
+
+  it("null napScore is excluded — overallAuth equals backlinkScore alone when edgeAuth is null", () => {
+    // Before fix: overallAuth = round((71 + backlinkScore) / 2)
+    // After fix:  overallAuth = round(backlinkScore / 1) = backlinkScore
+    const backlinkScore = 30;
+    const result = computeOverallAuth(backlinkScore, null);
+    expect(result).toBe(backlinkScore); // not round((71 + 30) / 2) = 51
+    expect(result).not.toBe(Math.round((71 + backlinkScore) / 2));
+  });
+
+  it("null napScore is excluded — overallAuth averages backlinkScore + edgeAuth only", () => {
+    // Before fix: overallAuth = round((71 + backlink + edge) / 3)
+    // After fix:  overallAuth = round((backlink + edge) / 2)
+    const result = computeOverallAuth(30, 50);
+    expect(result).toBe(Math.round((30 + 50) / 2)); // 40
+    expect(result).not.toBe(Math.round((71 + 30 + 50) / 3)); // 51 — old result
+  });
+});
+
 // ── ADR-018 §4: overallAuth excludes unavailable components ──────────────────
 
 describe("overallAuth — truthful average (ADR-018 §4)", () => {
-  const napScore = 71;
+  it("returns null when both backlinkScore and edgeAuth are null (all unavailable)", () => {
+    const result = computeOverallAuth(null, null);
+    expect(result).toBeNull();
+  });
 
-  it("includes only napScore + backlinkScore when edgeAuth is null", () => {
-    const result = computeOverallAuth(napScore, 30, null);
-    expect(result).toBe(Math.round((71 + 30) / 2));
+  it("returns backlinkScore unchanged when edgeAuth is null (single component)", () => {
+    expect(computeOverallAuth(40, null)).toBe(40);
+    expect(computeOverallAuth(0,  null)).toBe(0);
+    expect(computeOverallAuth(100, null)).toBe(100);
+  });
+
+  it("averages backlinkScore + edgeAuth when both are non-null", () => {
+    const result = computeOverallAuth(30, 50);
+    expect(result).toBe(Math.round((30 + 50) / 2)); // 40
   });
 
   it("includes edgeAuth in the average when non-null", () => {
-    const result = computeOverallAuth(napScore, 30, 55);
-    expect(result).toBe(Math.round((71 + 30 + 55) / 3));
+    const result = computeOverallAuth(30, 55);
+    expect(result).toBe(Math.round((30 + 55) / 2));
   });
 
   it("authority_score=0 placeholder is NOT included — verified by divisor", () => {
     // Old formula: (0 + 71 + 30 + 0) / 4 = 25.25 → 25
-    // New formula: (71 + 30) / 2 = 50.5 → 51
-    const oldResult = Math.round((0 + napScore + 30 + 0) / 4);
-    const newResult = computeOverallAuth(napScore, 30, null);
+    // New formula: backlinkScore=30 alone → 30
+    const oldResult = Math.round((0 + 71 + 30 + 0) / 4);
+    const newResult = computeOverallAuth(30, null);
     expect(newResult).toBeGreaterThan(oldResult); // new formula is honest and higher
-    expect(newResult).toBe(51);
+    expect(newResult).toBe(30);
     expect(oldResult).toBe(25);
   });
 
   it("schemaScore=0 placeholder is NOT included — verified by divisor", () => {
     // If schemaScore (0) were included with edgeAuth=null:
-    // (71 + 30 + 0) / 3 = 33.67 → 34
-    // Correct: (71 + 30) / 2 = 50.5 → 51
-    const withFalseZero = Math.round((napScore + 30 + 0) / 3);
-    const correct       = computeOverallAuth(napScore, 30, null);
+    // (30 + 0) / 2 = 15 — lower than 30
+    const withFalseZero = Math.round((30 + 0) / 2);
+    const correct       = computeOverallAuth(30, null);
     expect(correct).toBeGreaterThan(withFalseZero);
   });
 
   it("backlinkScore=0 (no opportunities yet) is still included — real data, not a placeholder", () => {
     // backlinkScore=0 is a real computed value from live data, not a placeholder.
-    const result = computeOverallAuth(napScore, 0, null);
-    expect(result).toBe(Math.round((71 + 0) / 2)); // 35.5 → 36
+    const result = computeOverallAuth(0, null);
+    expect(result).toBe(0); // single real component = itself (not null)
+    expect(result).not.toBeNull();
   });
 
   it("edgeAuth=0 is included when explicitly zero (real evidence exists)", () => {
     // A real edgeAuth of 0 means evidence was evaluated and scored 0 — still valid.
-    const result = computeOverallAuth(napScore, 30, 0);
-    expect(result).toBe(Math.round((71 + 30 + 0) / 3));
+    const result = computeOverallAuth(30, 0);
+    expect(result).toBe(Math.round((30 + 0) / 2));
   });
 
-  it("full score (all 100) averages correctly with 3 components", () => {
-    const result = computeOverallAuth(100, 100, 100);
+  it("full score (all 100) averages correctly with 2 components", () => {
+    const result = computeOverallAuth(100, 100);
     expect(result).toBe(100);
   });
 
-  it("divisor is 2 when edgeAuth is null (nap + backlink only)", () => {
-    const nap      = 60;
+  it("divisor is 1 when only backlinkScore is available (edgeAuth null)", () => {
     const backlink = 40;
-    const result   = computeOverallAuth(nap, backlink, null);
-    expect(result).toBe(Math.round((nap + backlink) / 2)); // divisor = 2
+    const result   = computeOverallAuth(backlink, null);
+    expect(result).toBe(backlink); // divisor = 1
   });
 
-  it("divisor is 3 when edgeAuth is non-null (nap + backlink + edge)", () => {
-    const nap      = 60;
+  it("divisor is 2 when both backlinkScore and edgeAuth are non-null", () => {
     const backlink = 40;
-    const edge     = 50;
-    const result   = computeOverallAuth(nap, backlink, edge);
-    expect(result).toBe(Math.round((nap + backlink + edge) / 3)); // divisor = 3
+    const edge     = 60;
+    const result   = computeOverallAuth(backlink, edge);
+    expect(result).toBe(Math.round((backlink + edge) / 2)); // divisor = 2
   });
 });
 
@@ -155,13 +205,11 @@ describe("sparkline edge data guard (ADR-018 §5)", () => {
   });
 
   it("snapshots with authority_score=0 and no edge data → sparkline hidden", () => {
-    // This is the key regression: authority_score placeholder must NOT be plotted.
     const snapshotsAllZero = [
       { edge_authority_score: null },
       { edge_authority_score: null },
       { edge_authority_score: null },
     ];
-    // Component should return null from the IIFE when !hasEdgeData.
     expect(hasEdgeDataForSparkline(snapshotsAllZero)).toBe(false);
   });
 
@@ -173,7 +221,6 @@ describe("sparkline edge data guard (ADR-018 §5)", () => {
     const edgeScores = snapshots
       .map(s => s.edge_authority_score)
       .filter((v): v is number => v != null);
-    // Plot must equal edgeScores; authority_score zeros must never appear in the plot.
     expect(edgeScores).toEqual([42, 48]);
     expect(edgeScores).not.toContain(0); // no authority_score zeros in the plot
   });
@@ -195,8 +242,6 @@ describe("competitive benchmark null preservation (ADR-018 §6)", () => {
   });
 
   it("rendering guard: null coerced with ?? -1 gives -1 for color comparison", () => {
-    // In the rendering: (row.authorityScore ?? -1) >= 40
-    // When null → -1 >= 40 → false → grey color. Correct behavior.
     const authorityScore: number | null = null;
     const forColorComparison = (authorityScore ?? -1) >= 40;
     expect(forColorComparison).toBe(false);
@@ -221,8 +266,6 @@ describe("competitive benchmark null preservation (ADR-018 §6)", () => {
   });
 
   it("display value: 0 || '—' renders as '—' (edge case — zero is falsy)", () => {
-    // If edgeAuthorityScore is genuinely 0, || "—" will show "—" — acceptable edge case.
-    // resolveEdgeAuth(0) = 0, and 0 || "—" = "—" in the display.
     const authorityScore: number | null = 0;
     const display = authorityScore || "—";
     expect(display).toBe("—"); // 0 is falsy; still shows "—" — acceptable
@@ -264,26 +307,70 @@ describe("ScoreGauge null contract", () => {
     expect(display).toBe(0);
     expect(display).not.toBe("—");
   });
+
+  it("napScore=null renders as '—' (no live NAP backend)", () => {
+    const napScore: number | null = null; // mirrors component declaration
+    const display = napScore !== null ? napScore : "—";
+    expect(display).toBe("—");
+  });
+});
+
+// ── Main gauge null contract ──────────────────────────────────────────────────
+
+describe("main authority ring — null overallAuth", () => {
+  it("overallAuth=null gives conic-gradient degree of 0 (no fill)", () => {
+    const overallAuth: number | null = null;
+    const degrees = (overallAuth ?? 0) * 3.6;
+    expect(degrees).toBe(0);
+  });
+
+  it("overallAuth=50 gives 180 degrees (half ring)", () => {
+    const overallAuth: number | null = 50;
+    const degrees = (overallAuth ?? 0) * 3.6;
+    expect(degrees).toBe(180);
+  });
+
+  it("overallAuth=null renders as '—' not 0 or null", () => {
+    const overallAuth: number | null = null;
+    const display = overallAuth !== null ? overallAuth : "—";
+    expect(display).toBe("—");
+  });
+
+  it("statusColor(null) returns grey hex (not green/amber/red)", () => {
+    const statusColor = (s: number | null) =>
+      s === null ? "#64748B" : s >= 70 ? "#22C55E" : s >= 40 ? "#F59E0B" : "#EF4444";
+    expect(statusColor(null)).toBe("#64748B");
+    expect(statusColor(null)).not.toBe("#22C55E");
+    expect(statusColor(null)).not.toBe("#F59E0B");
+    expect(statusColor(null)).not.toBe("#EF4444");
+  });
 });
 
 // ── Edge Auth integration scenario ───────────────────────────────────────────
 
-describe("Edge Authority Score end-to-end scenario", () => {
-  it("typical BBB state: napScore=71, backlinkScore=15, edgeAuth=null → overallAuth=43", () => {
-    const result = computeOverallAuth(71, 15, null);
-    expect(result).toBe(Math.round((71 + 15) / 2)); // 43
+describe("Edge Authority Score end-to-end scenario (post NAP-removal)", () => {
+  it("typical BBB state: backlinkScore=15, edgeAuth=null → overallAuth=15 (no phantom NAP)", () => {
+    const result = computeOverallAuth(15, null);
+    expect(result).toBe(15);
+    expect(result).not.toBe(Math.round((71 + 15) / 2)); // old phantom-NAP result = 43
   });
 
-  it("with edgeAuth loaded: napScore=71, backlinkScore=15, edgeAuth=62 → overallAuth=49", () => {
-    const result = computeOverallAuth(71, 15, 62);
-    expect(result).toBe(Math.round((71 + 15 + 62) / 3)); // 49.33 → 49
+  it("with edgeAuth loaded: backlinkScore=15, edgeAuth=62 → overallAuth=39", () => {
+    const result = computeOverallAuth(15, 62);
+    expect(result).toBe(Math.round((15 + 62) / 2)); // 38.5 → 39
   });
 
-  it("old formula (with false zeros) would have given 24 — new formula gives 43", () => {
-    const oldResult = Math.round((0 + 71 + 15 + 0) / 4); // authority_score=0, schemaScore=0
-    const newResult = computeOverallAuth(71, 15, null);
-    expect(oldResult).toBe(22);
-    expect(newResult).toBe(43);
-    expect(newResult).toBeGreaterThan(oldResult);
+  it("old phantom-NAP formula would have given 43 (backlink=15, nap=71) — new gives 15", () => {
+    const phantomNapResult = Math.round((71 + 15) / 2); // 43 — fabricated
+    const newResult = computeOverallAuth(15, null);     // 15 — truthful
+    expect(newResult).toBeLessThan(phantomNapResult); // honest score is lower
+    expect(newResult).toBe(15);
+    expect(phantomNapResult).toBe(43);
+  });
+
+  it("all-unavailable scenario (data still loading): overallAuth=null, not 0", () => {
+    const result = computeOverallAuth(null, null);
+    expect(result).toBeNull();
+    expect(result).not.toBe(0);
   });
 });

@@ -223,6 +223,49 @@ describe("[S2] Provider API key configuration", () => {
   });
 });
 
+// ── S2 extended: resolveOpenAiApiKey canonical/alias precedence ───────────────
+//
+// resolveOpenAiApiKey() mirrors the actual exported helper in auto-content.ts.
+// We test the pure key-resolution logic here without touching env vars directly.
+
+function resolveOpenAiApiKey(
+  canonicalKey: string | undefined,
+  legacyKey: string | undefined,
+): string {
+  return canonicalKey ?? legacyKey ?? "";
+}
+
+describe("[S2] resolveOpenAiApiKey — canonical/alias precedence", () => {
+  it("returns canonical AI_INTEGRATIONS_OPENAI_API_KEY when both are set", () => {
+    const result = resolveOpenAiApiKey("canonical-key", "legacy-key");
+    expect(result).toBe("canonical-key");
+  });
+
+  it("falls back to OPENAI_API_KEY when canonical is absent", () => {
+    const result = resolveOpenAiApiKey(undefined, "legacy-key");
+    expect(result).toBe("legacy-key");
+  });
+
+  it("returns empty string when both are absent (triggers fail-fast 503)", () => {
+    const result = resolveOpenAiApiKey(undefined, undefined);
+    expect(result).toBe("");
+    expect(!result).toBe(true); // empty string is falsy → 503 path
+  });
+
+  it("empty canonical does not fall through to legacy (empty string is not undefined)", () => {
+    // ?? only falls through on null/undefined, not empty string.
+    // Callers that set the env var to "" still hit the fail-fast.
+    const result = resolveOpenAiApiKey("", "legacy-key");
+    expect(result).toBe("");
+    expect(!result).toBe(true); // "" is falsy → 503 path
+  });
+
+  it("legacy key alone is sufficient to pass the fail-fast check", () => {
+    const result = resolveOpenAiApiKey(undefined, "sk-legacy");
+    expect(!result).toBe(false); // non-empty → no 503
+  });
+});
+
 // ── S6: Timeout constant ─────────────────────────────────────────────────────
 
 describe("[S6] Timeout constant", () => {

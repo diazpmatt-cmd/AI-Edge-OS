@@ -428,19 +428,29 @@ export default function AuthorityEnginePage() {
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
-  const napScore       = 71;  // placeholder — no NAP backend yet
+  // NAP score: no live NAP-scanning backend exists. Do not substitute a constant.
+  // Excluded from overallAuth until a real value is available (ADR-018 §4).
+  const napScore: number | null = null;
   const liveItems      = liveOpps?.items ?? [];
-  const backlinkScore  = computeBacklinkScore(liveItems);
+  // backlinkScore is only included when liveOpps has actually loaded (not null).
+  // When liveOpps is null the page is still loading; a 0 from an empty array is not
+  // evidence — it is absence of data.
+  const backlinkScore: number | null = liveOpps !== null ? computeBacklinkScore(liveItems) : null;
   // Edge Authority Score from the competitive summary (loaded when backlinks tab is active).
   // When null (not yet loaded or no qualifying evidence), excluded from the average per ADR-018.
   // authority_score (third-party DA, always 0 placeholder) and schemaScore (0 placeholder)
   // are intentionally excluded — do not include unavailable values in aggregates (ADR-018 §4).
   const edgeAuth  = competitiveSummary?.client?.edgeAuthorityScore ?? null;
-  const _authParts: number[] = [napScore, backlinkScore];
-  if (edgeAuth !== null) _authParts.push(edgeAuth);
-  const overallAuth = Math.round(_authParts.reduce((a, b) => a + b, 0) / _authParts.length);
+  const _authParts: number[] = [];
+  if (backlinkScore !== null) _authParts.push(backlinkScore);
+  if (edgeAuth !== null)      _authParts.push(edgeAuth);
+  // If no components are available, overallAuth is null — never NaN or zero.
+  const overallAuth: number | null = _authParts.length > 0
+    ? Math.round(_authParts.reduce((a, b) => a + b, 0) / _authParts.length)
+    : null;
 
-  const statusColor = (s: number) => s >= 70 ? "#22C55E" : s >= 40 ? "#F59E0B" : "#EF4444";
+  const statusColor = (s: number | null) =>
+    s === null ? "#64748B" : s >= 70 ? "#22C55E" : s >= 40 ? "#F59E0B" : "#EF4444";
 
   const filteredDirs = catFilter === "all" ? CITATION_DIRS : CITATION_DIRS.filter(d => d.category === catFilter);
 
@@ -757,7 +767,7 @@ export default function AuthorityEnginePage() {
               <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                 <div style={{
                   width: 88, height: 88, borderRadius: "50%",
-                  background: `conic-gradient(${statusColor(overallAuth)} ${overallAuth * 3.6}deg, rgba(255,255,255,0.04) 0deg)`,
+                  background: `conic-gradient(${statusColor(overallAuth)} ${(overallAuth ?? 0) * 3.6}deg, rgba(255,255,255,0.04) 0deg)`,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   boxShadow: `0 0 24px ${statusColor(overallAuth)}30`,
                 }}>
@@ -765,7 +775,7 @@ export default function AuthorityEnginePage() {
                     width: 68, height: 68, borderRadius: "50%", background: "#030612",
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                   }}>
-                    <span style={{ fontSize: 24, fontWeight: 900, color: statusColor(overallAuth), lineHeight: 1 }}>{overallAuth}</span>
+                    <span style={{ fontSize: 24, fontWeight: 900, color: statusColor(overallAuth), lineHeight: 1 }}>{overallAuth !== null ? overallAuth : "—"}</span>
                     <span style={{ fontSize: 9, color: "rgba(148,163,184,0.6)" }}>/100</span>
                   </div>
                 </div>
@@ -789,7 +799,7 @@ export default function AuthorityEnginePage() {
                 <ScoreGauge score={citScore}      color={statusColor(citScore)}      label="Citations"
                   sub={`${listed}/${CITATION_DIRS.length} listed`} />
                 <ScoreGauge score={napScore}      color={statusColor(napScore)}      label="NAP Consistency"
-                  sub="4 of 7 verified" />
+                  sub="No live data (backend pending)" />
                 <ScoreGauge score={backlinkScore} color={statusColor(backlinkScore)} label="Backlinks"
                   sub={liveItems.length === 0 ? "No data yet" : `${wonCount + pursuingCount} active · ${liveItems.length} opps`} />
                 <ScoreGauge score={0}             color="#EF4444"                    label="Schema.org"
@@ -1101,7 +1111,7 @@ export default function AuthorityEnginePage() {
                   { label: "Opportunities",         value: liveItems.length,            color: "#22C55E" },
                   { label: "Won / Pursuing",         value: wonCount + pursuingCount,    color: "#38BDF8" },
                   { label: "Target (competitive)",   value: "20+",                       color: "#F59E0B" },
-                  { label: "Opportunity Score",      value: `${backlinkScore}/100`,      color: statusColor(backlinkScore) },
+                  { label: "Opportunity Score",      value: backlinkScore !== null ? `${backlinkScore}/100` : "—",  color: statusColor(backlinkScore) },
                 ].map(s => (
                   <div key={s.label} style={{
                     background: "rgba(11,22,41,0.8)", border: `1px solid ${s.color}20`,

@@ -1379,13 +1379,17 @@ export async function migrateSchema(): Promise<void> {
 
   // Idempotency: unique per (client_id, idempotency_key) when key is provided.
   // Partial index allows multiple NULL idempotency_key rows (no-key requests).
+  // IF NOT EXISTS handles idempotent re-runs; unexpected errors (permission denied,
+  // connection failure, syntax) propagate and abort startup — do not swallow them.
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS cig_client_idempotency_uniq
       ON content_image_generations(client_id, idempotency_key)
       WHERE idempotency_key IS NOT NULL;
-  `).catch(() => {});
+  `);
 
   // ALTER TABLE guards — add columns absent on existing installs.
+  // ADD COLUMN IF NOT EXISTS is idempotent in PG 9.6+; errors other than "already
+  // exists" (permission, connection, syntax) propagate and abort startup.
   const alterGuards = [
     `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS client_id       TEXT`,
     `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS service_key     TEXT`,
@@ -1399,10 +1403,11 @@ export async function migrateSchema(): Promise<void> {
     `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS completed_at    TIMESTAMPTZ`,
     `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
     // Allow NULL on image_url — storage_key is now the canonical reference.
+    // DROP NOT NULL on an already-nullable column is a no-op in PG (no error).
     `ALTER TABLE content_image_generations ALTER COLUMN image_url DROP NOT NULL`,
   ];
   for (const stmt of alterGuards) {
-    await pool.query(stmt).catch(() => {});
+    await pool.query(stmt);
   }
 
   console.log("[SCHEMA] Core schema migration complete");

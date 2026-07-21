@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-19
+Last updated: 2026-07-21
 
 ---
 
@@ -174,6 +174,26 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 4. Defer live provider collection, prompt monitoring, rank tracking, and external execution until their security and tenant boundaries are approved.
 
 ---
+
+---
+
+## AI Visibility V1 — COMPLETE (GO — 2026-07-21)
+
+All six implementation phases complete. DP-001 live-provider smoke test passed in production.
+
+| Phase | Status | Description |
+|---|---|---|
+| C9R-1 | ✅ COMPLETE | Assessment + architecture docs + roadmap |
+| C9R-2 | ✅ COMPLETE | Execution service + persistence + API route |
+| C9R-3 | ✅ COMPLETE | Frontend Opportunities tab + Coverage panel |
+| C9R-4 | ✅ COMPLETE | Real AI query provider (OpenAI gpt-4o-mini) + evidence panel |
+| C9R-5 | ✅ COMPLETE | Scheduled monitoring + run history (ADR-016) |
+| C9R-6 | ✅ COMPLETE | Review intelligence tenant safety (6 discrepancies resolved) |
+| C9R-7 | ✅ COMPLETE | Release acceptance + DP-001 PASS |
+
+**DP-001 evidence:** Scan `d2e7852c-8278-4be3-aa44-5f9af0297a47`, `2026-07-21T01:45:06Z` UTC, HTTP 201, 8/8 queries `success=true`, 0% citation baseline (measured), trigger_source=manual, 0 errors.
+
+Scheduling is disabled by default. Enable when approved: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true }` + `AI_VISIBILITY_SCHEDULER_ENABLED=true`.
 
 ---
 

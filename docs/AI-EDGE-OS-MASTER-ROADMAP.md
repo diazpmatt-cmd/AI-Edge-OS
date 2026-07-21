@@ -1,6 +1,6 @@
 # AI Edge OS — Master Roadmap
 
-**Last updated:** 2026-07-20
+**Last updated:** 2026-07-21
 **Deployed commit:** `e44141e5` (July 19, 2026)
 
 ---
@@ -109,8 +109,8 @@ International expansion is explicitly out of scope. Progression to adjacent mark
 | C9R-5 | ✅ COMPLETE | Scheduled monitoring + run history (ADR-016) |
 | C9R-6 | ✅ COMPLETE | Review intelligence tenant safety |
 
-**C9R-7:** ✅ COMPLETE — AI Visibility V1 Release Acceptance: **CONDITIONAL GO** (2026-07-20)
-**C9R-7 Session 2:** Query-context root causes 1–5 diagnosed and fixed. DP-001 ready to re-execute after republish.
+**C9R-7:** ✅ COMPLETE — AI Visibility V1 Release Acceptance: **GO** (DP-001 PASS 2026-07-21)
+Scan `d2e7852c`, 8/8 queries `success=true`, `trigger_source=manual`, HTTP 201 — all 12 acceptance criteria satisfied.
 
 See [AI-VISIBILITY-V1-ROADMAP.md](AI-VISIBILITY-V1-ROADMAP.md) for full phase specs.
 
@@ -424,7 +424,7 @@ These completion percentages are final and must not be modified by future docume
 | BBB Autopilot (A–C) | ✅ Complete (pilot disabled by default) |
 | GBP Engine Phase 1–3 | ✅ Complete (Phase 2 pilot blocked by GCP quota) |
 | Authority & Backlink Engine (C8R-1–C8R-10) | ✅ V1 Complete (ADR-015) |
-| AI Visibility V1 (C9R-1–C9R-7) | ✅ 100% — CONDITIONAL GO |
+| AI Visibility V1 (C9R-1–C9R-7) | ✅ 100% — **GO** (DP-001 PASS 2026-07-21) |
 | Competitor Intelligence (P1–P7) | ✅ V1 Complete |
 | Local Presence Engine | ✅ Foundation complete |
 | AI Traffic Attribution (WS-1) | ⬜ Not started |

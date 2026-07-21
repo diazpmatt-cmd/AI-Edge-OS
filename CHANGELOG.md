@@ -6,6 +6,25 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### AI Visibility V1 — Production Accepted (GO) (2026-07-21)
+
+#### Release
+
+- **DP-001 live-provider smoke test passed.** Scan ID `d2e7852c-8278-4be3-aa44-5f9af0297a47`, executed `2026-07-21T01:45:06.719Z` UTC, HTTP 201, 16,147 ms. 8/8 queries `success: true`; trigger_source `manual`; 0 errors.
+- All queries contained real BBB service names (bed bug inspection, roach control, fumigation, etc.), real Baldwin County geographies, and mixed intent templates. No generic fallback content. 0% citation rate is a valid measured baseline.
+- Decision upgraded from **CONDITIONAL GO** → **GO**. All 12 acceptance criteria satisfied. AI Visibility V1 is fully production-accepted.
+- Scheduling remains disabled by default. May be enabled with explicit operator approval: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }` + `AI_VISIBILITY_SCHEDULER_ENABLED=true`.
+
+#### Query-context corrections (sessions 1–3, 2026-07-20–21, confirmed resolved in production)
+
+- Fixed `queryActiveServiceIds` querying nonexistent `service_id` column → now `queryActiveServiceKeys()` on `service_key`.
+- Added `queryClientRow()` UUID-based fallback to `clients.service_areas` when `local_presence_profiles` lookup returns null (legacy `client_id='default'` row).
+- Fail-closed query generation: returns `[]` and raises `preflight_failed` (HTTP 422) when services or geographies are empty — no silent "local services" / "my area" fallbacks.
+- Service-priority round-robin selection: services iterated in `sort_order ASC` per round; template index keyed on `result.length` for intent diversity; no alpha-sort cap skew.
+- `displayServiceName()` map for natural phrasing ("roach control" not "roaches", "rodent control" not "rodents", etc.).
+- Idempotent schema repair: `local_presence_profiles.client_id` reassigned from `'default'` to real UUID on server restart.
+- 95 tests across `ai-query-generation-canonical.test.ts`, `ai-query-scan-preflight.test.ts`, `ai-visibility-query-provider.test.ts` — all pass.
+
 ### DAB-3C — Isolated Private Bridge Activation Composition (2026-07-14)
 
 #### Added

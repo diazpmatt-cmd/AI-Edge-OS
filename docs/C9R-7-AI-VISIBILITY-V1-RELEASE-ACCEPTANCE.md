@@ -9,9 +9,9 @@
 
 ## Decision
 
-## **CONDITIONAL GO**
+## **GO — PRODUCTION ACCEPTED**
 
-AI Visibility V1 implementation is accepted for production deployment. One bounded deployment prerequisite must be satisfied before enabling scheduling or announcing the feature to users: a controlled live-provider smoke test confirming the OpenAI API key is functional in the production environment. No architecture blockers, no tenant-safety gaps, no release-blocking defects were found.
+AI Visibility V1 implementation is fully accepted for production. All 12 acceptance criteria passed. DP-001 live-provider smoke test executed and passed on 2026-07-21 (scan ID `d2e7852c-8278-4be3-aa44-5f9af0297a47`, 8/8 queries `success=true`, trigger_source=manual). No architecture blockers, no tenant-safety gaps, no release-blocking defects. Scheduling may now be enabled with explicit operator approval.
 
 ---
 

@@ -336,25 +336,34 @@ All constraints satisfied: 4 distinct intent templates (2 slots each), 8 distinc
 
 ---
 
-## Next Activity
+## DP-001 Final Pass — Production Accepted (2026-07-21)
 
-**Deploy sessions 1–3 and execute one authenticated DP-001 re-scan.**
+**Status: GO — AI Visibility V1 is fully production-accepted.**
 
-**Pre-deployment checklist:**
-1. Confirm `OPENAI_API_KEY` (real key) present in production secrets
-2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` removed (done in prior cycle)
-3. Republish to pick up all three sessions' code changes
-4. On first restart, `schema-migrate.ts` repair automatically updates `local_presence_profiles.client_id` from `'default'` to the real UUID (idempotent — safe to redeploy)
+### Evidence
 
-**Smoke test pass criteria:**
-- `status: "completed"`
-- Queries contain real BBB service names (e.g. "bed bug inspection", "roach control") — not "local services" or bare pest plurals
-- Queries contain real Baldwin County geographies (e.g. "Foley, AL") — not "my area"
-- Multiple distinct intent templates present (not all "best…")
-- No single service appears in all 8 query slots
+| Field | Value |
+|---|---|
+| Execution timestamp | `2026-07-21T01:45:06.719Z` UTC |
+| HTTP response | 201 Created |
+| Latency | 16,147 ms |
+| Scan ID | `d2e7852c-8278-4be3-aa44-5f9af0297a47` |
+| Queries executed | 8 / 8 (`success: true` on all) |
+| Citation rate | 0 % (valid measured baseline — no AI citation yet) |
+| trigger_source | `manual` |
+| Errors | 0 |
 
-**Once DP-001 re-scan passes:**
-1. Announce AI Visibility V1 to authorized users
-2. Optionally enable scheduler: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }`
-3. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in production secrets + restart API Server
-4. Monitor `[ai-visibility-scheduler]` log lines
+All 8 queries used real BBB service names, real Baldwin County geographies, and mixed intent templates. No generic fallback content. No prohibited phrases.
+
+### Decision
+
+**CONDITIONAL GO → GO.** All 12 acceptance criteria passed. All five DP-001 query-context root causes (sessions 1–3) confirmed resolved in production.
+
+### Next Phase
+
+**Content Autopilot** — keyword and content-gap discovery, Baldwin County demand signals, competitor-topic intelligence, content planning / approval / publishing / performance feedback, tenant isolation, fail-closed.
+
+Scheduling of AI Visibility scans may now be enabled when approved:
+1. `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }`
+2. Set `AI_VISIBILITY_SCHEDULER_ENABLED=true` in production secrets + restart API Server
+3. Monitor `[ai-visibility-scheduler]` log lines

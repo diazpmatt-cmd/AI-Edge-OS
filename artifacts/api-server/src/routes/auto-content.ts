@@ -1524,7 +1524,48 @@ router.get("/auto-content/registry", (_req, res) => {
 // Phase 2: AI image generation via gpt-image-1.
 // Accepts { prompt, postId?, size? }, generates an image, uploads it to Object
 // Storage, persists a record, and returns { ok, generationId, imageUrl }.
+//
+// Security controls implemented:
+//   [S1]  Authentication gate (Clerk; 401 on missing session)
+//   [S2]  API key fail-fast (503 if not configured; empty Bearer never sent)
+//   [S3]  Prompt length limit (≤500 chars; 400 on excess)
+//   [S4]  Prohibited-claim block (termites / whole-home heat-treatment; 400)
+//   [S5]  Valid size allow-list (400 on unknown)
+//   [S6]  Request timeout (30 s AbortController; 504 on breach)
+//   [S7]  Response-body size cap (12 MB JSON; 502 on excess)
+//   [S8]  Decoded-buffer size cap (8 MB; 502 on excess)
+//   [S9]  PNG magic-bytes validation (502 on mismatch)
+//   [S10] Failure cleanup (GCS object deleted if DB insert fails)
+//   [S11] Secret never logged, never in response, never in migrations
+//   [S12] Model hardcoded to gpt-image-1; provider URL from env var only
+//   [S13] images stored as private objects (no public ACL set)
+//   [S14] Provenance persisted (user_id, post_id, prompt, size, image_url)
+
+// PNG magic bytes: 137 80 78 71 13 10 26 10
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Prompt keywords that are prohibited by the BB&B service registry contract.
+// "termites" and whole-home heat treatment are hard-locked (generationAllowed:false
+// and prohibitedClaims respectively) and must never appear in AI image prompts.
+const PROHIBITED_IMAGE_PROMPT_KEYWORDS = [
+  "termite",
+  "whole-home heat",
+  "whole home heat",
+  "heat treatment",
+];
+
+export function isProhibitedImagePrompt(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return PROHIBITED_IMAGE_PROMPT_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+const IMAGE_GENERATION_TIMEOUT_MS  = 30_000;   // 30 s provider timeout
+const IMAGE_RESPONSE_MAX_BYTES      = 12 * 1024 * 1024; // 12 MB JSON cap
+const IMAGE_BUFFER_MAX_BYTES        = 8  * 1024 * 1024; // 8 MB decoded cap
+const PROMPT_MAX_LENGTH             = 500;
+
 router.post("/auto-content/generate-image", async (req, res) => {
+  // [S1] Authentication gate
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -1532,44 +1573,90 @@ router.post("/auto-content/generate-image", async (req, res) => {
     prompt?: string; postId?: string; size?: string;
   };
 
+  // [S3] Prompt required and length-limited
   if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
+  if (prompt.trim().length > PROMPT_MAX_LENGTH) {
+    res.status(400).json({ error: `prompt must be ≤${PROMPT_MAX_LENGTH} characters` });
+    return;
+  }
 
+  // [S4] Prohibited-claim block
+  if (isProhibitedImagePrompt(prompt)) {
+    res.status(400).json({ error: "prompt contains a prohibited service or claim" });
+    return;
+  }
+
+  // [S5] Valid size allow-list
   const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
   if (!validSizes.includes(size)) {
     res.status(400).json({ error: `size must be one of: ${validSizes.join(", ")}` });
     return;
   }
 
-  try {
-    // ── Call gpt-image-1 via Replit-managed OpenAI integration ──────────────
-    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-    const apiKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "";
+  // [S2] API key fail-fast — never send an empty Bearer token
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const apiKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "";
+  if (!apiKey) {
+    res.status(503).json({ error: "Image generation not available (provider not configured)" });
+    return;
+  }
 
-    const aiRes = await fetch(`${baseURL}/images/generations`, {
-      method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
-    });
+  let gcsFilePath: string | null = null;
+
+  try {
+    // [S6] Request timeout via AbortController
+    const controller  = new AbortController();
+    const timeoutId   = setTimeout(() => controller.abort(), IMAGE_GENERATION_TIMEOUT_MS);
+
+    let aiRes: Response;
+    try {
+      // [S12] Model hardcoded; URL from trusted env var only
+      aiRes = await fetch(`${baseURL}/images/generations`, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
+        },
+        body: JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!aiRes.ok) {
-      const errText = await aiRes.text().catch(() => "");
-      console.error("[auto-content/generate-image] OpenAI error:", aiRes.status, errText);
+      console.error("[auto-content/generate-image] provider error:", aiRes.status);
       res.status(502).json({ error: "Image generation failed" });
       return;
     }
 
-    const aiJson = await aiRes.json() as { data?: Array<{ b64_json?: string }> };
+    // [S7] Response-body size cap — read raw text and check length before parsing
+    const rawText = await aiRes.text();
+    if (Buffer.byteLength(rawText, "utf8") > IMAGE_RESPONSE_MAX_BYTES) {
+      res.status(502).json({ error: "Provider response too large" });
+      return;
+    }
+
+    const aiJson = JSON.parse(rawText) as { data?: Array<{ b64_json?: string }> };
     const b64    = aiJson.data?.[0]?.b64_json;
     if (!b64) { res.status(502).json({ error: "No image data returned from AI" }); return; }
 
-    // ── Upload buffer to Object Storage ──────────────────────────────────────
-    const imageBuffer  = Buffer.from(b64, "base64");
-    const imageId      = randomUUID();
-    const privateDir   = process.env.PRIVATE_OBJECT_DIR ?? "";
+    // [S8] Decoded-buffer size cap
+    const imageBuffer = Buffer.from(b64, "base64");
+    if (imageBuffer.length > IMAGE_BUFFER_MAX_BYTES) {
+      res.status(502).json({ error: "Generated image exceeds maximum allowed size" });
+      return;
+    }
 
+    // [S9] PNG magic-bytes validation
+    if (imageBuffer.length < PNG_MAGIC.length || !imageBuffer.subarray(0, 8).equals(PNG_MAGIC)) {
+      res.status(502).json({ error: "Provider returned unexpected image format" });
+      return;
+    }
+
+    // ── Upload buffer to Object Storage ──────────────────────────────────────
+    const imageId    = randomUUID();
+    const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
     if (!privateDir) {
       res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
       return;
@@ -1582,20 +1669,37 @@ router.post("/auto-content/generate-image", async (req, res) => {
     const bucketPrefix  = firstSlash === -1 ? "" : withoutScheme.slice(firstSlash + 1);
     const objectPath    = `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
 
+    // [S13] Objects stored as private (no public ACL)
     const gcsFile = objectStorageClient.bucket(bucketName).file(objectPath);
     await gcsFile.save(imageBuffer, { contentType: "image/png", resumable: false });
+    gcsFilePath = objectPath; // tracked for cleanup in case DB insert fails
 
-    // ── Persist generation record ─────────────────────────────────────────────
+    // [S14] Provenance persisted — user_id, post_id, prompt, size, image_url
     const imageUrl = `/objects/generated-images/${imageId}.png`;
     await pool.query(
       `INSERT INTO content_image_generations (id, user_id, post_id, prompt, size, image_url)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [imageId, userId, postId ?? null, prompt.trim(), size, imageUrl],
     );
+    gcsFilePath = null; // DB committed — nothing to clean up
 
     res.json({ ok: true, generationId: imageId, imageUrl });
+
   } catch (err: any) {
-    console.error("[auto-content/generate-image] error:", err);
+    // [S10] Failure cleanup: delete orphaned GCS object if DB insert failed
+    if (gcsFilePath) {
+      const privateDir    = process.env.PRIVATE_OBJECT_DIR ?? "";
+      const withoutScheme = privateDir.replace(/^gs:\/\//, "");
+      const firstSlash    = withoutScheme.indexOf("/");
+      const bucketName    = firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash);
+      objectStorageClient.bucket(bucketName).file(gcsFilePath).delete({ ignoreNotFound: true })
+        .catch(() => {});
+    }
+    if (err?.name === "AbortError") {
+      res.status(504).json({ error: "Image generation timed out" });
+      return;
+    }
+    console.error("[auto-content/generate-image] error:", err?.message ?? "unknown");
     res.status(500).json({ error: err?.message ?? "Image generation failed" });
   }
 });

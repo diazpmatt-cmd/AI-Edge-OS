@@ -433,6 +433,9 @@ export * from "./dataforseo-backlink-adapter";
 export * from "./backlink-scheduler-config";
 export * from "./backlink-history";
 
+// Edge Authority Score — AI Edge OS proprietary scoring (ADR-016)
+export * from "./edge-authority-score";
+
 // Competitor Intelligence Engine — canonical entity layer
 export * from "./competitor-types";
 export * from "./competitor-extractor";

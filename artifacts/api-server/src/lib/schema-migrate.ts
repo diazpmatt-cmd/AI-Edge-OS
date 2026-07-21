@@ -1125,6 +1125,13 @@ export async function migrateSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS referring_domain_count INTEGER NOT NULL DEFAULT 0;
   `).catch(() => { /* ignore if table doesn't exist yet — CREATE TABLE above will include them next run */ });
 
+  // Edge Authority Score column — nullable; null means "Unavailable" (no real provider data yet).
+  // Must never be back-filled from fixture/demo data.
+  await pool.query(`
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS edge_authority_score INTEGER;
+  `).catch(() => { /* safe to ignore if table missing — CREATE TABLE handles on first run */ });
+
   // ── GBP Audit Engine ───────────────────────────────────────────────────────
   // Canonical production DDL for GBP audit tables.  This is the single source
   // of truth for CREATE TABLE.  If you add a column to lib/db/src/schema/gbp-audit.ts
@@ -1327,6 +1334,24 @@ export async function migrateSchema(): Promise<void> {
     WHEN undefined_column THEN NULL;
     WHEN SQLSTATE '42703' THEN NULL;
     END $$;
+  `);
+
+  // ── Content Autopilot Phase 2: AI Image Generations ─────────────────────
+  // One row per AI-generated image. Tracks the prompt, size, object-storage
+  // path, and which social post (if any) the image was generated for.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_image_generations (
+      id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    TEXT        NOT NULL,
+      post_id    TEXT,
+      prompt     TEXT        NOT NULL,
+      size       TEXT        NOT NULL DEFAULT '1024x1024',
+      image_url  TEXT        NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS cig_user_created
+      ON content_image_generations(user_id, created_at DESC);
   `);
 
   console.log("[SCHEMA] Core schema migration complete");

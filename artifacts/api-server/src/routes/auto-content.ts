@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { autoContentSettingsTable, socialPostsTable, imageAssetsTable, clientsTable } from "@workspace/db/schema";
 import {
   normalizeTopics,
@@ -25,6 +25,7 @@ import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { objectStorageClient } from "../lib/objectStorage.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -1517,6 +1518,86 @@ router.get("/auto-content/registry", (_req, res) => {
     audiences: BBB_AUDIENCES,
     campaignGoals: CAMPAIGN_GOALS,
   });
+});
+
+// ── POST /auto-content/generate-image ────────────────────────────────────────
+// Phase 2: AI image generation via gpt-image-1.
+// Accepts { prompt, postId?, size? }, generates an image, uploads it to Object
+// Storage, persists a record, and returns { ok, generationId, imageUrl }.
+router.post("/auto-content/generate-image", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { prompt, postId, size = "1024x1024" } = req.body as {
+    prompt?: string; postId?: string; size?: string;
+  };
+
+  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
+
+  const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
+  if (!validSizes.includes(size)) {
+    res.status(400).json({ error: `size must be one of: ${validSizes.join(", ")}` });
+    return;
+  }
+
+  try {
+    // ── Call gpt-image-1 via Replit-managed OpenAI integration ──────────────
+    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+    const apiKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "";
+
+    const aiRes = await fetch(`${baseURL}/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text().catch(() => "");
+      console.error("[auto-content/generate-image] OpenAI error:", aiRes.status, errText);
+      res.status(502).json({ error: "Image generation failed" });
+      return;
+    }
+
+    const aiJson = await aiRes.json() as { data?: Array<{ b64_json?: string }> };
+    const b64    = aiJson.data?.[0]?.b64_json;
+    if (!b64) { res.status(502).json({ error: "No image data returned from AI" }); return; }
+
+    // ── Upload buffer to Object Storage ──────────────────────────────────────
+    const imageBuffer  = Buffer.from(b64, "base64");
+    const imageId      = randomUUID();
+    const privateDir   = process.env.PRIVATE_OBJECT_DIR ?? "";
+
+    if (!privateDir) {
+      res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
+      return;
+    }
+
+    // Parse "gs://bucket-name/optional/prefix" into bucketName + objectPath
+    const withoutScheme = privateDir.replace(/^gs:\/\//, "");
+    const firstSlash    = withoutScheme.indexOf("/");
+    const bucketName    = firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash);
+    const bucketPrefix  = firstSlash === -1 ? "" : withoutScheme.slice(firstSlash + 1);
+    const objectPath    = `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
+
+    const gcsFile = objectStorageClient.bucket(bucketName).file(objectPath);
+    await gcsFile.save(imageBuffer, { contentType: "image/png", resumable: false });
+
+    // ── Persist generation record ─────────────────────────────────────────────
+    const imageUrl = `/objects/generated-images/${imageId}.png`;
+    await pool.query(
+      `INSERT INTO content_image_generations (id, user_id, post_id, prompt, size, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [imageId, userId, postId ?? null, prompt.trim(), size, imageUrl],
+    );
+
+    res.json({ ok: true, generationId: imageId, imageUrl });
+  } catch (err: any) {
+    console.error("[auto-content/generate-image] error:", err);
+    res.status(500).json({ error: err?.message ?? "Image generation failed" });
+  }
 });
 
 export default router;

@@ -88,6 +88,7 @@ interface ScoreSnapshot {
   backlink_count: number; opportunity_count: number; won_count: number;
   run_id: string | null;
   new_count: number; lost_count: number; referring_domain_count: number;
+  edge_authority_score: number | null;
 }
 
 interface BacklinkTrendPeriod {
@@ -105,7 +106,8 @@ interface CompetitorBenchmark {
 
 interface CompetitiveComparisonResult {
   client: {
-    authorityScore: number; backlinkCount: number;
+    authorityScore: number; edgeAuthorityScore: number | null;
+    backlinkCount: number;
     referringDomainCount: number; opportunityCount: number; wonCount: number;
   };
   competitors: CompetitorBenchmark[];
@@ -423,12 +425,12 @@ export default function AuthorityEnginePage() {
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
-  const authorityScore = audit?.authorityScore ?? 29;
+  const authorityScore = audit?.authorityScore ?? null;
   const napScore       = 71;  // placeholder — no NAP backend yet
   const liveItems      = liveOpps?.items ?? [];
   const backlinkScore  = computeBacklinkScore(liveItems);
   const schemaScore    = 0;   // placeholder — no schema backend yet
-  const overallAuth    = Math.round((authorityScore + napScore + backlinkScore + schemaScore) / 4);
+  const overallAuth    = Math.round(((authorityScore ?? 0) + napScore + backlinkScore + schemaScore) / 4);
 
   const statusColor = (s: number) => s >= 70 ? "#22C55E" : s >= 40 ? "#F59E0B" : "#EF4444";
 
@@ -1317,15 +1319,20 @@ export default function AuthorityEnginePage() {
 
               {/* ── C8R-9: Historical Authority Trend sparkline ── */}
               {scoreSnapshots.length >= 2 && (() => {
-                const scores     = scoreSnapshots.map(s => s.authority_score);
-                const counts     = scoreSnapshots.map(s => s.backlink_count);
-                const scorePts   = buildSparklinePoints(scores,  220, 36);
-                const countPts   = buildSparklinePoints(counts,  220, 36);
-                const first      = scoreSnapshots[0]!;
-                const last       = scoreSnapshots[scoreSnapshots.length - 1]!;
-                const delta      = last.authority_score - first.authority_score;
-                const avgScore   = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-                const peakScore  = Math.max(...scores);
+                const edgeScores   = scoreSnapshots.map(s => s.edge_authority_score).filter((v): v is number => v != null);
+                const hasEdgeData  = edgeScores.length >= 2;
+                const plotScores   = hasEdgeData ? edgeScores : scoreSnapshots.map(s => s.authority_score);
+                const counts       = scoreSnapshots.map(s => s.backlink_count);
+                const scorePts     = buildSparklinePoints(plotScores, 220, 36);
+                const countPts     = buildSparklinePoints(counts, 220, 36);
+                const first        = scoreSnapshots[0]!;
+                const last         = scoreSnapshots[scoreSnapshots.length - 1]!;
+                const delta        = hasEdgeData && edgeScores.length >= 2
+                  ? edgeScores[edgeScores.length - 1]! - edgeScores[0]!
+                  : last.authority_score - first.authority_score;
+                const avgScore     = hasEdgeData ? Math.round(edgeScores.reduce((a, b) => a + b, 0) / edgeScores.length) : null;
+                const peakScore    = hasEdgeData ? Math.max(...edgeScores) : null;
+                const latestEdge   = hasEdgeData ? edgeScores[edgeScores.length - 1] : null;
                 const trendColor = delta > 0 ? "#22C55E" : delta < 0 ? "#EF4444" : "#64748B";
                 return (
                   <div style={{
@@ -1349,7 +1356,7 @@ export default function AuthorityEnginePage() {
                       {/* Authority score sparkline */}
                       <div>
                         <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.5px",
-                          textTransform: "uppercase", marginBottom: 6 }}>Authority Score</div>
+                          textTransform: "uppercase", marginBottom: 6 }}>AI Edge Score</div>
                         <svg width="100%" viewBox={`0 0 220 36`} preserveAspectRatio="none"
                           style={{ display: "block", height: 36 }}>
                           <defs>
@@ -1377,9 +1384,9 @@ export default function AuthorityEnginePage() {
                         </div>
                         <div style={{ display: "flex", gap: 12, marginTop: 6, flexWrap: "wrap" }}>
                           {[
-                            { label: "Latest",  value: last.authority_score,  color: "#38BDF8" },
-                            { label: "Average", value: avgScore,              color: "#94A3B8" },
-                            { label: "Peak",    value: peakScore,             color: "#F59E0B" },
+                            { label: "Latest",  value: latestEdge ?? "—", color: "#38BDF8" },
+                            { label: "Average", value: avgScore   ?? "—", color: "#94A3B8" },
+                            { label: "Peak",    value: peakScore  ?? "—", color: "#F59E0B" },
                           ].map(m => (
                             <div key={m.label}>
                               <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.value}</div>
@@ -1493,7 +1500,7 @@ export default function AuthorityEnginePage() {
               {competitiveSummary && (() => {
                 const { client: self, competitors } = competitiveSummary;
                 const allRows = [
-                  { domain: "bedbugsbeyond.com", businessName: "Bed Bugs & Beyond (You)", authorityScore: self.authorityScore, backlinkCount: self.backlinkCount, citationScore: null as number | null, opportunityScore: self.opportunityCount, isSelf: true },
+                  { domain: "bedbugsbeyond.com", businessName: "Bed Bugs & Beyond (You)", authorityScore: self.edgeAuthorityScore ?? 0, backlinkCount: self.backlinkCount, citationScore: null as number | null, opportunityScore: self.opportunityCount, isSelf: true },
                   ...competitors.map(c => ({ ...c, citationScore: c.citationScore as number | null, isSelf: false })),
                 ];
                 if (allRows.length <= 1 && competitors.length === 0) return null;

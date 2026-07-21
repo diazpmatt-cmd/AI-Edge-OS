@@ -18,6 +18,7 @@ import {
   calcNextRunAt,
   BACKLINK_SCHEDULE_FREQUENCIES,
   computePeriodSummaries,
+  computeEdgeAuthorityScore,
   type BacklinkWorkflowStatus,
   type BacklinkOpportunityCategory,
   type BacklinkProviderHealthState,
@@ -199,10 +200,19 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     return;
   }
 
-  const now               = new Date();
-  const resolvedProvider  = _backlinkRegistry.resolve();
-  const provider          = resolvedProvider ?? new FixtureBacklinkDataProvider(BBB_FIXTURE_BACKLINK_OBSERVATIONS);
-  const providerHealth    = resolvedProvider !== null ? "configured" : "fixture_fallback";
+  const now      = new Date();
+  const provider = _backlinkRegistry.resolve();
+  if (!provider) {
+    // No live provider configured — skip ingest rather than fabricating fixture data.
+    res.json({
+      ok: true,
+      providerStatus: _backlinkRegistry.healthReport(),
+      reason: "no_provider_configured",
+      outcome: "skipped",
+    });
+    return;
+  }
+  const providerHealth = "configured";
 
   try {
     const result = await ingestFixtureBacklinks({
@@ -231,11 +241,19 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     const summary = "outcome" in result && result.outcome === "in_progress" ? null : result as import("@workspace/db").ManualBacklinkIngestionSummary;
     const snapshotDate = now.toISOString().slice(0, 10);
     if (summary) {
+      // Compute AI Edge Authority Score from real provider data.
+      // Returns null when backlinkCount=0 AND referringDomainCount=0 (fail-closed).
+      const edgeScore = computeEdgeAuthorityScore({
+        backlinkCount:        summary.prospectIds.length,
+        referringDomainCount: 0, // v1: live DA provider required for real value
+        opportunityCount:     summary.opportunityIds.length,
+        wonCount:             summary.workflowIds.length,
+      });
       pool.query(
         `INSERT INTO backlink_score_history
            (client_id, snapshot_date, authority_score, backlink_count, opportunity_count,
-            won_count, new_count, lost_count, referring_domain_count)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            won_count, new_count, lost_count, referring_domain_count, edge_authority_score)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
            authority_score         = EXCLUDED.authority_score,
            backlink_count          = EXCLUDED.backlink_count,
@@ -243,17 +261,19 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
            won_count               = EXCLUDED.won_count,
            new_count               = EXCLUDED.new_count,
            lost_count              = EXCLUDED.lost_count,
-           referring_domain_count  = EXCLUDED.referring_domain_count`,
+           referring_domain_count  = EXCLUDED.referring_domain_count,
+           edge_authority_score    = EXCLUDED.edge_authority_score`,
         [
           clientId.trim(),
           snapshotDate,
-          0, // v1 placeholder: real domain authority requires a live DA provider
+          0, // authority_score: v1 placeholder (third-party DA requires live DA provider)
           summary.prospectIds.length,
           summary.opportunityIds.length,
           summary.workflowIds.length,
           0, // new_count: v1 placeholder (requires live provider delta tracking)
           0, // lost_count: v1 placeholder (requires live provider delta tracking)
           0, // referring_domain_count: v1 placeholder (requires live DA provider)
+          edgeScore, // null when no qualifying backlink evidence — honest, not fabricated
         ],
       ).catch(e => console.error("[backlinks] score snapshot insert error:", e));
     }
@@ -278,7 +298,8 @@ router.get("/api/backlinks/history/score", async (req, res): Promise<void> => {
               opportunity_count, won_count, run_id,
               COALESCE(new_count, 0)              AS new_count,
               COALESCE(lost_count, 0)             AS lost_count,
-              COALESCE(referring_domain_count, 0) AS referring_domain_count
+              COALESCE(referring_domain_count, 0) AS referring_domain_count,
+              edge_authority_score
        FROM backlink_score_history
        WHERE client_id = $1
          AND snapshot_date >= CURRENT_DATE - ($2 || ' days')::INTERVAL
@@ -361,7 +382,8 @@ router.get("/api/backlinks/history/trend", async (req, res): Promise<void> => {
               opportunity_count, won_count, run_id,
               COALESCE(new_count, 0)              AS new_count,
               COALESCE(lost_count, 0)             AS lost_count,
-              COALESCE(referring_domain_count, 0) AS referring_domain_count
+              COALESCE(referring_domain_count, 0) AS referring_domain_count,
+              edge_authority_score
        FROM backlink_score_history
        WHERE client_id = $1
          AND snapshot_date >= CURRENT_DATE - '90 days'::INTERVAL
@@ -381,6 +403,8 @@ router.get("/api/backlinks/history/trend", async (req, res): Promise<void> => {
       referringDomainCount: Number(r.referring_domain_count),
       runId:                r.run_id ?? null,
     }));
+    // Note: edgeAuthorityScore not included in trend period summaries — that's
+    // a per-snapshot value; period summaries use delta-over-time logic.
     const periods = computePeriodSummaries(snapshots);
     res.json({ periods, snapshotCount: snapshots.length });
   } catch (err) {
@@ -415,7 +439,8 @@ router.get("/api/backlinks/history/competitive", async (req, res): Promise<void>
       ),
       pool.query(
         `SELECT authority_score, backlink_count, opportunity_count, won_count,
-                COALESCE(referring_domain_count, 0) AS referring_domain_count
+                COALESCE(referring_domain_count, 0) AS referring_domain_count,
+                edge_authority_score
          FROM backlink_score_history
          WHERE client_id = $1
          ORDER BY snapshot_date DESC
@@ -427,6 +452,7 @@ router.get("/api/backlinks/history/competitive", async (req, res): Promise<void>
     res.json({
       client: {
         authorityScore:       Number(selfRow?.authority_score          ?? 0),
+        edgeAuthorityScore:   selfRow?.edge_authority_score            ?? null,
         backlinkCount:        Number(selfRow?.backlink_count           ?? 0),
         referringDomainCount: Number(selfRow?.referring_domain_count   ?? 0),
         opportunityCount:     Number(selfRow?.opportunity_count        ?? 0),
@@ -444,7 +470,7 @@ router.get("/api/backlinks/history/competitive", async (req, res): Promise<void>
     });
   } catch (err) {
     if (isRelationMissingError(err)) {
-      res.json({ client: { authorityScore: 0, backlinkCount: 0, referringDomainCount: 0, opportunityCount: 0, wonCount: 0 }, competitors: [] });
+      res.json({ client: { authorityScore: 0, edgeAuthorityScore: null, backlinkCount: 0, referringDomainCount: 0, opportunityCount: 0, wonCount: 0 }, competitors: [] });
       return;
     }
     console.error("[backlinks] competitive error:", err);

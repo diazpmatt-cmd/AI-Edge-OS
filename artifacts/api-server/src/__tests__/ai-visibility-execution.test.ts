@@ -326,3 +326,108 @@ describe("AiVisibilityExecutionService.listHistory", () => {
     expect(Number(params[1])).toBe(100);
   });
 });
+
+// ── C9R-7 regression: service_key column fix ──────────────────────────────────
+//
+// AiVisibilityExecutionService.queryActiveServiceKeys() must query
+// client_services.service_key (not the non-existent service_id column).
+//
+// This test is the regression guard for the production bug diagnosed in C9R-7
+// session 3: the original method queried service_id, which does not exist in
+// the client_services table, causing PostgreSQL 42703, empty service list, and
+// ultimately generic "local services"/"my area" AI queries.
+
+describe("AiVisibilityExecutionService — service_key column regression (C9R-7)", () => {
+  let svc: AiVisibilityExecutionService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    svc = new AiVisibilityExecutionService();
+    // Default: all pool queries return empty rows (no table-not-found error)
+    mockPoolQuery.mockResolvedValue({ rows: [] });
+    // Default: all drizzle queries return empty rows
+    mockSelectFn.mockImplementation(() => ({
+      from: vi.fn(() => {
+        const empty: object[] = [];
+        return {
+          where: vi.fn(() => Object.assign(Promise.resolve(empty), {
+            limit:   vi.fn(() => Promise.resolve(empty)),
+            orderBy: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve(empty)) })),
+          })),
+        };
+      }),
+    }));
+  });
+
+  it("queries service_key column — never service_id", async () => {
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+
+    // Find the pool.query call that reads from client_services
+    const serviceCall = mockPoolQuery.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("client_services"),
+    );
+    expect(serviceCall, "no pool.query call targeting client_services").toBeDefined();
+    const [sql] = serviceCall!;
+    expect(sql).toContain("service_key");
+    expect(sql).not.toContain("service_id");
+  });
+
+  it("queries with ORDER BY sort_order ASC for priority-ordered service list", async () => {
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+
+    const serviceCall = mockPoolQuery.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("client_services"),
+    );
+    expect(serviceCall).toBeDefined();
+    const [sql] = serviceCall!;
+    expect(sql).toContain("sort_order");
+  });
+
+  it("includes is_active filter to exclude inactive services", async () => {
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+
+    const serviceCall = mockPoolQuery.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("client_services"),
+    );
+    expect(serviceCall).toBeDefined();
+    const [sql] = serviceCall!;
+    expect(sql.toLowerCase()).toContain("is_active");
+  });
+
+  it("passes clientId as the query parameter", async () => {
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+
+    const serviceCall = mockPoolQuery.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("client_services"),
+    );
+    expect(serviceCall).toBeDefined();
+    const [, params] = serviceCall!;
+    expect(params[0]).toBe(CLIENT_ID);
+  });
+
+  it("returns a valid model when service_key rows are present", async () => {
+    // First pool.query call (client_services) returns two service keys
+    mockPoolQuery
+      .mockResolvedValueOnce({ rows: [
+        { service_key: "bed_bug_inspection" },
+        { service_key: "roaches" },
+      ] })
+      .mockResolvedValue({ rows: [] }); // all subsequent calls (backlinks, persist, etc.)
+
+    const model = await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+    expect(model).toHaveProperty("recommendations");
+    expect(model).toHaveProperty("coverage");
+  });
+
+  it("does not emit the legacy 'service ID query warning' log message", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+    await new Promise(r => setTimeout(r, 30));
+
+    const legacyWarning = warnSpy.mock.calls.find(
+      args => typeof args[0] === "string" && args[0].includes("service ID query warning"),
+    );
+    expect(legacyWarning, "legacy service ID warning must not fire").toBeUndefined();
+    warnSpy.mockRestore();
+  });
+});

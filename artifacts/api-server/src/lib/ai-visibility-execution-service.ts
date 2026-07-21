@@ -137,8 +137,8 @@ export class AiVisibilityExecutionService {
     const { clientId, userId } = input;
     const generatedAt = new Date();
 
-    // ── 1. Resolve service IDs from client_services table ─────────────────────
-    const serviceIds = await this.queryActiveServiceIds(clientId);
+    // ── 1. Resolve service keys from client_services table ────────────────────
+    const serviceIds = await this.queryActiveServiceKeys(clientId);
 
     // ── 2. Query local presence sources (profile + channels) ──────────────────
     const [profiles, channels] = await Promise.all([
@@ -266,18 +266,22 @@ export class AiVisibilityExecutionService {
     );
   }
 
-  // ── Private: service ID resolution ──────────────────────────────────────────
+  // ── Private: service key resolution ──────────────────────────────────────────
+  // Reads service_key (text slug) from client_services in sort_order priority.
+  // The column is service_key — NOT service_id (which does not exist).
+  // C9R-7 correction: mirrors the same fix applied to AiQueryScanService
+  // (ai-query-scan-service.ts) during session 1.
 
-  private async queryActiveServiceIds(clientId: string): Promise<string[]> {
+  private async queryActiveServiceKeys(clientId: string): Promise<string[]> {
     try {
-      const { rows } = await this.pool.query<{ service_id: string }>(
-        `SELECT service_id FROM client_services WHERE client_id = $1 AND is_active = TRUE`,
+      const { rows } = await this.pool.query<{ service_key: string }>(
+        `SELECT service_key FROM client_services WHERE client_id = $1 AND is_active = TRUE ORDER BY sort_order ASC`,
         [clientId],
       );
-      return rows.map(r => r.service_id);
+      return rows.map(r => r.service_key);
     } catch (err: any) {
       if (err?.code === "42P01") return [];
-      console.warn("[ai-visibility] service ID query warning:", err?.message);
+      console.warn("[ai-visibility] service key query warning:", err?.message);
       return [];
     }
   }

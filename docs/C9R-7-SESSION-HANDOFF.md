@@ -267,21 +267,91 @@ All existing completion percentages are final. The new workstreams (WS-1 through
 
 ---
 
+## DP-001 Query Quality — Session 3 Fixes (2026-07-21)
+
+Sessions 1 and 2 corrected: auth routing, slug resolution, column name, geography fallback, preflight gate, and representative selection. Two further quality deficiencies were identified and corrected in session 3 before deployment.
+
+### Root Cause 6 — Intent-template skew (all-"best" queries)
+
+**Problem:** `templateIdx = round % templates.length` is evaluated in the outer loop. With 16 services ≥ limit=8, round 0 fills all 8 slots. Every slot in round 0 receives `template 0` ("best {s} in {l}"). The other three intent templates ("recommended…company in", "who provides…near", "top…services in") never appeared in the output.
+
+**Fix:** Move template selection inside the inner loop, keyed on the current emitted slot count:
+```typescript
+const templateIdx = result.length % templates.length;
+```
+This causes each consecutive emitted slot to advance to the next intent template, regardless of round. With 4 templates and limit=8, each template appears exactly twice.
+
+### Root Cause 7 — Bare pest plural in queries (e.g. "best roaches")
+
+**Problem:** `humanizeServiceId("roaches")` returns `"roaches"` (separator-to-space, no semantic mapping). This produced queries like `"best roaches in Gulf Shores, AL"` — not a phrase a real customer would type.
+
+**Fix:** Added `SERVICE_DISPLAY_NAMES` map + exported `displayServiceName()` to `lib/db/src/ai-query-generation.ts`:
+
+| Service key | Before | After |
+|---|---|---|
+| `roaches` | "roaches" | "roach control" |
+| `rodents` | "rodents" | "rodent control" |
+| `mosquitoes` | "mosquitoes" | "mosquito control" |
+| `ants` | "ants" | "ant control" |
+| `fleas` | "fleas" | "flea control" |
+| `ticks` | "ticks" | "tick control" |
+| `wasps_hornets` | "wasps hornets" | "wasp and hornet control" |
+| `spiders` | "spiders" | "spider control" |
+| `moles` | "moles" | "mole control" |
+| `wildlife_removal` | "wildlife removal" | "wildlife removal" (unchanged) |
+
+Service keys without an entry fall back to `humanizeServiceId()`. The map contains general pest-control industry terms only — no tenant-specific values hardcoded.
+
+### Provider-free dry run — exact production output (Session 3 — final)
+
+Template rotation by emitted slot (`result.length % 4`): slots 0,4 → "best", slots 1,5 → "recommended", slots 2,6 → "who provides", slots 3,7 → "top".
+
+```
+best bed bug inspection in Foley, AL
+recommended bed bug treatment company in Daphne, AL
+who provides residential pest control near Loxley, AL
+top commercial pest control services in Fairhope, AL
+best roach control in Gulf Shores, AL
+recommended rodent control company in Orange Beach, AL
+who provides mosquito control near Summerdale, AL
+top fumigation services in Spanish Fort, AL
+```
+
+All constraints satisfied: 4 distinct intent templates (2 slots each), 8 distinct priority services, 8 distinct authorized geographies, no prohibited phrases, no bare pest plurals, no generic content.
+
+### Tests Added / Corrected (Session 3)
+
+| File | Tests (before → after) | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` | 39 → 71 (+32) | Intent diversity (10 tests), service humanization (15 `displayServiceName` unit tests), natural-phrasing regression (9 tests), corrected `humanizeServiceId` and `displayServiceName` imports on 3 existing service-label assertions, corrected exact dry-run test to session 3 expected output |
+
+**71 tests in canonical file, all pass. Provider and preflight files unaffected (56 pass).**
+
+### Files Modified (Session 3)
+
+| File | Change |
+|---|---|
+| `lib/db/src/ai-query-generation.ts` | `SERVICE_DISPLAY_NAMES` map; exported `displayServiceName()`; `templateIdx` moved to inner loop keyed on `result.length` |
+| `artifacts/api-server/src/__tests__/ai-query-generation-canonical.test.ts` | 39→71: `displayServiceName` import + 3 assertion corrections + 32 new tests (sections 10, 11, 12) |
+
+---
+
 ## Next Activity
 
-**Deploy both the query-context fix (session 1) and the representative-selection fix (session 2), then execute one authenticated DP-001 re-scan.**
+**Deploy sessions 1–3 and execute one authenticated DP-001 re-scan.**
 
 **Pre-deployment checklist:**
 1. Confirm `OPENAI_API_KEY` (real key) present in production secrets
 2. Confirm `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` removed (done in prior cycle)
-3. Republish to pick up both sessions' code changes
+3. Republish to pick up all three sessions' code changes
 4. On first restart, `schema-migrate.ts` repair automatically updates `local_presence_profiles.client_id` from `'default'` to the real UUID (idempotent — safe to redeploy)
 
 **Smoke test pass criteria:**
 - `status: "completed"`
-- Queries contain real BBB service names (e.g. "bed bug inspection", "fumigation") — not "local services"
+- Queries contain real BBB service names (e.g. "bed bug inspection", "roach control") — not "local services" or bare pest plurals
 - Queries contain real Baldwin County geographies (e.g. "Foley, AL") — not "my area"
-- No single service appears in all 8 query slots (representative diversity)
+- Multiple distinct intent templates present (not all "best…")
+- No single service appears in all 8 query slots
 
 **Once DP-001 re-scan passes:**
 1. Announce AI Visibility V1 to authorized users

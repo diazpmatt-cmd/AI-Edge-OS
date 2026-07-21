@@ -414,22 +414,41 @@ Even after Root Causes 1–4 were fixed, `generateAiQueries()` would have produc
 - No alpha-sort is applied; service-priority order is the ordering guarantee
 - Same input always produces same output (determinism preserved without alpha-sort)
 
-**Provider-free dry run (production BBB — 16 services × 11 geos × limit=8):**
+**Provider-free dry run (production BBB — 16 services × 11 geos × limit=8) — session 3 final:**
+
+Template rotates per emitted slot (`result.length % 4`): slots 0,4 → "best", slots 1,5 → "recommended", slots 2,6 → "who provides", slots 3,7 → "top".
+Service display names applied: roaches→"roach control", rodents→"rodent control", mosquitoes→"mosquito control".
 
 | Slot | Service | Geography | Template | Query |
 |---|---|---|---|---|
 | 0 | bed_bug_inspection (sort=0) | Foley, AL | best…in | best bed bug inspection in Foley, AL |
-| 1 | bed_bug_treatment (sort=1) | Daphne, AL | best…in | best bed bug treatment in Daphne, AL |
-| 2 | residential_pest_control (sort=2) | Loxley, AL | best…in | best residential pest control in Loxley, AL |
-| 3 | commercial_pest_control (sort=3) | Fairhope, AL | best…in | best commercial pest control in Fairhope, AL |
-| 4 | roaches (sort=4) | Gulf Shores, AL | best…in | best roaches in Gulf Shores, AL |
-| 5 | rodents (sort=5) | Orange Beach, AL | best…in | best rodents in Orange Beach, AL |
-| 6 | mosquitoes (sort=6) | Summerdale, AL | best…in | best mosquitoes in Summerdale, AL |
-| 7 | fumigation (sort=7) | Spanish Fort, AL | best…in | best fumigation in Spanish Fort, AL |
+| 1 | bed_bug_treatment (sort=1) | Daphne, AL | recommended…company in | recommended bed bug treatment company in Daphne, AL |
+| 2 | residential_pest_control (sort=2) | Loxley, AL | who provides…near | who provides residential pest control near Loxley, AL |
+| 3 | commercial_pest_control (sort=3) | Fairhope, AL | top…services in | top commercial pest control services in Fairhope, AL |
+| 4 | roaches (sort=4) | Gulf Shores, AL | best…in | best roach control in Gulf Shores, AL |
+| 5 | rodents (sort=5) | Orange Beach, AL | recommended…company in | recommended rodent control company in Orange Beach, AL |
+| 6 | mosquitoes (sort=6) | Summerdale, AL | who provides…near | who provides mosquito control near Summerdale, AL |
+| 7 | fumigation (sort=7) | Spanish Fort, AL | top…services in | top fumigation services in Spanish Fort, AL |
 
-ants (sort=8), fleas…wildlife_removal never appear — limit=8 fills exactly with the 8 highest-priority services. Termites (sort=14, revenue_weight=0) is also excluded by the prohibited-phrase filter.
+ants (sort=8), fleas…wildlife_removal never appear — limit=8 fills exactly with the 8 highest-priority services. Termites (sort=14, revenue_weight=0) also excluded by prohibited-phrase filter.
 
 #### Tests added / corrected (C9R-7 session 2)
+
+| File | Tests (before → after) | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` | 28 → 39 (+11) | Round-robin production-scale (16×11), priority order, fumigation boundary, ants exclusion, exact dry-run output, geography diversity |
+| `ai-query-scan-preflight.test.ts` | 10 → 16 (+6) | HQ city not authorized, service_areas_json authorized, legacy 'default' profile isolation, 42703 regression, inactive-service filter, missing-service data |
+| `ai-visibility-query-provider.test.ts` | 2 corrected → 1 more corrected | "output is sorted lexicographically" → "output is deterministic — service-priority order" |
+
+#### Tests added / corrected (C9R-7 session 3 — intent diversity + service humanization)
+
+| File | Tests (before → after) | What it covers |
+|---|---|---|
+| `ai-query-generation-canonical.test.ts` | 39 → 71 (+32) | `displayServiceName` unit tests (15), intent-diversity per-slot template rotation (10), natural-phrasing regression (9), corrected exact dry-run output, corrected 3 service-label assertions |
+
+**71 + 40 + 16 = 127 AI query / preflight tests pass.**
+
+#### Tests added / corrected (C9R-7 session 2 — representative selection)
 
 | File | Tests (before → after) | What it covers |
 |---|---|---|
@@ -445,8 +464,6 @@ ants (sort=8), fleas…wildlife_removal never appear — limit=8 fills exactly w
 | `ai-query-scan-preflight.test.ts` (new) | 10 | `validatePreflight` logic, route 422 response |
 | `ai-visibility-query-provider.test.ts` (updated) | 2 corrected | Old "falls back to X" assertions replaced with fail-closed assertions |
 | `AIVisibilityEnginePage.test.ts` (extended) | 6 new (422 paths) | `classifyScanError` for 422 no_active_services / no_authorized_geography |
-
-**All 95 AI query / preflight tests pass. Total 39 + 40 + 16 = 95 across three test files.**
 
 ---
 
@@ -467,7 +484,7 @@ ants (sort=8), fleas…wildlife_removal never appear — limit=8 fills exactly w
 7. Confirm no secrets are printed in API Server logs.
 8. Confirm no customer communications were triggered.
 
-**Pass criteria (updated):** `status: "completed"`, at least one query contains a real BBB service name (not "local services"), at least one query contains a real Baldwin County geography (not "my area"), no single service dominates all 8 query slots.
+**Pass criteria (updated):** `status: "completed"`, at least one query contains a real BBB service name (e.g. "bed bug inspection", "roach control" — not "local services" or bare pest plurals), at least one query contains a real Baldwin County geography (e.g. "Foley, AL" — not "my area"), multiple distinct intent templates present (not all "best…"), no single service dominates all 8 query slots.
 
 **Bounded:** Single scan request. ~6–12 AI queries at gpt-4o-mini pricing. Total cost < $0.05.
 

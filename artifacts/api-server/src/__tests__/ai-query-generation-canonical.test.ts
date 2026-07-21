@@ -25,6 +25,7 @@ import { describe, it, expect } from "vitest";
 import {
   generateAiQueries,
   humanizeServiceId,
+  displayServiceName,
   AI_QUERY_GENERATION_LIMIT,
 } from "@workspace/db";
 import type { AiQueryTenantContext } from "@workspace/db";
@@ -91,7 +92,7 @@ describe("Canonical BBB query generation", () => {
 
   it("every query contains at least one BBB service label", () => {
     const queries = generateAiQueries(makeBbbContext());
-    const serviceLabels = BBB_SERVICES.map(humanizeServiceId);
+    const serviceLabels = BBB_SERVICES.map(displayServiceName);
     for (const q of queries) {
       const lower = q.toLowerCase();
       const hasService = serviceLabels.some(s => lower.includes(s));
@@ -125,7 +126,7 @@ describe("Canonical BBB query generation", () => {
   it("generates queries for roach control when it is the only active service", () => {
     const ctx = makeBbbContext({ activeServiceIds: ["roaches"] });
     const queries = generateAiQueries(ctx);
-    const roachQueries = queries.filter(q => q.toLowerCase().includes("roaches"));
+    const roachQueries = queries.filter(q => q.toLowerCase().includes("roach control"));
     expect(roachQueries.length).toBeGreaterThan(0);
   });
 
@@ -332,7 +333,7 @@ describe("Representative selection: service-priority round-robin (C9R-7 acceptan
 
   it("each query in production-scale output contains a distinct service (no service monopolizes the limit)", () => {
     const queries = generateAiQueries(makeProdContext());
-    const serviceLabels = PROD_SERVICES_16.map(humanizeServiceId);
+    const serviceLabels = PROD_SERVICES_16.map(displayServiceName);
     // Collect the services that appear in each query
     const servicesUsed = queries.map(q => {
       const lower = q.toLowerCase();
@@ -395,20 +396,29 @@ describe("Representative selection: service-priority round-robin (C9R-7 acceptan
     expect(hasFoley).toBe(true);
   });
 
-  it("provider-free dry run: returns exact expected production queries", () => {
+  it("provider-free dry run: returns exact expected production queries (C9R-7 session 3 — intent diversity + service humanization)", () => {
     // This test documents the exact query list that would be sent to the AI provider
-    // when running a scan against the BBB production tenant after the C9R-7 correction.
+    // when running a scan against the BBB production tenant after all C9R-7 corrections.
     // It is the canonical evidence for DP-001 provider-free dry run acceptance.
+    //
+    // Template rotation by emitted slot (result.length % 4):
+    //   slots 0,4 → "best {s} in {l}"
+    //   slots 1,5 → "recommended {s} company in {l}"
+    //   slots 2,6 → "who provides {s} near {l}"
+    //   slots 3,7 → "top {s} services in {l}"
+    //
+    // Service display names: roaches→"roach control", rodents→"rodent control",
+    // mosquitoes→"mosquito control". No bare pest plurals in output.
     const queries = generateAiQueries(makeProdContext());
     expect(queries).toHaveLength(8);
     expect(queries[0]).toBe("best bed bug inspection in Foley, AL");
-    expect(queries[1]).toBe("best bed bug treatment in Daphne, AL");
-    expect(queries[2]).toBe("best residential pest control in Loxley, AL");
-    expect(queries[3]).toBe("best commercial pest control in Fairhope, AL");
-    expect(queries[4]).toBe("best roaches in Gulf Shores, AL");
-    expect(queries[5]).toBe("best rodents in Orange Beach, AL");
-    expect(queries[6]).toBe("best mosquitoes in Summerdale, AL");
-    expect(queries[7]).toBe("best fumigation in Spanish Fort, AL");
+    expect(queries[1]).toBe("recommended bed bug treatment company in Daphne, AL");
+    expect(queries[2]).toBe("who provides residential pest control near Loxley, AL");
+    expect(queries[3]).toBe("top commercial pest control services in Fairhope, AL");
+    expect(queries[4]).toBe("best roach control in Gulf Shores, AL");
+    expect(queries[5]).toBe("recommended rodent control company in Orange Beach, AL");
+    expect(queries[6]).toBe("who provides mosquito control near Summerdale, AL");
+    expect(queries[7]).toBe("top fumigation services in Spanish Fort, AL");
   });
 });
 
@@ -444,5 +454,209 @@ describe("humanizeServiceId", () => {
 
   it("handles mixed separators", () => {
     expect(humanizeServiceId("residential_pest-control")).toBe("residential pest control");
+  });
+});
+
+// ── 10. displayServiceName — C9R-7 session 3 service humanization ─────────────
+
+describe("displayServiceName — natural customer-search phrases", () => {
+  it("roaches → roach control", () => {
+    expect(displayServiceName("roaches")).toBe("roach control");
+  });
+
+  it("rodents → rodent control", () => {
+    expect(displayServiceName("rodents")).toBe("rodent control");
+  });
+
+  it("mosquitoes → mosquito control", () => {
+    expect(displayServiceName("mosquitoes")).toBe("mosquito control");
+  });
+
+  it("ants → ant control", () => {
+    expect(displayServiceName("ants")).toBe("ant control");
+  });
+
+  it("fleas → flea control", () => {
+    expect(displayServiceName("fleas")).toBe("flea control");
+  });
+
+  it("ticks → tick control", () => {
+    expect(displayServiceName("ticks")).toBe("tick control");
+  });
+
+  it("wasps_hornets → wasp and hornet control", () => {
+    expect(displayServiceName("wasps_hornets")).toBe("wasp and hornet control");
+  });
+
+  it("spiders → spider control", () => {
+    expect(displayServiceName("spiders")).toBe("spider control");
+  });
+
+  it("bed_bug_inspection falls back to humanizeServiceId", () => {
+    expect(displayServiceName("bed_bug_inspection")).toBe("bed bug inspection");
+  });
+
+  it("bed_bug_treatment falls back to humanizeServiceId", () => {
+    expect(displayServiceName("bed_bug_treatment")).toBe("bed bug treatment");
+  });
+
+  it("residential_pest_control falls back to humanizeServiceId", () => {
+    expect(displayServiceName("residential_pest_control")).toBe("residential pest control");
+  });
+
+  it("commercial_pest_control falls back to humanizeServiceId", () => {
+    expect(displayServiceName("commercial_pest_control")).toBe("commercial pest control");
+  });
+
+  it("fumigation falls back to humanizeServiceId", () => {
+    expect(displayServiceName("fumigation")).toBe("fumigation");
+  });
+
+  it("hyphenated slug (wasps-hornets) normalises to same result as underscore form", () => {
+    expect(displayServiceName("wasps-hornets")).toBe("wasp and hornet control");
+  });
+
+  it("unknown slug falls back gracefully (no crash, no empty string)", () => {
+    const result = displayServiceName("custom_service_type");
+    expect(result).toBe("custom service type");
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+// ── 11. Intent diversity — C9R-7 session 3 ────────────────────────────────────
+
+describe("Intent diversity: template rotation across emitted slots", () => {
+  it("production-scale 16×11 output uses multiple distinct intent templates", () => {
+    const PROD_SERVICES_16 = [
+      "bed_bug_inspection", "bed_bug_treatment", "residential_pest_control",
+      "commercial_pest_control", "roaches", "rodents", "mosquitoes", "fumigation",
+      "ants", "fleas", "ticks", "wasps_hornets", "spiders", "moles", "termites", "wildlife_removal",
+    ];
+    const PROD_GEOS_11 = [
+      "Foley, AL", "Daphne, AL", "Loxley, AL", "Fairhope, AL",
+      "Gulf Shores, AL", "Orange Beach, AL", "Summerdale, AL",
+      "Spanish Fort, AL", "Elberta, AL", "Lillian, AL", "Perdido Beach, AL",
+    ];
+    const ctx: AiQueryTenantContext = {
+      clientId: "e87ddd9d-a6bf-4bf6-85b6-202467d952ee",
+      businessName: "Bed Bugs & Beyond",
+      businessDomain: null,
+      businessPhone: null,
+      activeServiceIds: PROD_SERVICES_16,
+      authorizedGeographies: PROD_GEOS_11,
+      prohibitedPhrases: ["termite", "heat treatment", "whole-home heat treatment"],
+      competitors: [],
+    };
+    const queries = generateAiQueries(ctx);
+    // With 16 services and limit=8, one round fills all slots.
+    // Template rotates per slot (result.length % 4):
+    // slots 0,4 → "best", slots 1,5 → "recommended", slots 2,6 → "who provides", slots 3,7 → "top"
+    const hasBest        = queries.some(q => q.startsWith("best "));
+    const hasRecommended = queries.some(q => q.startsWith("recommended "));
+    const hasWho         = queries.some(q => q.startsWith("who provides "));
+    const hasTop         = queries.some(q => q.startsWith("top "));
+    expect(hasBest,        "no 'best' template in output").toBe(true);
+    expect(hasRecommended, "no 'recommended' template in output").toBe(true);
+    expect(hasWho,         "no 'who provides' template in output").toBe(true);
+    expect(hasTop,         "no 'top' template in output").toBe(true);
+  });
+
+  it("no single intent template consumes all 8 slots", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const bestCount = queries.filter(q => q.startsWith("best ")).length;
+    expect(bestCount).toBeLessThan(AI_QUERY_GENERATION_LIMIT);
+  });
+
+  it("template rotation is deterministic — two identical calls produce identical intent order", () => {
+    const ctx = makeBbbContext();
+    const a = generateAiQueries(ctx);
+    const b = generateAiQueries(ctx);
+    expect([...a]).toEqual([...b]);
+  });
+
+  it("slot 0 uses 'best' template (first intent)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    expect(queries[0].startsWith("best ")).toBe(true);
+  });
+
+  it("slot 1 uses 'recommended' template (second intent)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    expect(queries[1].startsWith("recommended ")).toBe(true);
+  });
+
+  it("slot 2 uses 'who provides' template (third intent)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    expect(queries[2].startsWith("who provides ")).toBe(true);
+  });
+
+  it("slot 3 uses 'top' template (fourth intent)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    expect(queries[3].startsWith("top ")).toBe(true);
+  });
+
+  it("service-priority order is preserved: slot 0 service has higher priority than slot 4 service", () => {
+    // With BBB fixture (10 services, limit=8): slot 0 = bed_bug_inspection (priority 0),
+    // slot 4 = roaches (priority 4). Priority order is maintained independent of template.
+    const queries = generateAiQueries(makeBbbContext());
+    expect(queries[0].toLowerCase()).toContain("bed bug inspection");
+    expect(queries[4].toLowerCase()).toContain("roach control");
+  });
+});
+
+// ── 12. Natural phrasing — no bare pest plurals ───────────────────────────────
+
+describe("Natural phrasing: no malformed bare pest plural queries", () => {
+  it("no query contains 'best roaches' (malformed — should be 'roach control')", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasMalformed = queries.some(q => /best roaches/i.test(q));
+    expect(hasMalformed).toBe(false);
+  });
+
+  it("no query contains 'best rodents' (malformed)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasMalformed = queries.some(q => /best rodents/i.test(q));
+    expect(hasMalformed).toBe(false);
+  });
+
+  it("no query contains 'best mosquitoes' (malformed)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasMalformed = queries.some(q => /best mosquitoes/i.test(q));
+    expect(hasMalformed).toBe(false);
+  });
+
+  it("roach control appears in production output (not 'roaches')", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasRoachControl = queries.some(q => q.toLowerCase().includes("roach control"));
+    expect(hasRoachControl).toBe(true);
+  });
+
+  it("rodent control appears in production output (not 'rodents')", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasRodentControl = queries.some(q => q.toLowerCase().includes("rodent control"));
+    expect(hasRodentControl).toBe(true);
+  });
+
+  it("mosquito control appears in production output (not 'mosquitoes')", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasMosquitoControl = queries.some(q => q.toLowerCase().includes("mosquito control"));
+    expect(hasMosquitoControl).toBe(true);
+  });
+
+  it("bed bug inspection phrasing is preserved", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasBedBug = queries.some(q => q.toLowerCase().includes("bed bug inspection"));
+    expect(hasBedBug).toBe(true);
+  });
+
+  it("fumigation appears in production output", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasFumigation = queries.some(q => q.toLowerCase().includes("fumigation"));
+    expect(hasFumigation).toBe(true);
+  });
+
+  it("no query starts with 'top local services services' (double-services artefact)", () => {
+    const queries = generateAiQueries(makeBbbContext());
+    const hasDupe = queries.some(q => q.toLowerCase().includes("services services"));
+    expect(hasDupe).toBe(false);
   });
 });

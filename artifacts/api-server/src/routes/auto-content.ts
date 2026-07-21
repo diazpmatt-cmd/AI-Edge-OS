@@ -1520,12 +1520,18 @@ router.get("/auto-content/registry", (_req, res) => {
   });
 });
 
-// ── POST /auto-content/generate-image ────────────────────────────────────────
-// Phase 2: AI image generation via gpt-image-1.
-// Accepts { prompt, postId?, size? }, generates an image, uploads it to Object
-// Storage, persists a record, and returns { ok, generationId, imageUrl }.
+// ── Phase 2: AI Image Generation — Tenant-Safe V1 ────────────────────────────
 //
-// Security controls implemented:
+// POST /auto-content/generate-image
+//   Resolves tenant, enforces idempotency + rate-limit, persists a 'pending'
+//   record BEFORE the provider call, then completes or fails in-place.
+//   Returns { ok, generationId, storageKey }.
+//
+// GET /auto-content/generate-image/:id/signed-url
+//   Returns a short-lived signed URL for an approved asset.
+//   Used by the Instagram publishing adapter; requires ownership verification.
+//
+// Security controls:
 //   [S1]  Authentication gate (Clerk; 401 on missing session)
 //   [S2]  API key fail-fast (503 if not configured; empty Bearer never sent)
 //   [S3]  Prompt length limit (≤500 chars; 400 on excess)
@@ -1535,18 +1541,19 @@ router.get("/auto-content/registry", (_req, res) => {
 //   [S7]  Response-body size cap (12 MB JSON; 502 on excess)
 //   [S8]  Decoded-buffer size cap (8 MB; 502 on excess)
 //   [S9]  PNG magic-bytes validation (502 on mismatch)
-//   [S10] Failure cleanup (GCS object deleted if DB insert fails)
-//   [S11] Secret never logged, never in response, never in migrations
+//   [S10] Failure cleanup: GCS object deleted if DB commit fails (orphan-safe)
+//   [S11] API key never logged, never in response, never in migrations
 //   [S12] Model hardcoded to gpt-image-1; provider URL from env var only
-//   [S13] images stored as private objects (no public ACL set)
-//   [S14] Provenance persisted (user_id, post_id, prompt, size, image_url)
+//   [S13] Objects stored as private (no public ACL set)
+//   [S14] Provenance first: pending record written before any provider call
+//   [T1]  Tenant isolation: resolveClientContentContextFromDb on every request
+//   [I1]  Idempotency: client_id + idempotency_key → return existing record
+//   [R1]  Rate-limit: 10 completed/pending generations per hour per client
 
 // PNG magic bytes: 137 80 78 71 13 10 26 10
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-// Prompt keywords that are prohibited by the BB&B service registry contract.
-// "termites" and whole-home heat treatment are hard-locked (generationAllowed:false
-// and prohibitedClaims respectively) and must never appear in AI image prompts.
+// Prompt keywords prohibited by the BB&B service registry contract.
 const PROHIBITED_IMAGE_PROMPT_KEYWORDS = [
   "termite",
   "whole-home heat",
@@ -1559,41 +1566,46 @@ export function isProhibitedImagePrompt(prompt: string): boolean {
   return PROHIBITED_IMAGE_PROMPT_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-const IMAGE_GENERATION_TIMEOUT_MS  = 30_000;   // 30 s provider timeout
-const IMAGE_RESPONSE_MAX_BYTES      = 12 * 1024 * 1024; // 12 MB JSON cap
-const IMAGE_BUFFER_MAX_BYTES        = 8  * 1024 * 1024; // 8 MB decoded cap
+const IMAGE_GENERATION_TIMEOUT_MS  = 30_000;
+const IMAGE_RESPONSE_MAX_BYTES      = 12 * 1024 * 1024;
+const IMAGE_BUFFER_MAX_BYTES        = 8  * 1024 * 1024;
 const PROMPT_MAX_LENGTH             = 500;
+const IMAGE_RATE_LIMIT_PER_HOUR     = Number(process.env.IMAGE_RATE_LIMIT_PER_HOUR ?? "10");
+const SIGNED_URL_EXPIRY_SECONDS     = 15 * 60; // 15 minutes
 
-router.post("/auto-content/generate-image", async (req, res) => {
-  // [S1] Authentication gate
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseBucketPath(privateDir: string): { bucketName: string; bucketPrefix: string } {
+  const withoutScheme = privateDir.replace(/^gs:\/\//, "");
+  const firstSlash    = withoutScheme.indexOf("/");
+  return {
+    bucketName:   firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash),
+    bucketPrefix: firstSlash === -1 ? "" : withoutScheme.slice(firstSlash + 1),
+  };
+}
+
+function makeObjectPath(bucketPrefix: string, imageId: string): string {
+  return `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
+}
+
+// ── POST /auto-content/generate-image ────────────────────────────────────────
+
+router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
+  // [S1] Authentication
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const { prompt, postId, size = "1024x1024" } = req.body as {
-    prompt?: string; postId?: string; size?: string;
-  };
-
-  // [S3] Prompt required and length-limited
-  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
-  if (prompt.trim().length > PROMPT_MAX_LENGTH) {
-    res.status(400).json({ error: `prompt must be ≤${PROMPT_MAX_LENGTH} characters` });
+  // [T1] Tenant resolution — every call must resolve to a known active client
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const r    = resolved.reason;
+    const code = r === "not_found" ? 404 : r === "inactive" ? 403 : 503;
+    res.status(code).json({ error: "client_resolve_failed", reason: r });
     return;
   }
+  const clientId = resolved.client.id;
 
-  // [S4] Prohibited-claim block
-  if (isProhibitedImagePrompt(prompt)) {
-    res.status(400).json({ error: "prompt contains a prohibited service or claim" });
-    return;
-  }
-
-  // [S5] Valid size allow-list
-  const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
-  if (!validSizes.includes(size)) {
-    res.status(400).json({ error: `size must be one of: ${validSizes.join(", ")}` });
-    return;
-  }
-
-  // [S2] API key fail-fast — never send an empty Bearer token
+  // [S2] API key fail-fast
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
   const apiKey  = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "";
   if (!apiKey) {
@@ -1601,106 +1613,287 @@ router.post("/auto-content/generate-image", async (req, res) => {
     return;
   }
 
-  let gcsFilePath: string | null = null;
+  const { prompt, postId, size = "1024x1024", idempotencyKey, serviceKey } = req.body as {
+    prompt?: string; postId?: string; size?: string;
+    idempotencyKey?: string; serviceKey?: string;
+  };
 
+  // [S3] Prompt validation
+  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
+  if (prompt.trim().length > PROMPT_MAX_LENGTH) {
+    res.status(400).json({ error: `prompt must be ≤${PROMPT_MAX_LENGTH} characters` });
+    return;
+  }
+
+  // [S4] Prohibited-claim enforcement
+  if (isProhibitedImagePrompt(prompt)) {
+    res.status(400).json({ error: "prompt contains a prohibited service or claim" });
+    return;
+  }
+
+  // [S5] Size allow-list
+  const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
+  if (!validSizes.includes(size)) {
+    res.status(400).json({ error: `size must be one of: ${validSizes.join(", ")}` });
+    return;
+  }
+
+  // [I1] Idempotency — return existing record if (client_id, idempotency_key) matches
+  if (idempotencyKey) {
+    const existing = await pool.query<{ id: string; status: string; storage_key: string | null }>(
+      `SELECT id, status, storage_key
+         FROM content_image_generations
+        WHERE client_id = $1 AND idempotency_key = $2
+        LIMIT 1`,
+      [clientId, idempotencyKey],
+    );
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0]!;
+      if (row.status === "completed") {
+        res.json({ ok: true, generationId: row.id, storageKey: row.storage_key, idempotent: true });
+        return;
+      }
+      if (row.status === "pending") {
+        res.status(202).json({ ok: false, generationId: row.id, status: "pending", idempotent: true });
+        return;
+      }
+      // status === "failed" — fall through to allow fresh attempt
+    }
+  }
+
+  // [R1] Rate-limit check — count billable (pending + completed) in the past hour
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const rateRow     = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM content_image_generations
+      WHERE client_id = $1 AND created_at > $2 AND status IN ('pending', 'completed')`,
+    [clientId, windowStart],
+  );
+  const recentCount = Number(rateRow.rows[0]?.count ?? 0);
+  if (recentCount >= IMAGE_RATE_LIMIT_PER_HOUR) {
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: `Maximum ${IMAGE_RATE_LIMIT_PER_HOUR} image generations per hour`,
+      retryAfter: 3600,
+    });
+    return;
+  }
+
+  // [S14] / [P1] Insert 'pending' record BEFORE calling the provider
+  const imageId = randomUUID();
   try {
-    // [S6] Request timeout via AbortController
-    const controller  = new AbortController();
-    const timeoutId   = setTimeout(() => controller.abort(), IMAGE_GENERATION_TIMEOUT_MS);
-
-    let aiRes: Response;
-    try {
-      // [S12] Model hardcoded; URL from trusted env var only
-      aiRes = await fetch(`${baseURL}/images/generations`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
-        },
-        body: JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
+    await pool.query(
+      `INSERT INTO content_image_generations
+         (id, client_id, user_id, post_id, service_key, provider, model,
+          prompt, size, status, idempotency_key, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, '')`,
+      [imageId, clientId, userId, postId ?? null, serviceKey ?? null,
+       "openai", "gpt-image-1", prompt.trim(), size, idempotencyKey ?? null],
+    );
+  } catch (insertErr: any) {
+    // Concurrent duplicate hit the unique index — return the existing record
+    if (insertErr?.code === "23505" && idempotencyKey) {
+      const dup = await pool.query<{ id: string; status: string }>(
+        `SELECT id, status FROM content_image_generations
+          WHERE client_id = $1 AND idempotency_key = $2 LIMIT 1`,
+        [clientId, idempotencyKey],
+      );
+      if (dup.rows.length > 0) {
+        res.status(202).json({ ok: false, generationId: dup.rows[0]!.id, status: dup.rows[0]!.status, idempotent: true });
+        return;
+      }
     }
+    console.error("[auto-content/generate-image] pending insert error:", insertErr?.message);
+    res.status(500).json({ error: "Failed to initialize generation record" });
+    return;
+  }
 
-    if (!aiRes.ok) {
-      console.error("[auto-content/generate-image] provider error:", aiRes.status);
+  // Helper: mark record as failed (fire-and-forget safe)
+  const markFailed = async (reason: string): Promise<void> => {
+    await pool.query(
+      `UPDATE content_image_generations
+          SET status = 'failed', failure_reason = $1, updated_at = NOW(), completed_at = NOW()
+        WHERE id = $2`,
+      [reason.slice(0, 500), imageId],
+    ).catch(() => {});
+  };
+
+  // [S6] Timeout via AbortController
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), IMAGE_GENERATION_TIMEOUT_MS);
+
+  let aiRes: Response;
+  try {
+    // [S12] Model hardcoded; URL from trusted env var only
+    aiRes = await fetch(`${baseURL}/images/generations`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
+      },
+      body:   JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), size, n: 1 }),
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timeoutId);
+    if (fetchErr?.name === "AbortError") {
+      await markFailed("provider_timeout");
+      res.status(504).json({ error: "Image generation timed out" });
+    } else {
+      await markFailed(`provider_error:${fetchErr?.message ?? "unknown"}`);
       res.status(502).json({ error: "Image generation failed" });
-      return;
     }
+    return;
+  }
+  clearTimeout(timeoutId);
 
-    // [S7] Response-body size cap — read raw text and check length before parsing
-    const rawText = await aiRes.text();
-    if (Buffer.byteLength(rawText, "utf8") > IMAGE_RESPONSE_MAX_BYTES) {
-      res.status(502).json({ error: "Provider response too large" });
-      return;
-    }
+  if (!aiRes.ok) {
+    console.error("[auto-content/generate-image] provider HTTP error:", aiRes.status);
+    await markFailed(`provider_http_${aiRes.status}`);
+    res.status(502).json({ error: "Image generation failed" });
+    return;
+  }
 
-    const aiJson = JSON.parse(rawText) as { data?: Array<{ b64_json?: string }> };
-    const b64    = aiJson.data?.[0]?.b64_json;
-    if (!b64) { res.status(502).json({ error: "No image data returned from AI" }); return; }
+  // [S7] Response-body size cap
+  const rawText = await aiRes.text();
+  if (Buffer.byteLength(rawText, "utf8") > IMAGE_RESPONSE_MAX_BYTES) {
+    await markFailed("provider_response_too_large");
+    res.status(502).json({ error: "Provider response too large" });
+    return;
+  }
 
-    // [S8] Decoded-buffer size cap
-    const imageBuffer = Buffer.from(b64, "base64");
-    if (imageBuffer.length > IMAGE_BUFFER_MAX_BYTES) {
-      res.status(502).json({ error: "Generated image exceeds maximum allowed size" });
-      return;
-    }
+  const aiJson = JSON.parse(rawText) as { data?: Array<{ b64_json?: string }> };
+  const b64    = aiJson.data?.[0]?.b64_json;
+  if (!b64) {
+    await markFailed("no_image_data");
+    res.status(502).json({ error: "No image data returned from AI" });
+    return;
+  }
 
-    // [S9] PNG magic-bytes validation
-    if (imageBuffer.length < PNG_MAGIC.length || !imageBuffer.subarray(0, 8).equals(PNG_MAGIC)) {
-      res.status(502).json({ error: "Provider returned unexpected image format" });
-      return;
-    }
+  // [S8] Decoded-buffer size cap
+  const imageBuffer = Buffer.from(b64, "base64");
+  if (imageBuffer.length > IMAGE_BUFFER_MAX_BYTES) {
+    await markFailed("image_too_large");
+    res.status(502).json({ error: "Generated image exceeds maximum allowed size" });
+    return;
+  }
 
-    // ── Upload buffer to Object Storage ──────────────────────────────────────
-    const imageId    = randomUUID();
-    const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
-    if (!privateDir) {
-      res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
-      return;
-    }
+  // [S9] PNG magic-bytes validation
+  if (imageBuffer.length < PNG_MAGIC.length || !imageBuffer.subarray(0, 8).equals(PNG_MAGIC)) {
+    await markFailed("invalid_image_format");
+    res.status(502).json({ error: "Provider returned unexpected image format" });
+    return;
+  }
 
-    // Parse "gs://bucket-name/optional/prefix" into bucketName + objectPath
-    const withoutScheme = privateDir.replace(/^gs:\/\//, "");
-    const firstSlash    = withoutScheme.indexOf("/");
-    const bucketName    = firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash);
-    const bucketPrefix  = firstSlash === -1 ? "" : withoutScheme.slice(firstSlash + 1);
-    const objectPath    = `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
+  // ── Upload to Object Storage ──────────────────────────────────────────────
+  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  if (!privateDir) {
+    await markFailed("storage_not_configured");
+    res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
+    return;
+  }
 
-    // [S13] Objects stored as private (no public ACL)
+  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+  const objectPath                   = makeObjectPath(bucketPrefix, imageId);
+  const storageKey                   = `generated-images/${imageId}.png`; // canonical; no bucket prefix
+
+  let gcsUploaded = false;
+  try {
+    // [S13] Private object — no public ACL
     const gcsFile = objectStorageClient.bucket(bucketName).file(objectPath);
     await gcsFile.save(imageBuffer, { contentType: "image/png", resumable: false });
-    gcsFilePath = objectPath; // tracked for cleanup in case DB insert fails
+    gcsUploaded = true;
+  } catch (storageErr: any) {
+    console.error("[auto-content/generate-image] storage error:", storageErr?.message);
+    await markFailed("storage_failure");
+    res.status(500).json({ error: "Failed to store generated image" });
+    return;
+  }
 
-    // [S14] Provenance persisted — user_id, post_id, prompt, size, image_url
-    const imageUrl = `/objects/generated-images/${imageId}.png`;
+  // [S14] Update record to 'completed' with canonical storageKey
+  try {
     await pool.query(
-      `INSERT INTO content_image_generations (id, user_id, post_id, prompt, size, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [imageId, userId, postId ?? null, prompt.trim(), size, imageUrl],
+      `UPDATE content_image_generations
+          SET status = 'completed', storage_key = $1, updated_at = NOW(), completed_at = NOW()
+        WHERE id = $2`,
+      [storageKey, imageId],
     );
-    gcsFilePath = null; // DB committed — nothing to clean up
-
-    res.json({ ok: true, generationId: imageId, imageUrl });
-
-  } catch (err: any) {
-    // [S10] Failure cleanup: delete orphaned GCS object if DB insert failed
-    if (gcsFilePath) {
-      const privateDir    = process.env.PRIVATE_OBJECT_DIR ?? "";
-      const withoutScheme = privateDir.replace(/^gs:\/\//, "");
-      const firstSlash    = withoutScheme.indexOf("/");
-      const bucketName    = firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash);
-      objectStorageClient.bucket(bucketName).file(gcsFilePath).delete({ ignoreNotFound: true })
-        .catch(() => {});
+  } catch (dbErr: any) {
+    // [S10] DB commit failed — delete orphaned GCS object to prevent data leak
+    if (gcsUploaded) {
+      objectStorageClient.bucket(bucketName).file(objectPath).delete({ ignoreNotFound: true }).catch(() => {});
     }
-    if (err?.name === "AbortError") {
-      res.status(504).json({ error: "Image generation timed out" });
-      return;
-    }
-    console.error("[auto-content/generate-image] error:", err?.message ?? "unknown");
-    res.status(500).json({ error: err?.message ?? "Image generation failed" });
+    await markFailed("db_commit_failure");
+    console.error("[auto-content/generate-image] DB update error:", dbErr?.message);
+    res.status(500).json({ error: "Failed to record image generation" });
+    return;
+  }
+
+  res.json({ ok: true, generationId: imageId, storageKey });
+});
+
+// ── GET /auto-content/generate-image/:id/signed-url ──────────────────────────
+// Returns a short-lived (15-min) signed access URL for an approved asset.
+// The Instagram publishing adapter calls this before posting; the URL is never
+// persisted — each adapter invocation gets a fresh expiry window.
+//
+// IDOR guard: the requesting user's client_id MUST match the record's client_id.
+
+router.get("/auto-content/generate-image/:id/signed-url", async (req, res): Promise<void> => {
+  // [S1] Authentication
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  // [T1] Tenant resolution
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const code = resolved.reason === "not_found" ? 404 : 403;
+    res.status(code).json({ error: "client_resolve_failed" });
+    return;
+  }
+  const clientId = resolved.client.id;
+
+  const { id } = req.params as { id: string };
+  const genRow  = await pool.query<{ id: string; client_id: string; storage_key: string | null; status: string }>(
+    `SELECT id, client_id, storage_key, status FROM content_image_generations WHERE id = $1`,
+    [id],
+  );
+
+  if (genRow.rows.length === 0) {
+    res.status(404).json({ error: "Generation not found" });
+    return;
+  }
+  const gen = genRow.rows[0]!;
+
+  // [IDOR] Tenant ownership — never expose one client's asset to another
+  if (gen.client_id !== clientId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  if (gen.status !== "completed" || !gen.storage_key) {
+    res.status(409).json({ error: "Image not yet available", status: gen.status });
+    return;
+  }
+
+  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  if (!privateDir) {
+    res.status(500).json({ error: "Object storage not configured" });
+    return;
+  }
+
+  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+  const objectPath = `${bucketPrefix ? bucketPrefix + "/" : ""}${gen.storage_key}`;
+
+  try {
+    const [signedUrl] = await objectStorageClient.bucket(bucketName).file(objectPath).getSignedUrl({
+      version: "v4",
+      action:  "read",
+      expires: Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000,
+    });
+    res.json({ ok: true, signedUrl, expiresIn: SIGNED_URL_EXPIRY_SECONDS });
+  } catch (signErr: any) {
+    console.error("[auto-content/signed-url] error:", signErr?.message);
+    res.status(500).json({ error: "Failed to generate signed URL" });
   }
 });
 

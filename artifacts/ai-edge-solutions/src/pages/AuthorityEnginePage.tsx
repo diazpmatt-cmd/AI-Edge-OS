@@ -230,18 +230,21 @@ function PlaceholderBanner({ note }: { note: string }) {
   );
 }
 
-function ScoreGauge({ score, color, label, sub }: { score: number; color: string; label: string; sub: string }) {
-  const r = 38; const circ = 2 * Math.PI * r; const fill = (score / 100) * circ;
+function ScoreGauge({ score, color, label, sub }: { score: number | null; color: string; label: string; sub: string }) {
+  const r = 38; const circ = 2 * Math.PI * r; const fill = (score !== null ? score / 100 : 0) * circ;
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
       <svg width={100} height={100} style={{ transform: "rotate(-90deg)" }}>
         <circle cx={50} cy={50} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={8} />
-        <circle cx={50} cy={50} r={r} fill="none" stroke={color} strokeWidth={8}
+        <circle cx={50} cy={50} r={r} fill="none"
+          stroke={score !== null ? color : "rgba(255,255,255,0.08)"} strokeWidth={8}
           strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round"
           style={{ transition: "stroke-dasharray 1s ease" }} />
       </svg>
       <div style={{ marginTop: -76, zIndex: 1, textAlign: "center" }}>
-        <div style={{ fontSize: 26, fontWeight: 900, color }}>{score}</div>
+        <div style={{ fontSize: 26, fontWeight: 900, color: score !== null ? color : "#475569" }}>
+          {score !== null ? score : "—"}
+        </div>
         <div style={{ fontSize: 10, color: "rgba(148,163,184,0.7)", marginTop: -2 }}>/100</div>
       </div>
       <div style={{ height: 30, textAlign: "center" }}>
@@ -425,12 +428,17 @@ export default function AuthorityEnginePage() {
 
   // ── Computed values ──────────────────────────────────────────────────────────
 
-  const authorityScore = audit?.authorityScore ?? null;
   const napScore       = 71;  // placeholder — no NAP backend yet
   const liveItems      = liveOpps?.items ?? [];
   const backlinkScore  = computeBacklinkScore(liveItems);
-  const schemaScore    = 0;   // placeholder — no schema backend yet
-  const overallAuth    = Math.round(((authorityScore ?? 0) + napScore + backlinkScore + schemaScore) / 4);
+  // Edge Authority Score from the competitive summary (loaded when backlinks tab is active).
+  // When null (not yet loaded or no qualifying evidence), excluded from the average per ADR-018.
+  // authority_score (third-party DA, always 0 placeholder) and schemaScore (0 placeholder)
+  // are intentionally excluded — do not include unavailable values in aggregates (ADR-018 §4).
+  const edgeAuth  = competitiveSummary?.client?.edgeAuthorityScore ?? null;
+  const _authParts: number[] = [napScore, backlinkScore];
+  if (edgeAuth !== null) _authParts.push(edgeAuth);
+  const overallAuth = Math.round(_authParts.reduce((a, b) => a + b, 0) / _authParts.length);
 
   const statusColor = (s: number) => s >= 70 ? "#22C55E" : s >= 40 ? "#F59E0B" : "#EF4444";
 
@@ -784,8 +792,13 @@ export default function AuthorityEnginePage() {
                   sub="4 of 7 verified" />
                 <ScoreGauge score={backlinkScore} color={statusColor(backlinkScore)} label="Backlinks"
                   sub={liveItems.length === 0 ? "No data yet" : `${wonCount + pursuingCount} active · ${liveItems.length} opps`} />
-                <ScoreGauge score={schemaScore}   color="#EF4444"                    label="Schema.org"
+                <ScoreGauge score={0}             color="#EF4444"                    label="Schema.org"
                   sub="Not configured" />
+                <ScoreGauge
+                  score={edgeAuth}
+                  color={edgeAuth !== null ? statusColor(edgeAuth) : "#64748B"}
+                  label="Edge Authority"
+                  sub={edgeAuth !== null ? "AI Edge OS proprietary" : "Unavailable"} />
               </div>
             </div>
           </div>
@@ -1321,18 +1334,18 @@ export default function AuthorityEnginePage() {
               {scoreSnapshots.length >= 2 && (() => {
                 const edgeScores   = scoreSnapshots.map(s => s.edge_authority_score).filter((v): v is number => v != null);
                 const hasEdgeData  = edgeScores.length >= 2;
-                const plotScores   = hasEdgeData ? edgeScores : scoreSnapshots.map(s => s.authority_score);
+                // ADR-018 §5: never plot authority_score=0 as a trend; hide section entirely when no real data.
+                if (!hasEdgeData) return null;
+                const plotScores   = edgeScores; // only real Edge Authority data
                 const counts       = scoreSnapshots.map(s => s.backlink_count);
                 const scorePts     = buildSparklinePoints(plotScores, 220, 36);
                 const countPts     = buildSparklinePoints(counts, 220, 36);
                 const first        = scoreSnapshots[0]!;
                 const last         = scoreSnapshots[scoreSnapshots.length - 1]!;
-                const delta        = hasEdgeData && edgeScores.length >= 2
-                  ? edgeScores[edgeScores.length - 1]! - edgeScores[0]!
-                  : last.authority_score - first.authority_score;
-                const avgScore     = hasEdgeData ? Math.round(edgeScores.reduce((a, b) => a + b, 0) / edgeScores.length) : null;
-                const peakScore    = hasEdgeData ? Math.max(...edgeScores) : null;
-                const latestEdge   = hasEdgeData ? edgeScores[edgeScores.length - 1] : null;
+                const delta        = edgeScores[edgeScores.length - 1]! - edgeScores[0]!;
+                const avgScore     = Math.round(edgeScores.reduce((a, b) => a + b, 0) / edgeScores.length);
+                const peakScore    = Math.max(...edgeScores);
+                const latestEdge   = edgeScores[edgeScores.length - 1]!;
                 const trendColor = delta > 0 ? "#22C55E" : delta < 0 ? "#EF4444" : "#64748B";
                 return (
                   <div style={{
@@ -1500,7 +1513,7 @@ export default function AuthorityEnginePage() {
               {competitiveSummary && (() => {
                 const { client: self, competitors } = competitiveSummary;
                 const allRows = [
-                  { domain: "bedbugsbeyond.com", businessName: "Bed Bugs & Beyond (You)", authorityScore: self.edgeAuthorityScore ?? 0, backlinkCount: self.backlinkCount, citationScore: null as number | null, opportunityScore: self.opportunityCount, isSelf: true },
+                  { domain: "bedbugsbeyond.com", businessName: "Bed Bugs & Beyond (You)", authorityScore: self.edgeAuthorityScore as number | null, backlinkCount: self.backlinkCount, citationScore: null as number | null, opportunityScore: self.opportunityCount, isSelf: true },
                   ...competitors.map(c => ({ ...c, citationScore: c.citationScore as number | null, isSelf: false })),
                 ];
                 if (allRows.length <= 1 && competitors.length === 0) return null;
@@ -1544,7 +1557,7 @@ export default function AuthorityEnginePage() {
                                 <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>{row.domain}</div>
                               )}
                             </div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: row.authorityScore >= 40 ? "#22C55E" : "#94A3B8" }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: (row.authorityScore ?? -1) >= 40 ? "#22C55E" : "#94A3B8" }}>
                               {row.authorityScore || "—"}
                             </div>
                             <div style={{ fontSize: 11, color: "#94A3B8" }}>

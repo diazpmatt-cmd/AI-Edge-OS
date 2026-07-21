@@ -1337,22 +1337,73 @@ export async function migrateSchema(): Promise<void> {
   `);
 
   // ── Content Autopilot Phase 2: AI Image Generations ─────────────────────
-  // One row per AI-generated image. Tracks the prompt, size, object-storage
-  // path, and which social post (if any) the image was generated for.
+  // ── content_image_generations ─────────────────────────────────────────────
+  // Tenant-safe AI image generation record.
+  // CREATE TABLE includes all V1 columns; ALTER TABLE guards add missing columns
+  // to existing installs idempotently.
+  //
+  // COLUMN NOTES:
+  //   storage_key — canonical object identifier (path within bucket); the primary
+  //                 reference for asset delivery. image_url is legacy/deprecated.
+  //   status      — lifecycle: 'pending' → 'completed' | 'failed'
+  //   idempotency_key — client-supplied; prevents duplicate billable calls.
+  //                     Partial unique index enforced below.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS content_image_generations (
-      id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id    TEXT        NOT NULL,
-      post_id    TEXT,
-      prompt     TEXT        NOT NULL,
-      size       TEXT        NOT NULL DEFAULT '1024x1024',
-      image_url  TEXT        NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id        TEXT        NOT NULL,
+      user_id          TEXT        NOT NULL,
+      post_id          TEXT,
+      service_key      TEXT,
+      campaign_id      TEXT,
+      provider         TEXT        NOT NULL DEFAULT 'openai',
+      model            TEXT        NOT NULL DEFAULT 'gpt-image-1',
+      prompt           TEXT        NOT NULL,
+      size             TEXT        NOT NULL DEFAULT '1024x1024',
+      storage_key      TEXT,
+      image_url        TEXT        DEFAULT '',
+      status           TEXT        NOT NULL DEFAULT 'completed',
+      failure_reason   TEXT,
+      idempotency_key  TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at     TIMESTAMPTZ,
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE INDEX IF NOT EXISTS cig_user_created
       ON content_image_generations(user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS cig_client_status_created
+      ON content_image_generations(client_id, status, created_at DESC);
   `);
+
+  // Idempotency: unique per (client_id, idempotency_key) when key is provided.
+  // Partial index allows multiple NULL idempotency_key rows (no-key requests).
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS cig_client_idempotency_uniq
+      ON content_image_generations(client_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
+  `).catch(() => {});
+
+  // ALTER TABLE guards — add columns absent on existing installs.
+  const alterGuards = [
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS client_id       TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS service_key     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS campaign_id     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS provider        TEXT NOT NULL DEFAULT 'openai'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS model           TEXT NOT NULL DEFAULT 'gpt-image-1'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS storage_key     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS status          TEXT NOT NULL DEFAULT 'completed'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS failure_reason  TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS completed_at    TIMESTAMPTZ`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+    // Allow NULL on image_url — storage_key is now the canonical reference.
+    `ALTER TABLE content_image_generations ALTER COLUMN image_url DROP NOT NULL`,
+  ];
+  for (const stmt of alterGuards) {
+    await pool.query(stmt).catch(() => {});
+  }
 
   console.log("[SCHEMA] Core schema migration complete");
 }

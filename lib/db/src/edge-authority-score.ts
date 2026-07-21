@@ -21,7 +21,7 @@
  * Inputs must come from a live configured provider run.
  * Fixture/demo provider data MUST NOT be passed to this function.
  *
- * See ADR-016 for rationale and governance rules.
+ * See ADR-018 for rationale and governance rules.
  */
 
 export interface EdgeAuthorityScoreInput {

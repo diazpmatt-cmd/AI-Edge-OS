@@ -851,24 +851,51 @@ router.get("/social-connections/google-business-status", async (req, res) => {
             if (gbpLocationsFound === 0) {
               failureReason = "no_gbp_locations_found";
             } else {
-              const primaryLoc = locs[0];
-              selectedLocationName = primaryLoc.title;
-              console.log(`[GOOGLE-VERIFY] selectedLocationName="${selectedLocationName}" locationName="${primaryLoc.name}"`);
+              // ── Identity-preserving selection for status-poll write ──────────────
+              // NEVER write locationName: locs[0] when multiple locations exist and
+              // the stored location is unverified — Google API ordering is not stable
+              // and would repoisoin the DB on every Connections page poll.
+              const existingLocName: string | null = (metadata.locationName as string) ?? null;
+              const existingVerified: boolean       = metadata.verifiedByApi === true;
+              const existingLocTitle: string        = ((metadata.locationTitle ?? metadata.primaryLocationTitle) as string) ?? "";
+              const normT2 = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-              // Update metadata with latest location info (includes resource names for API caching)
+              let pickedLoc: (typeof locs)[0] | null = null;
+              if (existingLocName && existingVerified) {
+                pickedLoc = locs.find(l => l.name === existingLocName) ?? null;
+                if (!pickedLoc && existingLocTitle) {
+                  const normStored = normT2(existingLocTitle);
+                  pickedLoc = locs.find(l => normT2(l.title) === normStored) ?? null;
+                }
+              }
+              if (!pickedLoc && locs.length === 1) pickedLoc = locs[0];
+
+              if (pickedLoc) {
+                selectedLocationName = pickedLoc.title;
+                console.log(`[GOOGLE-VERIFY] selectedLocationName="${pickedLoc.title}" (${pickedLoc.name})`);
+              } else {
+                // Multiple locations, no verified context — use first for display only; do NOT persist.
+                selectedLocationName = locationNames[0] ?? "";
+                console.log(`[GOOGLE-VERIFY] ambiguous ${locs.length} locations, no verified context — display="${selectedLocationName}" locationName NOT updated`);
+              }
+
+              // Update metadata: always refresh accountName + location list;
+              // only overwrite locationName/locationTitle when identity is confirmed.
               try {
-                const updatedMeta = {
+                const metaUpdate: Record<string, unknown> = {
                   ...metadata,
                   accountName: firstAccount.name,
-                  locationName: primaryLoc.name,
-                  locationTitle: primaryLoc.title,
-                  primaryLocationTitle: primaryLoc.title,
                   locationNames,
                   gbpAccountsFound,
                   gbpLocationsFound,
                 };
+                if (pickedLoc) {
+                  metaUpdate.locationName         = pickedLoc.name;
+                  metaUpdate.locationTitle        = pickedLoc.title;
+                  metaUpdate.primaryLocationTitle = pickedLoc.title;
+                }
                 await db.update(socialConnectionsTable)
-                  .set({ metadata: JSON.stringify(updatedMeta), updatedAt: new Date() })
+                  .set({ metadata: JSON.stringify(metaUpdate), updatedAt: new Date() })
                   .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, "google_business")));
               } catch { /* non-fatal */ }
             }

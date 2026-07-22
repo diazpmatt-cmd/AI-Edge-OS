@@ -14,6 +14,8 @@ type DbConnection = {
   accountId: string | null;
   expiresAt: string | null;
   createdAt: string;
+  statusLabel?: "connected" | "needs_reauthorization";
+  needsReauthorization?: boolean;
 };
 
 type DebugInfo = {
@@ -52,6 +54,7 @@ const LOVABLE_MIGRATION: Record<string, MigrationState> = {
 type StatusKind = "connected" | "connected_readonly" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
+  if (dbConn?.needsReauthorization || dbConn?.statusLabel === "needs_reauthorization") return "needs_reconnect";
   if (dbConn) return (provider === "tiktok") ? "connected_readonly" : "connected";
   // Instagram is locked until Facebook is connected in the database
   if (provider === "instagram" && !facebookConnected) return "coming_soon";
@@ -302,7 +305,7 @@ export default function ConnectionsPage() {
     thumbnail: string | null;
     recentVideos: Array<{ videoId: string; title: string; publishedAt: string; thumbnail: string | null }>;
   };
-  const { data: ytChannelInfo } = useQuery<YouTubeChannelInfo>({
+  const { data: ytChannelInfo, isError: ytChannelInfoError } = useQuery<YouTubeChannelInfo>({
     queryKey: ["youtube_channel_info"],
     queryFn: () => authFetch<YouTubeChannelInfo>("/social-connections/youtube/channel-info"),
     enabled: connByProvider.has("youtube"),
@@ -798,7 +801,9 @@ export default function ConnectionsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 16, marginBottom: 32 }}>
           {PLATFORMS.map(platform => {
             const dbConn = connByProvider.get(platform.id);
-            const status = getStatus(platform.id, dbConn, facebookConnected);
+            const status = platform.id === "youtube" && ytChannelInfoError
+              ? "needs_reconnect"
+              : getStatus(platform.id, dbConn, facebookConnected);
             const sm = STATUS_META[status];
             const migration = LOVABLE_MIGRATION[platform.id];
             const accountName = getDisplayAccountName(platform.id, dbConn);

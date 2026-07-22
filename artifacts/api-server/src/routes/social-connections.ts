@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { generateState } from "../lib/oauthState";
 import { getCallbackLog } from "../lib/callbackDebugLog";
+import { deriveSocialConnectionHealth } from "../lib/social-connection-health";
 
 const router = Router();
 
@@ -54,6 +55,7 @@ router.get("/social-connections", async (req, res) => {
   const rows = await db.select().from(socialConnectionsTable)
     .where(eq(socialConnectionsTable.userId, userId));
   res.json(rows.map((r) => ({
+    ...deriveSocialConnectionHealth(r.metadata),
     id: r.id, provider: r.provider,
     accountName: r.accountName, accountId: r.accountId,
     expiresAt: r.expiresAt?.toISOString() ?? null,

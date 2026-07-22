@@ -13,6 +13,8 @@
  * exercised via the logic helpers, not the live HTTP layer.
  */
 
+import { describe, expect, it } from "vitest";
+
 describe("YouTube — canonical provider ID", () => {
   it("platform key is 'youtube'", () => {
     const PLATFORM_KEY = "youtube";

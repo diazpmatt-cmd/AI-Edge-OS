@@ -159,7 +159,7 @@ function CreateReferralModal({ programs, onClose, onCreated }: {
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={labelStyle}>Program</label>
-            <select value={form.programId} onChange={e => setForm(f => ({ ...f, programId: e.target.value }))} style={{ ...inputStyle }}>
+            <select value={form.programId} onChange={e => setForm(f => ({ ...f, programId: Number(e.target.value) }))} style={{ ...inputStyle }}>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>

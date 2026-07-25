@@ -48,73 +48,11 @@ const router = Router();
       );
     `);
     console.log("[referrals] tables ready");
-    await seedDemoData();
+    // Production data must originate from real referral activity. Demo seeding is intentionally disabled.
   } catch (err) {
     console.warn("[referrals] bootstrap warning:", err);
   }
 })();
-
-async function seedDemoData() {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id FROM referral_programs WHERE client_id = 'bbb' LIMIT 1`
-    );
-    if (rows.length > 0) return;
-
-    const { rows: programs } = await pool.query(`
-      INSERT INTO referral_programs (client_id, name, description, reward_type, reward_value, status, referral_code, promo_message)
-      VALUES
-        ('bbb','Neighbor Referral','Refer a neighbor for bed bug treatment and earn $50 credit toward your next service.','credit',50,'active','BBB-NEIGHBOR','Know someone with bed bugs? Share our number and earn $50 off your next visit!'),
-        ('bbb','Partner Program','For real estate agents and property managers. Earn $75 per confirmed booking.','cash',75,'active','BBB-PARTNER','We pay $75 per client you send our way. No cap on earnings.'),
-        ('bbb','Post-Service Thank You','Happy with your service? Refer a friend and both of you get $25 off.','discount',25,'active','BBB-THANKS','Love our service? So will your neighbors. Share and save!')
-      RETURNING id
-    `);
-
-    const [neighbor, partner, postService] = programs;
-    const now = new Date();
-    const ago = (d: number) => new Date(now.getTime() - d * 86400000).toISOString();
-
-    await pool.query(`
-      INSERT INTO referrals
-        (client_id,program_id,referrer_name,referrer_email,referrer_phone,referred_name,referred_phone,status,reward_amount,source,converted_at,paid_at,created_at)
-      VALUES
-        ('bbb',$1,'Sandra M.','sandra.m@email.com','702-555-0101','Tom W.','702-555-0201','paid',50,'link',$2,$3,$4),
-        ('bbb',$1,'Carlos R.','carlos.r@email.com','702-555-0102','Maria G.','702-555-0202','converted',50,'qr',$5,NULL,$6),
-        ('bbb',$1,'Linda T.','linda.t@email.com','702-555-0103',NULL,NULL,'pending',50,'link',NULL,NULL,$7),
-        ('bbb',$1,'James K.',NULL,'702-555-0104','Beth K.','702-555-0204','pending',50,'manual',NULL,NULL,$8),
-        ('bbb',$9,'Sunrise Realty','mgmt@sunrisenv.com','702-555-0110','Unit 4B HOA','702-555-0210','paid',75,'link',$10,$11,$12),
-        ('bbb',$9,'NV Prop Mgmt','referrals@nvpm.com','702-555-0111','Desert Villas','702-555-0211','converted',75,'link',$13,NULL,$14),
-        ('bbb',$9,'Clark Realty','info@clarkrealty.com','702-555-0112',NULL,NULL,'pending',75,'link',NULL,NULL,$15),
-        ('bbb',$16,'Rachel B.','rachel.b@email.com','702-555-0120','Kim P.','702-555-0220','paid',25,'link',$17,$18,$19),
-        ('bbb',$16,'David C.','david.c@email.com','702-555-0121','Ana C.','702-555-0221','converted',25,'qr',$20,NULL,$21),
-        ('bbb',$16,'Priya S.','priya.s@email.com','702-555-0122',NULL,NULL,'pending',25,'link',NULL,NULL,$22),
-        ('bbb',$16,'Marcus W.',NULL,'702-555-0123','Joe D.','702-555-0223','cancelled',25,'manual',NULL,NULL,$23),
-        ('bbb',$1,'Yvonne F.','yvonne.f@email.com','702-555-0105','Paul F.','702-555-0205','converted',50,'link',$24,NULL,$25)
-    `, [
-      neighbor.id,
-      ago(45), ago(38), ago(50),
-      ago(12), ago(15),
-      ago(7), ago(3),
-      partner.id,
-      ago(30), ago(25), ago(35),
-      ago(8), ago(10), ago(2),
-      postService.id,
-      ago(20), ago(15), ago(22),
-      ago(9), ago(11), ago(5), ago(6),
-      ago(9), ago(12),
-    ]);
-
-    await pool.query(`
-      UPDATE referral_programs SET uses_count = (
-        SELECT COUNT(*) FROM referrals WHERE program_id = referral_programs.id AND status != 'cancelled'
-      ) WHERE client_id = 'bbb'
-    `);
-
-    console.log("[referrals] demo data seeded for bbb");
-  } catch (err) {
-    console.warn("[referrals] seed warning:", err);
-  }
-}
 
 async function resolveClient(req: any, res: any): Promise<{ userId: string; clientId: string } | null> {
   const { userId } = getAuth(req);
@@ -248,8 +186,21 @@ router.post("/referrals", async (req, res) => {
 
     let rewardAmount: string | undefined;
     if (programId) {
-      const prog = await db.select().from(referralProgramsTable).where(eq(referralProgramsTable.id, Number(programId))).limit(1);
-      if (prog.length) rewardAmount = prog[0].rewardValue ?? undefined;
+      // Program ownership is part of the authorization boundary: a tenant may
+      // only create a referral against one of its own programs.
+      const prog = await db
+        .select()
+        .from(referralProgramsTable)
+        .where(and(
+          eq(referralProgramsTable.id, Number(programId)),
+          eq(referralProgramsTable.clientId, auth.clientId),
+        ))
+        .limit(1);
+      if (!prog.length) {
+        res.status(404).json({ error: "Program not found" });
+        return;
+      }
+      rewardAmount = prog[0].rewardValue ?? undefined;
     }
 
     const [referral] = await db
@@ -258,7 +209,7 @@ router.post("/referrals", async (req, res) => {
       .returning();
 
     if (programId) {
-      await pool.query(`UPDATE referral_programs SET uses_count = uses_count + 1 WHERE id = $1`, [Number(programId)]);
+      await pool.query(`UPDATE referral_programs SET uses_count = uses_count + 1 WHERE id = $1 AND client_id = $2`, [Number(programId), auth.clientId]);
     }
 
     res.status(201).json(referral);

@@ -5,7 +5,7 @@
  * G. Missing-data preservation (null volume/difficulty stays null — never fabricated)
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   normalizeText,
   deriveSignalId,
@@ -14,6 +14,7 @@ import {
   normalizePAAResult,
   normalizeRedditResult,
   normalizeAIProbeResult,
+  warnIfMissingCompetitorIdentifier,
 } from "../../../../../lib/db/src/discovery-normalizer";
 import type { RawKeywordResult } from "../../../../../lib/db/src/discovery-providers";
 
@@ -306,5 +307,95 @@ describe("T-C2-G-4: rawProviderData preservation", () => {
     const raw = makeRawKeyword({ providerRaw });
     const signal = normalizeKeywordResult({ raw, clientId: CLIENT_ID, source: "test_fixture", createdAt: CREATED_AT });
     expect(signal.rawProviderData).toEqual(providerRaw);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// H. Competitor identifier guard (warnIfMissingCompetitorIdentifier)
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("T-C2-H-1: warnIfMissingCompetitorIdentifier — warning fires when competitorRank is set with no identifier", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeSignalInput(overrides: {
+    competitorRank?: number | null;
+    rawProviderData?: Record<string, unknown>;
+  } = {}) {
+    return {
+      competitorRank:  overrides.competitorRank  ?? null,
+      rawProviderData: overrides.rawProviderData ?? {},
+      clientId:        CLIENT_ID,
+      normalizedValue: "bed bug treatment foley al",
+    };
+  }
+
+  it("does NOT warn when competitorRank is null (normal post-normalization state)", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({ competitorRank: null }));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("warns at WARN level when competitorRank is set but rawProviderData has no identifier fields", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  1,
+      rawProviderData: { source: "dataforseo_serp", organicResultCount: 10 },
+    }));
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("competitor_rank=1");
+    expect(warnSpy.mock.calls[0][0]).toContain(CLIENT_ID);
+  });
+
+  it("does NOT warn when competitorRank is set and competitorName is present", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  2,
+      rawProviderData: { competitorName: "Foley Pest Control" },
+    }));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does NOT warn when competitorRank is set and topCompetitorDomain is present", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  3,
+      rawProviderData: { topCompetitorDomain: "foleypest.com" },
+    }));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does NOT warn when competitorRank is set and topCompetitorTitle is present", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  1,
+      rawProviderData: { topCompetitorTitle: "Foley Pest Control | Professional Services" },
+    }));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("warns when identifier fields exist but are empty strings", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  1,
+      rawProviderData: { competitorName: "", topCompetitorDomain: "", topCompetitorTitle: "" },
+    }));
+    expect(warnSpy).toHaveBeenCalledOnce();
+  });
+
+  it("warns when identifier fields are non-string types (e.g. null)", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({
+      competitorRank:  4,
+      rawProviderData: { competitorName: null, topCompetitorDomain: null },
+    }));
+    expect(warnSpy).toHaveBeenCalledOnce();
+  });
+
+  it("warning message mentions the keyword normalizedValue for traceability", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    warnIfMissingCompetitorIdentifier(makeSignalInput({ competitorRank: 1 }));
+    expect(warnSpy.mock.calls[0][0]).toContain("bed bug treatment foley al");
   });
 });

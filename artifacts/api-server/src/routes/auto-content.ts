@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
-import { autoContentSettingsTable, socialPostsTable, imageAssetsTable } from "@workspace/db/schema";
+import { db, pool } from "@workspace/db";
+import { autoContentSettingsTable, socialPostsTable, imageAssetsTable, clientsTable } from "@workspace/db/schema";
 import {
   normalizeTopics,
   validateTopicForGeneration,
@@ -25,6 +25,7 @@ import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { objectStorageClient } from "../lib/objectStorage.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -56,6 +57,15 @@ function getAiModel() {
     headers: { Authorization: `Bearer ${key}` },
   });
   return gw(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
+}
+
+/**
+ * Canonical OpenAI API-key resolver for direct fetch calls (image generation).
+ * Priority: AI_INTEGRATIONS_OPENAI_API_KEY (Replit-managed) → OPENAI_API_KEY (direct).
+ * Never log the returned value.
+ */
+export function resolveOpenAiApiKey(): string {
+  return process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 }
 
 const DEFAULT_SERVICE_AREAS = [
@@ -496,6 +506,19 @@ router.post("/auto-content/generate", async (req, res) => {
     resolvedIndustry   = clientResult.context.industry;
   }
 
+  // Resolve canonical clientId for tenant-scoped post inserts.
+  // Non-fatal: posts insert successfully without clientId (backward compat).
+  let resolvedClientId: string | null = null;
+  try {
+    const [clientRow] = await db
+      .select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(eq(clientsTable.userId, userId));
+    resolvedClientId = clientRow?.id ?? null;
+  } catch {
+    // non-fatal — backward-compatible, posts insert without clientId
+  }
+
   const {
     clientName: bodyClientName, industry: bodyIndustry,
     serviceAreas: bodyServiceAreas, topics: bodyTopics,
@@ -794,7 +817,9 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
       ? `${post.caption}\n\n${post.hashtags.join(" ")}`
       : post.caption;
 
-    const captionGoogle = `${effectiveClient} proudly servicing ${post.city}.`;
+    const captionGoogle = Array.isArray(platforms) && platforms.includes("google")
+      ? `${post.caption}\n\n${effectiveClient} — Serving ${post.city.split(",")[0].trim()} and surrounding areas.`
+      : `${effectiveClient} proudly servicing ${post.city}.`;
 
     // V3: Compute scoring fields
     const dupRisk = calcDuplicateRisk(post.city, post.topic, post.angle, [
@@ -814,6 +839,7 @@ Write a ${angle}-angle post about ${topic} for customers in ${city}.`;
 
     const [ins] = await db.insert(socialPostsTable).values({
       userId,
+      clientId: resolvedClientId,
       clientName: effectiveClient,
       platforms: JSON.stringify(Array.isArray(platforms) && platforms.length ? platforms : ["facebook"]),
       caption: captionFull,
@@ -1501,6 +1527,522 @@ router.get("/auto-content/registry", (_req, res) => {
     audiences: BBB_AUDIENCES,
     campaignGoals: CAMPAIGN_GOALS,
   });
+});
+
+// ── Phase 2: AI Image Generation — Tenant-Safe V1 ────────────────────────────
+//
+// POST /auto-content/generate-image
+//   Resolves tenant, enforces idempotency + rate-limit, persists a 'pending'
+//   record BEFORE the provider call, then completes or fails in-place.
+//   Returns { ok, generationId, storageKey }.
+//
+// GET /auto-content/generate-image/:id/signed-url
+//   Returns a short-lived signed URL for an approved asset.
+//   Used by the Instagram publishing adapter; requires ownership verification.
+//
+// Security controls:
+//   [S1]  Authentication gate (Clerk; 401 on missing session)
+//   [S2]  API key fail-fast (503 if not configured; empty Bearer never sent)
+//   [S3]  Prompt length limit (≤500 chars; 400 on excess)
+//   [S4]  Prohibited-claim block (termites / whole-home heat-treatment; 400)
+//   [S5]  Valid size allow-list (400 on unknown)
+//   [S6]  Request timeout (30 s AbortController; 504 on breach)
+//   [S7]  Response-body size cap (12 MB JSON; 502 on excess)
+//   [S8]  Decoded-buffer size cap (8 MB; 502 on excess)
+//   [S9]  PNG magic-bytes validation (502 on mismatch)
+//   [S10] Failure cleanup: GCS object deleted if DB commit fails (orphan-safe)
+//   [S11] API key never logged, never in response, never in migrations
+//   [S12] Model hardcoded to gpt-image-1; provider URL from env var only
+//   [S13] Objects stored as private (no public ACL set)
+//   [S14] Provenance first: pending record written before any provider call
+//   [T1]  Tenant isolation: resolveClientContentContextFromDb on every request
+//   [I1]  Idempotency: client_id + idempotency_key → return existing record
+//   [R1]  Rate-limit: 10 completed/pending generations per hour per client
+
+// PNG magic bytes: 137 80 78 71 13 10 26 10
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Prompt keywords prohibited by the BB&B service registry contract.
+const PROHIBITED_IMAGE_PROMPT_KEYWORDS = [
+  "termite",
+  "whole-home heat",
+  "whole home heat",
+  "heat treatment",
+];
+
+export function isProhibitedImagePrompt(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return PROHIBITED_IMAGE_PROMPT_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+const IMAGE_GENERATION_TIMEOUT_MS  = 30_000;
+const IMAGE_RESPONSE_MAX_BYTES      = 12 * 1024 * 1024;
+const IMAGE_BUFFER_MAX_BYTES        = 8  * 1024 * 1024;
+const PROMPT_MAX_LENGTH             = 500;
+const IMAGE_RATE_LIMIT_PER_HOUR     = Number(process.env.IMAGE_RATE_LIMIT_PER_HOUR ?? "10");
+const SIGNED_URL_EXPIRY_SECONDS     = 15 * 60; // 15 minutes
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Build a server-side structured image prompt from authorized inputs.
+ * User-supplied creative brief is supplemental and never overrides the
+ * authorized service name or geography.
+ */
+export function buildImagePrompt(opts: {
+  serviceDisplayName: string;
+  city?: string;
+  creativeBrief?: string;
+}): string {
+  const parts: string[] = [
+    `Professional pest control marketing image for ${opts.serviceDisplayName}`,
+  ];
+  if (opts.city?.trim()) parts.push(`serving ${opts.city.trim()}`);
+  if (opts.creativeBrief?.trim()) parts.push(`Creative brief: ${opts.creativeBrief.trim()}`);
+  return parts.join(". ");
+}
+
+function parseBucketPath(privateDir: string): { bucketName: string; bucketPrefix: string } {
+  const withoutScheme = privateDir.replace(/^gs:\/\//, "");
+  const firstSlash    = withoutScheme.indexOf("/");
+  return {
+    bucketName:   firstSlash === -1 ? withoutScheme : withoutScheme.slice(0, firstSlash),
+    bucketPrefix: firstSlash === -1 ? "" : withoutScheme.slice(firstSlash + 1),
+  };
+}
+
+function makeObjectPath(bucketPrefix: string, imageId: string): string {
+  return `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
+}
+
+// ── POST /auto-content/generate-image ────────────────────────────────────────
+// Security controls (preflight order — provider is never called on any rejection):
+//   [S1]  Authentication
+//   [T1]  Tenant resolution
+//   [S2]  API key fail-fast
+//   [T2]  Post/draft ownership — postId must belong to authenticated user
+//   [SVC] Service authorization — serviceKey validated against active registry
+//   [S3]  Prompt / effectivePrompt validation
+//   [S4]  Prohibited-claim enforcement
+//   [S5]  Size allow-list
+//   [I1]  Idempotency: completed→200, pending→202, failed→atomic UPDATE then retry
+//   [R1]  Rate-limit: counts pending + completed + failed (all provider-boundary attempts)
+//   [P1]  Pending record INSERT (or reuse of I1 failed-row)
+//   [S6]  Provider call with AbortController timeout
+//   [S7–S10] Response / buffer / format guards
+//   [S13] Private object storage
+//   [S14] DB commit
+
+router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
+  // [S1] Authentication
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  // [T1] Tenant resolution — every call must resolve to a known active client
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const r    = resolved.reason;
+    const code = r === "not_found" ? 404 : r === "inactive" ? 403 : 503;
+    res.status(code).json({ error: "client_resolve_failed", reason: r });
+    return;
+  }
+  const clientId = resolved.client.id;
+
+  // [S2] API key fail-fast — canonical resolver (AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY)
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const apiKey  = resolveOpenAiApiKey();
+  if (!apiKey) {
+    res.status(503).json({ error: "Image generation not available (provider not configured)" });
+    return;
+  }
+
+  const {
+    prompt, postId, size = "1024x1024",
+    idempotencyKey, serviceKey, city,
+  } = req.body as {
+    prompt?: string; postId?: string; size?: string;
+    idempotencyKey?: string; serviceKey?: string; city?: string;
+  };
+
+  // [T2] Post/draft ownership — if a postId is provided, verify it belongs to this user.
+  // Must run BEFORE any provider interaction; provider is never called on 404/403.
+  if (postId) {
+    const postRow = await pool.query<{ id: string; user_id: string }>(
+      `SELECT id, user_id FROM social_posts WHERE id = $1 LIMIT 1`,
+      [postId],
+    );
+    if (postRow.rows.length === 0) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+    if (postRow.rows[0]!.user_id !== userId) {
+      res.status(403).json({ error: "Forbidden: post does not belong to this user" });
+      return;
+    }
+  }
+
+  // [SVC] Service authorization — validate serviceKey against tenant's active registry.
+  // Unknown keys (not in registry) are also rejected (not-generatable by convention).
+  let resolvedServiceDisplayName: string | undefined;
+  if (serviceKey) {
+    const svcError = resolved.context.registry.validateTopic(serviceKey);
+    if (svcError !== null) {
+      const errorCode = svcError === "SERVICE_COMING_SOON" ? "service_coming_soon"
+                      : svcError === "SERVICE_DISABLED"    ? "service_disabled"
+                      : "service_not_generatable";
+      res.status(422).json({
+        error: errorCode,
+        message: `Service "${serviceKey}" is not available for image generation`,
+      });
+      return;
+    }
+    // Also reject keys not present in the registry at all —
+    // validateTopic allows unknown topics by design (forward-compat), but
+    // image generation must be explicitly authorized via a known serviceId.
+    const svcRecord = matchServiceByTopic(serviceKey);
+    if (!svcRecord) {
+      res.status(422).json({
+        error: "unknown_service",
+        message: `Service "${serviceKey}" is not recognized`,
+      });
+      return;
+    }
+    resolvedServiceDisplayName = svcRecord.displayName;
+  }
+
+  // [S3] Build effective prompt — server-side when serviceKey is provided; user prompt
+  // is treated as supplemental creative direction only and never overrides the service.
+  let effectivePrompt: string;
+  if (serviceKey && resolvedServiceDisplayName) {
+    effectivePrompt = buildImagePrompt({
+      serviceDisplayName: resolvedServiceDisplayName,
+      city: city?.trim(),
+      creativeBrief: prompt?.trim(),
+    });
+  } else {
+    effectivePrompt = prompt?.trim() ?? "";
+  }
+
+  if (!effectivePrompt) {
+    res.status(400).json({ error: "prompt or serviceKey is required" });
+    return;
+  }
+  if (effectivePrompt.length > PROMPT_MAX_LENGTH) {
+    res.status(400).json({ error: `prompt must be ≤${PROMPT_MAX_LENGTH} characters` });
+    return;
+  }
+
+  // [S4] Prohibited-claim enforcement on the effective (server-built) prompt
+  if (isProhibitedImagePrompt(effectivePrompt)) {
+    res.status(400).json({ error: "prompt contains a prohibited service or claim" });
+    return;
+  }
+
+  // [S5] Size allow-list
+  const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
+  if (!validSizes.includes(size)) {
+    res.status(400).json({ error: `size must be one of: ${validSizes.join(", ")}` });
+    return;
+  }
+
+  // [I1] Idempotency — resolve or claim existing record.
+  // completed → 200 (no provider call); pending → 202 (in-flight);
+  // failed → atomic UPDATE to 'pending' so the same row/id is reused (avoids unique-
+  //   constraint collision on re-INSERT) and the rate-limit row count remains accurate.
+  let reuseImageId: string | null = null;
+  if (idempotencyKey) {
+    const existing = await pool.query<{ id: string; status: string; storage_key: string | null }>(
+      `SELECT id, status, storage_key
+         FROM content_image_generations
+        WHERE client_id = $1 AND idempotency_key = $2
+        LIMIT 1`,
+      [clientId, idempotencyKey],
+    );
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0]!;
+      if (row.status === "completed") {
+        res.json({ ok: true, generationId: row.id, storageKey: row.storage_key, idempotent: true });
+        return;
+      }
+      if (row.status === "pending") {
+        res.status(202).json({ ok: false, generationId: row.id, status: "pending", idempotent: true });
+        return;
+      }
+      // status === "failed" — atomically reset to 'pending' for retry.
+      // Using WHERE id=$1 AND status='failed' prevents a race where two threads
+      // both try to claim the same failed row.
+      const updated = await pool.query<{ id: string }>(
+        `UPDATE content_image_generations
+            SET status = 'pending', failure_reason = NULL, updated_at = NOW()
+          WHERE id = $1 AND status = 'failed'
+          RETURNING id`,
+        [row.id],
+      );
+      if (updated.rows.length > 0) {
+        reuseImageId = updated.rows[0]!.id;
+      } else {
+        // Another concurrent thread already claimed this row — re-read current status
+        const recheck = await pool.query<{ id: string; status: string; storage_key: string | null }>(
+          `SELECT id, status, storage_key FROM content_image_generations WHERE id = $1`,
+          [row.id],
+        );
+        const recheckRow = recheck.rows[0];
+        if (recheckRow?.status === "completed") {
+          res.json({ ok: true, generationId: recheckRow.id, storageKey: recheckRow.storage_key, idempotent: true });
+          return;
+        }
+        if (recheckRow?.status === "pending") {
+          res.status(202).json({ ok: false, generationId: recheckRow.id, status: "pending", idempotent: true });
+          return;
+        }
+        res.status(409).json({ error: "Concurrent retry conflict — please use a new idempotency key" });
+        return;
+      }
+    }
+  }
+
+  // [R1] Rate-limit — count ALL provider-boundary attempts (pending + completed + failed)
+  // in the past hour. Failed retries via the same idempotency key reuse the same row
+  // (from [I1] above) so they do not inflate the count beyond 1 per key.
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const rateRow     = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM content_image_generations
+      WHERE client_id = $1 AND created_at > $2 AND status IN ('pending', 'completed', 'failed')`,
+    [clientId, windowStart],
+  );
+  const recentCount = Number(rateRow.rows[0]?.count ?? 0);
+  if (recentCount >= IMAGE_RATE_LIMIT_PER_HOUR) {
+    res.status(429).json({
+      error: "rate_limit_exceeded",
+      message: `Maximum ${IMAGE_RATE_LIMIT_PER_HOUR} image generations per hour`,
+      limit: IMAGE_RATE_LIMIT_PER_HOUR,
+      windowSeconds: 3600,
+      retryAfter: 3600,
+    });
+    return;
+  }
+
+  // [P1] Insert 'pending' record BEFORE calling the provider.
+  // If we are retrying a failed row ([I1] above), the row already exists as 'pending' —
+  // skip the INSERT and reuse reuseImageId.
+  const imageId = reuseImageId ?? randomUUID();
+  if (!reuseImageId) {
+    try {
+      await pool.query(
+        `INSERT INTO content_image_generations
+           (id, client_id, user_id, post_id, service_key, provider, model,
+            prompt, size, status, idempotency_key, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, '')`,
+        [imageId, clientId, userId, postId ?? null, serviceKey ?? null,
+         "openai", "gpt-image-1", effectivePrompt, size, idempotencyKey ?? null],
+      );
+    } catch (insertErr: any) {
+      // Concurrent duplicate hit the unique index — return the existing record
+      if (insertErr?.code === "23505" && idempotencyKey) {
+        const dup = await pool.query<{ id: string; status: string }>(
+          `SELECT id, status FROM content_image_generations
+            WHERE client_id = $1 AND idempotency_key = $2 LIMIT 1`,
+          [clientId, idempotencyKey],
+        );
+        if (dup.rows.length > 0) {
+          res.status(202).json({ ok: false, generationId: dup.rows[0]!.id, status: dup.rows[0]!.status, idempotent: true });
+          return;
+        }
+      }
+      console.error("[auto-content/generate-image] pending insert error:", insertErr?.message);
+      res.status(500).json({ error: "Failed to initialize generation record" });
+      return;
+    }
+  }
+
+  // Helper: mark record as failed (fire-and-forget safe)
+  const markFailed = async (reason: string): Promise<void> => {
+    await pool.query(
+      `UPDATE content_image_generations
+          SET status = 'failed', failure_reason = $1, updated_at = NOW(), completed_at = NOW()
+        WHERE id = $2`,
+      [reason.slice(0, 500), imageId],
+    ).catch(() => {});
+  };
+
+  // [S6] Timeout via AbortController
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), IMAGE_GENERATION_TIMEOUT_MS);
+
+  let aiRes: Response;
+  try {
+    // [S12] Model hardcoded; URL from trusted env var only
+    aiRes = await fetch(`${baseURL}/images/generations`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
+      },
+      body:   JSON.stringify({ model: "gpt-image-1", prompt: effectivePrompt, size, n: 1 }),
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timeoutId);
+    if (fetchErr?.name === "AbortError") {
+      await markFailed("provider_timeout");
+      res.status(504).json({ error: "Image generation timed out" });
+    } else {
+      await markFailed(`provider_error:${fetchErr?.message ?? "unknown"}`);
+      res.status(502).json({ error: "Image generation failed" });
+    }
+    return;
+  }
+  clearTimeout(timeoutId);
+
+  if (!aiRes.ok) {
+    console.error("[auto-content/generate-image] provider HTTP error:", aiRes.status);
+    await markFailed(`provider_http_${aiRes.status}`);
+    res.status(502).json({ error: "Image generation failed" });
+    return;
+  }
+
+  // [S7] Response-body size cap
+  const rawText = await aiRes.text();
+  if (Buffer.byteLength(rawText, "utf8") > IMAGE_RESPONSE_MAX_BYTES) {
+    await markFailed("provider_response_too_large");
+    res.status(502).json({ error: "Provider response too large" });
+    return;
+  }
+
+  const aiJson = JSON.parse(rawText) as { data?: Array<{ b64_json?: string }> };
+  const b64    = aiJson.data?.[0]?.b64_json;
+  if (!b64) {
+    await markFailed("no_image_data");
+    res.status(502).json({ error: "No image data returned from AI" });
+    return;
+  }
+
+  // [S8] Decoded-buffer size cap
+  const imageBuffer = Buffer.from(b64, "base64");
+  if (imageBuffer.length > IMAGE_BUFFER_MAX_BYTES) {
+    await markFailed("image_too_large");
+    res.status(502).json({ error: "Generated image exceeds maximum allowed size" });
+    return;
+  }
+
+  // [S9] PNG magic-bytes validation
+  if (imageBuffer.length < PNG_MAGIC.length || !imageBuffer.subarray(0, 8).equals(PNG_MAGIC)) {
+    await markFailed("invalid_image_format");
+    res.status(502).json({ error: "Provider returned unexpected image format" });
+    return;
+  }
+
+  // ── Upload to Object Storage ──────────────────────────────────────────────
+  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  if (!privateDir) {
+    await markFailed("storage_not_configured");
+    res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
+    return;
+  }
+
+  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+  const objectPath                   = makeObjectPath(bucketPrefix, imageId);
+  const storageKey                   = `generated-images/${imageId}.png`; // canonical; no bucket prefix
+
+  let gcsUploaded = false;
+  try {
+    // [S13] Private object — no public ACL
+    const gcsFile = objectStorageClient.bucket(bucketName).file(objectPath);
+    await gcsFile.save(imageBuffer, { contentType: "image/png", resumable: false });
+    gcsUploaded = true;
+  } catch (storageErr: any) {
+    console.error("[auto-content/generate-image] storage error:", storageErr?.message);
+    await markFailed("storage_failure");
+    res.status(500).json({ error: "Failed to store generated image" });
+    return;
+  }
+
+  // [S14] Update record to 'completed' with canonical storageKey
+  try {
+    await pool.query(
+      `UPDATE content_image_generations
+          SET status = 'completed', storage_key = $1, updated_at = NOW(), completed_at = NOW()
+        WHERE id = $2`,
+      [storageKey, imageId],
+    );
+  } catch (dbErr: any) {
+    // [S10] DB commit failed — delete orphaned GCS object to prevent data leak
+    if (gcsUploaded) {
+      objectStorageClient.bucket(bucketName).file(objectPath).delete({ ignoreNotFound: true }).catch(() => {});
+    }
+    await markFailed("db_commit_failure");
+    console.error("[auto-content/generate-image] DB update error:", dbErr?.message);
+    res.status(500).json({ error: "Failed to record image generation" });
+    return;
+  }
+
+  res.json({ ok: true, generationId: imageId, storageKey });
+});
+
+// ── GET /auto-content/generate-image/:id/signed-url ──────────────────────────
+// Returns a short-lived (15-min) signed access URL for an approved asset.
+// The Instagram publishing adapter calls this before posting; the URL is never
+// persisted — each adapter invocation gets a fresh expiry window.
+//
+// IDOR guard: the requesting user's client_id MUST match the record's client_id.
+
+router.get("/auto-content/generate-image/:id/signed-url", async (req, res): Promise<void> => {
+  // [S1] Authentication
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  // [T1] Tenant resolution
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const code = resolved.reason === "not_found" ? 404 : 403;
+    res.status(code).json({ error: "client_resolve_failed" });
+    return;
+  }
+  const clientId = resolved.client.id;
+
+  const { id } = req.params as { id: string };
+  const genRow  = await pool.query<{ id: string; client_id: string; storage_key: string | null; status: string }>(
+    `SELECT id, client_id, storage_key, status FROM content_image_generations WHERE id = $1`,
+    [id],
+  );
+
+  if (genRow.rows.length === 0) {
+    res.status(404).json({ error: "Generation not found" });
+    return;
+  }
+  const gen = genRow.rows[0]!;
+
+  // [IDOR] Tenant ownership — never expose one client's asset to another
+  if (gen.client_id !== clientId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  if (gen.status !== "completed" || !gen.storage_key) {
+    res.status(409).json({ error: "Image not yet available", status: gen.status });
+    return;
+  }
+
+  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  if (!privateDir) {
+    res.status(500).json({ error: "Object storage not configured" });
+    return;
+  }
+
+  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+  const objectPath = `${bucketPrefix ? bucketPrefix + "/" : ""}${gen.storage_key}`;
+
+  try {
+    const [signedUrl] = await objectStorageClient.bucket(bucketName).file(objectPath).getSignedUrl({
+      version: "v4",
+      action:  "read",
+      expires: Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000,
+    });
+    res.json({ ok: true, signedUrl, expiresIn: SIGNED_URL_EXPIRY_SECONDS });
+  } catch (signErr: any) {
+    console.error("[auto-content/signed-url] error:", signErr?.message);
+    res.status(500).json({ error: "Failed to generate signed URL" });
+  }
 });
 
 export default router;

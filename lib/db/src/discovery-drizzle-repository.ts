@@ -36,6 +36,8 @@ import type { Pool } from "pg";
 import { z } from "zod/v4";
 import type * as schema from "./schema";
 
+import { warnIfMissingCompetitorIdentifier } from "./discovery-normalizer";
+
 import type {
   DiscoverySignal,
   DiscoveryCluster,
@@ -504,9 +506,11 @@ export class DrizzleDiscoveryRepository implements DiscoveryRepository {
         });
 
       // 2. Persist signals in batches of 500 (idempotent on deterministic PK)
+      //    Guard fires here so future callers that bypass saveSignals() are also covered.
       const SIGNAL_BATCH = 500;
       for (let i = 0; i < summary.allSignals.length; i += SIGNAL_BATCH) {
         const batch = summary.allSignals.slice(i, i + SIGNAL_BATCH);
+        for (const s of batch) warnIfMissingCompetitorIdentifier(s);
         await tx
           .insert(discoverySignalsTable)
           .values(batch.map(serializeSignal))
@@ -533,6 +537,7 @@ export class DrizzleDiscoveryRepository implements DiscoveryRepository {
 
   async saveSignals(signals: DiscoverySignal[]): Promise<void> {
     if (!signals.length) return;
+    for (const s of signals) warnIfMissingCompetitorIdentifier(s);
     const BATCH = 500;
     for (let i = 0; i < signals.length; i += BATCH) {
       await this.db
@@ -679,6 +684,7 @@ export class InMemoryDiscoveryRepository implements DiscoveryRepository {
     this.writeCallCounts.saveSignals++;
     if (this.simulateWriteFailure) throw new Error("simulated_db_write_failure");
     for (const s of signals) {
+      warnIfMissingCompetitorIdentifier(s);
       // ON CONFLICT DO NOTHING behavior: skip if id already present
       if (!this.signals.has(s.id)) {
         this.signals.set(s.id, { ...s });

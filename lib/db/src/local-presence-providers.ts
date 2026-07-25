@@ -5,9 +5,12 @@
 //   1. Add an entry to LOCAL_PRESENCE_PROVIDERS below.
 //   2. Add a corresponding seed row in DEFAULT_CHANNELS in
 //      artifacts/api-server/src/routes/local-presence.ts.
-//   3. Implement a sync adapter in Phase 2 and set syncSupported: true.
+//   3. Implement a sync adapter in Phase 2 and set syncSupported: true
+//      and the relevant capability flags.
 //
 // No other structural changes are required by design.
+
+import type { ProviderAdapterCapabilities } from "./local-presence-adapters";
 
 export type LocalPresenceProviderId =
   | "google_business_profile"
@@ -32,6 +35,7 @@ export interface LocalPresenceProviderDef {
   iconEmoji: string;
   scoreWeight: number;
   description: string;
+  capabilities: ProviderAdapterCapabilities;
 }
 
 export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
@@ -43,10 +47,19 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     category: "search",
     tier: 1,
     manualSetupUrl: "https://business.google.com",
-    syncSupported: false,
+    syncSupported: true,
     iconEmoji: "🌐",
     scoreWeight: 40,
     description: "The most important local listing — powers Google Search, Maps, and AI Overviews.",
+    capabilities: {
+      syncSupported: true,
+      writeSupported: false,
+      fetchHours: true,
+      fetchPhotos: true,
+      fetchReviews: true,
+      fetchCategories: true,
+      oauthRequired: true,
+    },
   },
   {
     id: "apple_business_connect",
@@ -60,6 +73,15 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     iconEmoji: "🍎",
     scoreWeight: 20,
     description: "Powers Apple Maps and Siri — critical for iPhone users.",
+    capabilities: {
+      syncSupported: false,
+      writeSupported: false,
+      fetchHours: false,
+      fetchPhotos: false,
+      fetchReviews: false,
+      fetchCategories: false,
+      oauthRequired: true,
+    },
   },
   {
     id: "bing_places",
@@ -73,6 +95,15 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     iconEmoji: "🔍",
     scoreWeight: 15,
     description: "Powers Bing Search and Microsoft AI assistants.",
+    capabilities: {
+      syncSupported: false,
+      writeSupported: false,
+      fetchHours: false,
+      fetchPhotos: false,
+      fetchReviews: false,
+      fetchCategories: false,
+      oauthRequired: false,
+    },
   },
   {
     id: "facebook_business",
@@ -86,6 +117,15 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     iconEmoji: "📘",
     scoreWeight: 10,
     description: "Facebook Pages power local discovery and reviews on Meta's network.",
+    capabilities: {
+      syncSupported: false,
+      writeSupported: false,
+      fetchHours: false,
+      fetchPhotos: false,
+      fetchReviews: false,
+      fetchCategories: false,
+      oauthRequired: true,
+    },
   },
   {
     id: "yelp",
@@ -99,6 +139,15 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     iconEmoji: "⭐",
     scoreWeight: 10,
     description: "High-intent directory — consumers actively search Yelp for local services.",
+    capabilities: {
+      syncSupported: false,
+      writeSupported: false,
+      fetchHours: false,
+      fetchPhotos: false,
+      fetchReviews: false,
+      fetchCategories: false,
+      oauthRequired: true,
+    },
   },
   {
     id: "nextdoor",
@@ -112,6 +161,15 @@ export const LOCAL_PRESENCE_PROVIDERS: readonly LocalPresenceProviderDef[] = [
     iconEmoji: "🏘️",
     scoreWeight: 5,
     description: "Neighborhood network — strong for hyper-local service-area businesses.",
+    capabilities: {
+      syncSupported: false,
+      writeSupported: false,
+      fetchHours: false,
+      fetchPhotos: false,
+      fetchReviews: false,
+      fetchCategories: false,
+      oauthRequired: true,
+    },
   },
 ] as const;
 

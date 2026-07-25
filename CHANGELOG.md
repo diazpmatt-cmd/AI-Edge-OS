@@ -6,6 +6,166 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — V1 Operational Readiness (RGE-8, 2026-07-25)
+
+#### Added
+
+- A visible Readiness tab exposing delivery mode, emergency-stop state, scheduler absence,
+  unresolved fraud/reward/delivery queues, and milestone production-acceptance coverage.
+- A deterministic readiness model that never authorizes autonomous referral operation.
+- Formal local V1 acceptance evidence separating 100% implementation from 2/8 production
+  acceptance.
+- Fresh-database validation covering the production bootstrap, idempotent SQL migrations,
+  complete API and frontend suites, Referral Growth aggregate tests, TypeScript, and both
+  production builds.
+
+### Referral Growth — Read-Only CRM Attribution (RGE-7, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated referral-to-customer candidates derived only from already-synced GorillaDesk
+  customer and job records.
+- Exact phone/email match evidence, confidence, measured-revenue provenance, and explicit human
+  confirm/reject controls.
+- Confirmations persist an internal attribution link only. They make no external API call and
+  perform no GorillaDesk/CRM write.
+
+### Referral Growth — Truthful Campaign Reporting (RGE-6, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated program reporting for invitations, referrals, conversions, reward review,
+  fulfillment, and recorded reward cost.
+- A visible Reporting tab and deterministic referral-economics helper.
+- Attributed revenue and ROI remain explicitly unavailable until an explicit measured-revenue
+  link exists; missing revenue is never reported as measured zero.
+- No provider call, scheduler, outbound message, payment, or CRM write was added.
+
+### Referral Growth — Fraud & Abuse Review Controls (RGE-5, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated, explainable referral risk signals for duplicate identities, repeated invitation
+  destinations, unusual velocity, self-referrals, and reward stacking.
+- A human-only Fraud Review queue with evidence, risk scores, status filters, optimistic
+  concurrency, idempotent decisions, and append-only decision history.
+- Explicit privacy provenance showing that device/IP fingerprints are unavailable rather than
+  fabricated when no lawful retained source exists.
+
+#### Safety
+
+- Clear, hold, and reject are review-queue decisions only. They never alter referrals, rewards,
+  invitations, customer records, GorillaDesk/CRM data, or external systems.
+- No automatic rejection, raw-IP/device collection, scheduler, payment, message, merge, or
+  deployment was added.
+
+### Referral Growth — Reward Ledger & Fulfillment Controls (RGE-4, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated reward ledger with immutable conversion-time reward snapshots.
+- Separate human approval and manual-fulfillment evidence actions with transaction locking,
+  idempotency, duplicate prevention, and durable actor/timestamp provenance.
+- A controlled Rewards interface showing pending review, approved, and externally fulfilled rewards.
+
+#### Safety
+
+- Removed the direct **Mark Paid** path. AI Edge OS cannot issue cash, credits, discounts, or
+  payments; fulfillment only records evidence of an action completed outside the platform.
+- Added no payment provider, scheduler, automatic fulfillment, production message, merge, or
+  deployment.
+
+### Referral Growth — Controlled Invitation Delivery (RGE-3, 2026-07-25)
+
+#### Added
+
+- Tenant-scoped Telnyx SMS and SMTP email adapters behind a fail-closed delivery gate.
+- Dry-run-by-default delivery attempts, an exact test-recipient allowlist, a global emergency stop,
+  strict per-tenant hourly limits, idempotency, live-delivery duplicate prevention, and durable
+  provider receipts/failure codes.
+- A second explicit human confirmation for each delivery attempt and a dry-run-only Referral Growth
+  interface with visible emergency-stop, rate-limit, and scheduler status.
+
+#### Safety
+
+- No scheduler or automatic follow-up was added. The interface cannot request live delivery.
+- Live provider calls require explicit environment enablement, explicit live mode, emergency-stop
+  release, exact destination allowlisting, an approved invitation, and current opt-in status.
+- No real SMS or email was sent. No production deployment was performed.
+
+### Referral Growth — Invitations & Follow-Up Preparation (RGE-2, 2026-07-24)
+
+#### Added
+
+- Tenant-scoped SMS/email invitation templates with approved merge tokens, optional follow-up copy,
+  and a bounded 1–30 day follow-up interval.
+- Consent-backed invitation drafts, idempotency keys, 24-hour duplicate protection, human approval,
+  cancellation, contact suppression, and immutable invitation snapshots.
+- Contact preference records with normalized email/phone destinations, documented consent source
+  and time, opt-out status, and transaction-level serialization across draft/suppression races.
+- A visible **Invitations** tab in Referral Growth for creating templates and consent-backed drafts,
+  approving drafts, cancelling them, and suppressing contacts.
+
+#### Safety and verification
+
+- Delivery is physically absent: RGE-2 imports no Telnyx/email sender, exposes no send route, has no
+  scheduler, and constrains every invitation to `delivery_state='not_dispatched'` and
+  `sequence_step=0`.
+- Approval records human intent for a separately authorized delivery phase and explicitly reports
+  that no message was sent. Opt-outs suppress matching draft/approved rows and block approval.
+- RGE-2 API contract and database-invariant tests pass 28/28; invitation UI contract tests pass
+  6/6; all focused referral API tests pass 53/53. The complete API suite passes 1,321/1,321
+  against a disposable test database.
+- API/frontend TypeScript and production builds pass. The complete frontend suite passes 52/53
+  files and 2,248 tests, with the same three unrelated pre-existing `ContactPage.test.tsx`
+  expectation failures.
+- Merged through PR #43 and production-accepted on 2026-07-25 using deployed UI, bundle,
+  authentication, and no-delivery evidence. See `docs/RGE-2-PRODUCTION-ACCEPTANCE.md`.
+
+### Referral Growth — Customer Enrollment & Attribution (2026-07-24)
+
+#### Added
+
+- Tenant-derived public referral program lookup and customer enrollment routes using secure
+  referral codes, bounded public metadata, active-client checks, and transactional program locking.
+- Public referral landing page with referrer/referred-customer contact capture, consent copy,
+  honeypot protection, client-side validation, and explicit duplicate/self-referral feedback.
+- Admin referral-program creation with reward type/value, optional expiration and capacity, secure
+  generated codes, and copyable share links.
+- Duplicate and self-referral normalization, paused/expired/full-program rejection, and bounded
+  per-code/requester submission rate limiting.
+
+#### Security and verification
+
+- Public submissions derive `client_id` only from the locked referral program; request bodies cannot
+  select a tenant. Usage increments remain scoped by both program and client.
+- No automatic payout, message, CRM write, publication, scheduler, or demo-data insertion was added.
+- Focused referral tests pass 25/25; URL helper tests pass 2/2; the complete API suite passes
+  1,293/1,293 against a disposable test database. API/frontend TypeScript and production builds pass.
+- Full frontend verification has one unrelated existing baseline: three failing
+  `ContactPage.test.tsx` expectations. Referral Growth tests and builds are green.
+- Merged through PR #42 at merge commit
+  `ded48a360dd02edf232ad2672e26d37dab335089`. Not deployed or production-accepted.
+
+### AI Visibility V1 — Production Accepted (GO) (2026-07-21)
+
+#### Release
+
+- **DP-001 live-provider smoke test passed.** Scan ID `d2e7852c-8278-4be3-aa44-5f9af0297a47`, executed `2026-07-21T01:45:06.719Z` UTC, HTTP 201, 16,147 ms. 8/8 queries `success: true`; trigger_source `manual`; 0 errors.
+- All queries contained real BBB service names (bed bug inspection, roach control, fumigation, etc.), real Baldwin County geographies, and mixed intent templates. No generic fallback content. 0% citation rate is a valid measured baseline.
+- Decision upgraded from **CONDITIONAL GO** → **GO**. All 12 acceptance criteria satisfied. AI Visibility V1 is fully production-accepted.
+- Scheduling remains disabled by default. May be enabled with explicit operator approval: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true, "frequency": "weekly" }` + `AI_VISIBILITY_SCHEDULER_ENABLED=true`.
+
+#### Query-context corrections (sessions 1–3, 2026-07-20–21, confirmed resolved in production)
+
+- Fixed `queryActiveServiceIds` querying nonexistent `service_id` column → now `queryActiveServiceKeys()` on `service_key`.
+- Added `queryClientRow()` UUID-based fallback to `clients.service_areas` when `local_presence_profiles` lookup returns null (legacy `client_id='default'` row).
+- Fail-closed query generation: returns `[]` and raises `preflight_failed` (HTTP 422) when services or geographies are empty — no silent "local services" / "my area" fallbacks.
+- Service-priority round-robin selection: services iterated in `sort_order ASC` per round; template index keyed on `result.length` for intent diversity; no alpha-sort cap skew.
+- `displayServiceName()` map for natural phrasing ("roach control" not "roaches", "rodent control" not "rodents", etc.).
+- Idempotent schema repair: `local_presence_profiles.client_id` reassigned from `'default'` to real UUID on server restart.
+- 95 tests across `ai-query-generation-canonical.test.ts`, `ai-query-scan-preflight.test.ts`, `ai-visibility-query-provider.test.ts` — all pass.
+
 ### DAB-3C — Isolated Private Bridge Activation Composition (2026-07-14)
 
 #### Added

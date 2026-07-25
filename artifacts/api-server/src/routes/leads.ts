@@ -6,6 +6,76 @@ import { getAuth } from "@clerk/express";
 
 const router = Router();
 
+function parseWebLeadMessage(msg: string | null): {
+  email: string | null;
+  business: string | null;
+  industry: string | null;
+  services: string | null;
+  packageLabel: string | null;
+  note: string | null;
+} {
+  const result = { email: null, business: null, industry: null, services: null, packageLabel: null, note: null } as {
+    email: string | null; business: string | null; industry: string | null;
+    services: string | null; packageLabel: string | null; note: string | null;
+  };
+  if (!msg) return result;
+  for (const line of msg.split("\n")) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim().toLowerCase();
+    const val = line.slice(colonIdx + 1).trim() || null;
+    if (key === "email")    result.email        = val;
+    if (key === "business") result.business     = val;
+    if (key === "industry") result.industry     = val;
+    if (key === "services") result.services     = val;
+    if (key === "package")  result.packageLabel = val;
+    if (key === "message")  result.note         = val;
+  }
+  return result;
+}
+
+router.get("/leads/web", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const rows = await db
+    .select()
+    .from(leadsTable)
+    .where(sql`
+      ${leadsTable.clientName} = ${"AI Edge Solutions"}
+      AND ${leadsTable.source} = ${"contact-form"}
+    `)
+    .orderBy(desc(leadsTable.createdAt));
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const active    = rows.filter(r => r.status === "new" || r.status === "contacted").length;
+  const thisMonth = rows.filter(r => new Date(r.createdAt) >= startOfMonth).length;
+
+  res.json({
+    leads: rows.map(r => {
+      const parsed = parseWebLeadMessage(r.message);
+      return {
+        id:           r.id,
+        customerName: r.customerName ?? null,
+        phone:        r.phone,
+        email:        parsed.email,
+        business:     parsed.business,
+        industry:     parsed.industry,
+        services:     parsed.services,
+        packageLabel: parsed.packageLabel,
+        packageKey:   r.eventType.startsWith("contact-form:") ? r.eventType.replace("contact-form:", "") : null,
+        note:         parsed.note,
+        status:       r.status,
+        notes:        r.notes,
+        createdAt:    r.createdAt.toISOString(),
+        updatedAt:    r.updatedAt.toISOString(),
+      };
+    }),
+    stats: { total: rows.length, active, thisMonth },
+  });
+});
+
 router.get("/leads", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }

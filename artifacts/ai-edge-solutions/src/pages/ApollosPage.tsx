@@ -54,7 +54,7 @@ const NAV_INTENTS: { patterns: string[]; response: string; route: string }[] = [
   { patterns: ["growth execution", "daily execution", "today's mission"], response: "Loading Growth Execution...",          route: "/admin/bbb-execution"      },
   { patterns: ["client onboarding"],                       response: "Preparing Client Onboarding...",        route: "/admin/client-onboarding"  },
   { patterns: ["revenue forecast", "show revenue", "profit center"], response: "Loading Revenue Forecast...", route: "/admin/profit-center"      },
-  { patterns: ["google business", "generate a google"],    response: "Taking you to Local Presence Engine...",route: "/admin/local-presence"     },
+  { patterns: ["google business", "generate a google"],    response: "Taking you to Local Edge Presence Engine...",route: "/admin/local-presence"     },
   { patterns: ["seo", "analyze seo"],                      response: "Opening SEO Engine...",                 route: "/admin/local-presence"     },
 ];
 

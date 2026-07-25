@@ -7,6 +7,7 @@ import { verifyState } from "../lib/oauthState";
 import { logCallback, getCallbackLog } from "../lib/callbackDebugLog";
 import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
+import { selectGoogleBusinessLocation } from "../lib/google-business-location-selection";
 
 // FetchResponse is defined explicitly to avoid accidental collisions with other
 // "Response" types that may be present in the project (for example the
@@ -373,18 +374,24 @@ router.get("/oauth/google/callback", async (req, res) => {
                 console.log(`[GOOGLE-VERIFY] locations found = ${locs.length} names=${JSON.stringify(locationNames)}`);
                 gbpMeta.locationCount = locs.length;
                 gbpMeta.locationNames = locationNames;
+                gbpMeta.locationCandidates = locs.map((l) => ({ name: l.name, title: l.title }));
 
-                const match = locs.find(l =>
-                  l.title?.toLowerCase().includes("bed bug") || l.title?.toLowerCase().includes("beyond")
-                );
-                if (match) {
-                  console.log(`[GOOGLE-VERIFY] ✓ "Bed Bugs & Beyond" location found: "${match.title}" (${match.name})`);
+                const selection = selectGoogleBusinessLocation(locs);
+                if (selection.kind === "selected") {
+                  const match = selection.location;
+                  console.log(`[GOOGLE-VERIFY] ✓ location selected (${selection.reason}): "${match.title}" (${match.name})`);
                   gbpMeta.primaryLocation = match.name;
                   gbpMeta.primaryLocationTitle = match.title;
-                } else if (locs.length > 0) {
-                  console.log(`[GOOGLE-VERIFY] "Bed Bugs & Beyond" NOT matched — using first: "${locs[0].title}"`);
-                  gbpMeta.primaryLocation = locs[0].name;
-                  gbpMeta.primaryLocationTitle = locs[0].title;
+                  gbpMeta.locationName = match.name;
+                  gbpMeta.locationTitle = match.title;
+                  gbpMeta.verifiedByApi = true;
+                } else if (selection.kind === "selection_required") {
+                  // Fail closed: Google does not guarantee ordering. Never bind a
+                  // multi-location account to locations[0]; the authenticated user
+                  // must choose through the refresh-location picker.
+                  console.warn(`[GOOGLE-VERIFY] ${locs.length} locations found with no verified match — explicit selection required`);
+                  gbpMeta.locationSelectionRequired = true;
+                  gbpMeta.verifiedByApi = false;
                 } else {
                   console.warn(`[GOOGLE-VERIFY] no_locations_found`);
                   gbpMeta.noLocations = true;

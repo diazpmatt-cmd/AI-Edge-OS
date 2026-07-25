@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
+import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
 import { aiVisibilityAuditsTable, auditExportsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import { generateAuditPDF } from "../services/pdf-generator.js";
+import { AiVisibilityExecutionService } from "../lib/ai-visibility-execution-service.js";
+import { AiQueryScanService } from "../lib/ai-query-scan-service.js";
+import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
 
@@ -300,6 +304,330 @@ router.post("/ai-visibility/email-report", async (req, res) => {
   } catch (err) {
     console.error("[ai-visibility] email-report error:", err);
     res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+// ── GET /api/ai-visibility/read-model/:clientId ───────────────────────────────
+// Returns a live AiVisibilityReadModel composed from real canonical source data.
+// Requires the authenticated userId to own the requested client slug.
+
+router.get("/ai-visibility/read-model/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+  if (!requestedSlug) { res.status(400).json({ error: "client_id_required" }); return; }
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc   = new AiVisibilityExecutionService(pool, db);
+    const model = await svc.execute({ clientId: clientCheck.clientId, userId });
+    res.json(model);
+  } catch (err) {
+    console.error("[ai-visibility] read-model error:", err);
+    res.status(500).json({ error: "execution_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/read-model/:clientId/history ───────────────────────
+// Returns paginated AI query scan summaries with optional status filter.
+// Query params:
+//   ?page=1        (1-based, default 1)
+//   ?pageSize=20   (max 50, default 20)
+//   ?status=completed|failed|running  (optional, omit for all)
+
+router.get("/ai-visibility/read-model/:clientId/history", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  const page     = Math.max(1, Number(req.query.page)     || 1);
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize) || 20));
+  const status   = typeof req.query.status === "string" && req.query.status ? req.query.status : undefined;
+
+  try {
+    const svc  = new AiQueryScanService(pool, db);
+    const page_ = await svc.listHistory(clientCheck.clientId, { page, pageSize, status });
+    res.json(page_);
+  } catch (err) {
+    console.error("[ai-visibility] history error:", err);
+    res.status(500).json({ error: "history_query_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/schedule/:clientId ──────────────────────────────────
+// Returns the scheduling configuration for this tenant, or a default (disabled)
+// stub if no schedule row exists yet.
+
+router.get("/ai-visibility/schedule/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const { rows } = await pool.query<{
+      id: string; client_id: string; enabled: boolean; frequency: string;
+      next_run_at: Date | null; last_run_at: Date | null; last_success_at: Date | null;
+      consecutive_failures: number; max_retries: number;
+      created_at: Date; updated_at: Date;
+    }>(
+      `SELECT id, client_id, enabled, frequency, next_run_at, last_run_at,
+              last_success_at, consecutive_failures, max_retries, created_at, updated_at
+       FROM ai_visibility_schedule WHERE client_id = $1 LIMIT 1`,
+      [clientCheck.clientId],
+    );
+
+    if (!rows.length) {
+      res.json({
+        clientId:            clientCheck.clientId,
+        enabled:             false,
+        frequency:           "weekly",
+        nextRunAt:           null,
+        lastRunAt:           null,
+        lastSuccessAt:       null,
+        consecutiveFailures: 0,
+        maxRetries:          3,
+      });
+      return;
+    }
+
+    const r = rows[0];
+    res.json({
+      id:                  r.id,
+      clientId:            r.client_id,
+      enabled:             r.enabled,
+      frequency:           r.frequency,
+      nextRunAt:           r.next_run_at  ? r.next_run_at.toISOString()  : null,
+      lastRunAt:           r.last_run_at  ? r.last_run_at.toISOString()  : null,
+      lastSuccessAt:       r.last_success_at ? r.last_success_at.toISOString() : null,
+      consecutiveFailures: r.consecutive_failures,
+      maxRetries:          r.max_retries,
+      createdAt:           r.created_at.toISOString(),
+      updatedAt:           r.updated_at.toISOString(),
+    });
+  } catch (err: any) {
+    if (err?.code === "42P01") {
+      res.json({ clientId: clientCheck.clientId, enabled: false, frequency: "weekly", nextRunAt: null, lastRunAt: null, lastSuccessAt: null, consecutiveFailures: 0, maxRetries: 3 });
+      return;
+    }
+    console.error("[ai-visibility] schedule get error:", err);
+    res.status(500).json({ error: "schedule_query_failed" });
+  }
+});
+
+// ── PUT /api/ai-visibility/schedule/:clientId ─────────────────────────────────
+// Upserts scheduling config for this tenant.
+// Body: { enabled: boolean, frequency?: "daily"|"weekly"|"biweekly"|"monthly" }
+
+router.put("/ai-visibility/schedule/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  const { enabled, frequency = "weekly" } = req.body as { enabled?: boolean; frequency?: string };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled_required_boolean" }); return;
+  }
+
+  const validFrequencies = ["daily", "weekly", "biweekly", "monthly"];
+  const safeFrequency = validFrequencies.includes(frequency) ? frequency : "weekly";
+
+  try {
+    const nextRunAt = enabled ? new Date(Date.now() + 60 * 1000) : null; // first run ~1 min from now if enabling
+
+    await pool.query(
+      `INSERT INTO ai_visibility_schedule
+         (client_id, enabled, frequency, next_run_at, consecutive_failures, max_retries, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 0, 3, NOW(), NOW())
+       ON CONFLICT (client_id) DO UPDATE
+         SET enabled    = EXCLUDED.enabled,
+             frequency  = EXCLUDED.frequency,
+             next_run_at = CASE
+               WHEN EXCLUDED.enabled = TRUE AND ai_visibility_schedule.enabled = FALSE THEN $4
+               WHEN EXCLUDED.enabled = TRUE THEN ai_visibility_schedule.next_run_at
+               ELSE NULL
+             END,
+             consecutive_failures = CASE
+               WHEN EXCLUDED.enabled = TRUE AND ai_visibility_schedule.enabled = FALSE THEN 0
+               ELSE ai_visibility_schedule.consecutive_failures
+             END,
+             updated_at = NOW()`,
+      [clientCheck.clientId, enabled, safeFrequency, nextRunAt],
+    );
+
+    res.json({ ok: true, clientId: clientCheck.clientId, enabled, frequency: safeFrequency });
+  } catch (err: any) {
+    if (err?.code === "42P01") {
+      res.status(503).json({ error: "schedule_table_not_ready" }); return;
+    }
+    console.error("[ai-visibility] schedule put error:", err);
+    res.status(500).json({ error: "schedule_update_failed" });
+  }
+});
+
+// ── POST /api/ai-visibility/ingest/scheduled ──────────────────────────────────
+// Scheduler-secret-authenticated endpoint for automated scan triggers.
+// Called by runAiVisibilitySchedulerMonitor() — NOT by the frontend.
+// Authentication: x-scheduler-secret header only (no Clerk token required).
+// Client identity: x-scheduler-client-id header (UUID from ai_visibility_schedule).
+
+router.post("/ai-visibility/ingest/scheduled", async (req, res): Promise<void> => {
+  if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
+    res.status(401).json({ error: "Unauthorized" }); return;
+  }
+
+  const clientIdHeader = req.headers["x-scheduler-client-id"];
+  if (!clientIdHeader || typeof clientIdHeader !== "string" || !clientIdHeader.trim()) {
+    res.status(400).json({ error: "x-scheduler-client-id header required" }); return;
+  }
+
+  const trustedClientId = clientIdHeader.trim();
+
+  try {
+    const svc     = new AiQueryScanService(pool, db);
+    const summary = await svc.execute({ clientId: trustedClientId, userId: "scheduler", triggerSource: "scheduled" });
+    res.status(201).json(summary);
+  } catch (err) {
+    console.error("[ai-visibility] scheduled ingest error:", err);
+    res.status(500).json({ error: "scan_failed" });
+  }
+});
+
+// ── POST /api/ai-visibility/query-scan/:clientId ───────────────────────────────
+// Triggers a live AI query scan for this tenant. Runs synchronously (all queries
+// execute before the response is returned). Typical latency: 15–60 s depending
+// on query count and provider speed.
+// Optional body: { triggerSource?: "manual" | "scheduled" }
+
+router.post("/ai-visibility/query-scan/:clientId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  const triggerSource = req.body?.triggerSource === "scheduled" ? "scheduled" as const : "manual" as const;
+
+  try {
+    const svc     = new AiQueryScanService(pool, db);
+    const summary = await svc.execute({ clientId: clientCheck.clientId, userId, triggerSource });
+    if (summary.status === "preflight_failed") {
+      res.status(422).json({
+        error:            "preflight_failed",
+        preflightFailure: summary.preflightFailure,
+        message:          `Cannot execute scan: ${summary.preflightFailure}`,
+      });
+      return;
+    }
+    res.status(201).json(summary);
+  } catch (err) {
+    console.error("[ai-visibility] query-scan error:", err);
+    res.status(500).json({ error: "scan_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/query-scan/:clientId/latest ────────────────────────
+// Returns the latest completed scan summary + results for this tenant.
+// Returns 404 if no scan has been run yet.
+
+router.get("/ai-visibility/query-scan/:clientId/latest", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const requestedSlug = req.params.clientId;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+  if (clientCheck.slug !== requestedSlug) {
+    res.status(403).json({ error: "forbidden" }); return;
+  }
+
+  try {
+    const svc  = new AiQueryScanService(pool, db);
+    const data = await svc.getLatestScan(clientCheck.clientId);
+    if (!data.scan) {
+      res.status(404).json({ error: "no_scan_found" }); return;
+    }
+    res.json({ scan: data.scan, results: data.results });
+  } catch (err) {
+    console.error("[ai-visibility] query-scan latest error:", err);
+    res.status(500).json({ error: "scan_query_failed" });
+  }
+});
+
+// ── GET /api/ai-visibility/query-scan/evidence/:scanId ────────────────────────
+// Returns full evidence for a specific scan by UUID.
+// The scanId must belong to the authenticated tenant (IDOR guard).
+
+router.get("/ai-visibility/query-scan/evidence/:scanId", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { scanId } = req.params;
+
+  const clientCheck = await resolveClientActiveCheck(userId);
+  if (!clientCheck.ok) {
+    const status = clientCheck.reason === "not_found" ? 404 : 403;
+    res.status(status).json({ error: clientCheck.reason }); return;
+  }
+
+  try {
+    const svc  = new AiQueryScanService(pool, db);
+    const data = await svc.getScanEvidence(scanId, clientCheck.clientId);
+    if (!data.scan) {
+      res.status(404).json({ error: "scan_not_found" }); return;
+    }
+    res.json({ scan: data.scan, results: data.results });
+  } catch (err) {
+    console.error("[ai-visibility] query-scan evidence error:", err);
+    res.status(500).json({ error: "evidence_query_failed" });
   }
 });
 

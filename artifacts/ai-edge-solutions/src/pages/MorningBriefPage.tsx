@@ -597,7 +597,7 @@ export default function MorningBriefPage() {
             background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
           }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: presenceConnected > 0 ? "#60A5FA" : "#475569", flexShrink: 0 }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>Local Presence</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#CBD5E1" }}>Local Edge Presence</span>
             <span style={{ fontSize: 9, fontWeight: 700, color: "#60A5FA", letterSpacing: "0.3px", marginLeft: "auto" }}>
               {presenceConnected}/{presenceTotal} CHANNELS
             </span>

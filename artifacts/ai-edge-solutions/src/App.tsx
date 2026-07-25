@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show } from "@clerk/react";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { BusinessProvider } from "@/contexts/business-context";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,6 +31,7 @@ const PricingPage     = lazy(() => import("./pages/marketing/PricingPage"));
 const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
 const PrivacyPage     = lazy(() => import("./pages/marketing/PrivacyPage"));
 const TermsPage       = lazy(() => import("./pages/marketing/TermsPage"));
+const PublicReferralPage = lazy(() => import("./pages/PublicReferralPage"));
 
 // ── Admin / Command Center pages (auth-gated) ───────────────────────────────
 const AdminAccessPage     = lazy(() => import("./pages/AdminAccessPage"));
@@ -47,6 +49,7 @@ const AutoContentEnginePage      = lazy(() => import("./pages/AutoContentEngineP
 const ImageAssetManagerPage      = lazy(() => import("./pages/ImageAssetManagerPage"));
 const SystemDiagnosticsPage      = lazy(() => import("./pages/SystemDiagnosticsPage"));
 const LocalPresenceEnginePage       = lazy(() => import("./pages/LocalPresenceEnginePage"));
+const GbpAuditPage                  = lazy(() => import("./pages/GbpAuditPage"));
 const VoiceSearchEnginePage         = lazy(() => import("./pages/VoiceSearchEnginePage"));
 const ReviewsEnginePage             = lazy(() => import("./pages/ReviewsEnginePage"));
 const AIVisibilityEnginePage        = lazy(() => import("./pages/AIVisibilityEnginePage"));
@@ -70,6 +73,11 @@ const ProfitCenterPage              = lazy(() => import("./pages/ProfitCenterPag
 const ApollosPage                   = lazy(() => import("./pages/ApollosPage"));
 const SecretsPage                   = lazy(() => import("./pages/SecretsPage"));
 const DemoPage                      = lazy(() => import("./pages/DemoPage"));
+const CompetitorIntelligencePage    = lazy(() => import("./pages/CompetitorIntelligencePage"));
+const AuthorityEnginePage           = lazy(() => import("./pages/AuthorityEnginePage"));
+const EdgeOpportunitiesPage         = lazy(() => import("./pages/EdgeOpportunitiesPage"));
+const ReferralProgramPage           = lazy(() => import("./pages/ReferralProgramPage"));
+const WebLeadsPage                  = lazy(() => import("./pages/WebLeadsPage"));
 
 const PageLoader = () => (
   <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}>
@@ -114,6 +122,7 @@ function AppRouter() {
         <Route path="/demo">
           <Suspense fallback={<PageLoader />}><DemoPage /></Suspense>
         </Route>
+        <Route path="/refer/:code" component={PublicReferralPage} />
 
         {/* Development-only mock UI preview; excluded from production routing. */}
         {isSecretsPreviewAvailable(import.meta.env.DEV) && (
@@ -162,6 +171,9 @@ function AppRouter() {
         </Route>
         <Route path="/admin/diagnostics">
           <Authenticated><SystemDiagnosticsPage /></Authenticated>
+        </Route>
+        <Route path="/admin/gbp-audit">
+          <Authenticated><GbpAuditPage /></Authenticated>
         </Route>
         <Route path="/admin/local-presence">
           <Authenticated><LocalPresenceEnginePage /></Authenticated>
@@ -229,6 +241,21 @@ function AppRouter() {
         <Route path="/admin/secrets">
           <Authenticated><SecretsPage /></Authenticated>
         </Route>
+        <Route path="/admin/competitor-intelligence">
+          <Authenticated><CompetitorIntelligencePage /></Authenticated>
+        </Route>
+        <Route path="/admin/authority-engine">
+          <Authenticated><AuthorityEnginePage /></Authenticated>
+        </Route>
+        <Route path="/admin/edge-opportunities">
+          <Authenticated><EdgeOpportunitiesPage /></Authenticated>
+        </Route>
+        <Route path="/admin/web-leads">
+          <Authenticated><WebLeadsPage /></Authenticated>
+        </Route>
+        <Route path="/admin/referrals">
+          <Authenticated><ReferralProgramPage /></Authenticated>
+        </Route>
 
         {/* /admin root → redirect to dashboard */}
         <Route path="/admin">
@@ -256,16 +283,18 @@ function AppRouter() {
 function App() {
   return (
     <ThemeProvider>
-      <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <WouterRouter base={basePath}>
-              <AppRouter />
-              <Toaster />
-            </WouterRouter>
-          </TooltipProvider>
-        </QueryClientProvider>
-      </ClerkProvider>
+      <BusinessProvider>
+        <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <WouterRouter base={basePath}>
+                <AppRouter />
+                <Toaster />
+              </WouterRouter>
+            </TooltipProvider>
+          </QueryClientProvider>
+        </ClerkProvider>
+      </BusinessProvider>
     </ThemeProvider>
   );
 }

@@ -392,8 +392,8 @@ export default function AssessmentsInboxPage() {
                   {[
                     { label: "Overall Score",     value: selected.scoreOverall },
                     { label: "Lead Recovery",     value: selected.scoreLeadRecovery },
-                    { label: "Local Presence",    value: selected.scoreLocalPresence },
-                    { label: "AI Visibility",     value: selected.scoreAiVisibility },
+                    { label: "Local Edge Presence",    value: selected.scoreLocalPresence },
+                    { label: "AI Edge Visibility",     value: selected.scoreAiVisibility },
                     { label: "Review Strength",   value: selected.scoreReviewStrength },
                   ].map(s => (
                     <div key={s.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
@@ -412,7 +412,7 @@ export default function AssessmentsInboxPage() {
                 <DetailSection title="Opportunity Metrics">
                   {[
                     { label: "Revenue Recovery",      value: "Estimate pending", color: "#22C55E" },
-                    { label: "AI Visibility",         value: "Estimate pending", color: "#3B82F6" },
+                    { label: "AI Edge Visibility",    value: "Estimate pending", color: "#3B82F6" },
                     { label: "Local Visibility",      value: "Estimate pending", color: "#00AEEF" },
                     { label: "Lead Conversion",       value: "Estimate pending", color: "#F59E0B" },
                   ].map(op => (

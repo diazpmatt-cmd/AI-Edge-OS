@@ -26,3 +26,10 @@ export * from "./discovery-schedules";
 export * from "./backlinks";
 export * from "./platform-deliveries";
 export * from "./agent-tasks";
+export * from "./gbp-audit";
+export * from "./gbp-optimizations";
+export * from "./referrals";
+export * from "./competitors";
+
+// Phase C9R-6: tenant-safe review summaries
+export * from "./tenant-safe-reviews";

@@ -6,8 +6,8 @@ const LINKS = [
   { label: "Services", href: "/services", icon: "⚙" },
   { label: "Why Us", href: "/#why-us", icon: "◈", anchor: true },
   { label: "Products", href: "/products", icon: "⬡" },
-  { label: "Case Studies", href: "/case-studies", icon: "↗" },
   { label: "Pricing", href: "/pricing", icon: "◇" },
+  { label: "Case Studies", href: "/case-studies", icon: "↗" },
   { label: "FAQ", href: "/pricing", icon: "?", faqAnchor: true },
 ];
 

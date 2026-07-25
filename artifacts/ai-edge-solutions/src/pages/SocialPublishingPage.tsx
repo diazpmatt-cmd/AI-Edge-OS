@@ -11,7 +11,7 @@ import { MediaUploader, type MediaAttachment } from "@/components/MediaUploader"
 import { resolvePreviewUrl } from "@/lib/media-config";
 import { PLATFORM_MEDIA_COMPAT } from "@/lib/media-compat";
 
-type Platform = "facebook" | "instagram" | "google" | "youtube";
+type Platform = "facebook" | "instagram" | "google" | "youtube" | "tiktok";
 
 type SocialPost = {
   id: string;
@@ -74,6 +74,7 @@ const PLATFORM_STYLE: Record<string, { bg: string; color: string; icon: string; 
   instagram: { bg: "rgba(168,85,247,0.18)",  color: "#A855F7", icon: getSocialProvider("instagram").icon,       label: getSocialProvider("instagram").shortLabel },
   google:    { bg: "rgba(234,67,53,0.18)",   color: "#EA4335", icon: getSocialProvider("google_business").icon, label: "Google Business" },
   youtube:   { bg: "rgba(255,0,0,0.15)",     color: "#FF0000", icon: getSocialProvider("youtube").icon,         label: getSocialProvider("youtube").shortLabel },
+  tiktok:    { bg: "rgba(37,244,238,0.12)",  color: "#25F4EE", icon: getSocialProvider("tiktok").icon,          label: getSocialProvider("tiktok").shortLabel },
 };
 
 function parsePlatformResults(post: SocialPost): Record<string, { ok: boolean | null; error?: string }> {
@@ -498,31 +499,33 @@ export default function SocialPublishingPage() {
                   {/* Platform selector — all 6 providers from canonical registry */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
 
-                    {/* ── Selectable: operational providers ── */}
-                    {(["facebook", "instagram", "google", "youtube"] as Platform[]).map(p => {
+                    {/* ── Selectable: operational + demo-mode providers ── */}
+                    {(["facebook", "instagram", "google", "youtube", "tiktok"] as Platform[]).map(p => {
                       const s = PLATFORM_STYLE[p];
                       const checked = form.platforms.includes(p);
                       const registryId: SocialProviderId = p === "google" ? "google_business" : p as SocialProviderId;
                       const provider = getSocialProvider(registryId);
                       const isConnected = connectedProviders.has(registryId);
                       const uiState = resolvePlatformUIState(provider, isConnected);
+                      const isDemoMode = provider.status === "pending_approval";
                       return (
                         <div key={p} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
                           <button
                             onClick={() => togglePlatform(p)}
-                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : "#6B7280", fontWeight: 700, fontSize: 12.5 }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : isDemoMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : isDemoMode ? "#F59E0B" : "#6B7280", fontWeight: 700, fontSize: 12.5 }}
                           >
                             <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
                             {s.label}
+                            {isDemoMode && <span style={{ fontSize: 9, fontWeight: 800, color: "#F59E0B", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 10, padding: "1px 5px", marginLeft: 2 }}>DEMO</span>}
                           </button>
                           <PlatformStateChip state={uiState} showConnectLink={uiState === "disconnected"} />
                         </div>
                       );
                     })}
 
-                    {/* ── Non-selectable: pending approval / coming soon ── */}
+                    {/* ── Non-selectable: coming soon (no publish backend) ── */}
                     {SOCIAL_PROVIDERS
-                      .filter(p => !["facebook", "instagram", "google_business", "youtube"].includes(p.id))
+                      .filter(p => !["facebook", "instagram", "google_business", "youtube", "tiktok"].includes(p.id))
                       .map(provider => {
                         const uiState = resolvePlatformUIState(provider, connectedProviders.has(provider.id));
                         return (
@@ -542,9 +545,21 @@ export default function SocialPublishingPage() {
                     })}
                   </div>
 
+                  {/* TikTok Review Demo Mode notice */}
+                  {form.platforms.includes("tiktok") && (
+                    <div style={{ margin: "8px 0 4px", padding: "10px 14px", borderRadius: 8, background: "rgba(37,244,238,0.06)", border: "1px solid rgba(37,244,238,0.25)", display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#25F4EE", letterSpacing: "0.5px", textTransform: "uppercase" }}>🔬 TikTok Review Demo Mode</div>
+                      <div style={{ fontSize: 11.5, color: "#94A3B8", lineHeight: 1.6 }}>
+                        TikTok is connected via OAuth with <code style={{ color: "#25F4EE" }}>video.publish</code> scope requested. Posts are queued in the system.
+                        Live publishing activates once TikTok grants production approval for the <strong style={{ color: "#E2E8F0" }}>video.publish</strong> scope in the TikTok Developer Portal.
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#64748B" }}>Simulated Provider Response — this is not a live publish to TikTok.</div>
+                    </div>
+                  )}
+
                   {/* Helper text */}
                   <p style={{ margin: 0, fontSize: 11.5, color: "#4B5563", lineHeight: 1.6 }}>
-                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok and LinkedIn are visible but not yet available for publishing.
+                    Facebook, Instagram, Google Business Profile, and YouTube are active. TikTok is available in demo mode — posts are queued pending TikTok app approval.
                     {form.platforms.includes("google") && (
                       <span style={{ display: "block", marginTop: 4, color: "#EA4335", opacity: 0.8 }}>
                         Google Business: posts go to your first verified location. Connect your account in <strong>Connected Accounts</strong> if not done yet.
@@ -631,16 +646,19 @@ export default function SocialPublishingPage() {
                     const compat = PLATFORM_MEDIA_COMPAT[pId as keyof typeof PLATFORM_MEDIA_COMPAT];
                     if (!compat) continue;
                     const pLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
-                    if (currentMedia.kind === "video" && platform === "youtube") {
-                      // good
+                    if (currentMedia.kind === "video" && (platform === "youtube" || platform === "tiktok")) {
+                      // good — both YouTube and TikTok accept video
                     } else if (currentMedia.kind === "audio") {
                       warnings.push(`${pLabel}: MP3 stored as source asset — not published directly.`);
-                    } else if (currentMedia.kind === "video" && platform !== "youtube") {
+                    } else if (currentMedia.kind === "video" && platform !== "youtube" && platform !== "tiktok") {
                       warnings.push(`${pLabel}: video publishing not yet implemented.`);
                     }
                   }
                   if (form.platforms.includes("youtube") && currentMedia.kind !== "video") {
                     blockers.push("YouTube requires an MP4 video to publish.");
+                  }
+                  if (form.platforms.includes("tiktok") && currentMedia.kind !== "video") {
+                    warnings.push("TikTok: requires an MP4 video for live publishing (demo mode — post queued without video).");
                   }
                   if (form.platforms.includes("instagram") && currentMedia.kind !== "image") {
                     blockers.push("Instagram requires an image (JPG/PNG/WEBP/GIF).");

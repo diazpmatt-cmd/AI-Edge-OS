@@ -1,5 +1,97 @@
 # Session Handoff
 
+## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
+
+**Status:** Implemented and locally verified on `feat/referral-enrollment-attribution-v1`.
+Not committed, pushed, merged, deployed, or production-accepted.
+
+### Starting state and scope
+
+- Branch started clean from merged handoff commit
+  `a31731cd0f534303abb88d9dbdb12507c0c61e09`.
+- Referral Growth is customer-referral program software. It is not Local Opportunity Radar, Lead
+  Generation, a lead marketplace, or a list of local referral-source websites.
+- Bounded milestone: secure program creation, share links, public customer enrollment, and
+  tenant-safe attribution. Automated rewards, invitations, messaging, CRM integration, fraud
+  operations, QR codes, reporting expansion, and schedulers remain later phases.
+
+### Implemented behavior
+
+- Secure referral-code generation and validated program creation with reward, expiration, and
+  maximum-use settings.
+- Public program page and enrollment route with active-client checks, honeypot/rate-limit controls,
+  required contact paths, US phone normalization, and explicit self-referral/duplicate rejection.
+- Transactional `FOR UPDATE` program lock; canonical `client_id` is derived from the locked program
+  and never accepted from the request. Program use increments are tenant-scoped.
+- Public responses exclude internal program IDs and private capacity/status fields.
+- Admin UI creates programs and copies customer-facing referral links with a clipboard fallback.
+- No demo seeding, automatic payout, messaging, CRM write, publishing, or scheduler behavior.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| Focused referral API tests | 25/25 pass |
+| Referral share-link helper | 2/2 pass |
+| Complete API suite, disposable test DB | 1,293/1,293 pass |
+| API TypeScript | Pass |
+| Frontend TypeScript | Pass |
+| API production build | Pass |
+| Frontend production build | Pass |
+| Full frontend suite | 51/52 files; 2,242 pass, 2 skipped |
+| Unrelated baseline | 3 existing `ContactPage.test.tsx` failures |
+| `git diff --check` | Pass |
+
+### Roadmap position and next action
+
+- Referral Growth V1 is approximately 70% complete; RGE-1 is locally implemented, not accepted in
+  production.
+- Next preservation step requires separate authorization to commit and push this branch and open a
+  pull request. Deployment and live acceptance require later, separate authorization.
+
+---
+
+## Latest session: AI Visibility V1 — DP-001 Final Pass + Documentation Closeout (2026-07-21)
+
+**Status:** GO — AI Visibility V1 is fully production-accepted. Documentation closeout complete.
+
+### What was done
+
+- Executed DP-001 live-provider smoke test in production. All 8 queries completed with `success: true`. Scan ID `d2e7852c-8278-4be3-aa44-5f9af0297a47`, timestamp `2026-07-21T01:45:06.719Z` UTC, HTTP 201, 16,147 ms. 0 errors. trigger_source=manual.
+- Decision upgraded from CONDITIONAL GO → **GO**. All 12 acceptance criteria satisfied.
+- Formal documentation closeout: `ROADMAP.md`, `CHANGELOG.md`, `SESSION_HANDOFF.md`, `docs/C9R-7-AI-VISIBILITY-V1-RELEASE-ACCEPTANCE.md`, `docs/C9R-7-SESSION-HANDOFF.md`, `docs/AI-EDGE-OS-MASTER-ROADMAP.md` updated.
+- Memory updated: `.agents/memory/ai-visibility-v1-acceptance.md` → GO with full DP-001 evidence.
+
+### Production evidence
+
+| Field | Value |
+|---|---|
+| Scan ID | `d2e7852c-8278-4be3-aa44-5f9af0297a47` |
+| Timestamp | `2026-07-21T01:45:06.719Z` UTC |
+| HTTP | 201 Created |
+| Latency | 16,147 ms |
+| Queries | 8 / 8 (`success: true`) |
+| Citation rate | 0% (valid measured baseline) |
+| Trigger | manual |
+| Errors | 0 |
+
+### Next phase
+
+**Content Autopilot** — keyword/content-gap discovery, Baldwin County demand signals, competitor-topic intelligence, content planning / approval / publishing / performance feedback, tenant isolation, fail-closed. No termite service marketing. No whole-home heat treatment. Fumigation remains active.
+
+### Documents updated (this session)
+
+| File | Change |
+|---|---|
+| `docs/C9R-7-AI-VISIBILITY-V1-RELEASE-ACCEPTANCE.md` | Decision CONDITIONAL GO → GO; DP-001 Final Pass section appended |
+| `docs/C9R-7-SESSION-HANDOFF.md` | Next Activity → DP-001 Final Pass + next phase |
+| `docs/AI-EDGE-OS-MASTER-ROADMAP.md` | C9R-7 CONDITIONAL GO → GO; engine ownership table updated |
+| `ROADMAP.md` | AI Visibility V1 GO section added; last updated 2026-07-21 |
+| `CHANGELOG.md` | AI Visibility V1 GO entry prepended under [Unreleased] |
+| `SESSION_HANDOFF.md` | This section |
+
+---
+
 ## Latest session: DAB-3C Isolated Private Bridge Activation Composition (2026-07-14)
 
 **Status:** Implemented and bounded verification passed on `feature/dab3c-private-bridge-activation`. Not staged, committed, pushed, deployed, configured, migrated, installed, or activated.

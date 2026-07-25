@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
           fontSize: 11, color: "#00AEEF", fontWeight: 700,
           letterSpacing: "1.2px", textTransform: "uppercase", opacity: 0.9,
         }}>
-          Command Center
+          Command Edge Center
         </div>
         <p style={{ fontSize: 13, color: "#475569", marginTop: 6 }}>
           Sign in to access your AI growth dashboard.

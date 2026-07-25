@@ -14,6 +14,8 @@ type DbConnection = {
   accountId: string | null;
   expiresAt: string | null;
   createdAt: string;
+  statusLabel?: "connected" | "needs_reauthorization";
+  needsReauthorization?: boolean;
 };
 
 type DebugInfo = {
@@ -52,6 +54,7 @@ const LOVABLE_MIGRATION: Record<string, MigrationState> = {
 type StatusKind = "connected" | "connected_readonly" | "needs_reconnect" | "needs_review" | "not_connected" | "coming_soon" | "blocked";
 
 function getStatus(provider: string, dbConn: DbConnection | undefined, facebookConnected: boolean): StatusKind {
+  if (dbConn?.needsReauthorization || dbConn?.statusLabel === "needs_reauthorization") return "needs_reconnect";
   if (dbConn) return (provider === "tiktok") ? "connected_readonly" : "connected";
   // Instagram is locked until Facebook is connected in the database
   if (provider === "instagram" && !facebookConnected) return "coming_soon";
@@ -302,7 +305,7 @@ export default function ConnectionsPage() {
     thumbnail: string | null;
     recentVideos: Array<{ videoId: string; title: string; publishedAt: string; thumbnail: string | null }>;
   };
-  const { data: ytChannelInfo } = useQuery<YouTubeChannelInfo>({
+  const { data: ytChannelInfo, isError: ytChannelInfoError } = useQuery<YouTubeChannelInfo>({
     queryKey: ["youtube_channel_info"],
     queryFn: () => authFetch<YouTubeChannelInfo>("/social-connections/youtube/channel-info"),
     enabled: connByProvider.has("youtube"),
@@ -326,6 +329,8 @@ export default function ConnectionsPage() {
     uploadPermissionVerified: boolean; details: string;
   } | null>(null);
   const [ytTesting, setYtTesting] = useState(false);
+  const [gbpLocationPicker, setGbpLocationPicker] = useState<{ locations: Array<{ name: string; title: string; address: string | null }> } | null>(null);
+  const [gbpLocationSelected, setGbpLocationSelected] = useState<string | null>(null);
 
   const handleYtTestUpload = async () => {
     setYtTesting(true);
@@ -341,14 +346,30 @@ export default function ConnectionsPage() {
   };
 
   const refreshGBPLocationMut = useMutation({
-    mutationFn: () => authFetch<{ ok: boolean; locationTitle: string; locationName: string; locationCount: number }>(
-      "/social-connections/google-business-refresh-location", { method: "POST" }
+    mutationFn: (vars?: { forceLocationName?: string }) => authFetch<{ ok: boolean; locationTitle: string; locationName: string; locationCount: number }>(
+      "/social-connections/google-business-refresh-location",
+      { method: "POST", body: JSON.stringify(vars ?? {}) },
     ),
     onSuccess: (data) => {
+      setGbpLocationPicker(null);
+      setGbpLocationSelected(null);
       toast.success(`GBP location updated: ${data.locationTitle}`);
       qc.invalidateQueries({ queryKey: ["google_business_status"] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to refresh GBP location"),
+    onError: (e: any) => {
+      const msg: string = e?.message ?? "";
+      if (msg.startsWith("API 409: ")) {
+        try {
+          const body = JSON.parse(msg.slice("API 409: ".length));
+          if (body?.error === "location_selection_required" && Array.isArray(body?.locations)) {
+            setGbpLocationPicker({ locations: body.locations });
+            setGbpLocationSelected(null);
+            return;
+          }
+        } catch {}
+      }
+      toast.error(msg || "Failed to refresh GBP location");
+    },
   });
 
   const handleConnect = async (provider: string, opts?: { returnTo?: string }) => {
@@ -634,7 +655,7 @@ export default function ConnectionsPage() {
             borderRadius: 20, padding: "4px 14px", marginBottom: 14,
           }}>
             <span style={{ fontSize: 12, color: "#00AEEF", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              ⬡ Command Center
+              ⬡ Command Edge Center
             </span>
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 8px" }}>
@@ -780,7 +801,9 @@ export default function ConnectionsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))", gap: 16, marginBottom: 32 }}>
           {PLATFORMS.map(platform => {
             const dbConn = connByProvider.get(platform.id);
-            const status = getStatus(platform.id, dbConn, facebookConnected);
+            const status = platform.id === "youtube" && ytChannelInfoError
+              ? "needs_reconnect"
+              : getStatus(platform.id, dbConn, facebookConnected);
             const sm = STATUS_META[status];
             const migration = LOVABLE_MIGRATION[platform.id];
             const accountName = getDisplayAccountName(platform.id, dbConn);
@@ -952,17 +975,55 @@ export default function ConnectionsPage() {
                             </button>
                           )}
                           {isGBP && !gbpNeedsUpgrade && (
-                            <button
-                              onClick={() => refreshGBPLocationMut.mutate()}
-                              disabled={refreshGBPLocationMut.isPending}
-                              style={{
-                                padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                                background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.3)",
-                                color: "#4285F4", opacity: refreshGBPLocationMut.isPending ? 0.6 : 1, transition: "all 0.2s",
-                              }}
-                            >
-                              {refreshGBPLocationMut.isPending ? "Refreshing…" : "↻ Refresh Google Locations"}
-                            </button>
+                            <>
+                              <button
+                                onClick={() => refreshGBPLocationMut.mutate({})}
+                                disabled={refreshGBPLocationMut.isPending}
+                                style={{
+                                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                  background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.3)",
+                                  color: "#4285F4", opacity: refreshGBPLocationMut.isPending ? 0.6 : 1, transition: "all 0.2s",
+                                }}
+                              >
+                                {refreshGBPLocationMut.isPending ? "Refreshing…" : "↻ Refresh Google Locations"}
+                              </button>
+                              {gbpLocationPicker && (
+                                <div style={{ width: "100%", marginTop: 10, padding: "12px 14px", borderRadius: 10, background: "rgba(66,133,244,0.06)", border: "1px solid rgba(66,133,244,0.25)" }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: "#4285F4", marginBottom: 8 }}>Multiple locations found — select yours:</div>
+                                  {gbpLocationPicker.locations.map(loc => (
+                                    <label key={loc.name} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", cursor: "pointer" }}>
+                                      <input
+                                        type="radio"
+                                        name="gbpLocationPick"
+                                        value={loc.name}
+                                        checked={gbpLocationSelected === loc.name}
+                                        onChange={() => setGbpLocationSelected(loc.name)}
+                                        style={{ marginTop: 2, accentColor: "#4285F4" }}
+                                      />
+                                      <span style={{ fontSize: 13, lineHeight: 1.4 }}>
+                                        <span style={{ fontWeight: 600 }}>{loc.title}</span>
+                                        {loc.address && <span style={{ display: "block", fontSize: 11, opacity: 0.65 }}>{loc.address}</span>}
+                                      </span>
+                                    </label>
+                                  ))}
+                                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                                    <button
+                                      onClick={() => { if (gbpLocationSelected) refreshGBPLocationMut.mutate({ forceLocationName: gbpLocationSelected }); }}
+                                      disabled={!gbpLocationSelected || refreshGBPLocationMut.isPending}
+                                      style={{ padding: "6px 16px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: gbpLocationSelected ? "pointer" : "not-allowed", background: "#4285F4", border: "none", color: "#fff", opacity: (!gbpLocationSelected || refreshGBPLocationMut.isPending) ? 0.5 : 1 }}
+                                    >
+                                      {refreshGBPLocationMut.isPending ? "Saving…" : "Confirm Selection"}
+                                    </button>
+                                    <button
+                                      onClick={() => { setGbpLocationPicker(null); setGbpLocationSelected(null); }}
+                                      style={{ padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "transparent", border: "1px solid rgba(156,163,175,0.4)", color: "inherit" }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
                           {fbNeedsUpgrade && (
                             <button

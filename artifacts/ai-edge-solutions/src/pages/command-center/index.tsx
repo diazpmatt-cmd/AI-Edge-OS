@@ -135,6 +135,15 @@ export default function CommandCenter() {
   const seoTotal = articles.length;
   const seoPublishedPct = seoTotal ? Math.round(((seoCounts.published ?? 0) / seoTotal) * 100) : 0;
 
+  const clientId = activeBusiness?.id ?? "default";
+  const { data: gbpData } = useQuery<{
+    snapshot: { localScore: number; localMaxScore: number; checksFailed: number; gbpConnected: boolean; completedAt: string | null } | null;
+  }>({
+    queryKey: ["gbp-audit-latest-cc", clientId],
+    queryFn: () => apiFetch(`/gbp/audit/latest?clientId=${encodeURIComponent(clientId)}`),
+    staleTime: 5 * 60_000,
+  });
+
   const kpiCards = useMemo((): KpiCardDef[] => {
     const missedCalls = ciData?.metrics?.missed_calls ?? 0;
     const leadsRecovered = ciData?.metrics?.leads_captured ?? 0;
@@ -261,29 +270,46 @@ export default function CommandCenter() {
                 <div style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, padding: "2px 8px" }}>3 TIERS</div>
               </div>
               <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-                {[
-                  { name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
-                  { name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
-                  { name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
-                ].map(pkg => (
-                  <div key={pkg.name} style={{
-                    background: `${pkg.color}08`, border: `1px solid ${pkg.color}22`,
-                    borderRadius: 10, padding: "10px 14px",
-                    display: "flex", alignItems: "center", gap: 10,
-                  }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: pkg.color, boxShadow: `0 0 6px ${pkg.color}88`, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.9)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {pkg.name}
-                        <span style={{ fontSize: 8, fontWeight: 800, color: pkg.color, background: `${pkg.color}18`, border: `1px solid ${pkg.color}30`, borderRadius: 5, padding: "1px 5px" }}>{pkg.badge}</span>
+                {([
+                  { id: "core",       name: "Core Package",   color: "#00AEEF", badge: "POPULAR",  modules: ["GBP Audit Engine","Local Presence","Reviews Engine","Daily Command"], price: "Included" },
+                  { id: "growth",     name: "Growth Package", color: "#22C55E", badge: "GROWTH",   modules: ["Lead Recovery AI","Call Intelligence","Growth Execution","AI Receptionist"], price: "Add-on" },
+                  { id: "enterprise", name: "Enterprise",     color: "#A78BFA", badge: "CUSTOM",   modules: ["Competitor Intelligence","Authority & Backlink","AI CMO","All Engines"], price: "Custom" },
+                ] as const).map(pkg => {
+                  const isActive = activeBusiness.currentTier === pkg.id;
+                  return (
+                    <div key={pkg.name} style={{
+                      background: isActive ? `${pkg.color}14` : `${pkg.color}08`,
+                      border: isActive ? `1.5px solid ${pkg.color}55` : `1px solid ${pkg.color}22`,
+                      borderRadius: 10, padding: "10px 14px",
+                      display: "flex", alignItems: "center", gap: 10,
+                      boxShadow: isActive ? `0 0 12px ${pkg.color}18` : "none",
+                      position: "relative",
+                    }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: pkg.color, boxShadow: `0 0 6px ${pkg.color}88`, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(226,232,240,0.9)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {pkg.name}
+                          <span style={{ fontSize: 8, fontWeight: 800, color: pkg.color, background: `${pkg.color}18`, border: `1px solid ${pkg.color}30`, borderRadius: 5, padding: "1px 5px" }}>{pkg.badge}</span>
+                          {isActive && (
+                            <span style={{ fontSize: 8, fontWeight: 800, color: "#030612", background: pkg.color, borderRadius: 5, padding: "1px 6px", letterSpacing: "0.3px" }}>YOUR PLAN</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.7)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {pkg.modules.slice(0, 2).join(" · ")} · +{pkg.modules.length - 2} more
+                        </div>
                       </div>
-                      <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.7)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {pkg.modules.slice(0, 2).join(" · ")} · +{pkg.modules.length - 2} more
-                      </div>
+                      {isActive ? (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: pkg.color, flexShrink: 0 }}>{pkg.price}</div>
+                      ) : (
+                        <div style={{
+                          fontSize: 8, fontWeight: 700, color: "rgba(100,116,139,0.6)",
+                          background: "rgba(100,116,139,0.08)", border: "1px solid rgba(100,116,139,0.18)",
+                          borderRadius: 5, padding: "2px 6px", flexShrink: 0,
+                        }}>UPGRADE</div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: pkg.color, flexShrink: 0 }}>{pkg.price}</div>
-                  </div>
-                ))}
+                  );
+                })}
                 <Link to="/pricing">
                   <div style={{
                     marginTop: 2, padding: "9px 12px", textAlign: "center",
@@ -374,17 +400,73 @@ export default function CommandCenter() {
         </DashboardSection>
 
         {/* ── S5: Business Health ── */}
-        <DashboardSection id="business-health" title="Business Health" defaultExpanded={true}>
+        <DashboardSection id="business-health" title="Business Health" accentColor="#00AEEF" defaultExpanded={true}>
           <BusinessHealthPanel />
         </DashboardSection>
 
+        {/* ── S5b: GBP Health Widget (Phase 7) ── */}
+        <DashboardSection id="gbp-health" title="GBP Health" accentColor="#2DD4BF" defaultExpanded={true}
+          right={<a href="/admin/gbp-audit" style={{ fontSize: 10, color: "#2DD4BF", textDecoration: "none", fontWeight: 700 }}>View Full Audit →</a>}
+        >
+          {gbpData?.snapshot ? (() => {
+            const s     = gbpData.snapshot;
+            const pct   = s.localMaxScore > 0 ? Math.round((s.localScore / s.localMaxScore) * 100) : 0;
+            const color = pct >= 80 ? "#22C55E" : pct >= 55 ? "#F59E0B" : pct >= 30 ? "#FB923C" : "#EF4444";
+            const label = pct >= 80 ? "Strong" : pct >= 55 ? "Good" : pct >= 30 ? "Needs Work" : "Critical";
+            return (
+              <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ position: "relative", width: 64, height: 64, flexShrink: 0 }}>
+                    <svg width="64" height="64" viewBox="0 0 64 64">
+                      <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+                      <circle cx="32" cy="32" r="26" fill="none" stroke={color}
+                        strokeWidth="7" strokeLinecap="round" strokeDasharray={`${163.4}`}
+                        strokeDashoffset={163.4 - (pct / 100) * 163.4}
+                        transform="rotate(-90 32 32)" style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+                    </svg>
+                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 900, color }}>{pct}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{label}</div>
+                    <div style={{ fontSize: 10, color: "rgba(148,163,184,0.55)", marginTop: 3 }}>GBP Health Score</div>
+                  </div>
+                </div>
+                <div style={{ width: 1, height: 50, background: "rgba(255,255,255,0.05)", flexShrink: 0 }} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12, flex: 1 }}>
+                  {[
+                    { label: "Failed Checks",  value: s.checksFailed,   color: s.checksFailed > 0 ? "#EF4444" : "#22C55E" },
+                    { label: "GBP Connected",  value: s.gbpConnected ? "Yes" : "No", color: s.gbpConnected ? "#22C55E" : "#EF4444" },
+                    { label: "Last Audit",     value: s.completedAt ? new Date(s.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—", color: "rgba(148,163,184,0.8)" },
+                  ].map(m => (
+                    <div key={m.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+                      <div style={{ fontSize: 9.5, color: "rgba(100,116,139,0.55)", marginTop: 3, fontWeight: 600 }}>{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })() : (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+              <span style={{ fontSize: 18 }}>📍</span>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(226,232,240,0.7)" }}>No GBP audit data yet</div>
+                <a href="/admin/gbp-audit" style={{ fontSize: 11, color: "#2DD4BF", textDecoration: "none" }}>Run your first audit →</a>
+              </div>
+            </div>
+          )}
+        </DashboardSection>
+
         {/* ── S6: Revenue & Growth ── */}
-        <DashboardSection id="revenue-growth" title="Revenue & Growth" defaultExpanded={true}>
+        <DashboardSection id="revenue-growth" title="Revenue & Growth" accentColor="#22C55E" defaultExpanded={true}>
           <RevenueGrowthPanel />
         </DashboardSection>
 
         {/* ── Lead Recovery Detail (Telnyx) ── */}
         <DashboardSection id="lead-recovery-detail" title="Lead Recovery Analytics"
+          accentColor="#22C55E"
           right={<span style={{ fontSize: 10, color: "#22C55E", fontWeight: 600 }}>● Live · Telnyx</span>}
           defaultExpanded={false}
         >
@@ -435,12 +517,12 @@ export default function CommandCenter() {
         </DashboardSection>
 
         {/* ── S7: AI Activity ── */}
-        <DashboardSection id="ai-activity" title="AI Activity" defaultExpanded={true}>
+        <DashboardSection id="ai-activity" title="AI Activity" accentColor="#F472B6" defaultExpanded={true}>
           <AiActivityFeed />
         </DashboardSection>
 
         {/* ── S8: Opportunity Center ── */}
-        <DashboardSection id="opportunity-center" title="Opportunity Center" defaultExpanded={true}>
+        <DashboardSection id="opportunity-center" title="Opportunity Center" accentColor="#8B5CF6" defaultExpanded={true}>
           <OpportunityCenter />
         </DashboardSection>
 
@@ -602,7 +684,6 @@ export default function CommandCenter() {
             </div>
           )}
         </DashboardSection>
-
       </div>
     </AppShell>
   );

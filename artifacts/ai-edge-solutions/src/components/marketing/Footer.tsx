@@ -5,12 +5,12 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const SERVICES = [
   "Lead Recovery AI",
   "AI Receptionist",
-  "Google Business Profile",
+  "Business Edge Profile",
   "Review Generation",
   "Local SEO",
   "Website Design",
   "Social Media Distribution",
-  "AI Visibility / GEO",
+  "AI Edge Visibility",
 ];
 
 const COMPANY = [

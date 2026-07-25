@@ -1391,11 +1391,11 @@ export default function SystemDiagnosticsPage() {
         )}
       </div>
 
-      {/* ── Section 9: Local Presence Engine ── */}
+      {/* ── Section 9: Local Edge Presence Engine ── */}
       <div style={{ background: "rgba(11,22,41,0.85)", border: "1px solid rgba(0,174,239,0.18)", borderRadius: 16, padding: "24px 28px", marginBottom: 16, backdropFilter: "blur(8px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-          <span style={{ fontSize: 20 }}>📍</span>
-          <span style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>Local Presence Engine</span>
+          <span style={{ fontSize: 20 }}>🌎</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.01em" }}>Local Edge Presence Engine</span>
           <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 20, padding: "2px 8px", letterSpacing: "0.06em" }}>V1</span>
           <a href="/admin/local-presence" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#00AEEF", textDecoration: "none", background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)", borderRadius: 8, padding: "4px 10px" }}>
             Open Dashboard ↗

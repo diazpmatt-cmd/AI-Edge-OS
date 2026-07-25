@@ -108,6 +108,45 @@ export function inferGeographicScope(normalizedValue: string): GeographicScope {
   return "national";
 }
 
+// ── Competitor identifier guard ────────────────────────────────────────────────
+
+/**
+ * Warn when a signal has competitorRank set but no resolvable competitor identifier.
+ *
+ * Fires at WARN level so it surfaces in production logs without throwing.
+ * Called in normalizeKeywordResult and should also be called by the persistence
+ * layer before any insert — guarding future pipeline stages that set competitorRank.
+ *
+ * A "resolvable identifier" means at least one of:
+ *   - rawProviderData.competitorName  (pre-extracted by the normalizer)
+ *   - rawProviderData.topCompetitorDomain
+ *   - rawProviderData.topCompetitorTitle
+ * is a non-empty string.
+ */
+export function warnIfMissingCompetitorIdentifier(signal: {
+  competitorRank:   number | null;
+  rawProviderData:  Record<string, unknown>;
+  clientId:         string;
+  normalizedValue:  string;
+}): void {
+  if (signal.competitorRank === null) return;
+
+  const raw = signal.rawProviderData;
+  const hasIdentifier =
+    (typeof raw["competitorName"]       === "string" && (raw["competitorName"]       as string).trim().length > 0) ||
+    (typeof raw["topCompetitorDomain"]  === "string" && (raw["topCompetitorDomain"]  as string).trim().length > 0) ||
+    (typeof raw["topCompetitorTitle"]   === "string" && (raw["topCompetitorTitle"]   as string).trim().length > 0);
+
+  if (!hasIdentifier) {
+    console.warn(
+      `[discovery-normalizer] Signal has competitor_rank=${signal.competitorRank} but no resolvable ` +
+      `competitor identifier (competitorName / topCompetitorDomain / topCompetitorTitle) in ` +
+      `rawProviderData. clientId=${signal.clientId} keyword="${signal.normalizedValue}". ` +
+      `This signal will be stored without a competitor name — check the upstream provider output.`,
+    );
+  }
+}
+
 // ── Keyword result normalizer ──────────────────────────────────────────────────
 
 export interface NormalizeKeywordInput {
@@ -143,7 +182,22 @@ export function normalizeKeywordResult(input: NormalizeKeywordInput): DiscoveryS
   const normalizedValue = normalizeText(raw.keyword);
   const id              = deriveSignalId(clientId, source, normalizedValue);
 
-  return {
+  // Enrich rawProviderData with a pre-extracted competitorName so the API can
+  // surface it without re-parsing organicResults.  This is stored regardless of
+  // whether competitor_rank is set — a dedicated pipeline stage (Phase C7) is
+  // responsible for determining true gap signals and setting competitorRank.
+  // Prefer topCompetitorTitle (page title → best business-name proxy) over domain.
+  const providerRaw         = raw.providerRaw;
+  const topCompetitorTitle  = typeof providerRaw["topCompetitorTitle"] === "string"
+    ? providerRaw["topCompetitorTitle"] : null;
+  const topCompetitorDomain = typeof providerRaw["topCompetitorDomain"] === "string"
+    ? providerRaw["topCompetitorDomain"] : null;
+  const competitorName      = topCompetitorTitle ?? topCompetitorDomain ?? null;
+  const rawProviderData     = competitorName
+    ? { ...providerRaw, competitorName }
+    : providerRaw;
+
+  const signal: DiscoverySignal = {
     id,
     snapshotId,
     clientId,
@@ -161,9 +215,13 @@ export function normalizeKeywordResult(input: NormalizeKeywordInput): DiscoveryS
     competitorRank:   null,
     citationFound:    null,
     evidenceStrength: evidenceStrengthFor(source),
-    rawProviderData:  raw.providerRaw,
+    rawProviderData,
     createdAt,
   };
+
+  warnIfMissingCompetitorIdentifier(signal);
+
+  return signal;
 }
 
 // ── PAA result normalizer ──────────────────────────────────────────────────────

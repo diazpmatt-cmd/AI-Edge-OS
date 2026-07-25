@@ -14,6 +14,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import {
   // Domain types
@@ -109,11 +111,9 @@ function makeOccurrence(overrides: Partial<ScheduleOccurrence> = {}): ScheduleOc
 
 describe("§1 Repository bug-fix verification", () => {
   it("BUG-1: releaseSchedulerLeadership SQL has no updated_at reference", async () => {
-    const src = await import("fs").then(fs =>
-      fs.readFileSync(
-        new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url).pathname,
-        "utf8",
-      )
+    const src = readFileSync(
+      fileURLToPath(new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url)),
+      "utf8",
     );
     const releaseBlock = src.slice(
       src.indexOf("export async function releaseSchedulerLeadership"),
@@ -124,11 +124,9 @@ describe("§1 Repository bug-fix verification", () => {
   });
 
   it("BUG-2: updateOccurrenceStatus SQL has client_id predicate", async () => {
-    const src = await import("fs").then(fs =>
-      fs.readFileSync(
-        new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url).pathname,
-        "utf8",
-      )
+    const src = readFileSync(
+      fileURLToPath(new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url)),
+      "utf8",
     );
     const updateBlock = src.slice(
       src.indexOf("export async function updateOccurrenceStatus"),
@@ -139,11 +137,9 @@ describe("§1 Repository bug-fix verification", () => {
   });
 
   it("BUG-3: atomicAdvanceScheduleNextRun exists and uses optimistic WHERE", async () => {
-    const src = await import("fs").then(fs =>
-      fs.readFileSync(
-        new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url).pathname,
-        "utf8",
-      )
+    const src = readFileSync(
+      fileURLToPath(new URL("../../../../lib/db/src/discovery-c7-repository.ts", import.meta.url)),
+      "utf8",
     );
     expect(src).toContain("atomicAdvanceScheduleNextRun");
     const fnBlock = src.slice(
@@ -156,11 +152,9 @@ describe("§1 Repository bug-fix verification", () => {
   });
 
   it("leadership table schema has no updated_at column", async () => {
-    const src = await import("fs").then(fs =>
-      fs.readFileSync(
-        new URL("../../../../lib/db/src/schema/discovery-schedules.ts", import.meta.url).pathname,
-        "utf8",
-      )
+    const src = readFileSync(
+      fileURLToPath(new URL("../../../../lib/db/src/schema/discovery-schedules.ts", import.meta.url)),
+      "utf8",
     );
     const leadershipBlock = src.slice(
       src.indexOf("discoverySchedulerLeadershipTable"),

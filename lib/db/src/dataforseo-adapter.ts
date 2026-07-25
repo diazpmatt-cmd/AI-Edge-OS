@@ -403,6 +403,20 @@ function buildSerpKeywordResult(
   const competitorDomains = extractCompetitorDomains(organicItems);
   const paaQuestions      = extractPAAQuestions(serpResult.items ?? []);
 
+  // Identify the top-ranking competitor: first organic result whose domain
+  // is not in EXCLUDED_COMPETITOR_DOMAINS (same filter as extractCompetitorDomains).
+  const topCompetitorItem = organicItems.find(item => {
+    const domain = item.domain.toLowerCase().replace(/^www\./, "");
+    return !EXCLUDED_COMPETITOR_DOMAINS.has(domain);
+  });
+  const topCompetitorDomain = topCompetitorItem
+    ? topCompetitorItem.domain.toLowerCase().replace(/^www\./, "")
+    : null;
+  const topCompetitorRank = topCompetitorItem?.rank_absolute ?? null;
+  // Preserve the page title as a business-name proxy.
+  // Page titles often carry the brand name before the first " | " or " – " separator.
+  const topCompetitorTitle = topCompetitorItem?.title ?? null;
+
   // Map intent from query category
   const intentMap = {
     local:         "local",
@@ -425,14 +439,14 @@ function buildSerpKeywordResult(
     cpc:           volume?.cpc ?? null,
     relatedQueries: [],
     providerRaw: {
-      source:              "dataforseo_serp",
-      locationName:        query.locationName,
-      serviceId:           query.serviceId,
-      educationalOnly:     query.educationalOnly,
-      competitionLevel:    volume?.competition_level ?? null,
-      cpcUsd:              volume?.cpc ?? null,
-      organicResultCount:  organicItems.length,
-      organicResults:      organicItems.map(item => ({
+      source:               "dataforseo_serp",
+      locationName:         query.locationName,
+      serviceId:            query.serviceId,
+      educationalOnly:      query.educationalOnly,
+      competitionLevel:     volume?.competition_level ?? null,
+      cpcUsd:               volume?.cpc ?? null,
+      organicResultCount:   organicItems.length,
+      organicResults:       organicItems.map(item => ({
         rank:    item.rank_absolute,
         url:     item.url,
         domain:  item.domain,
@@ -441,6 +455,9 @@ function buildSerpKeywordResult(
       })),
       competitorDomains,
       paaQuestions,
+      topCompetitorDomain,
+      topCompetitorRank,
+      topCompetitorTitle,
     },
   };
 }

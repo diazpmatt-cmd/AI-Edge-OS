@@ -1,0 +1,119 @@
+name: Handoff to main integration
+
+on:
+  push:
+    branches:
+      - integration/handoff-to-main-rge-v1-2026-07-25
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_edge_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ai_edge_integration
+      NODE_ENV: test
+      REFERRAL_DELIVERY_ENABLED: "false"
+      REFERRAL_DELIVERY_MODE: dry_run
+      REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
+      REFERRAL_SCHEDULER_ENABLED: "false"
+      SCHEDULER_ENABLED: "false"
+      SCHEDULER_SECRET: integration-test-only-not-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/handoff-to-main-rge-v1-2026-07-25
+
+      - name: Verify starting heads
+        run: |
+          set -euo pipefail
+          git fetch origin main handoff/gbp-location-final-2026-07-24
+          test "$(git rev-parse origin/main)" = "b5c2738bc62854570cb168db00c769801b931382"
+          test "$(git rev-parse origin/handoff/gbp-location-final-2026-07-24)" = "664e945148f58c720be311cb71db0ad7efc25f3c"
+
+      - name: Attempt merge without commit
+        id: merge
+        shell: bash
+        run: |
+          set +e
+          git config user.name "AI Edge Integration Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git merge --no-commit --no-ff origin/handoff/gbp-location-final-2026-07-24
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            {
+              echo "# Integration conflict report"
+              echo
+              echo "Base: $(git rev-parse HEAD)"
+              echo "Handoff: $(git rev-parse origin/handoff/gbp-location-final-2026-07-24)"
+              echo
+              echo "## Unmerged files"
+              git diff --name-only --diff-filter=U | sed 's/^/- `/' | sed 's/$/`/'
+              echo
+              echo "## Conflict summary"
+              git status --short
+            } > integration-conflicts.md
+            echo "conflicted=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "conflicted=false" >> "$GITHUB_OUTPUT"
+
+      - name: Upload conflict report
+        if: failure() && hashFiles('integration-conflicts.md') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-conflicts
+          path: integration-conflicts.md
+
+      - name: Setup Node
+        if: steps.merge.outputs.conflicted == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        if: steps.merge.outputs.conflicted == 'false'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      - name: Install dependencies
+        if: steps.merge.outputs.conflicted == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate
+        if: steps.merge.outputs.conflicted == 'false'
+        run: |
+          set -euo pipefail
+          pnpm --filter @workspace/db run build
+          pnpm --filter @workspace/api-server run typecheck
+          pnpm --filter @workspace/ai-edge-solutions run typecheck
+          pnpm --filter @workspace/api-server test
+          pnpm --filter @workspace/ai-edge-solutions test
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/ai-edge-solutions run build
+          git diff --check
+
+      - name: Commit and push merge
+        if: steps.merge.outputs.conflicted == 'false'
+        run: |
+          set -euo pipefail
+          git commit -m "Merge handoff branch into main integration"
+          git push origin HEAD:integration/handoff-to-main-rge-v1-2026-07-25

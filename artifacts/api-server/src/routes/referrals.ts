@@ -2217,7 +2217,8 @@ router.get("/referrals/reporting", async (req, res) => {
         COALESCE(r.conversions, 0)::int AS conversions,
         COALESCE(l.pending_rewards, 0)::int AS "pendingRewards",
         COALESCE(l.fulfilled_rewards, 0)::int AS "fulfilledRewards",
-        COALESCE(l.reward_cost, 0)::numeric AS "rewardCost"
+        COALESCE(l.reward_cost, 0)::numeric AS "rewardCost",
+        a.attributed_revenue AS "attributedRevenue"
       FROM referral_programs p
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS invitations
@@ -2247,6 +2248,24 @@ router.get("/referrals/reporting", async (req, res) => {
         FROM referral_reward_ledger
         WHERE client_id = p.client_id AND program_id = p.id
       ) l ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          CASE
+            WHEN COUNT(*) FILTER (
+              WHERE status = 'confirmed' AND measured_revenue IS NOT NULL
+            ) > 0
+            THEN SUM(measured_revenue) FILTER (
+              WHERE status = 'confirmed' AND measured_revenue IS NOT NULL
+            )
+            ELSE NULL
+          END AS attributed_revenue
+        FROM referral_crm_attributions
+        WHERE client_id = p.client_id
+          AND referral_id IN (
+            SELECT id FROM referrals
+            WHERE client_id = p.client_id AND program_id = p.id
+          )
+      ) a ON TRUE
       WHERE p.client_id = $1
       ORDER BY p.created_at DESC
       `,
@@ -2259,7 +2278,10 @@ router.get("/referrals/reporting", async (req, res) => {
         buildReferralEconomics({
           ...row,
           rewardCost: Number(row.rewardCost ?? 0),
-          attributedRevenue: null,
+          attributedRevenue:
+            row.attributedRevenue == null
+              ? null
+              : Number(row.attributedRevenue),
         }),
       ),
     });

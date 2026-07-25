@@ -3,6 +3,9 @@ import {
   normalizeReferralPhone,
   scoreReferralCustomerMatch,
 } from "../lib/referral-attribution.js";
+import { readFileSync } from "node:fs";
+
+const routeSource = readFileSync("src/routes/referrals.ts", "utf8");
 
 describe("RGE-7 read-only referral attribution", () => {
   it("normalizes US phone formatting", () => {
@@ -25,5 +28,12 @@ describe("RGE-7 read-only referral attribution", () => {
 
   it("does not use names as identity evidence", () => {
     expect(scoreReferralCustomerMatch({}).confidence).toBe(0);
+  });
+
+  it("feeds only confirmed measured revenue into reporting", () => {
+    expect(routeSource).toContain("referral_crm_attributions");
+    expect(routeSource).toContain("status = 'confirmed'");
+    expect(routeSource).toContain("measured_revenue IS NOT NULL");
+    expect(routeSource).toContain('row.attributedRevenue == null');
   });
 });

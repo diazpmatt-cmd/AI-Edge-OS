@@ -64,11 +64,11 @@ function makeMockContext(clientId: string): DiscoveryContext {
 function makeRawKeyword(keyword: string) {
   return {
     keyword,
-    searchVolume:    100,
-    cpc:             1.5,
-    competition:     0.4,
-    trend:           "stable" as const,
-    relatedKeywords: [],
+    volumeMonthly: 100,
+    difficulty:    40,
+    intent:        "commercial" as const,
+    cpc:           1.5,
+    providerRaw:   {},
   };
 }
 

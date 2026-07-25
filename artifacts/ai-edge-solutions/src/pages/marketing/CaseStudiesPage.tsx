@@ -45,7 +45,7 @@ const SERVICES_USED = [
   "AI Receptionist",
   "Review Generation",
   "Local SEO",
-  "Google Business Profile Automation",
+  "Business Edge Profile",
 ];
 
 export default function CaseStudiesPage() {

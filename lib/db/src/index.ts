@@ -20,7 +20,9 @@ export * from "./db-service-registry-provider";
 export * from "./registry-validator";
 export * from "./scheduler-eligibility";
 export * from "./gbp-audit-engine";
+export * from "./gbp-optimization-engine";
 export * from "./local-presence-providers";
+export * from "./local-presence-adapters";
 
 // ── Phase C2: Discovery Engine ────────────────────────────────────────────────
 export * from "./discovery-types";
@@ -331,7 +333,7 @@ export type {
   StaleRunInfo,
 } from "./discovery-c6-repository";
 
-export { eq, and, or, sql } from "drizzle-orm";
+export { eq, and, or, ne, sql } from "drizzle-orm";
 
 // ── Phase C7: Discovery Scheduling ────────────────────────────────────────────
 
@@ -422,12 +424,47 @@ export * from "./backlink-fixture-provider";
 export * from "./backlink-ingestion";
 export * from "./backlink-ingestion-run";
 
+// Phase C8R-8: production backlink provider readiness
+export * from "./backlink-provider-config";
+export * from "./backlink-provider-registry";
+export * from "./dataforseo-backlink-adapter";
+
+// Phase C8R-9: scheduled backlink discovery & historical tracking
+export * from "./backlink-scheduler-config";
+export * from "./backlink-history";
+
+// Edge Authority Score — AI Edge OS proprietary scoring (ADR-018)
+export * from "./edge-authority-score";
+
+// Competitor Intelligence Engine — canonical entity layer
+export * from "./competitor-types";
+export * from "./competitor-extractor";
+export { DrizzleCompetitorRepository } from "./competitor-repository";
+
+// Phase 5: Provider Intelligence Foundation — observation types + provider interface
+export * from "./competitor-observation-types";
+export * from "./competitor-enrichment-provider";
+
 // Phase C8R-5: tenant-safe, pure AI Visibility read model (legacy audits remain noncanonical)
 export * from "./ai-visibility-read-model-types";
 export * from "./ai-visibility-prioritizer";
 export * from "./ai-visibility-read-model-adapters";
 export * from "./ai-visibility-read-model";
 export * from "./ai-visibility-fixtures";
+
+// Phase C9R-4: real AI query provider + mention/citation detection
+export * from "./ai-query-provider-types";
+export * from "./ai-query-generation";
+export * from "./ai-query-detection";
+export * from "./ai-query-read-model-adapter";
+
+// Phase C9R-5: scheduled monitoring + scan history types
+export * from "./ai-visibility-scan-history-types";
+export * from "./ai-visibility-trend-normalization";
+
+// Phase C9R-6: tenant-safe review intelligence
+export * from "./tenant-safe-review-types";
+export { DrizzleTenantSafeReviewRepository } from "./tenant-safe-review-repository";
 
 // C7 repository (schedule CRUD + leadership + claiming)
 export {

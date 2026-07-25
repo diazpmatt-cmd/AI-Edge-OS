@@ -1,20 +1,23 @@
-import { db } from "@workspace/db";
+import { db, pool as dbPool } from "@workspace/db";
 import { socialPostsTable, leadsTable, autoContentSettingsTable, clientsTable } from "@workspace/db/schema";
 import { createWeeklyPlanId, evaluateClientEligibility, isValidIanaTimezone } from "@workspace/db";
 import { eq, and, gte, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
+import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
+import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
 
-const POLL_INTERVAL_MS      = 60_000;      // post-publish tick: every 60s
-const AUTOPILOT_INTERVAL_MS = 30 * 60_000; // autonomous generation check: every 30min
+const POLL_INTERVAL_MS      = 60_000;       // post-publish tick: every 60s
+const AUTOPILOT_INTERVAL_MS = 30 * 60_000;  // autonomous generation check: every 30min
+const GBP_MONITOR_INTERVAL  = 6 * 60 * 60_000; // GBP audit monitor: every 6h
 
 // Tracks posts currently being published — prevents duplicate publishes if a
 // tick fires while a previous publish is still in flight (e.g. slow GBP upload).
-const inFlight = new Set<string>();
+export const inFlight = new Set<string>();
 
 function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw ?? "") as T; } catch { return fallback; }
@@ -34,7 +37,7 @@ interface SchedulerCycleSummary {
 
 // ── Post publishing ───────────────────────────────────────────────────────────
 
-async function publishDuePosts(): Promise<void> {
+export async function publishDuePosts(): Promise<void> {
   // Query for posts whose scheduled time has passed and are still "scheduled"
   // T6 approval gate: only publish posts that have been explicitly approved.
   // Posts with approvalStatus='pending' or null are held until a human (or
@@ -418,12 +421,63 @@ async function recoverMissedCalls(): Promise<void> {
   }
 }
 
+// ── GBP Audit Monitor ──────────────────────────────────────────────────────────
+// Runs every 6h. Finds enabled schedules where next_run_at <= NOW() and calls
+// POST /api/gbp/audit/run via internal HTTP with the scheduler secret.
+// Gracefully skips if gbp_audit_schedules table does not yet exist.
+
+async function runGbpAuditMonitor(): Promise<void> {
+  const port = parseInt(process.env.PORT ?? "8080", 10);
+  const base = `http://localhost:${port}`;
+
+  let rows: Array<{ client_id: string; user_id: string }>;
+  try {
+    const result = await dbPool.query<{ client_id: string; user_id: string }>(
+      `SELECT client_id, user_id
+       FROM gbp_audit_schedules
+       WHERE enabled = TRUE
+         AND next_run_at IS NOT NULL
+         AND next_run_at <= NOW()
+       LIMIT 10`,
+    );
+    rows = result.rows;
+  } catch {
+    return; // table may not exist yet on first startup
+  }
+
+  if (rows.length === 0) return;
+  logger.info(`[gbp-monitor] ${rows.length} scheduled audit(s) due`);
+
+  for (const row of rows) {
+    try {
+      const res = await fetch(`${base}/api/gbp/audit/run`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":        "application/json",
+          "x-scheduler-secret":  SCHEDULER_SECRET,
+          "x-scheduler-user-id": row.user_id,
+        },
+        body: JSON.stringify({ clientId: row.client_id }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        logger.warn({ clientId: row.client_id, status: res.status, txt }, "[gbp-monitor] audit run failed");
+      } else {
+        logger.info({ clientId: row.client_id }, "[gbp-monitor] audit completed");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ clientId: row.client_id, msg }, "[gbp-monitor] fetch error");
+    }
+  }
+}
+
 // ── Re-exports for test access ─────────────────────────────────────────────────
 
 export { evaluateClientEligibility } from "@workspace/db";
 
 export function startScheduler(): void {
-  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m");
+  logger.info("[scheduler] started — posts every 60s · autonomous-gen every 30min · missed-call recovery every 5m · gbp-monitor every 6h · backlink-scheduler every 15min · ai-visibility-scheduler every 60min");
 
   // ── Post publishing ──
   publishDuePosts().catch((err: unknown) => {
@@ -465,4 +519,55 @@ export function startScheduler(): void {
       logger.error({ err: msg }, "[scheduler] recovery tick error");
     });
   }, 5 * 60_000);
+
+  // ── GBP Audit Monitor ──
+  runGbpAuditMonitor().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "[scheduler] startup gbp-monitor error");
+  });
+
+  setInterval(() => {
+    runGbpAuditMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] gbp-monitor tick error");
+    });
+  }, GBP_MONITOR_INTERVAL);
+
+  // ── Backlink Scheduler Monitor (C8R-9) ────────────────────────────────────
+  // Checks backlink_discovery_schedule for due rows every 15 min.
+  // Disabled-by-default: no schedule rows have enabled=true until an admin
+  // calls PUT /api/backlinks/schedule.  Safe to run unconditionally.
+  const BACKLINK_SCHEDULER_INTERVAL = 15 * 60_000;
+
+  runBacklinkSchedulerMonitor().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "[scheduler] startup backlink-scheduler error");
+  });
+
+  setInterval(() => {
+    runBacklinkSchedulerMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] backlink-scheduler tick error");
+    });
+  }, BACKLINK_SCHEDULER_INTERVAL);
+
+  // ── AI Visibility Scheduler Monitor (C9R-5) ───────────────────────────────
+  // Checks ai_visibility_schedule for due rows every 60 min.
+  // Disabled-by-default: AI_VISIBILITY_SCHEDULER_ENABLED must be "true".
+  // No rows have enabled=true until an admin calls PUT /api/ai-visibility/schedule/:clientId.
+  if (process.env.AI_VISIBILITY_SCHEDULER_ENABLED === "true") {
+    const AI_VISIBILITY_SCHEDULER_INTERVAL = 60 * 60_000;
+
+    runAiVisibilitySchedulerMonitor().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "[scheduler] startup ai-visibility-scheduler error");
+    });
+
+    setInterval(() => {
+      runAiVisibilitySchedulerMonitor().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error({ err: msg }, "[scheduler] ai-visibility-scheduler tick error");
+      });
+    }, AI_VISIBILITY_SCHEDULER_INTERVAL);
+  }
 }

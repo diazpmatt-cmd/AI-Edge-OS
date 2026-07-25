@@ -30,6 +30,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { competitorDiscoveryService } from "./competitor-discovery-service.js";
+
 import {
   pool as defaultPool,
   db   as defaultDb,
@@ -368,6 +370,23 @@ export class DiscoveryExecutionService {
       saveCostRecords(ledger.getRecords(), this.pool).catch((err: unknown) => {
         console.error("[DiscoveryExecutionService] Cost record persistence failed:",
           err instanceof Error ? err.message : String(err));
+      });
+
+      // ── Phase 3B: Fire-and-forget competitor entity extraction ──────────────
+      // Runs AFTER the discovery run is fully finalized (transitions, costs, audit).
+      // Never blocks the discovery lifecycle. Never throws into the caller.
+      competitorDiscoveryService.extractCompetitorsFromLatestRun(clientId).then(r => {
+        console.log(
+          `[CompetitorDiscovery] Extraction complete for client ${clientId}: ` +
+          `extracted=${r.extracted} inserted=${r.inserted} updated=${r.updated} ` +
+          `skipped=${r.skipped} duplicateGroups=${r.duplicateGroups} ` +
+          `time=${r.processingTimeMs}ms`,
+        );
+      }).catch((err: unknown) => {
+        console.error(
+          `[CompetitorDiscovery] Extraction failed for client ${clientId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
       });
 
       return {

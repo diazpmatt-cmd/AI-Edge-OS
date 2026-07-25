@@ -8,6 +8,7 @@ import type {
   AiVisibilityLifecycleProjection,
   AiVisibilityNormalizedInput,
 } from "./ai-visibility-read-model-types";
+import type { ReviewImportResult } from "./tenant-safe-review-types";
 
 export interface AiVisibilityAdapterResult {
   observations: AiVisibilityNormalizedInput[];
@@ -39,7 +40,7 @@ const reference = (
 ) => buildReference(source, recordType, recordId, clientId, observedAt);
 
 function buildReference(
-  source: "local_presence" | "google_business" | "discovery" | "backlink" | "reviews" | "content",
+  source: "local_presence" | "google_business" | "discovery" | "backlink" | "reviews" | "content" | "ai_query",
   recordType: string,
   recordId: string,
   clientId: string,
@@ -245,16 +246,24 @@ export interface TenantSafeReviewSummary {
   platform: string;
   reviewCount: number;
   averageRating: number;
-  targetReviewCount: number;
+  /** Null means no defensible V1 target is available; observations suppressed when null. */
+  targetReviewCount: number | null;
   observedAt: Date;
   geography: string;
+  sourceConnectionId?: string;
+}
+
+type SummaryBelowTarget = TenantSafeReviewSummary & { targetReviewCount: number };
+
+function isBelowTarget(item: TenantSafeReviewSummary): item is SummaryBelowTarget {
+  return item.targetReviewCount !== null && item.reviewCount < item.targetReviewCount;
 }
 
 /** No adapter accepts the legacy global review tables; callers must provide a tenant-safe summary. */
 export function adaptTenantSafeReviews(items: readonly TenantSafeReviewSummary[] | null): AiVisibilityAdapterResult {
   if (items === null) return { observations: [], coverage: [{ source: "reviews", status: "not_tenant_safe",
     detail: "Existing review tables are global and are excluded until tenant-safe observations exist.", observedAt: null }] };
-  const observations = items.filter(item => item.reviewCount < item.targetReviewCount).map(item => ({
+  const observations = items.filter(isBelowTarget).map(item => ({
     clientId: item.clientId,
     dedupeKey: `review velocity ${item.platform}`,
     category: "review_intelligence" as const,
@@ -273,6 +282,51 @@ export function adaptTenantSafeReviews(items: readonly TenantSafeReviewSummary[]
   return { observations, coverage: [{ source: "reviews", status: items.length ? "available" : "no_observation",
     detail: items.length ? `${items.length} tenant-safe review summaries were supplied.` : "No tenant-safe review observation is available.",
     observedAt: items.length ? [...items].map(item => item.observedAt.toISOString()).sort().at(-1) ?? null : null }] };
+}
+
+/**
+ * C9R-6: Maps a ReviewImportResult (from GbpReviewSummaryImporter) to an
+ * AiVisibilityAdapterResult, using the canonical AiVisibilityCoverageStatus
+ * values. The existing adaptTenantSafeReviews() handles the "available" and
+ * "no_observation" paths; this function handles failure/disconnected paths.
+ */
+export function adaptReviewImportResult(result: ReviewImportResult): AiVisibilityAdapterResult {
+  switch (result.kind) {
+    case "available":
+      return adaptTenantSafeReviews(result.summaries);
+    case "no_observation":
+      return adaptTenantSafeReviews([]);
+    case "disconnected":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "not_connected",
+          detail: result.reason,
+          observedAt: null,
+        }],
+      };
+    case "unauthorized":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "unauthorized",
+          detail: "Account authorization error: the connected Google account does not have ownership access to this tenant's GBP location. Review the connected account in Local Presence settings.",
+          observedAt: null,
+        }],
+      };
+    case "provider_error":
+      return {
+        observations: [],
+        coverage: [{
+          source: "reviews",
+          status: "provider_error",
+          detail: `Provider error: ${result.error}`,
+          observedAt: null,
+        }],
+      };
+  }
 }
 
 export interface ConnectedGoogleSummary {

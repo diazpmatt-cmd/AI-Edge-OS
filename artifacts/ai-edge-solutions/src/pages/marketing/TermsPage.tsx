@@ -33,7 +33,7 @@ export default function TermsPage() {
           <ul style={UL_STYLE}>
             <li>Social media content distribution and scheduling</li>
             <li>Lead recovery and AI receptionist services</li>
-            <li>Google Business Profile automation</li>
+            <li>Business Edge Profile automation</li>
             <li>Review generation and reputation management</li>
             <li>Local SEO and AI visibility optimization</li>
             <li>Website design and maintenance</li>

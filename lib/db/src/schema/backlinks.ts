@@ -1,4 +1,4 @@
-import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const backlinkProspectsTable = pgTable("backlink_prospects", {
@@ -7,7 +7,7 @@ export const backlinkProspectsTable = pgTable("backlink_prospects", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
-  uniqueIndex("uq_backlink_prospects_id_client").on(table.id, table.clientId),
+  unique("uq_backlink_prospects_id_client").on(table.id, table.clientId),
   uniqueIndex("uq_backlink_prospects_client_domain_page").on(table.clientId, table.domain, sql`COALESCE(${table.pageUrl}, '')`),
   index("idx_backlink_prospects_client_domain").on(table.clientId, table.domain),
   check("ck_backlink_prospect_type", sql`${table.prospectType} IN ('domain','page','directory','organization','partnership','other')`),
@@ -34,7 +34,7 @@ export const backlinkOpportunitiesTable = pgTable("backlink_opportunities", {
   rationale: text("rationale").notNull(), recommendedAction: text("recommended_action").notNull(), evidenceIds: jsonb("evidence_ids").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
-  uniqueIndex("uq_backlink_opportunities_id_client").on(table.id, table.clientId),
+  unique("uq_backlink_opportunities_id_client").on(table.id, table.clientId),
   uniqueIndex("uq_backlink_opportunities_client_prospect_category_service").on(table.clientId, table.prospectId, table.category, table.serviceId),
   index("idx_backlink_opportunities_client_rank").on(table.clientId, table.attainability, table.potentialValue, table.id),
   index("idx_backlink_opportunities_client_category").on(table.clientId, table.category),
@@ -51,7 +51,7 @@ export const backlinkWorkflowsTable = pgTable("backlink_workflows", {
   version: integer("version").notNull().default(1), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(), completedAt: timestamp("completed_at", { withTimezone: true }),
 }, table => [
-  uniqueIndex("uq_backlink_workflows_id_client").on(table.id, table.clientId),
+  unique("uq_backlink_workflows_id_client").on(table.id, table.clientId),
   uniqueIndex("uq_backlink_workflows_opportunity_client").on(table.opportunityId, table.clientId),
   index("idx_backlink_workflows_client_status").on(table.clientId, table.status, table.opportunityId),
   foreignKey({ name: "fk_backlink_workflow_opportunity_tenant", columns: [table.opportunityId, table.clientId], foreignColumns: [backlinkOpportunitiesTable.id, backlinkOpportunitiesTable.clientId] }),

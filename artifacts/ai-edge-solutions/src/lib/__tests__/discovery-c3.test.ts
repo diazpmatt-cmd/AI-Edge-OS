@@ -27,7 +27,7 @@
  * Serialization round-trips (N, O) test the pure helper functions directly.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
 // ── Imports from lib/db/src (relative paths — no @workspace/db alias in vitest) ──
 
@@ -1311,5 +1311,110 @@ describe("T. Regression protection", () => {
         summary.allOpportunities[i]!.compositeScore,
       );
     }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// U. Competitor identifier guard at persistence layer
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe("T-C3-U: competitor identifier guard fires at saveSignals time", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("U1: warns when saving a signal with competitorRank set but no identifier in rawProviderData", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const signal = makeSignal({
+      competitorRank:  1,
+      rawProviderData: { source: "dataforseo_serp", organicResultCount: 8 },
+    });
+
+    await repo.saveSignals([signal]);
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("competitor_rank=1");
+    expect(warnSpy.mock.calls[0][0]).toContain(CLIENT_A);
+  });
+
+  it("U2: does NOT warn when saving a signal with competitorRank set AND a competitorName present", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const signal = makeSignal({
+      competitorRank:  2,
+      rawProviderData: { source: "dataforseo_serp", competitorName: "Foley Pest Control" },
+    });
+
+    await repo.saveSignals([signal]);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("U3: does NOT warn when saving a signal with null competitorRank (normal state)", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await repo.saveSignals([makeSignal({ competitorRank: null })]);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("U4: signal is still stored even when the warning fires (non-blocking guard)", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const signal = makeSignal({
+      competitorRank:  3,
+      rawProviderData: {},
+    });
+    await repo.saveSignals([signal]);
+
+    const stored = await repo.getSignalsForRun(signal.snapshotId, CLIENT_A);
+    expect(stored.some(s => s.id === signal.id)).toBe(true);
+  });
+
+  it("U5: warns once per offending signal when a batch contains multiple signals", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const bad1 = makeSignal({ id: "sig::a", normalizedValue: "kw one",   competitorRank: 1, rawProviderData: {} });
+    const good = makeSignal({ id: "sig::b", normalizedValue: "kw two",   competitorRank: 2, rawProviderData: { competitorName: "A Pest Co" } });
+    const bad2 = makeSignal({ id: "sig::c", normalizedValue: "kw three", competitorRank: 5, rawProviderData: {} });
+
+    await repo.saveSignals([bad1, good, bad2]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("U6: warns via persistRunResult path when summary contains a signal with competitorRank and no identifier", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const badSignal = makeSignal({
+      competitorRank:  4,
+      rawProviderData: { source: "dataforseo_serp" },
+    });
+
+    await repo.persistRunResult(makeSummary({ allSignals: [badSignal] }));
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]![0]).toContain("competitor_rank=4");
+  });
+
+  it("U7: does NOT warn via persistRunResult when the competitor signal has a valid topCompetitorDomain", async () => {
+    const repo = new InMemoryDiscoveryRepository();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const signal = makeSignal({
+      competitorRank:  1,
+      rawProviderData: { topCompetitorDomain: "foleypestcontrol.com" },
+    });
+
+    await repo.persistRunResult(makeSummary({ allSignals: [signal] }));
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

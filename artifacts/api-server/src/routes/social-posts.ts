@@ -14,6 +14,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { resolveGoogleToken } from "../lib/google-token.js";
 
 const router = Router();
 const objectStorageService = new ObjectStorageService();
@@ -417,7 +418,16 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       results.google = { ok: false, error: "Not connected — link your account in Connected Accounts." };
     } else {
       try {
-        const token = await getGoogleAccessToken({ ...gbpConn, accessToken: gbpConn.accessToken! });
+        const tokenResult = await resolveGoogleToken({
+          userId:       gbpConn.userId,
+          accessToken:  gbpConn.accessToken!,
+          refreshToken: gbpConn.refreshToken ?? null,
+          expiresAt:    gbpConn.expiresAt    ?? null,
+        });
+        if (!tokenResult.ok) {
+          throw new Error(`Google token refresh failed: ${tokenResult.reason}. Re-connect your Google account.`);
+        }
+        const token = tokenResult.token;
         const googleCaption = post.captionGoogle ?? post.caption;
         const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
         const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);
@@ -692,52 +702,6 @@ function captureGbpResponseHeaders(res: Response): Record<string, string> {
   return out;
 }
 
-async function getGoogleAccessToken(conn: { id?: any; userId: string; provider: string; accessToken: string; refreshToken: string | null; expiresAt: Date | null }): Promise<string> {
-  const isExpired = conn.expiresAt ? new Date(conn.expiresAt) < new Date() : false;
-  const needsRefresh = isExpired && !!conn.refreshToken;
-  console.log("[GOOGLE-REFRESH]", JSON.stringify({
-    attempt: needsRefresh,
-    reason: !conn.expiresAt ? "no_expiry_stored" : isExpired ? "token_expired" : "token_still_valid",
-    expiresAt: conn.expiresAt ?? null,
-    hasRefreshToken: !!conn.refreshToken,
-  }));
-  if (!conn.expiresAt || conn.expiresAt > new Date()) return conn.accessToken;
-  if (!conn.refreshToken) {
-    console.warn("[GOOGLE-REFRESH] skipping — no refresh token stored");
-    return conn.accessToken;
-  }
-  try {
-    const r = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id:     process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
-        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
-        refresh_token: conn.refreshToken,
-        grant_type:    "refresh_token",
-      }),
-    });
-    const refreshBody = await r.text();
-    if (!r.ok) {
-      console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, status: r.status, error: refreshBody.slice(0, 300) }));
-      return conn.accessToken;
-    }
-    const data = JSON.parse(refreshBody) as { access_token: string; expires_in?: number; scope?: string };
-    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
-    console.log("[GOOGLE-REFRESH]", JSON.stringify({
-      success: true,
-      newAccessTokenLength: data.access_token?.length ?? 0,
-      scope: data.scope ?? "(not returned)",
-      expiresAt,
-    }));
-    await db.update(socialConnectionsTable).set({ accessToken: data.access_token, expiresAt, updatedAt: new Date() })
-      .where(and(eq(socialConnectionsTable.userId, conn.userId), eq(socialConnectionsTable.provider, conn.provider)));
-    return data.access_token;
-  } catch (e: any) {
-    console.error("[GOOGLE-REFRESH]", JSON.stringify({ success: false, error: e?.message }));
-    return conn.accessToken;
-  }
-}
 
 async function publishToGBP(
   token: string,
@@ -865,9 +829,20 @@ async function publishToGBP(
       }));
       await saveCooldownAndThrow(locRes, locBody, "Business Information API", "mybusinessbusinessinformation.googleapis.com");
     }
-    const locData  = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
-    const location = locData.locations?.[0];
-    if (!location) throw new Error("No GBP location found — verify the account has at least one verified location.");
+    const locData = JSON.parse(locBody) as { locations?: { name: string; title: string }[] };
+    const allLocs = locData.locations ?? [];
+    if (!allLocs.length) throw new Error("No GBP location found — verify the account has at least one verified location.");
+    // Identity-preserving selection: title match first, then single-location auto, then ambiguous error
+    const _storedTitle = ((metadata.locationTitle ?? metadata.primaryLocationTitle ?? "") as string);
+    const _normT = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let location: { name: string; title: string } | null =
+      _storedTitle ? (allLocs.find(l => _normT(l.title) === _normT(_storedTitle)) ?? null) : null;
+    if (!location && allLocs.length === 1) location = allLocs[0];
+    if (!location) throw new Error(
+      `GBP location selection ambiguous: ${allLocs.length} locations found ` +
+      `(${allLocs.map(l => l.title).join(", ")}). ` +
+      `Please refresh your GBP location in Settings → Social Connections.`,
+    );
 
     // Verify location title matches the expected business before caching
     const EXPECTED_TITLE_RE = /bed\s+bugs.{0,10}beyond/i;
@@ -941,8 +916,11 @@ async function publishToGBP(
     body.media = [{ mediaFormat: "PHOTO", sourceUrl: imageUrl }];
   }
 
-  // 3 — create local post (direct fetch — no silent retry on 429)
-  const postUrl = `https://mybusinessposts.googleapis.com/v1/${locationResourceName}/localPosts`;
+  // 3 — create local post via GBP v4 API
+  // mybusinessposts.googleapis.com/v1 was decommissioned; use mybusiness.googleapis.com/v4
+  // v4 requires the full account-prefixed path: accounts/{id}/locations/{id}/localPosts
+  const fullV4PostPath = `${accountResourceName}/${locationResourceName}`;
+  const postUrl        = `https://mybusiness.googleapis.com/v4/${fullV4PostPath}/localPosts`;
   console.log("[GBP-PUBLISH] posting to", postUrl, "body=", JSON.stringify(body).slice(0, 300));
   const postRes = await fetch(postUrl, {
     method:  "POST",
@@ -964,7 +942,7 @@ async function publishToGBP(
         retryAfterHeader: postRes.headers.get("retry-after"),
         httpStatus:       postRes.status,
         endpoint:         "Local Posts API",
-        service:          "mybusinessposts.googleapis.com",
+        service:          "mybusiness.googleapis.com",
       });
       const cleanMeta = stripLegacyCooldownFields(metadata);
       try {

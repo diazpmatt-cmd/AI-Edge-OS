@@ -26,7 +26,7 @@ const SOURCES = [
   "SMS",
   "Callback Requests",
   "Voicemail",
-  "AI Visibility Engine",
+  "AI Edge Visibility",
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -43,7 +43,7 @@ const SOURCE_ICON: Record<string, string> = {
   "SMS":                "💬",
   "Callback Requests":  "📞",
   "Voicemail":          "🎙",
-  "AI Visibility Engine": "✨",
+  "AI Edge Visibility": "✨",
 };
 
 const fmt$ = (n: number) =>

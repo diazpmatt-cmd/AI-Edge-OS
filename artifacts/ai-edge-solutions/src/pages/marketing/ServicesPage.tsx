@@ -37,7 +37,7 @@ const SERVICES = [
   },
   {
     icon: "📍",
-    title: "Google Business Profile Automation",
+    title: "Business Edge Profile",
     tagline: "Own your local presence",
     description: "Your GBP is your most powerful free marketing asset. We automate consistent posting, photo uploads, Q&A responses, and profile optimization to keep you ranked at the top of local search.",
     features: [
@@ -117,7 +117,7 @@ const SERVICES = [
   },
   {
     icon: "🧠",
-    title: "AI Visibility / GEO Optimization",
+    title: "AI Edge Visibility",
     tagline: "Get found by AI-powered search",
     description: "ChatGPT, Gemini, Perplexity, and AI assistants are the new search engines. We optimize your business to be cited, recommended, and featured by these AI systems — the next frontier of local discovery.",
     features: [
@@ -201,42 +201,73 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      {/* Bottom CTA */}
+      {/* Pricing CTA */}
       <section style={{
         padding: "80px 24px",
         borderTop: "1px solid rgba(0,174,239,0.1)",
         textAlign: "center",
         background: "rgba(0,174,239,0.03)",
       }}>
-        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+        <div style={{ maxWidth: 680, margin: "0 auto" }}>
+          <div style={{
+            display: "inline-block", marginBottom: 20,
+            background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.2)",
+            borderRadius: 100, padding: "6px 18px",
+            fontSize: 12, fontWeight: 700, color: "#00AEEF", letterSpacing: "1.5px", textTransform: "uppercase",
+          }}>
+            Simple Pricing
+          </div>
           <h2 style={{
             fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800,
             letterSpacing: "-1px", color: "#FFFFFF", marginBottom: 16,
           }}>
-            Not sure where to start?
+            Ready to see what it costs?
           </h2>
           <p style={{ fontSize: 17, color: "#6B7280", lineHeight: 1.65, marginBottom: 36 }}>
-            Book a free strategy call and we'll identify which services will have the biggest impact on your business.
+            We offer straightforward packages designed for local service businesses. No hidden fees, no long-term lock-ins.
           </p>
-          <button
-            onClick={() => navigate("/contact")}
-            style={{
-              padding: "15px 40px", borderRadius: 12, background: "#00AEEF",
-              border: "none", color: "#fff", fontSize: 17, fontWeight: 700,
-              cursor: "pointer", boxShadow: "0 0 30px rgba(0,174,239,0.3)",
-              transition: "all 0.25s",
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.background = "#00C4FF";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 50px rgba(0,174,239,0.55)";
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.background = "#00AEEF";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(0,174,239,0.3)";
-            }}
-          >
-            Get My Free Strategy Call →
-          </button>
+          <div style={{ display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
+            <button
+              onClick={() => navigate("/pricing")}
+              style={{
+                padding: "15px 40px", borderRadius: 12, background: "#00AEEF",
+                border: "none", color: "#fff", fontSize: 17, fontWeight: 700,
+                cursor: "pointer", boxShadow: "0 0 30px rgba(0,174,239,0.3)",
+                transition: "all 0.25s",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "#00C4FF";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 0 50px rgba(0,174,239,0.55)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "#00AEEF";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 0 30px rgba(0,174,239,0.3)";
+                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+              }}
+            >
+              View Packages →
+            </button>
+            <button
+              onClick={() => navigate("/contact")}
+              style={{
+                padding: "15px 40px", borderRadius: 12,
+                background: "transparent",
+                border: "1px solid rgba(0,174,239,0.35)", color: "#C0C0C0", fontSize: 17, fontWeight: 700,
+                cursor: "pointer", transition: "all 0.25s",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.7)";
+                (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.35)";
+                (e.currentTarget as HTMLElement).style.color = "#C0C0C0";
+              }}
+            >
+              Book Free Strategy Call
+            </button>
+          </div>
         </div>
       </section>
 

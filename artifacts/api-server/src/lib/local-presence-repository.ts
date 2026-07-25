@@ -1,8 +1,11 @@
-import { db, eq } from "@workspace/db";
+import { db, eq, and } from "@workspace/db";
+import { desc } from "drizzle-orm";
 import {
   localPresenceProfilesTable,
   localPresenceChannelsTable,
+  gbpAuditSnapshotsTable,
   LOCAL_PRESENCE_PROVIDERS,
+  mapGbpSnapshotToChannelUpdate,
   type LocalPresenceProfile,
   type LocalPresenceChannel,
 } from "@workspace/db";
@@ -38,6 +41,39 @@ export function computeOverallPresenceScore(channels: LocalPresenceChannel[]): n
   const napBonus = activeCount >= 5 ? 5 : activeCount >= 3 ? 2 : 0;
 
   return Math.min(Math.round(weightedScore + napBonus), 100);
+}
+
+// ── GBP audit summary shape ────────────────────────────────────────────────
+export interface GbpAuditSummary {
+  overallScore: number;
+  checksPassed: number;
+  checksFailed: number;
+  checksWarning: number;
+  gbpConnected: boolean;
+  locationTitle: string | null;
+  completedAt: Date | null;
+}
+
+// ── Dashboard response shape ───────────────────────────────────────────────
+export interface LocalPresenceDashboard {
+  profile: LocalPresenceProfile;
+  channels: LocalPresenceChannel[];
+  overallScore: number;
+  connectedCount: number;
+  pendingCount: number;
+  notStartedCount: number;
+  gbpAuditSummary: GbpAuditSummary | null;
+  providers: Array<{
+    channelName: string;
+    displayName: string;
+    shortName: string;
+    iconEmoji: string;
+    tier: number;
+    manualSetupUrl: string;
+    syncSupported: boolean;
+    channel: LocalPresenceChannel | null;
+    completenessScore: number;
+  }>;
 }
 
 // ── Repository ───────────────────────────────────────────────────────────────
@@ -85,6 +121,10 @@ export class LocalPresenceRepository {
       recommendedAction?: string | null;
       metadataJson?: string | null;
       lastSyncAt?: Date | null;
+      providerId?: string | null;
+      nextSyncAt?: Date | null;
+      healthScore?: number;
+      issuesJson?: string | null;
     }
   ): Promise<LocalPresenceChannel> {
     const completenessScore = computeChannelCompletenessScore({
@@ -106,6 +146,10 @@ export class LocalPresenceRepository {
         metadataJson: data.metadataJson ?? null,
         completenessScore,
         lastSyncAt: data.lastSyncAt ?? null,
+        providerId: data.providerId ?? null,
+        nextSyncAt: data.nextSyncAt ?? null,
+        healthScore: data.healthScore ?? 0,
+        issuesJson: data.issuesJson ?? null,
       })
       .onConflictDoUpdate({
         target: [localPresenceChannelsTable.clientId, localPresenceChannelsTable.channelName],
@@ -117,6 +161,10 @@ export class LocalPresenceRepository {
           ...(data.recommendedAction !== undefined && { recommendedAction: data.recommendedAction }),
           ...(data.metadataJson !== undefined && { metadataJson: data.metadataJson }),
           ...(data.lastSyncAt !== undefined && { lastSyncAt: data.lastSyncAt }),
+          ...(data.providerId !== undefined && { providerId: data.providerId }),
+          ...(data.nextSyncAt !== undefined && { nextSyncAt: data.nextSyncAt }),
+          ...(data.healthScore !== undefined && { healthScore: data.healthScore }),
+          ...(data.issuesJson !== undefined && { issuesJson: data.issuesJson }),
           completenessScore,
           updatedAt: new Date(),
         },
@@ -125,39 +173,67 @@ export class LocalPresenceRepository {
     return row;
   }
 
-  async getDashboard(clientId: string): Promise<{
-    profile: LocalPresenceProfile;
-    channels: LocalPresenceChannel[];
-    overallScore: number;
-    connectedCount: number;
-    pendingCount: number;
-    notStartedCount: number;
-    providers: Array<{
-      channelName: string;
-      displayName: string;
-      shortName: string;
-      iconEmoji: string;
-      tier: number;
-      manualSetupUrl: string;
-      syncSupported: boolean;
-      channel: LocalPresenceChannel | null;
-      completenessScore: number;
-    }>;
-  }> {
+  // ── getDashboard: bridges GBP audit data into google_business channel ──────
+  async getDashboard(clientId: string): Promise<LocalPresenceDashboard> {
     const profile = await this.getOrCreateProfile(clientId);
     const channels = await this.getChannels(clientId);
-    const overallScore = computeOverallPresenceScore(channels);
 
-    const connectedCount = channels.filter(c =>
+    // Fetch latest complete GBP audit snapshot for this client (read-time bridge)
+    const [gbpSnapshot] = await db
+      .select()
+      .from(gbpAuditSnapshotsTable)
+      .where(
+        and(
+          eq(gbpAuditSnapshotsTable.clientId, clientId),
+          eq(gbpAuditSnapshotsTable.status, "complete"),
+        )
+      )
+      .orderBy(desc(gbpAuditSnapshotsTable.completedAt))
+      .limit(1);
+
+    // Derive real-time google_business channel health from the GBP audit snapshot.
+    // This replaces the hardcoded seed score with live data at read time.
+    let effectiveChannels = channels;
+    if (gbpSnapshot) {
+      const update = mapGbpSnapshotToChannelUpdate(gbpSnapshot);
+      effectiveChannels = channels.map(ch => {
+        if (ch.channelName !== "google_business") return ch;
+        return {
+          ...ch,
+          score: update.score,
+          healthScore: update.healthScore,
+          status: update.status,
+          verificationStatus: update.verificationStatus,
+          issuesJson: JSON.stringify(update.issues),
+          lastSyncAt: update.lastSyncAt,
+        };
+      });
+    }
+
+    const overallScore = computeOverallPresenceScore(effectiveChannels);
+
+    const connectedCount = effectiveChannels.filter(c =>
       ["connected", "verified_publishing"].includes(c.status)
     ).length;
-    const pendingCount = channels.filter(c =>
+    const pendingCount = effectiveChannels.filter(c =>
       ["setup_in_progress", "pending"].includes(c.status)
     ).length;
-    const notStartedCount = channels.filter(c => c.status === "not_started").length;
+    const notStartedCount = effectiveChannels.filter(c => c.status === "not_started").length;
+
+    const gbpAuditSummary: GbpAuditSummary | null = gbpSnapshot
+      ? {
+          overallScore: gbpSnapshot.overallScore,
+          checksPassed: gbpSnapshot.checksPassed,
+          checksFailed: gbpSnapshot.checksFailed,
+          checksWarning: gbpSnapshot.checksWarning,
+          gbpConnected: gbpSnapshot.gbpConnected,
+          locationTitle: gbpSnapshot.locationTitle ?? null,
+          completedAt: gbpSnapshot.completedAt ?? null,
+        }
+      : null;
 
     const providers = LOCAL_PRESENCE_PROVIDERS.map(p => {
-      const ch = channels.find(c => c.channelName === p.channelName) ?? null;
+      const ch = effectiveChannels.find(c => c.channelName === p.channelName) ?? null;
       return {
         channelName: p.channelName,
         displayName: p.displayName,
@@ -171,7 +247,16 @@ export class LocalPresenceRepository {
       };
     });
 
-    return { profile, channels, overallScore, connectedCount, pendingCount, notStartedCount, providers };
+    return {
+      profile,
+      channels: effectiveChannels,
+      overallScore,
+      connectedCount,
+      pendingCount,
+      notStartedCount,
+      gbpAuditSummary,
+      providers,
+    };
   }
 }
 

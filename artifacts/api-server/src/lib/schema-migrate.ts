@@ -211,6 +211,7 @@ export async function migrateSchema(): Promise<void> {
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS client_id TEXT`);
 
   // ── Auto Content Settings ──────────────────────────────────────────────────
   await pool.query(`
@@ -242,6 +243,28 @@ export async function migrateSchema(): Promise<void> {
       created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Canonical clients must exist before the local-presence repair below. On a
+  // fresh database app.ts has not yet imported the dedicated client resolver,
+  // so its bounded backfill remains separate from this base-table bootstrap.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id        TEXT        NOT NULL,
+      slug           TEXT        NOT NULL,
+      client_name    TEXT        NOT NULL,
+      industry       TEXT        NOT NULL DEFAULT 'pest_control',
+      industry_label TEXT        NOT NULL DEFAULT 'pest control',
+      region         TEXT        NOT NULL DEFAULT '',
+      service_areas  TEXT        NOT NULL DEFAULT '[]',
+      timezone       TEXT        NOT NULL DEFAULT 'America/Chicago',
+      is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_slug    ON clients(slug);
   `);
 
   // ── Image Assets ───────────────────────────────────────────────────────────
@@ -374,6 +397,12 @@ export async function migrateSchema(): Promise<void> {
       last_updated   TIMESTAMPTZ    NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE review_platform_stats ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL DEFAULT 'default'`);
+  // Migrate from single-column UNIQUE on platform to composite (client_id, platform).
+  // This supports multi-tenant isolation: different clients can have the same platform name.
+  // Safe to run repeatedly: DROP IF EXISTS + CREATE IF NOT EXISTS are both idempotent.
+  await pool.query(`ALTER TABLE review_platform_stats DROP CONSTRAINT IF EXISTS review_platform_stats_platform_unique`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS rps_client_platform_uniq ON review_platform_stats (client_id, platform)`);
 
   // ── Calls ──────────────────────────────────────────────────────────────────
   // These tables may have been created by a prior raw-SQL bootstrap with a
@@ -486,6 +515,109 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
 
+  // ── AI Visibility Run Results (C9R-2) ─────────────────────────────────────
+  // Persisted output of AiVisibilityExecutionService.execute().
+  // result_json holds the full serialised AiVisibilityReadModel.
+  // The summary columns (counts) enable the history endpoint to return
+  // lightweight paginated records without deserialising result_json.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_visibility_run_results (
+      id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id              TEXT        NOT NULL,
+      generated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      result_json            TEXT        NOT NULL,
+      recommendation_count   INTEGER     NOT NULL DEFAULT 0,
+      rejected_count         INTEGER     NOT NULL DEFAULT 0,
+      available_source_count INTEGER     NOT NULL DEFAULT 0,
+      created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_visibility_runs_client
+      ON ai_visibility_run_results(client_id, generated_at DESC);
+  `);
+
+  // ── AI Query Scans + Results (C9R-4) ─────────────────────────────────────
+  // ai_query_scans: one scan run per tenant (header record).
+  // ai_query_results: one row per individual query within a scan.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_query_scans (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT        NOT NULL,
+      status          TEXT        NOT NULL DEFAULT 'running',
+      provider        TEXT        NOT NULL DEFAULT 'openai',
+      model           TEXT        NOT NULL DEFAULT 'gpt-4o-mini',
+      query_count     INTEGER     NOT NULL DEFAULT 0,
+      completed_count INTEGER     NOT NULL DEFAULT 0,
+      mention_count   INTEGER     NOT NULL DEFAULT 0,
+      error           TEXT,
+      started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at    TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_query_scans_client
+      ON ai_query_scans(client_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS ai_query_results (
+      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      scan_id             UUID        NOT NULL,
+      client_id           TEXT        NOT NULL,
+      query               TEXT        NOT NULL,
+      provider            TEXT        NOT NULL DEFAULT 'openai',
+      model               TEXT        NOT NULL DEFAULT 'gpt-4o-mini',
+      response_text       TEXT,
+      latency_ms          INTEGER,
+      generated_at        TIMESTAMPTZ,
+      success             BOOLEAN     NOT NULL DEFAULT FALSE,
+      failure_reason      TEXT,
+      business_mentioned  BOOLEAN     NOT NULL DEFAULT FALSE,
+      mention_type        TEXT,
+      mention_position    INTEGER,
+      competitor_mentions JSONB       NOT NULL DEFAULT '[]',
+      citations           JSONB       NOT NULL DEFAULT '[]',
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_query_results_scan
+      ON ai_query_results(scan_id);
+
+    CREATE INDEX IF NOT EXISTS ai_query_results_client
+      ON ai_query_results(client_id, created_at DESC);
+  `);
+
+  // ── C9R-5: Scheduled Monitoring — schema additions ────────────────────────
+  // Idempotent ALTER TABLE statements for trigger_source + aggregate columns.
+  await pool.query(`
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS trigger_source          TEXT    NOT NULL DEFAULT 'manual';
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS competitor_mention_count INTEGER;
+    ALTER TABLE ai_query_scans
+      ADD COLUMN IF NOT EXISTS citation_count          INTEGER;
+    ALTER TABLE ai_visibility_run_results
+      ADD COLUMN IF NOT EXISTS trigger_source          TEXT    NOT NULL DEFAULT 'manual';
+  `);
+
+  // ── C9R-5: AI Visibility Schedule ─────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_visibility_schedule (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            TEXT        NOT NULL UNIQUE,
+      enabled              BOOLEAN     NOT NULL DEFAULT FALSE,
+      frequency            TEXT        NOT NULL DEFAULT 'weekly',
+      next_run_at          TIMESTAMPTZ,
+      last_run_at          TIMESTAMPTZ,
+      last_success_at      TIMESTAMPTZ,
+      consecutive_failures INTEGER     NOT NULL DEFAULT 0,
+      max_retries          INTEGER     NOT NULL DEFAULT 3,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS ai_visibility_schedule_due
+      ON ai_visibility_schedule(enabled, next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
   // ── Revenue Attribution ────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS revenue_attribution (
@@ -557,6 +689,137 @@ export async function migrateSchema(): Promise<void> {
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT local_presence_channels_client_channel UNIQUE (client_id, channel_name)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE local_presence_profiles
+      ADD COLUMN IF NOT EXISTS description        TEXT,
+      ADD COLUMN IF NOT EXISTS categories_json    TEXT,
+      ADD COLUMN IF NOT EXISTS hours_json         TEXT,
+      ADD COLUMN IF NOT EXISTS service_areas_json TEXT,
+      ADD COLUMN IF NOT EXISTS attributes_json    TEXT,
+      ADD COLUMN IF NOT EXISTS photos_json        TEXT;
+
+    ALTER TABLE local_presence_channels
+      ADD COLUMN IF NOT EXISTS provider_id    TEXT,
+      ADD COLUMN IF NOT EXISTS next_sync_at   TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS health_score   INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS issues_json    TEXT;
+  `);
+
+  // ── Local Presence: idempotent client_id repair ────────────────────────────
+  // local_presence_profiles.client_id is TEXT and may contain legacy slug values
+  // (e.g. "default") from a pre-UUID era. This repair migrates any such row to
+  // the canonical client UUID by matching on business_name.
+  //
+  // Safety constraints:
+  //   - Only reassigns if client_id is literally 'default' (the known legacy value)
+  //   - Only matches if business_name (case-insensitive) equals clients.client_name
+  //   - NOT EXISTS guard prevents a UNIQUE violation if the UUID profile already exists
+  //   - Idempotent: after first run, the WHERE client_id = 'default' no longer matches
+  //   - Does not affect any other tenant's data
+  await pool.query(`
+    UPDATE local_presence_profiles lpp
+    SET    client_id = c.id::text
+    FROM   clients c
+    WHERE  lpp.client_id = 'default'
+      AND  lower(lpp.business_name) = lower(c.client_name)
+      AND  NOT EXISTS (
+             SELECT 1 FROM local_presence_profiles lpp2
+             WHERE  lpp2.client_id = c.id::text
+           );
+  `);
+
+  // ── Competitor Intelligence Engine ────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS competitors (
+      id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id                   TEXT        NOT NULL,
+      domain                      TEXT        NOT NULL,
+      business_name               TEXT,
+      website                     TEXT,
+      gbp_place_id                TEXT,
+      primary_category            TEXT,
+      categories_json             TEXT,
+      address                     TEXT,
+      city                        TEXT,
+      state                       TEXT,
+      zip                         TEXT,
+      phone                       TEXT,
+      coordinates                 TEXT,
+      service_areas_json          TEXT,
+      years_in_business           INTEGER,
+      review_count                INTEGER,
+      avg_rating                  NUMERIC(3,1),
+      review_velocity             NUMERIC(6,2),
+      review_sentiment_score      INTEGER,
+      service_catalog_json        TEXT,
+      social_profiles_json        TEXT,
+      top_keyword_rank            INTEGER,
+      last_seen_rank              INTEGER,
+      keyword_gap_count           INTEGER     NOT NULL DEFAULT 0,
+      estimated_organic_traffic   INTEGER,
+      estimated_organic_keywords  INTEGER,
+      organic_visibility_score    INTEGER,
+      paid_visibility_score       INTEGER,
+      content_velocity_score      INTEGER,
+      local_presence_score        INTEGER,
+      gbp_health_score            INTEGER,
+      ai_visibility_score         INTEGER,
+      citation_score              INTEGER,
+      threat_level                TEXT,
+      opportunity_score           INTEGER     NOT NULL DEFAULT 0,
+      domain_authority            INTEGER,
+      backlink_count              INTEGER,
+      primary_photo_url           TEXT,
+      logo_url                    TEXT,
+      discovery_source            TEXT        NOT NULL DEFAULT 'serp_organic',
+      discovered_providers_json   TEXT,
+      provider_metadata_json      TEXT,
+      merged_from_domains_json    TEXT,
+      canonical_status            TEXT        NOT NULL DEFAULT 'active',
+      confidence_score            INTEGER     NOT NULL DEFAULT 10,
+      first_seen_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_crawled_at             TIMESTAMPTZ,
+      created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT competitors_client_domain_uniq UNIQUE (client_id, domain)
+    );
+
+    CREATE INDEX IF NOT EXISTS competitors_client_id_idx
+      ON competitors (client_id);
+    CREATE INDEX IF NOT EXISTS competitors_threat_level_idx
+      ON competitors (client_id, threat_level);
+    CREATE INDEX IF NOT EXISTS competitors_last_seen_idx
+      ON competitors (client_id, last_seen_at DESC);
+  `);
+
+  // ── Phase 5: Provider observation log ─────────────────────────────────────
+  // One row per (client_id, competitor_id, category, provider_id).
+  // Providers upsert their observations; canonical competitors table is untouched.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS competitor_observations (
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT         NOT NULL,
+      competitor_id   TEXT         NOT NULL,
+      domain          TEXT         NOT NULL,
+      category        TEXT         NOT NULL,
+      provider_id     TEXT         NOT NULL,
+      observed_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      confidence      INTEGER      NOT NULL DEFAULT 50,
+      source_url      TEXT,
+      raw_observation JSONB        NOT NULL DEFAULT '{}',
+      normalized_obs  JSONB        NOT NULL DEFAULT '{}',
+      attribution     JSONB        NOT NULL DEFAULT '{}',
+      is_mock         BOOLEAN      NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS comp_obs_uniq
+      ON competitor_observations(client_id, competitor_id, category, provider_id);
+    CREATE INDEX IF NOT EXISTS comp_obs_competitor_idx
+      ON competitor_observations(client_id, competitor_id);
   `);
 
   // ── Asset Library ──────────────────────────────────────────────────────────
@@ -819,6 +1082,355 @@ export async function migrateSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_backlink_ingestion_runs_client_status
       ON backlink_ingestion_runs(client_id, status, started_at);
   `);
+
+  // ── Backlink Scheduler & Score History (C8R-9) ────────────────────────────
+  // backlink_discovery_schedule: per-client scheduled discovery state.
+  // One row per client, upserted by the PUT /api/backlinks/schedule endpoint.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS backlink_discovery_schedule (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            TEXT        NOT NULL UNIQUE,
+      enabled              BOOLEAN     NOT NULL DEFAULT FALSE,
+      frequency            TEXT        NOT NULL DEFAULT 'weekly'
+        CHECK (frequency IN ('daily', 'weekly', 'biweekly')),
+      next_run_at          TIMESTAMPTZ,
+      last_run_at          TIMESTAMPTZ,
+      last_success_at      TIMESTAMPTZ,
+      last_run_status      TEXT
+        CHECK (last_run_status IS NULL OR last_run_status IN ('succeeded', 'failed', 'provider_unavailable')),
+      consecutive_failures INTEGER     NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+      max_retries          INTEGER     NOT NULL DEFAULT 3  CHECK (max_retries >= 1),
+      provider_override    TEXT,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_backlink_schedule_due
+      ON backlink_discovery_schedule(next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
+  // backlink_score_history: periodic authority score snapshots for trend tracking.
+  // One row per (client_id, snapshot_date).  90-day retention applied at startup.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS backlink_score_history (
+      id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id         TEXT        NOT NULL,
+      snapshot_date     DATE        NOT NULL,
+      authority_score   INTEGER     NOT NULL DEFAULT 0
+        CHECK (authority_score BETWEEN 0 AND 100),
+      backlink_count    INTEGER     NOT NULL DEFAULT 0 CHECK (backlink_count >= 0),
+      opportunity_count INTEGER     NOT NULL DEFAULT 0,
+      won_count         INTEGER     NOT NULL DEFAULT 0,
+      run_id            TEXT,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_backlink_score_history_client_date
+        UNIQUE (client_id, snapshot_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_backlink_score_history_client_date
+      ON backlink_score_history(client_id, snapshot_date DESC);
+  `);
+
+  // Prune backlink_score_history rows older than 90 days (non-destructive; best-effort).
+  await pool.query(
+    `DELETE FROM backlink_score_history
+     WHERE snapshot_date < CURRENT_DATE - INTERVAL '90 days'`,
+  ).catch(() => { /* ignore if table not yet populated */ });
+
+  // C8R-9 history extension: new_count, lost_count, referring_domain_count columns.
+  // Additive ALTER TABLE guards — safe to run on existing deployments.
+  await pool.query(`
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS new_count              INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS lost_count             INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS referring_domain_count INTEGER NOT NULL DEFAULT 0;
+  `).catch(() => { /* ignore if table doesn't exist yet — CREATE TABLE above will include them next run */ });
+
+  // Edge Authority Score column — nullable; null means "Unavailable" (no real provider data yet).
+  // Must never be back-filled from fixture/demo data.
+  await pool.query(`
+    ALTER TABLE backlink_score_history
+      ADD COLUMN IF NOT EXISTS edge_authority_score INTEGER;
+  `).catch(() => { /* safe to ignore if table missing — CREATE TABLE handles on first run */ });
+
+  // ── GBP Audit Engine ───────────────────────────────────────────────────────
+  // Canonical production DDL for GBP audit tables.  This is the single source
+  // of truth for CREATE TABLE.  If you add a column to lib/db/src/schema/gbp-audit.ts
+  // you MUST also add it here in the CREATE TABLE AND add an ALTER TABLE guard
+  // below so existing deployments pick it up without a manual migration.
+  //
+  // routes/gbp-audit.ts holds complementary ALTER TABLE guards only — it no
+  // longer duplicates the CREATE TABLE DDL.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_audit_snapshots (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT        NOT NULL,
+      user_id         TEXT        NOT NULL,
+      status          TEXT        NOT NULL DEFAULT 'pending',
+      local_score     INTEGER     NOT NULL DEFAULT 0,
+      local_max_score INTEGER     NOT NULL DEFAULT 0,
+      api_score       INTEGER     NOT NULL DEFAULT 0,
+      api_max_score   INTEGER     NOT NULL DEFAULT 0,
+      overall_score   INTEGER     NOT NULL DEFAULT 0,
+      max_score       INTEGER     NOT NULL DEFAULT 100,
+      checks_passed   INTEGER     NOT NULL DEFAULT 0,
+      checks_warning  INTEGER     NOT NULL DEFAULT 0,
+      checks_failed   INTEGER     NOT NULL DEFAULT 0,
+      checks_pending  INTEGER     NOT NULL DEFAULT 0,
+      location_name   TEXT,
+      location_title  TEXT,
+      gbp_connected   BOOLEAN     NOT NULL DEFAULT FALSE,
+      error_message   TEXT,
+      started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at    TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- ALTER TABLE guards: add any column that may be absent on tables created
+    -- by an older version of this bootstrap (idempotent; ADD COLUMN IF NOT EXISTS).
+    ALTER TABLE gbp_audit_snapshots
+      ADD COLUMN IF NOT EXISTS api_score     INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS api_max_score INTEGER NOT NULL DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS gbp_audit_checks (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      snapshot_id     TEXT        NOT NULL,
+      client_id       TEXT        NOT NULL,
+      category        TEXT        NOT NULL,
+      check_key       TEXT        NOT NULL,
+      check_label     TEXT        NOT NULL,
+      evidence_type   TEXT        NOT NULL DEFAULT 'local',
+      status          TEXT        NOT NULL DEFAULT 'data_pending',
+      score           INTEGER     NOT NULL DEFAULT 0,
+      max_score       INTEGER     NOT NULL DEFAULT 0,
+      priority        TEXT        NOT NULL DEFAULT 'medium',
+      current_value   TEXT,
+      recommendation  TEXT,
+      raw_data        JSONB       NOT NULL DEFAULT '{}',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_audit_snapshots_client_id_created_at
+      ON gbp_audit_snapshots(client_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS gbp_audit_checks_snapshot_id
+      ON gbp_audit_checks(snapshot_id);
+
+    CREATE INDEX IF NOT EXISTS gbp_audit_checks_client_id
+      ON gbp_audit_checks(client_id);
+  `);
+
+  // ── GBP Optimization Opportunities (Phase 3) ───────────────────────────────
+  // Stores one row per check per audit snapshot: priority-scored, grouped, and
+  // trend-tagged improvement opportunities derived by gbp-optimization-engine.ts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_optimization_opportunities (
+      id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      snapshot_id               TEXT        NOT NULL,
+      client_id                 TEXT        NOT NULL,
+      check_key                 TEXT        NOT NULL,
+      category                  TEXT        NOT NULL,
+      title                     TEXT        NOT NULL,
+      description               TEXT        NOT NULL DEFAULT '',
+      severity                  TEXT        NOT NULL DEFAULT 'Medium',
+      priority_score            INTEGER     NOT NULL DEFAULT 0,
+      estimated_impact          INTEGER     NOT NULL DEFAULT 0,
+      implementation_difficulty TEXT        NOT NULL DEFAULT 'Moderate',
+      confidence                INTEGER     NOT NULL DEFAULT 0,
+      evidence                  TEXT        NOT NULL DEFAULT '',
+      recommended_action        TEXT        NOT NULL DEFAULT '',
+      supporting_google_guideline TEXT,
+      group_name                TEXT        NOT NULL DEFAULT 'needs_attention',
+      trend                     TEXT,
+      time_estimate             TEXT,
+      ai_fix_available          BOOLEAN     NOT NULL DEFAULT FALSE,
+      check_status              TEXT        NOT NULL DEFAULT 'fail',
+      resolved                  BOOLEAN     NOT NULL DEFAULT FALSE,
+      resolved_at               TIMESTAMPTZ,
+      created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_opt_client_snap
+      ON gbp_optimization_opportunities(client_id, snapshot_id);
+
+    CREATE INDEX IF NOT EXISTS gbp_opt_snapshot_priority
+      ON gbp_optimization_opportunities(snapshot_id, priority_score DESC);
+  `);
+
+  // ── GBP Audit Schedules (Phase 5) ─────────────────────────────────────────
+  // Tracks per-client auto-audit schedule and alert preferences.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_audit_schedules (
+      id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id       TEXT        NOT NULL UNIQUE,
+      user_id         TEXT        NOT NULL DEFAULT '',
+      enabled         BOOLEAN     NOT NULL DEFAULT FALSE,
+      cadence_hours   INTEGER     NOT NULL DEFAULT 168,
+      next_run_at     TIMESTAMPTZ,
+      last_run_at     TIMESTAMPTZ,
+      alert_on_drop   INTEGER     NOT NULL DEFAULT 10,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_audit_schedules_next_run
+      ON gbp_audit_schedules(next_run_at)
+      WHERE enabled = TRUE;
+  `);
+
+  // ── GBP Alert Log (Phase 5) ────────────────────────────────────────────────
+  // One row per alert event: score drops, new critical/high issues, etc.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gbp_alert_log (
+      id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id     TEXT        NOT NULL,
+      snapshot_id   TEXT,
+      alert_type    TEXT        NOT NULL,
+      message       TEXT        NOT NULL,
+      severity      TEXT        NOT NULL DEFAULT 'info',
+      score_before  INTEGER,
+      score_after   INTEGER,
+      acknowledged  BOOLEAN     NOT NULL DEFAULT FALSE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS gbp_alert_log_client
+      ON gbp_alert_log(client_id, created_at DESC);
+  `);
+
+  // ── C9R-6: Tenant-Safe Review Summaries ───────────────────────────────────
+  // One row per (client_id, platform, geography). Populated by the GBP Review
+  // Summary Importer after verifying GBP connection ownership and confirming
+  // the connection has a cached authorized location.
+  //
+  // client_id is UUID referencing clients(id) ON DELETE CASCADE.
+  // target_review_count is nullable — null means no defensible V1 target.
+  // source_connection_id records which GBP social connection authorized import.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tenant_safe_review_summaries (
+      id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id            UUID        NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      platform             TEXT        NOT NULL,
+      review_count         INTEGER     NOT NULL,
+      average_rating       NUMERIC(3,2),
+      target_review_count  INTEGER,
+      geography            TEXT        NOT NULL,
+      source_connection_id TEXT,
+      observed_at          TIMESTAMPTZ NOT NULL,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS tsrs_client_platform_geo_uniq
+      ON tenant_safe_review_summaries(client_id, platform, geography);
+
+    CREATE INDEX IF NOT EXISTS tsrs_client_observed
+      ON tenant_safe_review_summaries(client_id, observed_at DESC);
+  `);
+
+  // ── C9R-6 schema remediation: fix pre-existing table if column types differ ─
+  // Environments where the table already existed with TEXT client_id + NOT NULL
+  // target need these ALTER TABLE statements applied idempotently.
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ALTER COLUMN client_id TYPE UUID USING client_id::uuid;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    END $$;
+
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ADD CONSTRAINT tsrs_client_fk
+        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    WHEN undefined_table THEN NULL;
+    END $$;
+
+    DO $$ BEGIN
+      ALTER TABLE tenant_safe_review_summaries
+        ALTER COLUMN target_review_count DROP NOT NULL;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    WHEN SQLSTATE '42703' THEN NULL;
+    END $$;
+  `);
+
+  // ── Content Autopilot Phase 2: AI Image Generations ─────────────────────
+  // ── content_image_generations ─────────────────────────────────────────────
+  // Tenant-safe AI image generation record.
+  // CREATE TABLE includes all V1 columns; ALTER TABLE guards add missing columns
+  // to existing installs idempotently.
+  //
+  // COLUMN NOTES:
+  //   storage_key — canonical object identifier (path within bucket); the primary
+  //                 reference for asset delivery. image_url is legacy/deprecated.
+  //   status      — lifecycle: 'pending' → 'completed' | 'failed'
+  //   idempotency_key — client-supplied; prevents duplicate billable calls.
+  //                     Partial unique index enforced below.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_image_generations (
+      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id        TEXT        NOT NULL,
+      user_id          TEXT        NOT NULL,
+      post_id          TEXT,
+      service_key      TEXT,
+      campaign_id      TEXT,
+      provider         TEXT        NOT NULL DEFAULT 'openai',
+      model            TEXT        NOT NULL DEFAULT 'gpt-image-1',
+      prompt           TEXT        NOT NULL,
+      size             TEXT        NOT NULL DEFAULT '1024x1024',
+      storage_key      TEXT,
+      image_url        TEXT        DEFAULT '',
+      status           TEXT        NOT NULL DEFAULT 'completed',
+      failure_reason   TEXT,
+      idempotency_key  TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at     TIMESTAMPTZ,
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS cig_user_created
+      ON content_image_generations(user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS cig_client_status_created
+      ON content_image_generations(client_id, status, created_at DESC);
+  `);
+
+  // Idempotency: unique per (client_id, idempotency_key) when key is provided.
+  // Partial index allows multiple NULL idempotency_key rows (no-key requests).
+  // IF NOT EXISTS handles idempotent re-runs; unexpected errors (permission denied,
+  // connection failure, syntax) propagate and abort startup — do not swallow them.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS cig_client_idempotency_uniq
+      ON content_image_generations(client_id, idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
+  `);
+
+  // ALTER TABLE guards — add columns absent on existing installs.
+  // ADD COLUMN IF NOT EXISTS is idempotent in PG 9.6+; errors other than "already
+  // exists" (permission, connection, syntax) propagate and abort startup.
+  const alterGuards = [
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS client_id       TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS service_key     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS campaign_id     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS provider        TEXT NOT NULL DEFAULT 'openai'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS model           TEXT NOT NULL DEFAULT 'gpt-image-1'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS storage_key     TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS status          TEXT NOT NULL DEFAULT 'completed'`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS failure_reason  TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS completed_at    TIMESTAMPTZ`,
+    `ALTER TABLE content_image_generations ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+    // Allow NULL on image_url — storage_key is now the canonical reference.
+    // DROP NOT NULL on an already-nullable column is a no-op in PG (no error).
+    `ALTER TABLE content_image_generations ALTER COLUMN image_url DROP NOT NULL`,
+  ];
+  for (const stmt of alterGuards) {
+    await pool.query(stmt);
+  }
 
   console.log("[SCHEMA] Core schema migration complete");
 }

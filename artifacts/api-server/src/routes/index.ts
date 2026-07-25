@@ -31,6 +31,12 @@ import apollosRouter from "./apollos";
 import discoveryRunRouter from "./discovery-run";
 import discoveryInspectRouter from "./discovery-inspect";
 import agentTasksRouter from "./agent-tasks";
+import gbpAuditRouter from "./gbp-audit";
+import gbpAiRouter from "./gbp-ai";
+import competitorIntelligenceRouter from "./competitor-intelligence";
+import contactRouter from "./contact";
+import referralsRouter from "./referrals";
+import backlinksRouter from "./backlinks";
 
 const router: IRouter = Router();
 
@@ -66,5 +72,11 @@ router.use(apollosRouter);
 router.use(discoveryRunRouter);
 router.use(discoveryInspectRouter);
 router.use(agentTasksRouter);
+router.use(gbpAuditRouter);
+router.use(gbpAiRouter);
+router.use(competitorIntelligenceRouter);
+router.use(contactRouter);
+router.use(referralsRouter);
+router.use(backlinksRouter);
 
 export default router;

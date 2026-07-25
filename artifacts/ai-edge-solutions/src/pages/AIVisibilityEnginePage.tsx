@@ -3,6 +3,69 @@ import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
 import { useAuth } from "@clerk/react";
+import { useActiveBusiness } from "@/contexts/business-context";
+import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
+import AiVisibilityQueryEvidencePanel, { type QEScan, type QEResult } from "@/components/AiVisibilityQueryEvidencePanel";
+import AiVisibilityHistoryPanel from "@/components/AiVisibilityHistoryPanel";
+
+// ─── Scan error classifier (exported for tests) ───────────────────────────────
+// Translates thrown errors into safe, user-readable messages.
+// A 401 or 403 must never be described as an AI-provider configuration failure.
+// No secrets, stack traces, raw payloads, or internal identifiers are exposed.
+
+export function classifyScanError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+
+  // apiFetch throws: "API {status}: {body}"
+  const statusMatch = msg.match(/^API (\d+):/);
+  if (statusMatch) {
+    const status = parseInt(statusMatch[1], 10);
+    if (status === 401) return "Session expired or authentication required. Please sign in again.";
+    if (status === 403) return "Access denied — this business is not authorized for your account.";
+    if (status === 404) return "Scan endpoint or business not found.";
+    if (status === 422) {
+      // Preflight failure: tenant profile data is incomplete — do not suggest an API config issue.
+      const lower = msg.toLowerCase();
+      if (lower.includes("no_active_services")) {
+        return "Scan cannot run: no active services are configured for this business. Contact your administrator.";
+      }
+      if (lower.includes("no_authorized_geography")) {
+        return "Scan cannot run: no authorized service geography is configured for this business. Contact your administrator.";
+      }
+      return "Scan cannot run: tenant profile is incomplete. Contact your administrator.";
+    }
+    if (status >= 500) return "Scan service error. Please try again.";
+    return `Request failed (${status}). Please try again.`;
+  }
+
+  // Network / connectivity failures (no HTTP response)
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("network error") ||
+    lower.includes("load failed")
+  ) {
+    return "Network error — could not reach the scan service. Check your connection.";
+  }
+
+  // Provider-specific failures that surface outside normal HTTP flow
+  if (lower.includes("not_configured") || lower.includes("provider not configured")) {
+    return "AI provider not configured. Contact your administrator.";
+  }
+  if (lower.includes("auth_failure") || lower.includes("invalid api key")) {
+    return "AI provider authentication failed. Contact your administrator.";
+  }
+  if (lower.includes("aborterror") || lower.includes("timed out") || lower.includes("timeout")) {
+    return "AI provider timed out. Please try again.";
+  }
+  if (lower.includes("rate_limit") || lower.includes("rate limit") || lower.includes("quota")) {
+    return "AI provider rate limit reached. Please try again shortly.";
+  }
+
+  // Safe generic fallback — never exposes raw error content
+  return "Scan failed. Please try again.";
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -180,9 +243,13 @@ export default function AIVisibilityEnginePage() {
   const apiFetch   = useApiFetch();
   const { getToken } = useAuth();
 
-  // Read clientId from URL query string (?clientId=xxx)
-  const clientId    = new URLSearchParams(window.location.search).get("clientId") ?? "default";
-  const isClientView = clientId !== "default";
+  // ── Canonical tenant identity — sourced from authenticated BusinessContext ──
+  // Must NOT be derived from window.location.search or any URL query parameter.
+  // activeBusiness.id is always the authorized slug for the signed-in user
+  // (e.g. "bed-bugs-and-beyond").  Never defaults to "default".
+  const { activeBusiness } = useActiveBusiness();
+  const clientId = activeBusiness.id;
+  const isClientView = Boolean(clientId);
 
   const [audit, setAudit]         = useState<AuditData>(DEMO);
   const [loading, setLoading]     = useState(true);
@@ -196,6 +263,72 @@ export default function AIVisibilityEnginePage() {
   const [emailLoading,  setEmailLoading]  = useState(false);
   const [emailStatus,   setEmailStatus]   = useState<{ ok: boolean; msg: string } | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+
+  // ── Read model (Opportunities tab) ──────────────────────────────────────────
+  const [activeTab, setActiveTab]  = useState<"opportunities" | "ai_query" | "legacy" | "history">("opportunities");
+  const [rmTrigger, setRmTrigger]  = useState(0);
+  const [readModel, setReadModel]  = useState<RMReadModel | null>(null);
+  const [rmLoading, setRmLoading]  = useState(false);
+  const [rmError,   setRmError]    = useState<string | null>(null);
+
+  // ── AI Query scan state ───────────────────────────────────────────────────
+  const [qeScan,      setQeScan]      = useState<QEScan | null>(null);
+  const [qeResults,   setQeResults]   = useState<readonly QEResult[]>([]);
+  const [qeLoading,   setQeLoading]   = useState(false);
+  const [qeError,     setQeError]     = useState<string | null>(null);
+  const qeLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (activeTab !== "opportunities") return;
+    setRmLoading(true);
+    setRmError(null);
+    apiFetch<RMReadModel>(`/ai-visibility/read-model/${clientId}`)
+      .then(data => setReadModel(data))
+      .catch(() => setRmError("Failed to load AI visibility data. Please try again."))
+      .finally(() => setRmLoading(false));
+  }, [activeTab, clientId, apiFetch, rmTrigger]);
+
+  // Load latest scan when AI Query tab first becomes active
+  useEffect(() => {
+    if (activeTab !== "ai_query" || qeLoadedRef.current) return;
+    qeLoadedRef.current = true;
+    setQeLoading(true);
+    setQeError(null);
+    apiFetch<{ scan: QEScan; results: QEResult[] }>(`/ai-visibility/query-scan/${clientId}/latest`)
+      .then(data => { setQeScan(data.scan); setQeResults(data.results); })
+      .catch(err => {
+        const msg = err?.message ?? String(err);
+        if (msg.includes("404") || msg.includes("no_scan_found")) {
+          setQeScan(null); setQeResults([]);
+        } else {
+          setQeError("Failed to load scan data.");
+        }
+      })
+      .finally(() => setQeLoading(false));
+  }, [activeTab, clientId, apiFetch]);
+
+  async function handleRunScan() {
+    if (!clientId) {
+      setQeError("Tenant identity unavailable. Please reload and try again.");
+      return;
+    }
+    setQeLoading(true);
+    setQeError(null);
+    try {
+      const data = await apiFetch<QEScan & { results: QEResult[] }>(
+        `/ai-visibility/query-scan/${clientId}`,
+        { method: "POST" },
+      );
+      setQeScan(data);
+      setQeResults((data as any).results ?? []);
+      // Refresh the read model so ai_query coverage updates
+      setRmTrigger(n => n + 1);
+    } catch (err) {
+      setQeError(classifyScanError(err));
+    } finally {
+      setQeLoading(false);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -335,13 +468,13 @@ export default function AIVisibilityEnginePage() {
             borderRadius: 20, padding: "4px 14px", marginBottom: 12,
           }}>
             <span style={{ fontSize: 12, color: "#FBBF24", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              ✨ AI Visibility Engine
+              🤖 AI Edge Visibility
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 5px" }}>
-                AI Visibility Engine
+                AI Edge Visibility
               </h1>
               <p style={{ fontSize: 13, color: t.text2, margin: 0, maxWidth: 620 }}>
                 {isClientView && audit.businessName
@@ -493,6 +626,63 @@ export default function AIVisibilityEnginePage() {
           </div>
         )}
 
+        {/* ── Tab navigation ── */}
+        <div style={{ display: "flex", gap: 0, marginBottom: 28, borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
+          {([
+            { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
+            { id: "ai_query",      label: "🤖 AI Query",      color: "#A78BFA" },
+            { id: "history",       label: "📈 History",        color: "#22C55E" },
+            { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "9px 18px", background: "none", border: "none",
+                cursor: "pointer", fontSize: 12, fontWeight: 700,
+                color: activeTab === tab.id ? tab.color : (isDark ? "#475569" : "#9CA3AF"),
+                borderBottom: activeTab === tab.id ? `2px solid ${tab.color}` : "2px solid transparent",
+                marginBottom: -1, transition: "all 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Opportunities view ── */}
+        {activeTab === "opportunities" && (
+          <AiVisibilityReadModelView
+            model={readModel}
+            loading={rmLoading}
+            error={rmError}
+            onRetry={() => setRmTrigger(n => n + 1)}
+            isDark={isDark}
+            colors={t}
+          />
+        )}
+
+        {/* ── AI Query evidence view ── */}
+        {activeTab === "ai_query" && (
+          <AiVisibilityQueryEvidencePanel
+            scan={qeScan}
+            results={qeResults}
+            isLoading={qeLoading}
+            error={qeError}
+            clientId={clientId}
+            onRunScan={handleRunScan}
+            isDark={isDark}
+          />
+        )}
+
+        {/* ── History view ── */}
+        {activeTab === "history" && (
+          <AiVisibilityHistoryPanel clientId={clientId} />
+        )}
+
+        {/* ── Legacy Audit view ── */}
+        {activeTab === "legacy" && (<>
+
         {/* ── 1. KPI Score Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, marginBottom: 30 }}>
           {kpiCards.map(k => (
@@ -612,7 +802,7 @@ export default function AIVisibilityEnginePage() {
 
         {/* ── 4. Authority Engine ── */}
         <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="Authority Engine" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
+          <SectionDivider title="Edge Authority" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {AUTHORITY_ITEMS.map(item => {
               const st = AUTHORITY_STATUS[item.status];
@@ -749,6 +939,8 @@ export default function AIVisibilityEnginePage() {
             })}
           </div>
         </div>
+
+        </>)}
 
       </div>
     </AppShell>

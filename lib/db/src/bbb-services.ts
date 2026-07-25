@@ -816,7 +816,13 @@ export function serviceStatusToOperationalState(status: ServiceStatus): Operatio
  */
 export function createWeeklyPlanId(userId: string, date: Date = new Date()): string {
   // ISO week number (Monday-start)
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  // Read the supplied instant in UTC. Date-only strings such as "2026-07-20"
+  // parse at UTC midnight and must not fall into the prior local calendar day.
+  const d = new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+  ));
   const dayNum = d.getUTCDay() || 7; // make Sunday = 7
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));

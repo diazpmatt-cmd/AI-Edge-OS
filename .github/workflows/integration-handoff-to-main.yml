@@ -57,6 +57,10 @@ jobs:
           set +e
           git config user.name "AI Edge Integration Bot"
           git config user.email "actions@users.noreply.github.com"
+          if git merge-base --is-ancestor origin/handoff/gbp-location-final-2026-07-24 HEAD; then
+            echo "conflicted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git merge --no-commit --no-ff origin/handoff/gbp-location-final-2026-07-24
           code=$?
           if [ "$code" -ne 0 ]; then
@@ -84,18 +88,18 @@ jobs:
           name: integration-conflicts
           path: integration-conflicts.md
 
-      - name: Setup Node
-        if: steps.merge.outputs.conflicted == 'false'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
       - name: Setup pnpm
         if: steps.merge.outputs.conflicted == 'false'
         uses: pnpm/action-setup@v4
         with:
-          version: 10.26.1
+          version: 11.9.0
+
+      - name: Setup Node
+        if: steps.merge.outputs.conflicted == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         if: steps.merge.outputs.conflicted == 'false'
@@ -118,5 +122,9 @@ jobs:
         if: steps.merge.outputs.conflicted == 'false' && github.event_name == 'push'
         run: |
           set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "Handoff is already integrated; no merge commit is required."
+            exit 0
+          fi
           git commit -m "Merge handoff branch into main integration"
           git push origin HEAD:integration/handoff-to-main-rge-v1-2026-07-25

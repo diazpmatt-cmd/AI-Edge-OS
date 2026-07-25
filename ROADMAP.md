@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-14
+Last updated: 2026-07-24
 
 ---
 
@@ -110,6 +110,43 @@ No live task-ledger file, database, migration, schema, API, UI, scheduler, webho
 
 ## Growth Engine C8R Status
 
+### C8R-6 — Backlink API Routes (implemented and verified)
+
+Completed scope:
+
+- Five production-ready Express routes: `GET /api/backlinks/opportunities` (pagination + category + workflowStatus filters), `GET /api/backlinks/opportunities/:id` (detail + evidence + workflow), `PATCH /api/backlinks/workflows/:opportunityId` (FSM transition), `GET /api/backlinks/runs` (ingestion history), `POST /api/backlinks/ingest/fixture` (fixture trigger).
+- Tenant isolation via `resolveClientContentContextFromDb` on every route. All handlers typed `Promise<void>` to satisfy TypeScript strict mode.
+- All 127 C8R-1 through C8R-5 tests preserved passing.
+
+### C8R-7 — Authority & Backlink Production UX (implemented and verified)
+
+Completed scope:
+
+- **Loading states**: spinner overlay with icon during opportunity fetch; per-drawer loading state for detail panel.
+- **Error states**: red banner with message + Retry button on opportunity fetch failure; drawer-scoped error for detail fetch failure.
+- **Pagination**: Prev / Next controls with `offset` state; page indicator shows "Showing X–Y items · end of results"; disabled states derived from `isPageEnd()`.
+- **Filtering**: category chips for all 10 `BacklinkOpportunityCategory` values; workflow status chips for all 7 statuses; both filters reset offset to 0 on change; both passed explicitly to `fetchOpportunities()` to avoid React closure bugs.
+- **Workflow status display**: color-coded badges using `wfStatusColor()` in table rows and detail drawer.
+- **Opportunity detail drawer**: slide-in panel (position: fixed) with backdrop dismiss; shows attainability + potential value scores, rationale, recommended action, workflow status + next action + due date + outcome summary, and evidence list.
+- **Evidence display**: per-evidence cards with sourceDomain, sourceUrl, category badge, authority/local-relevance/service-relevance/freshness-days metrics, and provider attribution.
+- **Ingestion history viewer**: collapsible section with full run table (run ID, provider, mode, status badge, accepted/rejected/observed counts, timestamp).
+- **Fixture ingest controls**: clearly labelled "DEV / DEMO ONLY" badge; ingest success/error feedback inline.
+- **Placeholder banners**: amber "PLACEHOLDER DATA" banner at top of Citations, NAP, Schema, and Actions tabs — clearly communicates no live backend exists for those sections.
+- **Backlink score sub-text**: dynamically reflects real data ("N active · M opps") instead of hardcoded "1 active link".
+- **`backlink-ui-helpers.ts`**: pure helper module with 9 exported functions + 4 exported constants; no React dependencies.
+- **`backlink-c8r7.test.ts`**: 63 new tests covering all helpers, all canonical category/status values, edge cases, and constant invariants.
+- TypeScript: api-server clean; frontend clean (pre-existing ReferralProgramPage.tsx errors unrelated to this work).
+- Tests: 127/127 C8R-1–C8R-5 regressions + 63/63 C8R-7 = **190 tests passing**.
+
+### Remaining Placeholder Areas (no backend yet)
+
+| Tab | Data Source | Backend Needed |
+|-----|-------------|----------------|
+| Citations | Hardcoded `CITATION_DIRS` array | Citation-scan engine |
+| NAP Consistency | Hardcoded `NAP_CHECKS` array | NAP-audit engine |
+| Schema.org | Hardcoded `SCHEMA_ITEMS` array | Schema-detection engine |
+| Action Plan | Hardcoded action steps | AI-generated recommendations engine |
+
 ### C8R-5 — Tenant-Safe AI Visibility Read Model (implemented and verified)
 
 Completed scope:
@@ -135,6 +172,47 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 2. Add bounded tenant-safe source adapters only when the underlying canonical integration exists.
 3. Add persisted or visible AI Visibility behavior only in separately approved phases.
 4. Defer live provider collection, prompt monitoring, rank tracking, and external execution until their security and tenant boundaries are approved.
+
+---
+
+---
+
+## AI Visibility V1 — COMPLETE (GO — 2026-07-21)
+
+All six implementation phases complete. DP-001 live-provider smoke test passed in production.
+
+| Phase | Status | Description |
+|---|---|---|
+| C9R-1 | ✅ COMPLETE | Assessment + architecture docs + roadmap |
+| C9R-2 | ✅ COMPLETE | Execution service + persistence + API route |
+| C9R-3 | ✅ COMPLETE | Frontend Opportunities tab + Coverage panel |
+| C9R-4 | ✅ COMPLETE | Real AI query provider (OpenAI gpt-4o-mini) + evidence panel |
+| C9R-5 | ✅ COMPLETE | Scheduled monitoring + run history (ADR-016) |
+| C9R-6 | ✅ COMPLETE | Review intelligence tenant safety (6 discrepancies resolved) |
+| C9R-7 | ✅ COMPLETE | Release acceptance + DP-001 PASS |
+
+**DP-001 evidence:** Scan `d2e7852c-8278-4be3-aa44-5f9af0297a47`, `2026-07-21T01:45:06Z` UTC, HTTP 201, 8/8 queries `success=true`, 0% citation baseline (measured), trigger_source=manual, 0 errors.
+
+Scheduling is disabled by default. Enable when approved: `PUT /api/ai-visibility/schedule/bed-bugs-and-beyond { "enabled": true }` + `AI_VISIBILITY_SCHEDULER_ENABLED=true`.
+
+---
+
+## GBP Engine Closeout (July 2026) — COMPLETE
+
+All four target areas verified with runtime behavioral tests. No additional feature changes in scope.
+
+| Area | Status | Test File | Passing |
+|------|--------|-----------|---------|
+| **Security & Tenant Isolation** | ✅ COMPLETE | `gbp-security.test.ts` | 15/15 |
+| **Alert Threshold Fix** | ✅ COMPLETE | `gbp-alert-threshold.test.ts` | 11/11 |
+| **Shared Google Token Service** | ✅ COMPLETE | `google-token.test.ts` | 11/11 |
+| **GBP → Content Autopilot** | ✅ COMPLETE | `gbp-autopilot-states.test.ts` | 10/10 |
+
+Supporting files: `gbp-finalization.test.ts` (25/25), `gbp-schema-drift.test.ts` (2/2).
+
+Commit: `b660d11a5858b80462099a8106986af66b3dd96d`
+
+Remaining external blocker: Google Business Profile Posts API returns 429 on every attempt. Root cause is GCP project 474786012895 quota/access — **Matthew must verify in GCP Console** before any retry. No live Google post was sent or claimed during closeout.
 
 ---
 
@@ -340,3 +418,257 @@ This phase does **not** add persistence, API routes, UI, schedulers, providers, 
 - [ ] Copy content from Content Autopilot Nextdoor draft
 - [ ] Paste into business.nextdoor.com
 - [ ] Document the Nextdoor business page URL for the record
+
+---
+
+## Local Presence Engine — Foundation Knockout (2026-07-19)
+
+The canonical Local Presence Engine data model and orchestration layer is now in place. All future providers (GBP, Apple, Bing, Yelp, Facebook, Nextdoor) share this foundation.
+
+### Completed Phases
+
+**Phase 1 — Audit**: Confirmed existing infrastructure (local_presence_profiles/channels tables, LOCAL_PRESENCE_PROVIDERS registry with 6 providers, /api/local-presence routes, 5746-line LocalPresenceEnginePage.tsx, fully-built siloed GBP engine).
+
+**Phase 2 — Schema Extension**: Added 6 columns to `local_presence_profiles` (description, categories_json, hours_json, service_areas_json, attributes_json, photos_json) and 4 columns to `local_presence_channels` (provider_id, next_sync_at, health_score, issues_json). All migrations use `ALTER TABLE … ADD COLUMN IF NOT EXISTS` in schema-migrate.ts.
+
+**Phase 3 — Provider Adapter Contracts**: Created `lib/db/src/local-presence-adapters.ts` with:
+- `ProviderAdapterCapabilities` interface (syncSupported, writeSupported, oauthRequired, fetchHours, fetchPhotos, fetchReviews, fetchCategories)
+- `NormalizedListingUpdate` and `NormalizedListingIssue` types for cross-provider normalization
+- `mapGbpSnapshotToChannelUpdate()` — pure function bridging GBP audit snapshots to channel health
+- `NO_GBP_AUDIT_UPDATE` fallback constant
+- All 6 providers updated with `capabilities` field in `local-presence-providers.ts`
+
+**Phase 4 — Dashboard GBP Bridge**: `LocalPresenceRepository.getDashboard()` fetches the latest complete `gbp_audit_snapshots` row at read time and overlays the `google_business` channel score/status/healthScore with live GBP audit data. No backfill needed — the bridge is read-only.
+
+**Phase 5 — Tenant Isolation (IDOR Fix)**: Routes now enforce ownership via `resolveAndValidateClientId(userId, rawId)`. "default" passes unconditionally (backward compat); any other slug is validated against `SELECT slug FROM clients WHERE user_id=$1 AND slug=$2`. All 6 route handlers (GET /local-presence, /dashboard, /score, /providers; PUT /channel, /profile) use this guard.
+
+**Phase 6 — Behavioral Tests (27 tests)**:
+- `local-presence-mapping.test.ts` — 17 tests covering mapGbpSnapshotToChannelUpdate, NO_GBP_AUDIT_UPDATE, computeChannelCompletenessScore, and computeOverallPresenceScore
+- `local-presence-tenant.test.ts` — 10 tests documenting tenant ownership contract, IDOR prevention invariant, and provider capability registry invariants
+
+### Architectural Decisions
+
+- **Read-time GBP bridge** (not write): GBP audit data is never written back to local_presence_channels. The dashboard overwrites the google_business channel at query time using the latest complete audit snapshot. This avoids stale data and dual-write complexity.
+- **"default" slug backward compat**: Existing rows keyed to "default" continue to work without migration. New clients use their slug from the clients table.
+- **Capabilities registry**: `ProviderAdapterCapabilities` is the single source of truth for what each provider supports. UI feature flags and route guards should consult this interface.
+- **Score weighting**: Overall presence score is weighted by `scoreWeight` in `LOCAL_PRESENCE_PROVIDERS`. GBP carries the highest weight (40/100). NAP bonus (+2 to +5) rewards NAP consistency across 3+ active channels.
+
+### Next Steps (Phase 2 — Provider Sync)
+
+- [ ] Wire the GBP OAuth token into `mapGbpSnapshotToChannelUpdate` so the bridge auto-triggers on new audit completions
+- [ ] Implement Apple Business Connect read adapter (scrape or API when available)
+- [ ] Implement Bing Places read adapter
+- [ ] Add `PUT /api/local-presence/sync/:channelName` endpoint for on-demand sync
+- [ ] Surface `healthScore` and `issuesJson` in LocalPresenceEnginePage.tsx channel cards
+
+---
+
+## Referral Growth Engine — RGE Status
+
+**Definition:** Referral Growth is customer-referral program software. It is distinct from Lead
+Generation, lead marketplaces, local referral sources such as Nextdoor or Angi, and future
+affiliate or ambassador programs.
+
+### Current position
+
+| Milestone | Status |
+|---|---|
+| Existing program/referral schema, CRUD, KPI dashboard, and manual status workflow | ✅ Implemented |
+| Production demo-data removal and authenticated tenant isolation | ✅ Implemented and verified |
+| **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged and deployed** |
+| **RGE-2 — Referral Invitations & Follow-Up Preparation** | ✅ **Production accepted (2026-07-25)** |
+| **RGE-3 — Controlled Invitation Delivery** | 🟡 **Merged; production acceptance pending** |
+| **RGE-4 — Reward Ledger, Approval & Fulfillment Controls** | 🟡 **Merged; production acceptance pending** |
+| **RGE-5 — Fraud & Abuse Review Controls** | 🟡 **Implemented locally; production acceptance pending** |
+| **RGE-6 — Truthful Campaign Reporting** | 🟡 **Implemented locally; production acceptance pending** |
+| **RGE-7 — Read-Only CRM Attribution** | 🟡 **Implemented locally; production acceptance pending** |
+| **RGE-8 — V1 Operational Readiness & Closeout** | 🟡 **Local implementation accepted; production acceptance pending** |
+| Scheduled follow-up | 🔵 Requires separate authorization |
+| GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
+| Campaign reporting and referral ROI | 🟡 Truthful reporting implemented; measured revenue attribution pending |
+
+**Honest completion estimate:** **100% implemented** for the currently frozen Referral Growth V1
+scope. Production acceptance is **2/8 milestones** (RGE-1 and RGE-2).
+RGE-2 is production-accepted. RGE-3 and RGE-4 are merged but undeployed. RGE-5 remains
+unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
+
+### RGE-6 — Truthful Campaign Reporting
+
+- Tenant-isolated program reporting covers invitations, referrals, conversions, conversion rate,
+  pending reward reviews, fulfilled rewards, and recorded reward cost.
+- Attributed revenue and ROI remain unavailable until an explicit measured-revenue attribution
+  exists. The system does not infer referral revenue from conversions or account-wide revenue.
+- No scheduler, delivery, payment, customer action, or external-system write is present.
+- Focused RGE-6 API tests: 4/4 pass. Focused RGE-6 UI tests: 3/3 pass.
+- API and frontend TypeScript checks pass.
+- Production acceptance remains pending; this milestone is neither merged nor deployed.
+
+### RGE-7 — Read-Only CRM Attribution
+
+- Candidate links are generated only from tenant-scoped, already-synced GorillaDesk customer/job
+  records using exact normalized phone or email evidence.
+- Names alone are never identity evidence. Missing job revenue remains unavailable.
+- Every internal link requires explicit human confirmation; rejection is also recorded.
+- The bridge performs no external API call and no GorillaDesk/CRM/customer write.
+- Focused RGE-7 API tests: 3/3 pass. Focused RGE-7 UI tests: 3/3 pass.
+- API, frontend, and database TypeScript checks pass.
+- Production acceptance remains pending; this milestone is neither merged nor deployed.
+
+### RGE-8 — V1 Operational Readiness & Closeout
+
+- A visible Readiness tab reports dry-run delivery, emergency-stop state, scheduler absence,
+  unresolved fraud/reward/delivery queues, and exact production-acceptance coverage.
+- The readiness model always leaves autonomous operation disabled.
+- Local V1 implementation acceptance is recorded in `docs/RGE-8-V1-LOCAL-ACCEPTANCE.md`.
+- Focused RGE-8 API tests: 3/3 pass. Focused RGE-8 UI tests: 3/3 pass.
+- Combined RGE-6 through RGE-8 focused tests: API 19/19; UI 13/13.
+- Fresh PostgreSQL bootstrap and all SQL migrations pass twice from scratch.
+- Complete API suite: 54/54 files and 1,359/1,359 tests pass.
+- Complete frontend suite: 58/58 files pass; 2,267 tests pass and only two paid,
+  credentialed DataForSEO live-provider checks are intentionally excluded.
+- Referral-focused aggregate: 17/17 files and 115/115 tests pass.
+- API, frontend, and database TypeScript checks pass. Both production builds pass.
+- No merge, deployment, scheduler activation, message, payment, reward issuance, customer action,
+  or external CRM write occurred.
+
+### RGE-1 — Customer Enrollment & Attribution
+
+Implemented scope:
+
+1. Admin creation of referral programs with a secure referral code, reward definition, optional
+   expiration, and optional maximum-use limit.
+2. Copyable customer share links that open a public referral landing page.
+3. Public enrollment that captures the referrer and referred customer and attributes the
+   submission to the exact program and tenant derived from the referral code.
+4. Fail-closed handling for inactive clients, paused/expired/full programs, malformed codes,
+   self-referrals, duplicates, honeypot submissions, and excessive per-code/requester attempts.
+5. Transactional row locking so attribution and program usage increments remain consistent during
+   concurrent submissions.
+6. No automatic payout, publication, message, CRM write, or scheduler side effect.
+
+### RGE-2 — Referral Invitations & Follow-Up Preparation
+
+Implemented scope:
+
+1. Tenant-scoped SMS and email invitation templates with the bounded tokens
+   `{{first_name}}`, `{{business_name}}`, and `{{referral_link}}`.
+2. Consent-backed invitation drafts that require a canonical destination, documented consent source
+   and time, an active tenant-owned program, and an optional active tenant-owned template.
+3. Per-tenant idempotency plus a transaction-serialized 24-hour duplicate guard for the same
+   program, channel, and contact.
+4. Contact opt-out suppression that blocks new drafts, blocks approval, and suppresses matching
+   draft/approved invitations.
+5. Human approval and cancellation workflow with follow-up copy and delay metadata.
+6. A visible Invitations tab for templates, drafts, approval, cancellation, and suppression.
+7. Delivery is intentionally absent: no Telnyx call, email-provider call, sender import, send route,
+   scheduler, automatic follow-up, or production message.
+
+Production acceptance:
+
+- RGE-2 API contract and database-invariant tests: 28/28 pass.
+- RGE-2 UI contract tests: 6/6 pass.
+- All focused referral API tests: 53/53 pass.
+- Complete API suite against a disposable test database: 1,321/1,321 pass.
+- API/frontend TypeScript and production builds: pass.
+- Complete frontend suite: 52/53 files and 2,248 tests pass; the only three failures are the
+  pre-existing, unrelated `ContactPage.test.tsx` expectations.
+- Deployed Invitations UI and bundle confirmed, protected production routes return 401 without
+  authentication, and the operator completed the authenticated visual smoke check.
+- Formal decision: **GO for preparation and approval only**. No live delivery was authorized.
+
+### RGE-3 — Controlled Invitation Delivery
+
+Implemented scope:
+
+1. Tenant-isolated Telnyx SMS and SMTP email adapters.
+2. Dry-run default with a dry-run-only UI; no provider is invoked during simulation.
+3. Explicit invitation approval plus explicit per-attempt confirmation.
+4. Exact test-recipient allowlisting, tenant hourly rate limiting, idempotency keys, transaction
+   locks, and duplicate live-delivery prevention.
+5. Durable simulated/delivered/failed receipts and provider failure codes.
+6. A fail-closed global emergency stop that is engaged by default.
+7. No scheduler, automatic follow-up, or real delivery activation.
+
+Acceptance boundary:
+
+- Implemented locally; production acceptance is pending.
+- No real SMS or email has been sent.
+- Live delivery remains unavailable unless separately authorized environment controls are all
+  deliberately enabled.
+
+Local verification:
+
+- Focused referral API tests: 25/25 pass.
+- Referral URL helper tests: 2/2 pass.
+- Complete API suite against a disposable in-memory PostgreSQL-compatible test database:
+  1,293/1,293 pass.
+- API and frontend TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Full frontend suite: 51/52 files pass and 2,242 tests pass; the only three failures are the
+  pre-existing, unrelated `ContactPage.test.tsx` expectations.
+
+### RGE-4 — Reward Ledger, Approval & Fulfillment Controls
+
+Implemented scope:
+
+1. An immutable, tenant-owned reward snapshot is created exactly once when a pending referral is
+   converted.
+2. Reward approval and fulfillment are separate human decisions, serialized with transaction locks
+   and protected by tenant-scoped idempotency keys.
+3. Fulfillment requires a method and external evidence reference. AI Edge OS records that the
+   reward was fulfilled elsewhere; it never issues cash, credit, discounts, or payments.
+4. The former direct **Mark Paid** action is removed. Generic referral transitions cannot set
+   `paid`; that state is reached only after approved fulfillment evidence is recorded.
+5. Pending and fulfilled reward totals are calculated from ledger state rather than inferred from
+   referral status.
+6. No payment provider, scheduler, automatic fulfillment, real message, or production action was
+   added.
+
+Local verification:
+
+- Focused referral API tests: 41/41 pass.
+- Focused Referral Growth UI tests: 9/9 pass.
+- API, frontend, and database TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Full frontend suite: 50 files and 2,117 tests pass; three known `ContactPage.test.tsx` assertions
+  fail, and three database-importing files cannot load because this environment has no safe
+  development/test `DATABASE_URL`.
+- Full API database-dependent verification remains pending until a safe disposable test database is
+  available.
+
+### RGE-5 — Fraud & Abuse Review Controls
+
+Implemented scope:
+
+1. Tenant-isolated risk evidence for duplicate referred identities, repeated invitation
+   destinations, unusual 24-hour referrer velocity, self-referrals, and reward stacking.
+2. Device/IP fingerprint signals are evaluated only when a lawful retained source exists. No such
+   source currently exists, so RGE-5 records `not_available` and collects no raw IP, user-agent, or
+   device fingerprint.
+3. A visible **Fraud Review** queue with open, held, cleared, rejected, and all-status filters,
+   evidence reasons, risk scores, and append-only decision history.
+4. Explicit human-only clear, hold, and reject decisions requiring a note, confirmation,
+   idempotency key, transaction lock, and optimistic version.
+5. Queue decisions never change a referral, reward, invitation, message, GorillaDesk record, CRM
+   record, or external system.
+6. No automatic rejection, payment, scheduler, customer message, fingerprint collection, or
+   production action was added.
+
+Local verification:
+
+- Focused referral API tests: 66/66 pass.
+- Focused Referral Growth UI tests: 13/13 pass.
+- API, frontend, and database TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Complete API run without a database: 578 tests pass; database-importing suites cannot load without
+  a safe development/test `DATABASE_URL`. One stale tenant-safety assertion was corrected to verify
+  the current transaction-scoped SQL.
+- Complete frontend run: 50 files and 2,120 tests pass; three known unrelated
+  `ContactPage.test.tsx` assertions fail, and database-importing suites cannot load without a safe
+  development/test `DATABASE_URL`.
+
+### Separate future workstream — Local Opportunity Radar
+
+Local Opportunity Radar remains useful local-first demand intelligence, but it is **not** Referral
+Growth. Its prospective partner mapping, geo-rank tracking, review velocity, local event discovery,
+and Google Maps competitor monitoring belong under Lead Generation / Local Demand Intelligence.

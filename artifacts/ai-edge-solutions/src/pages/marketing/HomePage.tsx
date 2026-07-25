@@ -8,12 +8,12 @@ const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const SERVICES = [
   { icon: "📞", title: "Lead Recovery AI", tagline: "Never lose a missed call again", description: "Instant text-back, 2-way SMS, and automated follow-up sequences that convert missed calls into booked jobs — in seconds." },
   { icon: "🤖", title: "AI Receptionist", tagline: "24/7 intelligent call handling", description: "An AI that answers every call, qualifies leads, books appointments, and handles FAQs — so you never miss a customer again." },
-  { icon: "📍", title: "Google Business Profile", tagline: "Optimize local visibility", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile prominently ranked in local search." },
+  { icon: "📍", title: "Business Edge Profile", tagline: "Optimize local visibility", description: "Automated GBP posting, photo uploads, Q&A management, and optimization that keeps your profile prominently ranked in local search." },
   { icon: "⭐", title: "Review Generation", tagline: "More 5-star reviews, on autopilot", description: "Automatically request reviews from satisfied customers via SMS. Respond intelligently and build a reputation that sells." },
   { icon: "🔍", title: "Local SEO", tagline: "Rank where it counts", description: "Hyper-targeted local SEO that puts your business at the top of Google for every service + city combination you need." },
   { icon: "🌐", title: "Website Design", tagline: "Sites that convert visitors", description: "Fast, mobile-first, conversion-optimized websites designed to turn visitors into paying customers — built on your brand." },
   { icon: "📲", title: "Social Media Distribution", tagline: "AI content across every platform", description: "Repurpose your content into social posts, schedule across platforms, and maintain a consistent presence without lifting a finger." },
-  { icon: "🧠", title: "AI Visibility / GEO", tagline: "Get found by AI search", description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery." },
+  { icon: "🧠", title: "AI Edge Visibility", tagline: "Get found by AI search", description: "Optimize your business to appear in ChatGPT, Gemini, Perplexity, and AI-assisted search — the next frontier of local discovery." },
 ];
 
 const TRUST = [
@@ -252,6 +252,31 @@ export default function HomePage() {
                 <span style={{ fontSize: 14, fontWeight: 800, color }}>{value}</span>
               </div>
             ))}
+
+            <div style={{ marginTop: 28, paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+                Curious what this looks like for your budget?
+              </p>
+              <button
+                onClick={() => navigate("/pricing")}
+                style={{
+                  width: "100%", padding: "12px 20px", borderRadius: 10,
+                  background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)",
+                  color: "#00AEEF", fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", transition: "all 0.25s",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(0,174,239,0.22)";
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.6)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(0,174,239,0.12)";
+                  (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,174,239,0.35)";
+                }}
+              >
+                See Pricing & Packages →
+              </button>
+            </div>
           </div>
 
         </div>

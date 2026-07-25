@@ -210,7 +210,7 @@ export default function BusinessAssessmentPage() {
               <span style={{ color: "#00AEEF", textShadow: "0 0 28px rgba(0,174,239,0.4)" }}>Losing Revenue</span>
             </h1>
             <p style={{ fontSize: 16, color: "#6B7280", lineHeight: 1.7, maxWidth: 500, margin: "0 auto" }}>
-              Get an instant AI-powered report showing your Lead Recovery Score, Local Presence, AI Visibility, and exactly what to fix first.
+              Get an instant AI-powered report showing your Lead Recovery Score, Local Edge Presence, AI Edge Visibility, and exactly what to fix first.
             </p>
           </div>
 
@@ -535,8 +535,8 @@ export default function BusinessAssessmentPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 32 }}>
           {[
             { label: "Lead Recovery",   value: scores.leadRecovery,   icon: "📞" },
-            { label: "Local Presence",  value: scores.localPresence,  icon: "📍" },
-            { label: "AI Visibility",   value: scores.aiVisibility,   icon: "✨" },
+            { label: "Local Edge Presence",  value: scores.localPresence,  icon: "📍" },
+            { label: "AI Edge Visibility",   value: scores.aiVisibility,   icon: "✨" },
             { label: "Review Strength", value: scores.reviewStrength, icon: "⭐" },
           ].map(card => {
             const sl = scoreLabel(card.value);
@@ -565,7 +565,7 @@ export default function BusinessAssessmentPage() {
             {[
               { icon: "💰", label: "Revenue Recovery Opportunity",  value: "Estimate pending", color: "#22C55E", note: "Missed call recovery + lead conversion optimization" },
               { icon: "📍", label: "Local Visibility Opportunity",  value: "Estimate pending", color: "#00AEEF", note: "Apple, Bing, Nextdoor listings not yet claimed"        },
-              { icon: "✨", label: "AI Visibility Opportunity",     value: "Estimate pending", color: "#3B82F6", note: "AI search engines not recommending your business"      },
+              { icon: "✨", label: "AI Edge Visibility Opportunity", value: "Estimate pending", color: "#3B82F6", note: "AI search engines not recommending your business"      },
               { icon: "⭐", label: "Lead Conversion Opportunity",   value: "Estimate pending", color: "#F59E0B", note: "Review velocity and trust signals below competitors"   },
             ].map(op => (
               <div key={op.label} style={{
@@ -646,7 +646,7 @@ export default function BusinessAssessmentPage() {
           <Divider>Projected Impact — Within 90 Days (with AI Edge)</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {[
-              { label: "Pending",  sub: "AI Visibility Est.",    color: "#3B82F6" },
+              { label: "Pending",  sub: "AI Edge Visibility Est.", color: "#3B82F6" },
               { label: "Pending",  sub: "Local Discovery Est.",  color: "#00AEEF" },
               { label: "Pending",  sub: "Lead Conversion Est.",  color: "#F59E0B" },
               { label: "Pending",  sub: "Revenue Est.",          color: "#22C55E" },

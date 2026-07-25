@@ -46,6 +46,23 @@ export type ArticleAsset = {
   updatedAt: string;
 };
 
+export type GapSignal = {
+  id: string;
+  keyword: string;
+  competitorName: string | null;
+  competitorRank: number | null;
+  volumeEstimate: number | null;
+  geographicScope: string | null;
+  status: string;
+};
+
+export type GapsResponse = {
+  hasData: boolean;
+  gaps: GapSignal[];
+  count: number;
+  weekLabel?: string;
+};
+
 export type SocialConnection = {
   id: string;
   provider: string;

@@ -40,7 +40,7 @@ interface SectionDef {
 }
 
 // ── Section registry — medal hierarchy order ───────────────────────────────────
-const SECTIONS: SectionDef[] = [
+export const SECTIONS: SectionDef[] = [
   {
     id: "home",
     headerEmoji: "🏠",
@@ -100,9 +100,8 @@ const SECTIONS: SectionDef[] = [
     name: "Competitor Intelligence",
     tagline: "Market intelligence and competitive positioning",
     accentColor: "#8B5CF6",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "🕵️", label: "Competitor Intel",  sub: "Market analysis",  family: "competitor",  comingSoon: true },
+      { to: "/admin/competitor-intelligence", icon: "🕵️", label: "Competitor Intel", sub: "Keyword gap analysis", family: "competitor" },
     ],
   },
   {
@@ -111,9 +110,8 @@ const SECTIONS: SectionDef[] = [
     name: "Authority & Backlink Engine",
     tagline: "Domain authority building and link acquisition",
     accentColor: "#38BDF8",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "🔗", label: "Authority Engine",  sub: "Backlink acquisition", family: "authority", comingSoon: true },
+      { to: "/admin/authority-engine", icon: "🔗", label: "Authority Engine", sub: "Citations & backlinks", family: "authority" },
     ],
   },
   {
@@ -122,9 +120,8 @@ const SECTIONS: SectionDef[] = [
     name: "Opportunity-to-Action Workflow",
     tagline: "Convert market signals into revenue-generating actions",
     accentColor: "#34D399",
-    comingSoon: true,
     tiles: [
-      { to: "#", icon: "⚡", label: "Opp → Action", sub: "Signal-to-revenue", family: "opportunity", comingSoon: true },
+      { to: "/admin/edge-opportunities", icon: "⚡", label: "Edge Opportunities", sub: "Signal-to-revenue", family: "opportunity" },
     ],
   },
   {
@@ -158,9 +155,11 @@ const SECTIONS: SectionDef[] = [
     accentColor: "#22C55E",
     tiles: [
       { to: "/admin/lead-recovery",     icon: "📞", label: "Lead Recovery AI",  sub: "Missed call conversion",    family: "growth" },
+      { to: "/admin/web-leads",         icon: "📋", label: "Web Leads",         sub: "Contact form submissions",  family: "growth" },
       { to: "/admin/call-intelligence", icon: "📊", label: "Call Intelligence", sub: "Call tracking & analytics", family: "growth" },
       { to: "/admin/bbb-execution",     icon: "🎯", label: "Growth Execution",  sub: "Revenue campaigns",         family: "growth" },
       { to: "/admin/ai-receptionist",   icon: "🤖", label: "AI Receptionist",   sub: "24/7 call handling",        family: "growth" },
+      { to: "/admin/referrals",         icon: "🤝", label: "Referral Engine",   sub: "Customers → growth",        family: "growth" },
     ],
   },
   {

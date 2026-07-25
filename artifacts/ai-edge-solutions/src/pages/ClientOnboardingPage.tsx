@@ -38,7 +38,7 @@ const MODULES = [
   { id: "leads",        label: "Lead Recovery",        icon: "🔥", color: B.orange  },
   { id: "media",        label: "Media Engine",         icon: "🎥", color: B.blue    },
   { id: "reviews",      label: "Review Engine",        icon: "⭐", color: B.gold    },
-  { id: "local",        label: "Local Presence Engine",icon: "📍", color: B.cyan    },
+  { id: "local",        label: "Local Edge Presence Engine",icon: "📍", color: B.cyan    },
   { id: "publishing",   label: "Publishing Center",    icon: "📤", color: B.purple  },
   { id: "revenue",      label: "Revenue Forecast",     icon: "💰", color: B.emerald },
   { id: "apollos",      label: "Apollos Briefing",     icon: "🧠", color: B.purple  },

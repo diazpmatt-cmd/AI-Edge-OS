@@ -96,7 +96,7 @@ const RECOMMENDED_ACTIONS = [
   { priority: 2, impact: "HIGH",   color: "#F97316", icon: "💼", title: "Contact your highest-priority open lead",         sub: "New leads cool fast — response within the hour improves close rates", agent: "Mason" },
   { priority: 3, impact: "MED",    color: B.gold,   icon: "✏️", title: "Review and approve any draft social posts",       sub: "Check Content Autopilot — queued drafts are waiting in Publishing Center", agent: "Mia" },
   { priority: 4, impact: "MED",    color: "#A78BFA", icon: "⭐", title: "Respond to any unanswered Google reviews",       sub: "Check Reviews Engine — unanswered reviews affect your local ranking", agent: "Olivia" },
-  { priority: 5, impact: "LOW",    color: B.blue,   icon: "🔍", title: "Check local SEO rankings this week",              sub: "Review Local Presence Engine for ranking changes and opportunities", agent: "Alex" },
+  { priority: 5, impact: "LOW",    color: B.blue,   icon: "🔍", title: "Check local SEO rankings this week",              sub: "Review Local Edge Presence Engine for ranking changes and opportunities", agent: "Alex" },
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────

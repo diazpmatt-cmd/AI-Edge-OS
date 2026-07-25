@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useApiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/AdminLayout";
+import { buildReferralShareUrl } from "@/lib/referral-growth";
 
 interface Program {
   id: number;
@@ -13,6 +14,7 @@ interface Program {
   promoMessage: string;
   usesCount: number;
   maxUses: number | null;
+  expiresAt: string | null;
   createdAt: string;
 }
 
@@ -220,6 +222,123 @@ function CreateReferralModal({ programs, onClose, onCreated }: {
   );
 }
 
+function CreateProgramModal({ onClose, onCreated }: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const apiFetch = useApiFetch();
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    rewardType: "credit",
+    rewardValue: "25",
+    promoMessage: "",
+    maxUses: "",
+    expiresAt: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", background: "rgba(11,22,41,0.9)", border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#E2E8F0",
+    outline: "none", boxSizing: "border-box",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10, fontWeight: 700, color: "rgba(100,116,139,0.9)",
+    textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4, display: "block",
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await apiFetch("/referrals/programs", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          rewardValue: Number(form.rewardValue),
+          maxUses: form.maxUses ? Number(form.maxUses) : null,
+          expiresAt: form.expiresAt ? new Date(`${form.expiresAt}T23:59:59`).toISOString() : null,
+        }),
+      });
+      onCreated();
+      onClose();
+    } catch {
+      setError("The program could not be created. Please review the fields and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <div style={{
+        background: "#0D1829", border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16, padding: 24, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#F1F5F9" }}>Create Referral Program</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#64748B", cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Program Name *</label>
+            <input required maxLength={120} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} placeholder="Neighbor Referral Program" />
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea maxLength={1000} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ ...inputStyle, minHeight: 70 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Reward Type</label>
+              <select value={form.rewardType} onChange={e => setForm(f => ({ ...f, rewardType: e.target.value }))} style={inputStyle}>
+                <option value="credit">Service credit</option>
+                <option value="cash">Cash</option>
+                <option value="discount">Discount</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Reward Value *</label>
+              <input required type="number" min="0" max="10000" step="0.01" value={form.rewardValue} onChange={e => setForm(f => ({ ...f, rewardValue: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Share Message</label>
+            <textarea maxLength={1000} value={form.promoMessage} onChange={e => setForm(f => ({ ...f, promoMessage: e.target.value }))} style={{ ...inputStyle, minHeight: 70 }} placeholder="Know someone who needs reliable pest control? Send them this link." />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Maximum Uses</label>
+              <input type="number" min="1" value={form.maxUses} onChange={e => setForm(f => ({ ...f, maxUses: e.target.value }))} style={inputStyle} placeholder="Unlimited" />
+            </div>
+            <div>
+              <label style={labelStyle}>Expiration Date</label>
+              <input type="date" value={form.expiresAt} onChange={e => setForm(f => ({ ...f, expiresAt: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          {error && <div style={{ fontSize: 11, color: "#F87171" }}>{error}</div>}
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={{
+              flex: 1, padding: 10, borderRadius: 9, cursor: "pointer",
+              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8",
+            }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{
+              flex: 1, padding: 10, borderRadius: 9, cursor: saving ? "wait" : "pointer",
+              background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E", fontWeight: 700,
+            }}>{saving ? "Creating…" : "Create Program"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ReferralProgramPage() {
   const apiFetch = useApiFetch();
   const [tab, setTab] = useState<Tab>("overview");
@@ -229,6 +348,8 @@ export default function ReferralProgramPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [showAddReferral, setShowAddReferral] = useState(false);
+  const [showCreateProgram, setShowCreateProgram] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -278,6 +399,18 @@ export default function ReferralProgramPage() {
     }
   };
 
+  const copyShareLink = async (program: Program) => {
+    const link = buildReferralShareUrl(window.location.origin, program.referralCode);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+      await navigator.clipboard.writeText(link);
+    } catch {
+      window.prompt("Copy this referral link:", link);
+    }
+    setCopiedCode(program.referralCode);
+    window.setTimeout(() => setCopiedCode(current => current === program.referralCode ? null : current), 1600);
+  };
+
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "overview",  label: "Overview",   icon: "📊" },
     { id: "programs",  label: "Programs",   icon: "🎯" },
@@ -293,6 +426,12 @@ export default function ReferralProgramPage() {
         <CreateReferralModal
           programs={programs}
           onClose={() => setShowAddReferral(false)}
+          onCreated={loadAll}
+        />
+      )}
+      {showCreateProgram && (
+        <CreateProgramModal
+          onClose={() => setShowCreateProgram(false)}
           onCreated={loadAll}
         />
       )}
@@ -323,6 +462,17 @@ export default function ReferralProgramPage() {
               </p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowCreateProgram(true)}
+                style={{
+                  padding: "9px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700,
+                  cursor: "pointer", background: "rgba(56,189,248,0.1)",
+                  border: "1px solid rgba(56,189,248,0.28)", color: "#38BDF8",
+                  letterSpacing: "0.3px",
+                }}
+              >
+                + New Program
+              </button>
               <button
                 onClick={() => setShowAddReferral(true)}
                 style={{
@@ -436,6 +586,17 @@ export default function ReferralProgramPage() {
                           <div style={{ marginTop: 6, fontSize: 9, color: "#22C55E", fontFamily: "monospace" }}>
                             Code: {p.referralCode}
                           </div>
+                          <button
+                            onClick={() => copyShareLink(p)}
+                            style={{
+                              marginTop: 8, width: "100%", padding: "6px 9px", borderRadius: 6,
+                              cursor: "pointer", background: "rgba(56,189,248,0.08)",
+                              border: "1px solid rgba(56,189,248,0.2)", color: "#38BDF8",
+                              fontSize: 10, fontWeight: 700,
+                            }}
+                          >
+                            {copiedCode === p.referralCode ? "✓ Link copied" : "🔗 Copy referral link"}
+                          </button>
                         </div>
                       </div>
                     );
@@ -519,18 +680,30 @@ export default function ReferralProgramPage() {
                             ))}
                           </div>
                         </div>
-                        <button
-                          onClick={() => toggleProgramStatus(p)}
-                          style={{
-                            padding: "6px 14px", borderRadius: 7, fontSize: 10, fontWeight: 700,
-                            cursor: "pointer",
-                            background: p.status === "active" ? "rgba(245,158,11,0.08)" : "rgba(34,197,94,0.08)",
-                            border: `1px solid ${p.status === "active" ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)"}`,
-                            color: p.status === "active" ? "#F59E0B" : "#22C55E",
-                          }}
-                        >
-                          {p.status === "active" ? "⏸ Pause" : "▶ Activate"}
-                        </button>
+                        <div style={{ display: "flex", gap: 7 }}>
+                          <button
+                            onClick={() => copyShareLink(p)}
+                            style={{
+                              padding: "6px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
+                              cursor: "pointer", background: "rgba(56,189,248,0.08)",
+                              border: "1px solid rgba(56,189,248,0.2)", color: "#38BDF8",
+                            }}
+                          >
+                            {copiedCode === p.referralCode ? "✓ Copied" : "🔗 Copy Link"}
+                          </button>
+                          <button
+                            onClick={() => toggleProgramStatus(p)}
+                            style={{
+                              padding: "6px 14px", borderRadius: 7, fontSize: 10, fontWeight: 700,
+                              cursor: "pointer",
+                              background: p.status === "active" ? "rgba(245,158,11,0.08)" : "rgba(34,197,94,0.08)",
+                              border: `1px solid ${p.status === "active" ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)"}`,
+                              color: p.status === "active" ? "#F59E0B" : "#22C55E",
+                            }}
+                          >
+                            {p.status === "active" ? "⏸ Pause" : "▶ Activate"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -545,12 +718,12 @@ export default function ReferralProgramPage() {
                 <div style={{ fontSize: 22, marginBottom: 8 }}>➕</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1", marginBottom: 4 }}>Create New Program</div>
                 <div style={{ fontSize: 11, color: "#475569", marginBottom: 14 }}>Design a custom referral campaign for any customer segment</div>
-                <button style={{
+                <button onClick={() => setShowCreateProgram(true)} style={{
                   padding: "8px 20px", borderRadius: 9, fontSize: 11, fontWeight: 700,
                   cursor: "pointer", background: "rgba(34,197,94,0.1)",
                   border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E",
                 }}>
-                  + New Program (coming soon)
+                  + New Program
                 </button>
               </div>
             </div>

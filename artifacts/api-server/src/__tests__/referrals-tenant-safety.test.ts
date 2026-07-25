@@ -82,3 +82,55 @@ describe("Referral Growth production-data contract", () => {
     expect(bootstrap).not.toContain("INSERT INTO referrals");
   });
 });
+
+describe("Referral Growth public-attribution route contract", () => {
+  const publicSubmission = routeSection(
+    'router.post("/referrals/public/:code",',
+    'router.get("/referrals/stats",',
+  );
+
+  it("derives client ownership from the locked referral program", () => {
+    expect(publicSubmission).toContain('client_id AS "clientId"');
+    expect(publicSubmission).toContain("program.clientId");
+    expect(publicSubmission).not.toContain("req.body.clientId");
+    expect(publicSubmission).toContain("JOIN clients c ON c.id::text = rp.client_id");
+    expect(publicSubmission).toContain("AND c.is_active = TRUE");
+  });
+
+  it("serializes capacity checks and referral creation in one transaction", () => {
+    expect(publicSubmission).toContain('client.query("BEGIN")');
+    expect(publicSubmission).toContain("FOR UPDATE");
+    expect(publicSubmission).toContain("getPublicProgramAvailability(program)");
+    expect(publicSubmission).toContain('client.query("COMMIT")');
+    expect(publicSubmission).toContain('client.query("ROLLBACK")');
+  });
+
+  it("stores link attribution and the exact referral code", () => {
+    expect(publicSubmission).toContain("'pending', $9, 'link', $10, $11");
+    expect(publicSubmission).toContain("code, submission.notes");
+  });
+
+  it("increments usage only for the program's canonical client", () => {
+    expect(publicSubmission).toContain("WHERE id = $1 AND client_id = $2");
+    expect(publicSubmission).toContain("[program.id, program.clientId]");
+  });
+
+  it("checks for duplicate referred contacts before insertion", () => {
+    expect(publicSubmission).toContain("LOWER(referred_email) = $2");
+    expect(publicSubmission).toContain("REGEXP_REPLACE(COALESCE(referred_phone, ''),");
+    expect(publicSubmission.indexOf("referral_already_submitted")).toBeLessThan(
+      publicSubmission.indexOf("INSERT INTO referrals"),
+    );
+  });
+
+  it("rate-limits public submissions before parsing or database work", () => {
+    expect(publicSubmission).toContain("referralSubmissionRateLimiter.check");
+    expect(publicSubmission).toContain('res.status(429).json({ error: "rate_limit_exceeded"');
+    expect(publicSubmission.indexOf("referralSubmissionRateLimiter.check")).toBeLessThan(
+      publicSubmission.indexOf("publicReferralSubmissionSchema.safeParse"),
+    );
+    expect(publicSubmission.indexOf("referralSubmissionRateLimiter.check")).toBeLessThan(
+      publicSubmission.indexOf("pool.connect()"),
+    );
+  });
+});

@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-21
+Last updated: 2026-07-24
 
 ---
 
@@ -465,52 +465,54 @@ The canonical Local Presence Engine data model and orchestration layer is now in
 
 ## Referral Growth Engine — RGE Status
 
-### Planned Implementation Order
+**Definition:** Referral Growth is customer-referral program software. It is distinct from Lead
+Generation, lead marketplaces, local referral sources such as Nextdoor or Angi, and future
+affiliate or ambassador programs.
 
-Growth Engine phases are executed sequentially. Each phase depends on the previous one being live and verified.
+### Current position
 
-| Phase | Engine | Status |
-|-------|--------|--------|
-| C8R (1–7) | Authority & Backlink Engine | ✅ **COMPLETE** |
-| AI Visibility | AI Visibility Read Model + Collection | 🔵 Planned (C8R-5 read model done; live collection deferred) |
-| Content Autopilot | Multi-Platform Content Generation | 🟡 Active (BB&B pilot) |
-| **RGE-1** | **Local Opportunity Radar** | 🔵 **Planned** |
+| Milestone | Status |
+|---|---|
+| Existing program/referral schema, CRUD, KPI dashboard, and manual status workflow | ✅ Implemented |
+| Production demo-data removal and authenticated tenant isolation | ✅ Implemented and verified |
+| **RGE-1 — Customer Enrollment & Attribution** | 🟡 **Implemented locally; preservation and production acceptance pending** |
+| Automated invitations and follow-up | 🔵 Planned |
+| Reward ledger, approval, and fulfillment | 🔵 Planned |
+| Fraud review and duplicate controls beyond enrollment | 🔵 Planned |
+| GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
+| Campaign reporting and referral ROI | 🔵 Planned |
 
----
+**Honest completion estimate:** approximately **70%** of the currently defined Referral Growth V1.
+This is not a production acceptance declaration.
 
-### RGE-1 — Local Opportunity Radar (🔵 Planned)
+### RGE-1 — Customer Enrollment & Attribution
 
-**Summary:** A hyper-local lead-generation and referral surface that surfaces the highest-conversion
-offline and online opportunities specific to Bed Bugs & Beyond's Baldwin County service area.
-Unlike the backlink authority engine (domain-level signals), the Local Opportunity Radar focuses
-on real-world referral relationships, community trust, and geo-targeted discovery.
+Implemented scope:
 
-**Proposed scope:**
+1. Admin creation of referral programs with a secure referral code, reward definition, optional
+   expiration, and optional maximum-use limit.
+2. Copyable customer share links that open a public referral landing page.
+3. Public enrollment that captures the referrer and referred customer and attributes the
+   submission to the exact program and tenant derived from the referral code.
+4. Fail-closed handling for inactive clients, paused/expired/full programs, malformed codes,
+   self-referrals, duplicates, honeypot submissions, and excessive per-code/requester attempts.
+5. Transactional row locking so attribution and program usage increments remain consistent during
+   concurrent submissions.
+6. No automatic payout, publication, message, CRM write, or scheduler side effect.
 
-1. **Referral Partner Map** — Identify and rank hotel chains, rental property managers, apartment complexes,
-   and moving companies in the service area that are likely bed-bug referral sources. Track outreach
-   status (discovered → contacted → partner → active → churned).
+Local verification:
 
-2. **Geo-Rank Tracker** — Monitor Google Maps pack position for target keywords
-   ("bed bug exterminator Las Vegas", "bed bug treatment Henderson NV", etc.) across the service area.
-   Surface rank changes week-over-week so Matthew can see which GBP optimizations moved the needle.
+- Focused referral API tests: 25/25 pass.
+- Referral URL helper tests: 2/2 pass.
+- Complete API suite against a disposable in-memory PostgreSQL-compatible test database:
+  1,293/1,293 pass.
+- API and frontend TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Full frontend suite: 51/52 files pass and 2,242 tests pass; the only three failures are the
+  pre-existing, unrelated `ContactPage.test.tsx` expectations.
 
-3. **Review Velocity Monitor** — Track 5-star review accumulation rate vs. top competitors.
-   Alert when a competitor's review count crosses a threshold relative to BBB's count.
-   Surface a one-click "ask for review" action linked to Google review URL.
+### Separate future workstream — Local Opportunity Radar
 
-4. **Local Event Radar** — Surface Baldwin County community events (home shows, real estate agent
-   open houses, Chamber of Commerce events) as high-value sponsorship / networking opportunities.
-   Connects to the backlink engine — event sponsorships produce local authority backlinks.
-
-5. **Google Maps Competitor Pulse** — Weekly snapshot of top-3 competitors (name, review count,
-   photo count, Q&A count, post recency). Shows exactly what BBB needs to do to pass them.
-
-**Dependencies before RGE-1 can start:**
-
-- Backlink engine (C8R-6/7) — COMPLETE ✅
-- GBP connection verified and quota confirmed (GCP project 474786012895) — BLOCKED on Matthew
-- Content Autopilot pilot stable (social posting confirmed live) — IN PROGRESS
-
-**No implementation scope in this entry.** RGE-1 is recorded as a future bounded phase. No schema,
-API, UI, scheduler, or data collection is implied by this entry.
+Local Opportunity Radar remains useful local-first demand intelligence, but it is **not** Referral
+Growth. Its prospective partner mapping, geo-rank tracking, review velocity, local event discovery,
+and Google Maps competitor monitoring belong under Lead Generation / Local Demand Intelligence.

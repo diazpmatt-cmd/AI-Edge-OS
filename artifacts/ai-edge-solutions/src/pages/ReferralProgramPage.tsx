@@ -6,6 +6,7 @@ import { ReferralInvitationsPanel } from "@/components/referrals/ReferralInvitat
 import { ReferralRewardsPanel } from "@/components/referrals/ReferralRewardsPanel";
 import { ReferralFraudReviewPanel } from "@/components/referrals/ReferralFraudReviewPanel";
 import { ReferralReportingPanel } from "@/components/referrals/ReferralReportingPanel";
+import { ReferralAttributionPanel } from "@/components/referrals/ReferralAttributionPanel";
 
 interface Program {
   id: number;
@@ -59,7 +60,8 @@ type Tab =
   | "referrals"
   | "payouts"
   | "fraud"
-  | "reporting";
+  | "reporting"
+  | "attribution";
 
 const STATUS_CFG: Record<string, { color: string; label: string; dot: string }> = {
   pending:   { color: "#F59E0B", label: "Pending",   dot: "○" },
@@ -432,6 +434,7 @@ export default function ReferralProgramPage() {
     { id: "payouts",   label: "Payouts",    icon: "💵" },
     { id: "fraud",     label: "Fraud Review", icon: "🛡️" },
     { id: "reporting", label: "Reporting", icon: "📈" },
+    { id: "attribution", label: "Attribution", icon: "🔗" },
   ];
 
   return (
@@ -849,6 +852,10 @@ export default function ReferralProgramPage() {
 
           {tab === "reporting" && (
             <ReferralReportingPanel />
+          )}
+
+          {tab === "attribution" && (
+            <ReferralAttributionPanel />
           )}
 
         </div>

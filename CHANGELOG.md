@@ -6,6 +6,17 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Read-Only CRM Attribution (RGE-7, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated referral-to-customer candidates derived only from already-synced GorillaDesk
+  customer and job records.
+- Exact phone/email match evidence, confidence, measured-revenue provenance, and explicit human
+  confirm/reject controls.
+- Confirmations persist an internal attribution link only. They make no external API call and
+  perform no GorillaDesk/CRM write.
+
 ### Referral Growth — Truthful Campaign Reporting (RGE-6, 2026-07-25)
 
 #### Added

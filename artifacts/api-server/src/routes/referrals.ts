@@ -35,6 +35,7 @@ import {
   type ReferralRiskAssessment,
 } from "../lib/referral-fraud.js";
 import { buildReferralEconomics } from "../lib/referral-reporting.js";
+import { scoreReferralCustomerMatch } from "../lib/referral-attribution.js";
 
 const router = Router();
 
@@ -220,6 +221,26 @@ const router = Router();
         idempotency_key   TEXT NOT NULL,
         created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (client_id, idempotency_key)
+      );
+      CREATE TABLE IF NOT EXISTS referral_crm_attributions (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id            TEXT NOT NULL,
+        referral_id          INTEGER NOT NULL REFERENCES referrals(id),
+        source_system        TEXT NOT NULL DEFAULT 'gorilladesk_sync',
+        customer_external_id TEXT NOT NULL,
+        status               TEXT NOT NULL DEFAULT 'proposed' CHECK (
+          status IN ('proposed', 'confirmed', 'rejected')
+        ),
+        confidence           INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+        reasons              JSONB NOT NULL DEFAULT '[]'::jsonb,
+        measured_revenue     NUMERIC(12,2),
+        decided_by_user_id   TEXT,
+        decided_at           TIMESTAMPTZ,
+        decision_idempotency_key TEXT,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (client_id, referral_id, customer_external_id),
+        UNIQUE (client_id, decision_idempotency_key)
       );
       CREATE INDEX IF NOT EXISTS referral_invitations_tenant_status_created
         ON referral_invitations(client_id, status, created_at DESC);
@@ -2196,7 +2217,8 @@ router.get("/referrals/reporting", async (req, res) => {
         COALESCE(r.conversions, 0)::int AS conversions,
         COALESCE(l.pending_rewards, 0)::int AS "pendingRewards",
         COALESCE(l.fulfilled_rewards, 0)::int AS "fulfilledRewards",
-        COALESCE(l.reward_cost, 0)::numeric AS "rewardCost"
+        COALESCE(l.reward_cost, 0)::numeric AS "rewardCost",
+        a.attributed_revenue AS "attributedRevenue"
       FROM referral_programs p
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS invitations
@@ -2226,6 +2248,24 @@ router.get("/referrals/reporting", async (req, res) => {
         FROM referral_reward_ledger
         WHERE client_id = p.client_id AND program_id = p.id
       ) l ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          CASE
+            WHEN COUNT(*) FILTER (
+              WHERE status = 'confirmed' AND measured_revenue IS NOT NULL
+            ) > 0
+            THEN SUM(measured_revenue) FILTER (
+              WHERE status = 'confirmed' AND measured_revenue IS NOT NULL
+            )
+            ELSE NULL
+          END AS attributed_revenue
+        FROM referral_crm_attributions
+        WHERE client_id = p.client_id
+          AND referral_id IN (
+            SELECT id FROM referrals
+            WHERE client_id = p.client_id AND program_id = p.id
+          )
+      ) a ON TRUE
       WHERE p.client_id = $1
       ORDER BY p.created_at DESC
       `,
@@ -2238,12 +2278,199 @@ router.get("/referrals/reporting", async (req, res) => {
         buildReferralEconomics({
           ...row,
           rewardCost: Number(row.rewardCost ?? 0),
-          attributedRevenue: null,
+          attributedRevenue:
+            row.attributedRevenue == null
+              ? null
+              : Number(row.attributedRevenue),
         }),
       ),
     });
   } catch (err) {
     console.error("[referrals] reporting error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.get("/referrals/attribution/candidates", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  try {
+    const clientResult = await pool.query(
+      `SELECT slug FROM clients WHERE id = $1 LIMIT 1`,
+      [auth.clientId],
+    );
+    const projectId = clientResult.rows[0]?.slug;
+    if (!projectId) {
+      res.status(404).json({ error: "client_not_found" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `
+      SELECT
+        r.id AS "referralId",
+        r.referred_name AS "referredName",
+        r.referred_phone AS "referralPhone",
+        r.referred_email AS "referralEmail",
+        c.external_id AS "customerExternalId",
+        c.name AS "customerName",
+        c.phone AS "customerPhone",
+        c.email AS "customerEmail",
+        CASE
+          WHEN COALESCE(j.revenue_cents, 0) > 0
+          THEN j.revenue_cents::numeric / 100
+          ELSE NULL
+        END AS "measuredRevenue",
+        COALESCE(a.status, 'proposed') AS status
+      FROM referrals r
+      JOIN gorilladesk_customers c
+        ON c.project_id = $2
+       AND (
+         (
+           NULLIF(regexp_replace(COALESCE(r.referred_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+           AND right(regexp_replace(r.referred_phone, '\\D', '', 'g'), 10)
+             = right(regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g'), 10)
+         )
+         OR (
+           NULLIF(lower(trim(COALESCE(r.referred_email, ''))), '') IS NOT NULL
+           AND lower(trim(r.referred_email)) = lower(trim(COALESCE(c.email, '')))
+         )
+       )
+      LEFT JOIN LATERAL (
+        SELECT SUM(amount_cents)::int AS revenue_cents
+        FROM gorilladesk_jobs
+        WHERE project_id = $2 AND customer_id = c.external_id
+      ) j ON TRUE
+      LEFT JOIN referral_crm_attributions a
+        ON a.client_id = r.client_id
+       AND a.referral_id = r.id
+       AND a.customer_external_id = c.external_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+      `,
+      [auth.clientId, projectId],
+    );
+    res.json({
+      source: "local_gorilladesk_sync",
+      externalCalls: false,
+      candidates: rows
+        .map((row) => ({
+          ...row,
+          ...scoreReferralCustomerMatch(row),
+          measuredRevenue:
+            row.measuredRevenue == null ? null : Number(row.measuredRevenue),
+        }))
+        .filter((row) => row.confidence > 0),
+    });
+  } catch (err) {
+    console.error("[referrals] attribution candidates error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.post("/referrals/attribution/decision", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const referralId = Number(req.body?.referralId);
+  const customerExternalId = String(req.body?.customerExternalId ?? "");
+  const decision = req.body?.decision;
+  const idempotencyKey = String(req.body?.idempotencyKey ?? "");
+  if (
+    !Number.isInteger(referralId) ||
+    !customerExternalId ||
+    !["confirmed", "rejected"].includes(decision) ||
+    idempotencyKey.length < 8
+  ) {
+    res.status(400).json({ error: "invalid_request" });
+    return;
+  }
+  try {
+    const candidate = await pool.query(
+      `
+      SELECT
+        r.referred_phone AS "referralPhone",
+        r.referred_email AS "referralEmail",
+        c.phone AS "customerPhone",
+        c.email AS "customerEmail",
+        CASE
+          WHEN COALESCE(j.revenue_cents, 0) > 0
+          THEN j.revenue_cents::numeric / 100
+          ELSE NULL
+        END AS "measuredRevenue"
+      FROM referrals r
+      JOIN clients tenant ON tenant.id = r.client_id
+      JOIN gorilladesk_customers c
+        ON c.project_id = tenant.slug
+       AND c.external_id = $3
+       AND (
+         (
+           NULLIF(regexp_replace(COALESCE(r.referred_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+           AND right(regexp_replace(r.referred_phone, '\\D', '', 'g'), 10)
+             = right(regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g'), 10)
+         )
+         OR (
+           NULLIF(lower(trim(COALESCE(r.referred_email, ''))), '') IS NOT NULL
+           AND lower(trim(r.referred_email)) = lower(trim(COALESCE(c.email, '')))
+         )
+       )
+      LEFT JOIN LATERAL (
+        SELECT SUM(amount_cents)::int AS revenue_cents
+        FROM gorilladesk_jobs
+        WHERE project_id = tenant.slug AND customer_id = c.external_id
+      ) j ON TRUE
+      WHERE r.id = $1 AND r.client_id = $2
+      LIMIT 1
+      `,
+      [referralId, auth.clientId, customerExternalId],
+    );
+    if (!candidate.rows[0]) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const match = scoreReferralCustomerMatch(candidate.rows[0]);
+    if (match.confidence === 0) {
+      res.status(409).json({ error: "identity_match_no_longer_valid" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `
+      INSERT INTO referral_crm_attributions (
+        client_id, referral_id, customer_external_id, status,
+        confidence, reasons, measured_revenue, decided_by_user_id, decided_at,
+        decision_idempotency_key
+      )
+      VALUES ($1, $2, $3, $4, $7, $8::jsonb, $9, $5, now(), $6)
+      ON CONFLICT (client_id, referral_id, customer_external_id)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        decided_by_user_id = EXCLUDED.decided_by_user_id,
+        decided_at = EXCLUDED.decided_at,
+        decision_idempotency_key = EXCLUDED.decision_idempotency_key,
+        confidence = EXCLUDED.confidence,
+        reasons = EXCLUDED.reasons,
+        measured_revenue = EXCLUDED.measured_revenue,
+        updated_at = now()
+      WHERE referral_crm_attributions.client_id = $1
+      RETURNING *
+      `,
+      [
+        auth.clientId,
+        referralId,
+        customerExternalId,
+        decision,
+        auth.userId,
+        idempotencyKey,
+        match.confidence,
+        JSON.stringify(match.reasons),
+        candidate.rows[0].measuredRevenue,
+      ],
+    );
+    res.json({ attribution: rows[0], externalWrite: false });
+  } catch (err: any) {
+    if (err?.code === "23505") {
+      res.status(409).json({ error: "duplicate_decision" });
+      return;
+    }
+    console.error("[referrals] attribution decision error:", err);
     res.status(500).json({ error: "Failed" });
   }
 });

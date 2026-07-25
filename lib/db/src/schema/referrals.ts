@@ -387,6 +387,51 @@ export const referralFraudReviewEventsTable = pgTable(
   ],
 );
 
+export const referralCrmAttributionsTable = pgTable(
+  "referral_crm_attributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id").notNull(),
+    referralId: integer("referral_id")
+      .notNull()
+      .references(() => referralsTable.id),
+    sourceSystem: text("source_system").notNull().default("gorilladesk_sync"),
+    customerExternalId: text("customer_external_id").notNull(),
+    status: text("status").notNull().default("proposed"),
+    confidence: integer("confidence").notNull(),
+    reasons: jsonb("reasons").notNull().default(sql`'[]'::jsonb`),
+    measuredRevenue: numeric("measured_revenue", { precision: 12, scale: 2 }),
+    decidedByUserId: text("decided_by_user_id"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionIdempotencyKey: text("decision_idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("referral_crm_attribution_tenant_candidate").on(
+      table.clientId,
+      table.referralId,
+      table.customerExternalId,
+    ),
+    uniqueIndex("referral_crm_attribution_tenant_decision").on(
+      table.clientId,
+      table.decisionIdempotencyKey,
+    ),
+    check(
+      "referral_crm_attribution_status_check",
+      sql`${table.status} IN ('proposed', 'confirmed', 'rejected')`,
+    ),
+    check(
+      "referral_crm_attribution_confidence_check",
+      sql`${table.confidence} BETWEEN 0 AND 100`,
+    ),
+  ],
+);
+
 export const insertReferralProgramSchema = createInsertSchema(referralProgramsTable).omit({ id: true, createdAt: true, updatedAt: true, usesCount: true });
 export type InsertReferralProgram = z.infer<typeof insertReferralProgramSchema>;
 export type ReferralProgram = typeof referralProgramsTable.$inferSelect;

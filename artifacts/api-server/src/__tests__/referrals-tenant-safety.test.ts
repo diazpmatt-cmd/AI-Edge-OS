@@ -20,7 +20,8 @@ describe("Referral Growth tenant-safety contract", () => {
   it("requires Clerk authentication and resolves the canonical client", () => {
     expect(source).toContain("const { userId } = getAuth(req)");
     expect(source).toContain("resolveClientContentContextFromDb(userId)");
-    expect(source).toContain("return { userId, clientId: resolved.client.id }");
+    expect(compact).toContain("clientId: resolved.client.id");
+    expect(compact).toContain("clientName: resolved.client.clientName");
   });
 
   it("looks up a supplied program by both program ID and authenticated client ID", () => {
@@ -125,7 +126,8 @@ describe("Referral Growth public-attribution route contract", () => {
 
   it("rate-limits public submissions before parsing or database work", () => {
     expect(publicSubmission).toContain("referralSubmissionRateLimiter.check");
-    expect(publicSubmission).toContain('res.status(429).json({ error: "rate_limit_exceeded"');
+    expect(publicSubmission).toContain(".status(429)");
+    expect(publicSubmission).toContain('error: "rate_limit_exceeded"');
     expect(publicSubmission.indexOf("referralSubmissionRateLimiter.check")).toBeLessThan(
       publicSubmission.indexOf("publicReferralSubmissionSchema.safeParse"),
     );

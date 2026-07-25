@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useApiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/AdminLayout";
 import { buildReferralShareUrl } from "@/lib/referral-growth";
+import { ReferralInvitationsPanel } from "@/components/referrals/ReferralInvitationsPanel";
 
 interface Program {
   id: number;
@@ -46,7 +47,7 @@ interface Stats {
   pendingPayout: string;
 }
 
-type Tab = "overview" | "programs" | "referrals" | "payouts";
+type Tab = "overview" | "programs" | "invitations" | "referrals" | "payouts";
 
 const STATUS_CFG: Record<string, { color: string; label: string; dot: string }> = {
   pending:   { color: "#F59E0B", label: "Pending",   dot: "○" },
@@ -414,6 +415,7 @@ export default function ReferralProgramPage() {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "overview",  label: "Overview",   icon: "📊" },
     { id: "programs",  label: "Programs",   icon: "🎯" },
+    { id: "invitations", label: "Invitations", icon: "✉️" },
     { id: "referrals", label: "Referrals",  icon: "👥" },
     { id: "payouts",   label: "Payouts",    icon: "💵" },
   ];
@@ -727,6 +729,11 @@ export default function ReferralProgramPage() {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* ── Tab: Invitations ── */}
+          {tab === "invitations" && (
+            <ReferralInvitationsPanel programs={programs} />
           )}
 
           {/* ── Tab: Referrals ── */}

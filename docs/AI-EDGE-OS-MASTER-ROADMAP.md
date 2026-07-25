@@ -427,7 +427,7 @@ These completion percentages are final and must not be modified by future docume
 | AI Visibility V1 (C9R-1–C9R-7) | ✅ 100% — **GO** (DP-001 PASS 2026-07-21) |
 | Competitor Intelligence (P1–P7) | ✅ V1 Complete |
 | Local Presence Engine | ✅ Foundation complete |
-| Referral Growth Engine | 🟡 70% — RGE-1 enrollment/attribution implemented locally; production acceptance pending |
+| Referral Growth Engine | 🟡 82% — RGE-1 merged; RGE-2 invitations/consent/approval implemented locally with delivery disabled |
 | AI Traffic Attribution (WS-1) | ⬜ Not started |
 | Traffic & Channel Intelligence (WS-2) | ⬜ Not started |
 | Baldwin County Search Intelligence (WS-3) | ⬜ Not started |

@@ -130,3 +130,206 @@ export function isSelfReferral(submission: PublicReferralSubmission): boolean {
   const referredPhone = normalizePhone(submission.referredPhone);
   return Boolean(referrerPhone && referredPhone && referrerPhone === referredPhone);
 }
+
+// ── RGE-2: invitation drafting and approval (delivery intentionally absent) ──
+
+export const REFERRAL_INVITATION_CHANNELS = ["sms", "email"] as const;
+export type ReferralInvitationChannel =
+  (typeof REFERRAL_INVITATION_CHANNELS)[number];
+
+export const REFERRAL_INVITATION_TOKENS = [
+  "first_name",
+  "business_name",
+  "referral_link",
+] as const;
+
+export const referralInvitationTemplateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    channel: z.enum(REFERRAL_INVITATION_CHANNELS),
+    subject: z.string().trim().max(160).optional().nullable(),
+    body: z.string().trim().min(10).max(1200),
+    followUpBody: z.string().trim().max(1200).optional().nullable(),
+    followUpDelayDays: z.coerce.number().int().min(1).max(30).default(3),
+  })
+  .superRefine((value, ctx) => {
+    if (value.channel === "email" && !value.subject) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["subject"],
+        message: "Email templates require a subject.",
+      });
+    }
+    for (const field of ["subject", "body", "followUpBody"] as const) {
+      const unsupported = findUnsupportedInvitationTokens(value[field] ?? "");
+      if (unsupported.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: `Unsupported template token: ${unsupported.join(", ")}`,
+        });
+      }
+    }
+  });
+
+export const referralInvitationDraftSchema = z
+  .object({
+    programId: z.coerce.number().int().positive(),
+    templateId: z.coerce.number().int().positive().optional().nullable(),
+    channel: z.enum(REFERRAL_INVITATION_CHANNELS),
+    recipientName: z.string().trim().min(2).max(120),
+    recipientPhone: z.string().trim().max(40).optional().nullable(),
+    recipientEmail: z.string().trim().email().max(254).optional().nullable(),
+    subject: z.string().trim().max(160).optional().nullable(),
+    initialMessage: z.string().trim().min(10).max(1200).optional().nullable(),
+    followUpMessage: z.string().trim().max(1200).optional().nullable(),
+    followUpDelayDays: z.coerce.number().int().min(1).max(30).default(3),
+    consentConfirmed: z.literal(true),
+    consentSource: z.enum([
+      "customer_request",
+      "written_form",
+      "web_form",
+      "service_agreement",
+      "other_documented",
+    ]),
+    consentAt: z.coerce.date(),
+    idempotencyKey: z
+      .string()
+      .trim()
+      .min(8)
+      .max(120)
+      .regex(/^[A-Za-z0-9._:-]+$/),
+  })
+  .superRefine((value, ctx) => {
+    if (value.consentAt.getTime() > Date.now() + 5 * 60 * 1000) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["consentAt"],
+        message: "Consent time cannot be in the future.",
+      });
+    }
+    if (value.channel === "sms" && !normalizePhone(value.recipientPhone)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipientPhone"],
+        message: "A valid phone number is required for SMS.",
+      });
+    }
+    if (value.channel === "email" && !normalizeEmail(value.recipientEmail)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipientEmail"],
+        message: "A valid email address is required for email.",
+      });
+    }
+    if (!value.templateId && !value.initialMessage) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["initialMessage"],
+        message: "Choose a template or provide an invitation message.",
+      });
+    }
+    if (value.channel === "email" && !value.templateId && !value.subject) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["subject"],
+        message: "Email invitations require a subject.",
+      });
+    }
+    for (const field of [
+      "subject",
+      "initialMessage",
+      "followUpMessage",
+    ] as const) {
+      const unsupported = findUnsupportedInvitationTokens(value[field] ?? "");
+      if (unsupported.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: `Unsupported template token: ${unsupported.join(", ")}`,
+        });
+      }
+    }
+  });
+
+export const referralContactPreferenceSchema = z
+  .object({
+    channel: z.enum(REFERRAL_INVITATION_CHANNELS),
+    destination: z.string().trim().min(3).max(254),
+    reason: z
+      .string()
+      .trim()
+      .min(2)
+      .max(500)
+      .default("Customer requested no referral invitations."),
+  })
+  .superRefine((value, ctx) => {
+    if (!normalizeInvitationDestination(value.channel, value.destination)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["destination"],
+        message: `A valid ${value.channel === "sms" ? "phone number" : "email address"} is required.`,
+      });
+    }
+  });
+
+export type ReferralInvitationTemplateInput = z.infer<
+  typeof referralInvitationTemplateSchema
+>;
+export type ReferralInvitationDraftInput = z.infer<
+  typeof referralInvitationDraftSchema
+>;
+
+const INVITATION_TOKEN_PATTERN = /\{\{\s*([a-z_]+)\s*\}\}/gi;
+
+export function findUnsupportedInvitationTokens(text: string): string[] {
+  const allowed = new Set<string>(REFERRAL_INVITATION_TOKENS);
+  const unsupported = new Set<string>();
+  for (const match of text.matchAll(INVITATION_TOKEN_PATTERN)) {
+    const token = match[1].toLowerCase();
+    if (!allowed.has(token)) unsupported.add(token);
+  }
+  return [...unsupported].sort();
+}
+
+export function renderReferralInvitation(
+  text: string,
+  values: { firstName: string; businessName: string; referralLink: string },
+): string {
+  const replacements: Record<string, string> = {
+    first_name: values.firstName,
+    business_name: values.businessName,
+    referral_link: values.referralLink,
+  };
+  return text.replace(INVITATION_TOKEN_PATTERN, (_match, rawToken: string) => {
+    const token = rawToken.toLowerCase();
+    return replacements[token] ?? "";
+  });
+}
+
+export function normalizeInvitationDestination(
+  channel: ReferralInvitationChannel,
+  value: string | null | undefined,
+): string | null {
+  if (channel === "sms") {
+    const phone = normalizePhone(value);
+    return phone?.length === 10 ? phone : null;
+  }
+  const email = normalizeEmail(value);
+  return email && z.string().email().safeParse(email).success ? email : null;
+}
+
+export type ReferralInvitationStatus =
+  | "draft"
+  | "approved"
+  | "cancelled"
+  | "suppressed";
+
+export function canTransitionReferralInvitation(
+  current: ReferralInvitationStatus,
+  next: ReferralInvitationStatus,
+): boolean {
+  if (current === "draft") return next === "approved" || next === "cancelled";
+  if (current === "approved") return next === "cancelled";
+  return false;
+}

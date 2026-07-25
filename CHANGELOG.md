@@ -6,6 +6,35 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Invitations & Follow-Up Preparation (RGE-2, 2026-07-24)
+
+#### Added
+
+- Tenant-scoped SMS/email invitation templates with approved merge tokens, optional follow-up copy,
+  and a bounded 1–30 day follow-up interval.
+- Consent-backed invitation drafts, idempotency keys, 24-hour duplicate protection, human approval,
+  cancellation, contact suppression, and immutable invitation snapshots.
+- Contact preference records with normalized email/phone destinations, documented consent source
+  and time, opt-out status, and transaction-level serialization across draft/suppression races.
+- A visible **Invitations** tab in Referral Growth for creating templates and consent-backed drafts,
+  approving drafts, cancelling them, and suppressing contacts.
+
+#### Safety and verification
+
+- Delivery is physically absent: RGE-2 imports no Telnyx/email sender, exposes no send route, has no
+  scheduler, and constrains every invitation to `delivery_state='not_dispatched'` and
+  `sequence_step=0`.
+- Approval records human intent for a separately authorized delivery phase and explicitly reports
+  that no message was sent. Opt-outs suppress matching draft/approved rows and block approval.
+- RGE-2 API contract and database-invariant tests pass 28/28; invitation UI contract tests pass
+  6/6; all focused referral API tests pass 53/53. The complete API suite passes 1,321/1,321
+  against a disposable test database.
+- API/frontend TypeScript and production builds pass. The complete frontend suite passes 52/53
+  files and 2,248 tests, with the same three unrelated pre-existing `ContactPage.test.tsx`
+  expectation failures.
+- Implemented locally on `feat/referral-invitations-followup-v1`; not committed, pushed, merged,
+  deployed, or production-accepted. No message was sent and no production data was changed.
+
 ### Referral Growth — Customer Enrollment & Attribution (2026-07-24)
 
 #### Added
@@ -28,8 +57,8 @@ All notable changes to the AI Edge Solutions platform.
   1,293/1,293 against a disposable test database. API/frontend TypeScript and production builds pass.
 - Full frontend verification has one unrelated existing baseline: three failing
   `ContactPage.test.tsx` expectations. Referral Growth tests and builds are green.
-- Implemented locally on `feat/referral-enrollment-attribution-v1`; not yet committed, pushed,
-  merged, deployed, or production-accepted.
+- Merged through PR #42 at merge commit
+  `ded48a360dd02edf232ad2672e26d37dab335089`. Not deployed or production-accepted.
 
 ### AI Visibility V1 — Production Accepted (GO) (2026-07-21)
 

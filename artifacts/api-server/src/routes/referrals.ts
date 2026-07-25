@@ -34,6 +34,7 @@ import {
   evaluateReferralRisk,
   type ReferralRiskAssessment,
 } from "../lib/referral-fraud.js";
+import { buildReferralEconomics } from "../lib/referral-reporting.js";
 
 const router = Router();
 
@@ -2181,6 +2182,72 @@ router.post("/referrals", async (req, res) => {
 });
 
 // ── PATCH /api/referrals/:id ──────────────────────────────────────────────────
+router.get("/referrals/reporting", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.id AS "programId",
+        p.name AS "programName",
+        COALESCE(i.invitations, 0)::int AS invitations,
+        COALESCE(r.referrals, 0)::int AS referrals,
+        COALESCE(r.conversions, 0)::int AS conversions,
+        COALESCE(l.pending_rewards, 0)::int AS "pendingRewards",
+        COALESCE(l.fulfilled_rewards, 0)::int AS "fulfilledRewards",
+        COALESCE(l.reward_cost, 0)::numeric AS "rewardCost"
+      FROM referral_programs p
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS invitations
+        FROM referral_invitations
+        WHERE client_id = p.client_id AND program_id = p.id
+      ) i ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS referrals,
+          COUNT(*) FILTER (
+            WHERE status IN ('converted', 'paid')
+          )::int AS conversions
+        FROM referrals
+        WHERE client_id = p.client_id AND program_id = p.id
+      ) r ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) FILTER (
+            WHERE status IN ('pending_review', 'approved')
+          )::int AS pending_rewards,
+          COUNT(*) FILTER (
+            WHERE status = 'fulfilled'
+          )::int AS fulfilled_rewards,
+          COALESCE(SUM(reward_amount) FILTER (
+            WHERE status = 'fulfilled'
+          ), 0)::numeric AS reward_cost
+        FROM referral_reward_ledger
+        WHERE client_id = p.client_id AND program_id = p.id
+      ) l ON TRUE
+      WHERE p.client_id = $1
+      ORDER BY p.created_at DESC
+      `,
+      [auth.clientId],
+    );
+    res.json({
+      generatedAt: new Date().toISOString(),
+      revenueSource: "not_configured",
+      programs: rows.map((row) =>
+        buildReferralEconomics({
+          ...row,
+          rewardCost: Number(row.rewardCost ?? 0),
+          attributedRevenue: null,
+        }),
+      ),
+    });
+  } catch (err) {
+    console.error("[referrals] reporting error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 router.patch("/referrals/:id", async (req, res) => {
   const auth = await resolveClient(req, res);
   if (!auth) return;

@@ -6,6 +6,17 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Truthful Campaign Reporting (RGE-6, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated program reporting for invitations, referrals, conversions, reward review,
+  fulfillment, and recorded reward cost.
+- A visible Reporting tab and deterministic referral-economics helper.
+- Attributed revenue and ROI remain explicitly unavailable until an explicit measured-revenue
+  link exists; missing revenue is never reported as measured zero.
+- No provider call, scheduler, outbound message, payment, or CRM write was added.
+
 ### Referral Growth — Fraud & Abuse Review Controls (RGE-5, 2026-07-25)
 
 #### Added

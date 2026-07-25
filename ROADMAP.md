@@ -480,13 +480,25 @@ affiliate or ambassador programs.
 | **RGE-3 — Controlled Invitation Delivery** | 🟡 **Merged; production acceptance pending** |
 | **RGE-4 — Reward Ledger, Approval & Fulfillment Controls** | 🟡 **Merged; production acceptance pending** |
 | **RGE-5 — Fraud & Abuse Review Controls** | 🟡 **Implemented locally; production acceptance pending** |
+| **RGE-6 — Truthful Campaign Reporting** | 🟡 **Implemented locally; production acceptance pending** |
 | Scheduled follow-up | 🔵 Requires separate authorization |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
-| Campaign reporting and referral ROI | 🔵 Planned |
+| Campaign reporting and referral ROI | 🟡 Truthful reporting implemented; measured revenue attribution pending |
 
-**Honest completion estimate:** approximately **97%** of the currently defined Referral Growth V1.
+**Honest completion estimate:** approximately **98%** of the currently defined Referral Growth V1.
 RGE-2 is production-accepted. RGE-3 and RGE-4 are merged but undeployed. RGE-5 remains
 unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
+
+### RGE-6 — Truthful Campaign Reporting
+
+- Tenant-isolated program reporting covers invitations, referrals, conversions, conversion rate,
+  pending reward reviews, fulfilled rewards, and recorded reward cost.
+- Attributed revenue and ROI remain unavailable until an explicit measured-revenue attribution
+  exists. The system does not infer referral revenue from conversions or account-wide revenue.
+- No scheduler, delivery, payment, customer action, or external-system write is present.
+- Focused RGE-6 API tests: 4/4 pass. Focused RGE-6 UI tests: 3/3 pass.
+- API and frontend TypeScript checks pass.
+- Production acceptance remains pending; this milestone is neither merged nor deployed.
 
 ### RGE-1 — Customer Enrollment & Attribution
 

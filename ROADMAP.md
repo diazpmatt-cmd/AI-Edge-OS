@@ -522,8 +522,11 @@ unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
 - Local V1 implementation acceptance is recorded in `docs/RGE-8-V1-LOCAL-ACCEPTANCE.md`.
 - Focused RGE-8 API tests: 3/3 pass. Focused RGE-8 UI tests: 3/3 pass.
 - Combined RGE-6 through RGE-8 focused tests: API 19/19; UI 13/13.
-- Referral-focused aggregate tests: API 85 assertions pass with one database-dependent suite
-  unavailable because no safe development/test database is configured; UI 24/24 pass.
+- Fresh PostgreSQL bootstrap and all SQL migrations pass twice from scratch.
+- Complete API suite: 54/54 files and 1,359/1,359 tests pass.
+- Complete frontend suite: 58/58 files pass; 2,267 tests pass and only two paid,
+  credentialed DataForSEO live-provider checks are intentionally excluded.
+- Referral-focused aggregate: 17/17 files and 115/115 tests pass.
 - API, frontend, and database TypeScript checks pass. Both production builds pass.
 - No merge, deployment, scheduler activation, message, payment, reward issuance, customer action,
   or external CRM write occurred.

@@ -6,6 +6,22 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Reward Ledger & Fulfillment Controls (RGE-4, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated reward ledger with immutable conversion-time reward snapshots.
+- Separate human approval and manual-fulfillment evidence actions with transaction locking,
+  idempotency, duplicate prevention, and durable actor/timestamp provenance.
+- A controlled Rewards interface showing pending review, approved, and externally fulfilled rewards.
+
+#### Safety
+
+- Removed the direct **Mark Paid** path. AI Edge OS cannot issue cash, credits, discounts, or
+  payments; fulfillment only records evidence of an action completed outside the platform.
+- Added no payment provider, scheduler, automatic fulfillment, production message, merge, or
+  deployment.
+
 ### Referral Growth — Controlled Invitation Delivery (RGE-3, 2026-07-25)
 
 #### Added

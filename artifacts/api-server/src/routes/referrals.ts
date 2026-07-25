@@ -17,6 +17,8 @@ import {
   referralDeliveryRequestSchema,
   referralInvitationDraftSchema,
   referralInvitationTemplateSchema,
+  referralRewardApprovalSchema,
+  referralRewardFulfillmentSchema,
   referralSubmissionRateLimiter,
   renderReferralInvitation,
 } from "../lib/referral-growth.js";
@@ -145,6 +147,31 @@ const router = Router();
         completed_at          TIMESTAMPTZ,
         UNIQUE (client_id, idempotency_key)
       );
+      CREATE TABLE IF NOT EXISTS referral_reward_ledger (
+        id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id                   TEXT NOT NULL,
+        referral_id                 INTEGER NOT NULL REFERENCES referrals(id),
+        program_id                  INTEGER REFERENCES referral_programs(id),
+        reward_type                 TEXT NOT NULL,
+        reward_amount               NUMERIC(10,2) NOT NULL CHECK (reward_amount >= 0),
+        status                      TEXT NOT NULL DEFAULT 'pending_review' CHECK (
+          status IN ('pending_review', 'approved', 'fulfilled', 'rejected')
+        ),
+        approval_idempotency_key    TEXT,
+        approved_by_user_id         TEXT,
+        approved_at                 TIMESTAMPTZ,
+        fulfillment_idempotency_key TEXT,
+        fulfillment_method          TEXT,
+        fulfillment_reference       TEXT,
+        fulfillment_note            TEXT,
+        fulfilled_by_user_id        TEXT,
+        fulfilled_at                TIMESTAMPTZ,
+        created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (client_id, referral_id),
+        UNIQUE (client_id, approval_idempotency_key),
+        UNIQUE (client_id, fulfillment_idempotency_key)
+      );
       CREATE INDEX IF NOT EXISTS referral_invitations_tenant_status_created
         ON referral_invitations(client_id, status, created_at DESC);
       CREATE INDEX IF NOT EXISTS referral_contact_preferences_suppression
@@ -154,6 +181,8 @@ const router = Router();
       CREATE UNIQUE INDEX IF NOT EXISTS referral_delivery_attempts_live_once
         ON referral_delivery_attempts(client_id, invitation_id, sequence_step)
         WHERE requested_mode = 'live' AND status IN ('dispatching', 'delivered');
+      CREATE INDEX IF NOT EXISTS referral_reward_ledger_tenant_status_created
+        ON referral_reward_ledger(client_id, status, created_at DESC);
     `);
     console.log("[referrals] tables ready");
     // Production data must originate from real referral activity. Demo seeding is intentionally disabled.
@@ -1284,6 +1313,226 @@ router.post("/referrals/invitations/:id/dispatch", async (req, res) => {
   });
 });
 
+// ── RGE-4: reward ledger, approval, and manual fulfillment ───────────────────
+// This phase records human decisions and evidence only. It never calls a
+// payment processor, creates a credit, sends a message, or schedules work.
+
+router.get("/referrals/rewards", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        rl.id,
+        rl.referral_id AS "referralId",
+        rl.program_id AS "programId",
+        rl.reward_type AS "rewardType",
+        rl.reward_amount AS "rewardAmount",
+        rl.status,
+        rl.approved_at AS "approvedAt",
+        rl.fulfillment_method AS "fulfillmentMethod",
+        rl.fulfillment_reference AS "fulfillmentReference",
+        rl.fulfillment_note AS "fulfillmentNote",
+        rl.fulfilled_at AS "fulfilledAt",
+        rl.created_at AS "createdAt",
+        r.referrer_name AS "referrerName",
+        r.referred_name AS "referredName",
+        rp.name AS "programName"
+      FROM referral_reward_ledger rl
+      JOIN referrals r
+        ON r.id = rl.referral_id
+       AND r.client_id = rl.client_id
+      LEFT JOIN referral_programs rp
+        ON rp.id = rl.program_id
+       AND rp.client_id = rl.client_id
+      WHERE rl.client_id = $1
+      ORDER BY rl.created_at DESC
+      LIMIT 500
+    `,
+      [auth.clientId],
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("[referrals] reward ledger list error:", error);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.post("/referrals/rewards/:id/approve", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const parsed = referralRewardApprovalSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "explicit_reward_approval_required" });
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-reward:${req.params.id}`,
+    ]);
+    const existing = await client.query(
+      `
+      SELECT id, status, approval_idempotency_key AS "approvalIdempotencyKey"
+      FROM referral_reward_ledger
+      WHERE client_id = $1 AND approval_idempotency_key = $2
+      LIMIT 1
+    `,
+      [auth.clientId, parsed.data.idempotencyKey],
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].id !== req.params.id) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "reward_approval_idempotency_conflict" });
+        return;
+      }
+      await client.query("COMMIT");
+      res.json({ idempotent: true, reward: existing.rows[0] });
+      return;
+    }
+    const { rows } = await client.query(
+      `
+      UPDATE referral_reward_ledger
+      SET
+        status = 'approved',
+        approval_idempotency_key = $3,
+        approved_by_user_id = $4,
+        approved_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $1
+        AND client_id = $2
+        AND status = 'pending_review'
+      RETURNING id, referral_id AS "referralId", reward_amount AS "rewardAmount",
+                reward_type AS "rewardType", status, approved_at AS "approvedAt"
+    `,
+      [
+        req.params.id,
+        auth.clientId,
+        parsed.data.idempotencyKey,
+        auth.userId,
+      ],
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "reward_not_approvable" });
+      return;
+    }
+    await client.query("COMMIT");
+    res.json({ idempotent: false, reward: rows[0] });
+  } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (error?.code === "23505") {
+      res.status(409).json({ error: "duplicate_reward_approval" });
+      return;
+    }
+    console.error("[referrals] reward approval error:", error);
+    res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/referrals/rewards/:id/fulfill", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const parsed = referralRewardFulfillmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "fulfillment_evidence_required" });
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-reward:${req.params.id}`,
+    ]);
+    const existing = await client.query(
+      `
+      SELECT id, status, fulfillment_idempotency_key AS "fulfillmentIdempotencyKey"
+      FROM referral_reward_ledger
+      WHERE client_id = $1 AND fulfillment_idempotency_key = $2
+      LIMIT 1
+    `,
+      [auth.clientId, parsed.data.idempotencyKey],
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].id !== req.params.id) {
+        await client.query("ROLLBACK");
+        res
+          .status(409)
+          .json({ error: "reward_fulfillment_idempotency_conflict" });
+        return;
+      }
+      await client.query("COMMIT");
+      res.json({ idempotent: true, reward: existing.rows[0] });
+      return;
+    }
+    const { rows } = await client.query(
+      `
+      UPDATE referral_reward_ledger
+      SET
+        status = 'fulfilled',
+        fulfillment_idempotency_key = $3,
+        fulfillment_method = $4,
+        fulfillment_reference = $5,
+        fulfillment_note = $6,
+        fulfilled_by_user_id = $7,
+        fulfilled_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $1
+        AND client_id = $2
+        AND status = 'approved'
+      RETURNING id, referral_id AS "referralId", reward_amount AS "rewardAmount",
+                reward_type AS "rewardType", status,
+                fulfillment_method AS "fulfillmentMethod",
+                fulfillment_reference AS "fulfillmentReference",
+                fulfilled_at AS "fulfilledAt"
+    `,
+      [
+        req.params.id,
+        auth.clientId,
+        parsed.data.idempotencyKey,
+        parsed.data.method,
+        parsed.data.reference,
+        parsed.data.note ?? null,
+        auth.userId,
+      ],
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "reward_not_fulfillable" });
+      return;
+    }
+    await client.query(
+      `
+      UPDATE referrals
+      SET status = 'paid', paid_at = NOW(), updated_at = NOW()
+      WHERE id = $1 AND client_id = $2 AND status = 'converted'
+    `,
+      [rows[0].referralId, auth.clientId],
+    );
+    await client.query("COMMIT");
+    res.json({
+      idempotent: false,
+      externallyPaid: false,
+      message: "Manual fulfillment evidence recorded; no payment was issued.",
+      reward: rows[0],
+    });
+  } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (error?.code === "23505") {
+      res.status(409).json({ error: "duplicate_reward_fulfillment" });
+      return;
+    }
+    console.error("[referrals] reward fulfillment error:", error);
+    res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
+  }
+});
+
 
 // ── GET /api/referrals/stats ──────────────────────────────────────────────────
 router.get("/referrals/stats", async (req, res) => {
@@ -1291,15 +1540,27 @@ router.get("/referrals/stats", async (req, res) => {
   if (!auth) return;
   try {
     const { rows } = await pool.query(`
-      SELECT
-        COUNT(*)::int                                                            AS total,
-        COUNT(*) FILTER (WHERE status='converted')::int                         AS converted,
-        COUNT(*) FILTER (WHERE status='paid')::int                              AS paid,
-        COUNT(*) FILTER (WHERE status='pending')::int                           AS pending,
-        COUNT(*) FILTER (WHERE status='cancelled')::int                         AS cancelled,
-        COALESCE(SUM(reward_amount) FILTER (WHERE status='paid'),0)             AS "totalPaidOut",
-        COALESCE(SUM(reward_amount) FILTER (WHERE status IN ('converted','pending')),0) AS "pendingPayout"
-      FROM referrals WHERE client_id = $1
+      WITH referral_stats AS (
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE status='converted')::int AS converted,
+          COUNT(*) FILTER (WHERE status='paid')::int AS paid,
+          COUNT(*) FILTER (WHERE status='pending')::int AS pending,
+          COUNT(*) FILTER (WHERE status='cancelled')::int AS cancelled
+        FROM referrals
+        WHERE client_id = $1
+      ),
+      reward_stats AS (
+        SELECT
+          COALESCE(SUM(reward_amount) FILTER (WHERE status='fulfilled'), 0) AS "totalPaidOut",
+          COALESCE(SUM(reward_amount) FILTER (WHERE status IN ('pending_review','approved')), 0) AS "pendingPayout",
+          COUNT(*) FILTER (WHERE status IN ('pending_review','approved'))::int AS "pendingRewardCount",
+          COUNT(*) FILTER (WHERE status='fulfilled')::int AS "fulfilledRewardCount"
+        FROM referral_reward_ledger
+        WHERE client_id = $1
+      )
+      SELECT referral_stats.*, reward_stats.*
+      FROM referral_stats CROSS JOIN reward_stats
     `, [auth.clientId]);
     const s = rows[0];
     const conversionRate = s.total > 0
@@ -1444,27 +1705,91 @@ router.post("/referrals", async (req, res) => {
 router.patch("/referrals/:id", async (req, res) => {
   const auth = await resolveClient(req, res);
   if (!auth) return;
+  const id = Number(req.params.id);
+  const status = req.body?.status;
+  if (!Number.isInteger(id) || !["converted", "cancelled"].includes(status)) {
+    res.status(400).json({ error: "invalid_referral_transition" });
+    return;
+  }
+  const client = await pool.connect();
   try {
-    const id = parseInt(req.params.id);
-    const { status } = req.body;
-    if (!status) { res.status(400).json({ error: "status required" }); return; }
-
-    const now = new Date();
-    const extra: Record<string, unknown> = { status };
-    if (status === "converted") extra.convertedAt = now;
-    if (status === "paid")      extra.paidAt      = now;
-
-    const [updated] = await db
-      .update(referralsTable)
-      .set(extra as Parameters<typeof db.update>[0] extends infer T ? any : never)
-      .where(and(eq(referralsTable.id, id), eq(referralsTable.clientId, auth.clientId)))
-      .returning();
-
-    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(updated);
+    await client.query("BEGIN");
+    const referralResult = await client.query(
+      `
+      SELECT
+        r.id,
+        r.program_id AS "programId",
+        r.status,
+        r.reward_amount AS "rewardAmount",
+        rp.reward_type AS "rewardType"
+      FROM referrals r
+      LEFT JOIN referral_programs rp
+        ON rp.id = r.program_id
+       AND rp.client_id = r.client_id
+      WHERE r.id = $1 AND r.client_id = $2
+      FOR UPDATE OF r
+    `,
+      [id, auth.clientId],
+    );
+    const referral = referralResult.rows[0];
+    if (!referral) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (referral.status !== "pending") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "referral_transition_not_allowed" });
+      return;
+    }
+    const { rows } = await client.query(
+      `
+      UPDATE referrals
+      SET
+        status = $3,
+        converted_at = CASE WHEN $3 = 'converted' THEN NOW() ELSE converted_at END,
+        updated_at = NOW()
+      WHERE id = $1 AND client_id = $2 AND status = 'pending'
+      RETURNING *
+    `,
+      [id, auth.clientId, status],
+    );
+    if (status === "converted") {
+      if (referral.rewardAmount == null || !referral.rewardType) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "reward_snapshot_missing" });
+        return;
+      }
+      await client.query(
+        `
+        INSERT INTO referral_reward_ledger (
+          client_id,
+          referral_id,
+          program_id,
+          reward_type,
+          reward_amount,
+          status
+        )
+        VALUES ($1, $2, $3, $4, $5, 'pending_review')
+        ON CONFLICT (client_id, referral_id) DO NOTHING
+      `,
+        [
+          auth.clientId,
+          id,
+          referral.programId,
+          referral.rewardType,
+          referral.rewardAmount,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    res.json(rows[0]);
   } catch (err) {
-    console.error("[referrals] update error:", err);
+    await client.query("ROLLBACK").catch(() => undefined);
+    console.error("[referrals] transition error:", err);
     res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
   }
 });
 

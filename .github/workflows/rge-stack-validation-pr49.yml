@@ -51,7 +51,7 @@ jobs:
       GORILLADESK_API_KEY: ""
       OPENAI_API_KEY: ""
       AI_INTEGRATIONS_OPENAI_API_KEY: ""
-      SCHEDULER_SECRET: ""
+      SCHEDULER_SECRET: rge-ci-scheduler-secret-not-for-production
 
     steps:
       - name: Check out the stacked PR
@@ -160,38 +160,67 @@ jobs:
             src/__tests__/.rge-ci-fresh-database.test.ts
 
       - name: Complete API test suite
-        run: pnpm --filter @workspace/api-server test
+        if: always()
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server exec vitest run \
+            --reporter=json --outputFile=/tmp/api-tests.json
+          status=$?
+          node -e "const r=require('/tmp/api-tests.json'),p=r.testResults.filter(x=>x.status==='passed').length; console.log('::notice title=API test totals::files='+p+'/'+r.testResults.length+' passed, tests='+r.numPassedTests+'/'+r.numTotalTests+' passed, failed='+r.numFailedTests+', skipped='+r.numPendingTests)"
+          exit "$status"
 
       - name: Complete frontend test suite
-        run: pnpm --filter @workspace/ai-edge-solutions test
+        if: always()
+        run: |
+          set +e
+          pnpm --filter @workspace/ai-edge-solutions exec vitest run \
+            --configLoader runner --config vitest.config.ts \
+            --reporter=json --outputFile=/tmp/frontend-tests.json
+          status=$?
+          node -e "const r=require('/tmp/frontend-tests.json'),p=r.testResults.filter(x=>x.status==='passed').length; console.log('::notice title=Frontend test totals::files='+p+'/'+r.testResults.length+' passed, tests='+r.numPassedTests+'/'+r.numTotalTests+' passed, failed='+r.numFailedTests+', skipped='+r.numPendingTests)"
+          exit "$status"
 
       - name: Referral Growth aggregate tests
+        if: always()
         shell: bash
         run: |
+          set +e
           mapfile -t api_tests < <(find artifacts/api-server/src/__tests__ -maxdepth 1 -name 'referral*.test.ts' -print | sort)
           mapfile -t ui_tests < <(find artifacts/ai-edge-solutions/src/lib/__tests__ -maxdepth 1 -name 'referral*.test.ts' -print | sort)
-          pnpm --filter @workspace/api-server exec vitest run "${api_tests[@]#artifacts/api-server/}"
+          pnpm --filter @workspace/api-server exec vitest run "${api_tests[@]#artifacts/api-server/}" \
+            --reporter=json --outputFile=/tmp/referral-api-tests.json
+          api_status=$?
           pnpm --filter @workspace/ai-edge-solutions exec vitest run \
             --configLoader runner \
             --config vitest.config.ts \
-            "${ui_tests[@]#artifacts/ai-edge-solutions/}"
+            "${ui_tests[@]#artifacts/ai-edge-solutions/}" \
+            --reporter=json --outputFile=/tmp/referral-ui-tests.json
+          ui_status=$?
+          node -e "const a=require('/tmp/referral-api-tests.json'),u=require('/tmp/referral-ui-tests.json'),p=[...a.testResults,...u.testResults].filter(x=>x.status==='passed').length; console.log('::notice title=Referral aggregate totals::files='+p+'/'+(a.testResults.length+u.testResults.length)+' passed, tests='+(a.numPassedTests+u.numPassedTests)+'/'+(a.numTotalTests+u.numTotalTests)+' passed, failed='+(a.numFailedTests+u.numFailedTests)+', skipped='+(a.numPendingTests+u.numPendingTests))"
+          if (( api_status != 0 || ui_status != 0 )); then exit 1; fi
 
       - name: Database TypeScript validation
+        if: always()
         run: pnpm exec tsc -p lib/db/tsconfig.json --noEmit
 
       - name: API TypeScript validation
+        if: always()
         run: pnpm --filter @workspace/api-server typecheck
 
       - name: Frontend TypeScript validation
+        if: always()
         run: pnpm --filter @workspace/ai-edge-solutions typecheck
 
       - name: Production API build
+        if: always()
         run: pnpm --filter @workspace/api-server build
 
       - name: Production frontend build
+        if: always()
         run: pnpm --filter @workspace/ai-edge-solutions build
 
       - name: Diff whitespace validation
+        if: always()
         run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
 
       - name: Destroy disposable database

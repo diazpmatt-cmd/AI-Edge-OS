@@ -183,3 +183,40 @@ export const competitorsTable = pgTable(
 
 export type Competitor    = typeof competitorsTable.$inferSelect;
 export type InsertCompetitor = typeof competitorsTable.$inferInsert;
+
+/**
+ * Provider enrichment cache for canonical competitors.
+ *
+ * This table is also created by the additive API startup migration. Keeping it
+ * in the canonical Drizzle schema ensures a fresh development/test database
+ * receives the same table and indexes before integration tests execute.
+ */
+export const competitorObservationsTable = pgTable(
+  "competitor_observations",
+  {
+    id:                    uuid("id").primaryKey().defaultRandom(),
+    clientId:              text("client_id").notNull(),
+    competitorId:          text("competitor_id").notNull(),
+    domain:                text("domain").notNull(),
+    category:              text("category").notNull(),
+    providerId:            text("provider_id").notNull(),
+    observedAt:            timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
+    confidence:            integer("confidence").notNull().default(50),
+    sourceUrl:             text("source_url"),
+    rawObservation:        jsonb("raw_observation").notNull().default({}),
+    normalizedObservation: jsonb("normalized_obs").notNull().default({}),
+    attribution:           jsonb("attribution").notNull().default({}),
+    isMock:                boolean("is_mock").notNull().default(false),
+    createdAt:             timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:             timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ([
+    uniqueIndex("comp_obs_uniq").on(
+      table.clientId,
+      table.competitorId,
+      table.category,
+      table.providerId,
+    ),
+    index("comp_obs_competitor_idx").on(table.clientId, table.competitorId),
+  ]),
+);

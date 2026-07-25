@@ -36,11 +36,13 @@ minimumReleaseAgeExclude:
   - '@replit/*'
   - stripe-replit-sync
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
+allowBuilds:
+  '@swc/core': true
+  browser-tabs-lock: false
+  core-js: false
+  esbuild: true
+  msw: true
+  unrs-resolver: true
 
 overrides:
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0

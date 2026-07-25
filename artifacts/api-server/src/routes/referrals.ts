@@ -36,6 +36,7 @@ import {
 } from "../lib/referral-fraud.js";
 import { buildReferralEconomics } from "../lib/referral-reporting.js";
 import { scoreReferralCustomerMatch } from "../lib/referral-attribution.js";
+import { buildReferralReadiness } from "../lib/referral-readiness.js";
 
 const router = Router();
 
@@ -2287,6 +2288,44 @@ router.get("/referrals/reporting", async (req, res) => {
     });
   } catch (err) {
     console.error("[referrals] reporting error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.get("/referrals/readiness", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const config = resolveReferralDeliveryConfig();
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        (SELECT COUNT(*)::int FROM referral_fraud_reviews
+          WHERE client_id = $1 AND status IN ('open', 'held')) AS "openFraudReviews",
+        (SELECT COUNT(*)::int FROM referral_reward_ledger
+          WHERE client_id = $1 AND status IN ('pending_review', 'approved')) AS "pendingRewards",
+        (SELECT COUNT(*)::int FROM referral_delivery_attempts
+          WHERE client_id = $1 AND status = 'failed') AS "failedDeliveries"
+      `,
+      [auth.clientId],
+    );
+    res.json(
+      buildReferralReadiness({
+        deliveryEnabled: config.enabled,
+        deliveryMode: config.mode,
+        emergencyStop: config.emergencyStop,
+        schedulerEnabled: false,
+        openFraudReviews: rows[0]?.openFraudReviews ?? 0,
+        pendingRewards: rows[0]?.pendingRewards ?? 0,
+        failedDeliveries: rows[0]?.failedDeliveries ?? 0,
+        // RGE-1 and RGE-2 have production acceptance evidence. RGE-3–RGE-8
+        // remain pending until separately merged, deployed, and smoke-tested.
+        productionAcceptedMilestones: 2,
+        totalMilestones: 8,
+      }),
+    );
+  } catch (err) {
+    console.error("[referrals] readiness error:", err);
     res.status(500).json({ error: "Failed" });
   }
 });

@@ -245,6 +245,28 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
 
+  // Canonical clients must exist before the local-presence repair below. On a
+  // fresh database app.ts has not yet imported the dedicated client resolver,
+  // so its bounded backfill remains separate from this base-table bootstrap.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id        TEXT        NOT NULL,
+      slug           TEXT        NOT NULL,
+      client_name    TEXT        NOT NULL,
+      industry       TEXT        NOT NULL DEFAULT 'pest_control',
+      industry_label TEXT        NOT NULL DEFAULT 'pest control',
+      region         TEXT        NOT NULL DEFAULT '',
+      service_areas  TEXT        NOT NULL DEFAULT '[]',
+      timezone       TEXT        NOT NULL DEFAULT 'America/Chicago',
+      is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_slug    ON clients(slug);
+  `);
+
   // ── Image Assets ───────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS image_assets (

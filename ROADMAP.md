@@ -482,11 +482,13 @@ affiliate or ambassador programs.
 | **RGE-5 — Fraud & Abuse Review Controls** | 🟡 **Implemented locally; production acceptance pending** |
 | **RGE-6 — Truthful Campaign Reporting** | 🟡 **Implemented locally; production acceptance pending** |
 | **RGE-7 — Read-Only CRM Attribution** | 🟡 **Implemented locally; production acceptance pending** |
+| **RGE-8 — V1 Operational Readiness & Closeout** | 🟡 **Local implementation accepted; production acceptance pending** |
 | Scheduled follow-up | 🔵 Requires separate authorization |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
 | Campaign reporting and referral ROI | 🟡 Truthful reporting implemented; measured revenue attribution pending |
 
-**Honest completion estimate:** approximately **99%** of the currently defined Referral Growth V1.
+**Honest completion estimate:** **100% implemented** for the currently frozen Referral Growth V1
+scope. Production acceptance is **2/8 milestones** (RGE-1 and RGE-2).
 RGE-2 is production-accepted. RGE-3 and RGE-4 are merged but undeployed. RGE-5 remains
 unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
 
@@ -511,6 +513,23 @@ unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
 - Focused RGE-7 API tests: 3/3 pass. Focused RGE-7 UI tests: 3/3 pass.
 - API, frontend, and database TypeScript checks pass.
 - Production acceptance remains pending; this milestone is neither merged nor deployed.
+
+### RGE-8 — V1 Operational Readiness & Closeout
+
+- A visible Readiness tab reports dry-run delivery, emergency-stop state, scheduler absence,
+  unresolved fraud/reward/delivery queues, and exact production-acceptance coverage.
+- The readiness model always leaves autonomous operation disabled.
+- Local V1 implementation acceptance is recorded in `docs/RGE-8-V1-LOCAL-ACCEPTANCE.md`.
+- Focused RGE-8 API tests: 3/3 pass. Focused RGE-8 UI tests: 3/3 pass.
+- Combined RGE-6 through RGE-8 focused tests: API 19/19; UI 13/13.
+- Fresh PostgreSQL bootstrap and all SQL migrations pass twice from scratch.
+- Complete API suite: 54/54 files and 1,359/1,359 tests pass.
+- Complete frontend suite: 58/58 files pass; 2,267 tests pass and only two paid,
+  credentialed DataForSEO live-provider checks are intentionally excluded.
+- Referral-focused aggregate: 17/17 files and 115/115 tests pass.
+- API, frontend, and database TypeScript checks pass. Both production builds pass.
+- No merge, deployment, scheduler activation, message, payment, reward issuance, customer action,
+  or external CRM write occurred.
 
 ### RGE-1 — Customer Enrollment & Attribution
 

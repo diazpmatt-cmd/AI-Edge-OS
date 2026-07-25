@@ -477,16 +477,16 @@ affiliate or ambassador programs.
 | Production demo-data removal and authenticated tenant isolation | ✅ Implemented and verified |
 | **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged and deployed** |
 | **RGE-2 — Referral Invitations & Follow-Up Preparation** | ✅ **Production accepted (2026-07-25)** |
-| **RGE-3 — Controlled Invitation Delivery** | 🟡 **Implemented and locally verified; production acceptance pending** |
-| **RGE-4 — Reward Ledger, Approval & Fulfillment Controls** | 🟡 **Implemented and locally verified; production acceptance pending** |
+| **RGE-3 — Controlled Invitation Delivery** | 🟡 **Merged; production acceptance pending** |
+| **RGE-4 — Reward Ledger, Approval & Fulfillment Controls** | 🟡 **Merged; production acceptance pending** |
+| **RGE-5 — Fraud & Abuse Review Controls** | 🟡 **Implemented locally; production acceptance pending** |
 | Scheduled follow-up | 🔵 Requires separate authorization |
-| Fraud review and duplicate controls beyond enrollment | 🔵 Planned |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
 | Campaign reporting and referral ROI | 🔵 Planned |
 
-**Honest completion estimate:** approximately **94%** of the currently defined Referral Growth V1.
-RGE-2 is production-accepted. RGE-3 and RGE-4 remain unmerged, undeployed, and not
-production-accepted.
+**Honest completion estimate:** approximately **97%** of the currently defined Referral Growth V1.
+RGE-2 is production-accepted. RGE-3 and RGE-4 are merged but undeployed. RGE-5 remains
+unmerged and undeployed. None of RGE-3 through RGE-5 is production-accepted.
 
 ### RGE-1 — Customer Enrollment & Attribution
 
@@ -592,6 +592,37 @@ Local verification:
   development/test `DATABASE_URL`.
 - Full API database-dependent verification remains pending until a safe disposable test database is
   available.
+
+### RGE-5 — Fraud & Abuse Review Controls
+
+Implemented scope:
+
+1. Tenant-isolated risk evidence for duplicate referred identities, repeated invitation
+   destinations, unusual 24-hour referrer velocity, self-referrals, and reward stacking.
+2. Device/IP fingerprint signals are evaluated only when a lawful retained source exists. No such
+   source currently exists, so RGE-5 records `not_available` and collects no raw IP, user-agent, or
+   device fingerprint.
+3. A visible **Fraud Review** queue with open, held, cleared, rejected, and all-status filters,
+   evidence reasons, risk scores, and append-only decision history.
+4. Explicit human-only clear, hold, and reject decisions requiring a note, confirmation,
+   idempotency key, transaction lock, and optimistic version.
+5. Queue decisions never change a referral, reward, invitation, message, GorillaDesk record, CRM
+   record, or external system.
+6. No automatic rejection, payment, scheduler, customer message, fingerprint collection, or
+   production action was added.
+
+Local verification:
+
+- Focused referral API tests: 66/66 pass.
+- Focused Referral Growth UI tests: 13/13 pass.
+- API, frontend, and database TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Complete API run without a database: 578 tests pass; database-importing suites cannot load without
+  a safe development/test `DATABASE_URL`. One stale tenant-safety assertion was corrected to verify
+  the current transaction-scoped SQL.
+- Complete frontend run: 50 files and 2,120 tests pass; three known unrelated
+  `ContactPage.test.tsx` assertions fail, and database-importing suites cannot load without a safe
+  development/test `DATABASE_URL`.
 
 ### Separate future workstream — Local Opportunity Radar
 

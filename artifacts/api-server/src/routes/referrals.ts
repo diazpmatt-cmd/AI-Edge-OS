@@ -19,6 +19,8 @@ import {
   referralInvitationTemplateSchema,
   referralRewardApprovalSchema,
   referralRewardFulfillmentSchema,
+  referralFraudDecisionSchema,
+  referralFraudEvaluationSchema,
   referralSubmissionRateLimiter,
   renderReferralInvitation,
 } from "../lib/referral-growth.js";
@@ -28,6 +30,10 @@ import {
   evaluateReferralDeliveryGate,
   resolveReferralDeliveryConfig,
 } from "../lib/referral-delivery.js";
+import {
+  evaluateReferralRisk,
+  type ReferralRiskAssessment,
+} from "../lib/referral-fraud.js";
 
 const router = Router();
 
@@ -172,6 +178,48 @@ const router = Router();
         UNIQUE (client_id, approval_idempotency_key),
         UNIQUE (client_id, fulfillment_idempotency_key)
       );
+      CREATE TABLE IF NOT EXISTS referral_fraud_reviews (
+        id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id                TEXT NOT NULL,
+        referral_id              INTEGER NOT NULL REFERENCES referrals(id),
+        status                   TEXT NOT NULL DEFAULT 'open' CHECK (
+          status IN ('open', 'held', 'cleared', 'rejected')
+        ),
+        risk_score               INTEGER NOT NULL DEFAULT 0 CHECK (
+          risk_score BETWEEN 0 AND 100
+        ),
+        reasons                  JSONB NOT NULL DEFAULT '[]'::jsonb,
+        evidence                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+        fingerprint_evaluation   TEXT NOT NULL DEFAULT 'not_available' CHECK (
+          fingerprint_evaluation IN ('evaluated', 'not_available')
+        ),
+        version                  INTEGER NOT NULL DEFAULT 0,
+        reviewed_by_user_id      TEXT,
+        reviewed_at              TIMESTAMPTZ,
+        review_note              TEXT,
+        decision_idempotency_key TEXT,
+        created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (client_id, referral_id),
+        UNIQUE (client_id, decision_idempotency_key)
+      );
+      CREATE TABLE IF NOT EXISTS referral_fraud_review_events (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id         TEXT NOT NULL,
+        review_id         UUID NOT NULL REFERENCES referral_fraud_reviews(id),
+        referral_id       INTEGER NOT NULL REFERENCES referrals(id),
+        previous_status   TEXT NOT NULL CHECK (
+          previous_status IN ('open', 'held', 'cleared', 'rejected')
+        ),
+        new_status        TEXT NOT NULL CHECK (
+          new_status IN ('held', 'cleared', 'rejected')
+        ),
+        note              TEXT NOT NULL,
+        actor_user_id     TEXT NOT NULL,
+        idempotency_key   TEXT NOT NULL,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (client_id, idempotency_key)
+      );
       CREATE INDEX IF NOT EXISTS referral_invitations_tenant_status_created
         ON referral_invitations(client_id, status, created_at DESC);
       CREATE INDEX IF NOT EXISTS referral_contact_preferences_suppression
@@ -183,6 +231,10 @@ const router = Router();
         WHERE requested_mode = 'live' AND status IN ('dispatching', 'delivered');
       CREATE INDEX IF NOT EXISTS referral_reward_ledger_tenant_status_created
         ON referral_reward_ledger(client_id, status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS referral_fraud_reviews_tenant_status_score
+        ON referral_fraud_reviews(client_id, status, risk_score DESC, created_at DESC);
+      CREATE INDEX IF NOT EXISTS referral_fraud_events_tenant_review_created
+        ON referral_fraud_review_events(client_id, review_id, created_at DESC);
     `);
     console.log("[referrals] tables ready");
     // Production data must originate from real referral activity. Demo seeding is intentionally disabled.
@@ -206,6 +258,102 @@ async function resolveClient(req: any, res: any): Promise<{ userId: string; clie
     return null;
   }
   return { userId, clientId: resolved.client.id, clientName: resolved.client.clientName };
+}
+
+async function assessReferralRisk(
+  client: { query: (sql: string, params?: unknown[]) => Promise<any> },
+  clientId: string,
+  referralId: number,
+): Promise<ReferralRiskAssessment | null> {
+  const result = await client.query(
+    `
+    SELECT
+      r.id,
+      (
+        SELECT COUNT(*)::int
+        FROM referrals d
+        WHERE d.client_id = r.client_id
+          AND d.id <> r.id
+          AND (
+            (NULLIF(LOWER(TRIM(r.referred_email)), '') IS NOT NULL
+              AND LOWER(TRIM(d.referred_email)) = LOWER(TRIM(r.referred_email)))
+            OR
+            (NULLIF(REGEXP_REPLACE(COALESCE(r.referred_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+              AND REGEXP_REPLACE(COALESCE(d.referred_phone, ''), '\\D', '', 'g')
+                = REGEXP_REPLACE(COALESCE(r.referred_phone, ''), '\\D', '', 'g'))
+          )
+      )::int + 1 AS "duplicateIdentityCount",
+      (
+        SELECT COUNT(*)::int
+        FROM referral_invitations i
+        WHERE i.client_id = r.client_id
+          AND (
+            (i.channel = 'email'
+              AND NULLIF(LOWER(TRIM(r.referred_email)), '') IS NOT NULL
+              AND i.recipient_destination = LOWER(TRIM(r.referred_email)))
+            OR
+            (i.channel = 'sms'
+              AND NULLIF(REGEXP_REPLACE(COALESCE(r.referred_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+              AND i.recipient_destination
+                = RIGHT(REGEXP_REPLACE(COALESCE(r.referred_phone, ''), '\\D', '', 'g'), 10))
+          )
+      )::int AS "repeatedDestinationCount",
+      (
+        SELECT COUNT(*)::int
+        FROM referrals v
+        WHERE v.client_id = r.client_id
+          AND v.created_at >= NOW() - INTERVAL '24 hours'
+          AND (
+            (NULLIF(LOWER(TRIM(r.referrer_email)), '') IS NOT NULL
+              AND LOWER(TRIM(v.referrer_email)) = LOWER(TRIM(r.referrer_email)))
+            OR
+            (NULLIF(REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+              AND REGEXP_REPLACE(COALESCE(v.referrer_phone, ''), '\\D', '', 'g')
+                = REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g'))
+          )
+      )::int AS "recentReferrerCount",
+      (
+        (NULLIF(LOWER(TRIM(r.referrer_email)), '') IS NOT NULL
+          AND LOWER(TRIM(r.referrer_email)) = LOWER(TRIM(r.referred_email)))
+        OR
+        (NULLIF(REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+          AND REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g')
+            = REGEXP_REPLACE(COALESCE(r.referred_phone, ''), '\\D', '', 'g'))
+      ) AS "selfReferral",
+      (
+        SELECT COUNT(*)::int
+        FROM referral_reward_ledger rl
+        JOIN referrals rr
+          ON rr.id = rl.referral_id
+         AND rr.client_id = rl.client_id
+        WHERE rl.client_id = r.client_id
+          AND rl.status IN ('pending_review', 'approved', 'fulfilled')
+          AND (
+            (NULLIF(LOWER(TRIM(r.referrer_email)), '') IS NOT NULL
+              AND LOWER(TRIM(rr.referrer_email)) = LOWER(TRIM(r.referrer_email)))
+            OR
+            (NULLIF(REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g'), '') IS NOT NULL
+              AND REGEXP_REPLACE(COALESCE(rr.referrer_phone, ''), '\\D', '', 'g')
+                = REGEXP_REPLACE(COALESCE(r.referrer_phone, ''), '\\D', '', 'g'))
+          )
+      )::int AS "activeRewardCount"
+    FROM referrals r
+    WHERE r.id = $1 AND r.client_id = $2
+    LIMIT 1
+  `,
+    [referralId, clientId],
+  );
+  const metrics = result.rows[0];
+  if (!metrics) return null;
+  return evaluateReferralRisk({
+    duplicateIdentityCount: metrics.duplicateIdentityCount,
+    repeatedDestinationCount: metrics.repeatedDestinationCount,
+    recentReferrerCount: metrics.recentReferrerCount,
+    selfReferral: Boolean(metrics.selfReferral),
+    activeRewardCount: metrics.activeRewardCount,
+    // RGE-5 does not collect raw IP addresses or device fingerprints.
+    fingerprintCount: null,
+  });
 }
 
 // ── Public referral enrollment ───────────────────────────────────────────────
@@ -1527,6 +1675,337 @@ router.post("/referrals/rewards/:id/fulfill", async (req, res) => {
       return;
     }
     console.error("[referrals] reward fulfillment error:", error);
+    res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
+  }
+});
+
+// ── RGE-5: fraud review evidence and human decisions ─────────────────────────
+// Risk signals create a review queue only. They never mutate referrals,
+// rewards, invitations, delivery state, customer records, or external systems.
+
+router.get("/referrals/fraud-reviews", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const requestedStatus = String(req.query.status ?? "open");
+  const allowed = new Set(["open", "held", "cleared", "rejected", "all"]);
+  if (!allowed.has(requestedStatus)) {
+    res.status(400).json({ error: "invalid_review_status" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        fr.id,
+        fr.referral_id AS "referralId",
+        fr.status,
+        fr.risk_score AS "riskScore",
+        fr.reasons,
+        fr.evidence,
+        fr.fingerprint_evaluation AS "fingerprintEvaluation",
+        fr.version,
+        fr.reviewed_at AS "reviewedAt",
+        fr.review_note AS "reviewNote",
+        fr.created_at AS "createdAt",
+        fr.updated_at AS "updatedAt",
+        r.referrer_name AS "referrerName",
+        r.referred_name AS "referredName",
+        r.status AS "referralStatus",
+        rp.name AS "programName"
+      FROM referral_fraud_reviews fr
+      JOIN referrals r
+        ON r.id = fr.referral_id
+       AND r.client_id = fr.client_id
+      LEFT JOIN referral_programs rp
+        ON rp.id = r.program_id
+       AND rp.client_id = fr.client_id
+      WHERE fr.client_id = $1
+        AND ($2 = 'all' OR fr.status = $2)
+      ORDER BY
+        CASE fr.status WHEN 'open' THEN 0 WHEN 'held' THEN 1 ELSE 2 END,
+        fr.risk_score DESC,
+        fr.created_at DESC
+      LIMIT 500
+    `,
+      [auth.clientId, requestedStatus],
+    );
+    res.json({
+      automatedDecisions: false,
+      fingerprintCollection: false,
+      reviews: rows,
+    });
+  } catch (error) {
+    console.error("[referrals] fraud review list error:", error);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.get("/referrals/fraud-reviews/:id/events", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  try {
+    const review = await pool.query(
+      `SELECT id FROM referral_fraud_reviews WHERE id = $1 AND client_id = $2`,
+      [req.params.id, auth.clientId],
+    );
+    if (!review.rows[0]) {
+      res.status(404).json({ error: "review_not_found" });
+      return;
+    }
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        previous_status AS "previousStatus",
+        new_status AS "newStatus",
+        note,
+        actor_user_id AS "actorUserId",
+        created_at AS "createdAt"
+      FROM referral_fraud_review_events
+      WHERE review_id = $1 AND client_id = $2
+      ORDER BY created_at DESC
+      LIMIT 250
+    `,
+      [req.params.id, auth.clientId],
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("[referrals] fraud review event list error:", error);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.post("/referrals/fraud-reviews/evaluate", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const parsed = referralFraudEvaluationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "explicit_risk_evaluation_required" });
+    return;
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-fraud-evaluation`,
+    ]);
+    const referralResult = await client.query(
+      `
+      SELECT id
+      FROM referrals
+      WHERE client_id = $1
+        AND ($2::int IS NULL OR id = $2)
+      ORDER BY created_at DESC
+      LIMIT 250
+    `,
+      [auth.clientId, parsed.data.referralId ?? null],
+    );
+    if (parsed.data.referralId && !referralResult.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "referral_not_found" });
+      return;
+    }
+    let flagged = 0;
+    for (const referral of referralResult.rows) {
+      const assessment = await assessReferralRisk(
+        client,
+        auth.clientId,
+        referral.id,
+      );
+      if (!assessment || assessment.signals.length === 0) continue;
+      flagged += 1;
+      await client.query(
+        `
+        INSERT INTO referral_fraud_reviews (
+          client_id,
+          referral_id,
+          status,
+          risk_score,
+          reasons,
+          evidence,
+          fingerprint_evaluation
+        )
+        VALUES ($1, $2, 'open', $3, $4::jsonb, $5::jsonb, $6)
+        ON CONFLICT (client_id, referral_id) DO UPDATE
+        SET
+          risk_score = EXCLUDED.risk_score,
+          reasons = EXCLUDED.reasons,
+          evidence = EXCLUDED.evidence,
+          fingerprint_evaluation = EXCLUDED.fingerprint_evaluation,
+          version = referral_fraud_reviews.version + 1,
+          updated_at = NOW()
+        WHERE referral_fraud_reviews.status IN ('open', 'held')
+      `,
+        [
+          auth.clientId,
+          referral.id,
+          assessment.score,
+          JSON.stringify(assessment.signals.map((signal) => signal.reason)),
+          JSON.stringify({
+            signals: assessment.signals,
+            containsRawContactData: false,
+          }),
+          assessment.fingerprintEvaluation,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    res.json({
+      evaluated: referralResult.rows.length,
+      flagged,
+      automatedDecisions: false,
+      fingerprintCollection: false,
+      message: "Risk evidence refreshed. No customer action was taken.",
+    });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    console.error("[referrals] fraud evaluation error:", error);
+    res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/referrals/fraud-reviews/:id/decision", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const parsed = referralFraudDecisionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "explicit_review_decision_required" });
+    return;
+  }
+  const statusByDecision = {
+    clear: "cleared",
+    hold: "held",
+    reject: "rejected",
+  } as const;
+  const nextStatus = statusByDecision[parsed.data.decision];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-fraud-review:${req.params.id}`,
+    ]);
+    const priorEvent = await client.query(
+      `
+      SELECT id, review_id AS "reviewId", new_status AS "newStatus"
+      FROM referral_fraud_review_events
+      WHERE client_id = $1 AND idempotency_key = $2
+      LIMIT 1
+    `,
+      [auth.clientId, parsed.data.idempotencyKey],
+    );
+    if (priorEvent.rows[0]) {
+      if (priorEvent.rows[0].reviewId !== req.params.id) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "review_idempotency_conflict" });
+        return;
+      }
+      await client.query("COMMIT");
+      res.json({ idempotent: true, decision: priorEvent.rows[0] });
+      return;
+    }
+    const currentResult = await client.query(
+      `
+      SELECT id, referral_id AS "referralId", status, version
+      FROM referral_fraud_reviews
+      WHERE id = $1 AND client_id = $2
+      FOR UPDATE
+    `,
+      [req.params.id, auth.clientId],
+    );
+    const current = currentResult.rows[0];
+    if (!current) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "review_not_found" });
+      return;
+    }
+    if (!["open", "held"].includes(current.status)) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "review_already_finalized" });
+      return;
+    }
+    if (current.version !== parsed.data.expectedVersion) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "stale_review_version" });
+      return;
+    }
+    const updated = await client.query(
+      `
+      UPDATE referral_fraud_reviews
+      SET
+        status = $3,
+        version = version + 1,
+        reviewed_by_user_id = $4,
+        reviewed_at = NOW(),
+        review_note = $5,
+        decision_idempotency_key = $6,
+        updated_at = NOW()
+      WHERE id = $1
+        AND client_id = $2
+        AND version = $7
+        AND status IN ('open', 'held')
+      RETURNING id, referral_id AS "referralId", status, version,
+                reviewed_at AS "reviewedAt"
+    `,
+      [
+        req.params.id,
+        auth.clientId,
+        nextStatus,
+        auth.userId,
+        parsed.data.note,
+        parsed.data.idempotencyKey,
+        parsed.data.expectedVersion,
+      ],
+    );
+    if (!updated.rows[0]) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "concurrent_review_conflict" });
+      return;
+    }
+    await client.query(
+      `
+      INSERT INTO referral_fraud_review_events (
+        client_id,
+        review_id,
+        referral_id,
+        previous_status,
+        new_status,
+        note,
+        actor_user_id,
+        idempotency_key
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+      [
+        auth.clientId,
+        req.params.id,
+        current.referralId,
+        current.status,
+        nextStatus,
+        parsed.data.note,
+        auth.userId,
+        parsed.data.idempotencyKey,
+      ],
+    );
+    await client.query("COMMIT");
+    res.json({
+      idempotent: false,
+      review: updated.rows[0],
+      customerActionTaken: false,
+      rewardChanged: false,
+      messageChanged: false,
+      crmChanged: false,
+    });
+  } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (error?.code === "23505") {
+      res.status(409).json({ error: "duplicate_review_decision" });
+      return;
+    }
+    console.error("[referrals] fraud review decision error:", error);
     res.status(500).json({ error: "Failed" });
   } finally {
     client.release();

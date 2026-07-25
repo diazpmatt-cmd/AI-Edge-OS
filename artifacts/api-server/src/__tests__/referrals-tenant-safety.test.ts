@@ -50,8 +50,13 @@ describe("Referral Growth tenant-safety contract", () => {
 
   it("keeps referral status updates tenant-scoped", () => {
     const updateReferral = compact.slice(compact.indexOf('router.patch("/referrals/:id",'));
-    expect(updateReferral).toContain("eq(referralsTable.id, id)");
-    expect(updateReferral).toContain("eq(referralsTable.clientId, auth.clientId)");
+    expect(updateReferral).toContain(
+      "WHERE r.id = $1 AND r.client_id = $2 FOR UPDATE OF r",
+    );
+    expect(updateReferral).toContain(
+      "WHERE id = $1 AND client_id = $2 AND status = 'pending'",
+    );
+    expect(updateReferral).toContain("[id, auth.clientId]");
   });
 
   it("keeps program status updates tenant-scoped", () => {

@@ -6,6 +6,24 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Fraud & Abuse Review Controls (RGE-5, 2026-07-25)
+
+#### Added
+
+- Tenant-isolated, explainable referral risk signals for duplicate identities, repeated invitation
+  destinations, unusual velocity, self-referrals, and reward stacking.
+- A human-only Fraud Review queue with evidence, risk scores, status filters, optimistic
+  concurrency, idempotent decisions, and append-only decision history.
+- Explicit privacy provenance showing that device/IP fingerprints are unavailable rather than
+  fabricated when no lawful retained source exists.
+
+#### Safety
+
+- Clear, hold, and reject are review-queue decisions only. They never alter referrals, rewards,
+  invitations, customer records, GorillaDesk/CRM data, or external systems.
+- No automatic rejection, raw-IP/device collection, scheduler, payment, message, merge, or
+  deployment was added.
+
 ### Referral Growth — Reward Ledger & Fulfillment Controls (RGE-4, 2026-07-25)
 
 #### Added

@@ -307,6 +307,24 @@ export const referralRewardFulfillmentSchema = z.object({
     .regex(/^[A-Za-z0-9._:-]+$/),
 });
 
+export const referralFraudEvaluationSchema = z.object({
+  confirmEvaluation: z.literal(true),
+  referralId: z.number().int().positive().optional(),
+});
+
+export const referralFraudDecisionSchema = z.object({
+  decision: z.enum(["clear", "hold", "reject"]),
+  confirmDecision: z.literal(true),
+  expectedVersion: z.number().int().nonnegative(),
+  note: z.string().trim().min(3).max(1000),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(8)
+    .max(120)
+    .regex(/^[A-Za-z0-9._:-]+$/),
+});
+
 export type ReferralInvitationTemplateInput = z.infer<
   typeof referralInvitationTemplateSchema
 >;

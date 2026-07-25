@@ -9,6 +9,7 @@ import {
   uuid,
   uniqueIndex,
   check,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -294,6 +295,94 @@ export const referralRewardLedgerTable = pgTable(
     check(
       "referral_reward_ledger_amount_check",
       sql`${table.rewardAmount} >= 0`,
+    ),
+  ],
+);
+
+export const referralFraudReviewsTable = pgTable(
+  "referral_fraud_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id").notNull(),
+    referralId: integer("referral_id")
+      .notNull()
+      .references(() => referralsTable.id),
+    status: text("status").notNull().default("open"),
+    riskScore: integer("risk_score").notNull().default(0),
+    reasons: jsonb("reasons").notNull().default([]),
+    evidence: jsonb("evidence").notNull().default({}),
+    fingerprintEvaluation: text("fingerprint_evaluation")
+      .notNull()
+      .default("not_available"),
+    version: integer("version").notNull().default(0),
+    reviewedByUserId: text("reviewed_by_user_id"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+    decisionIdempotencyKey: text("decision_idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("referral_fraud_review_tenant_referral").on(
+      table.clientId,
+      table.referralId,
+    ),
+    uniqueIndex("referral_fraud_review_tenant_decision_idempotency").on(
+      table.clientId,
+      table.decisionIdempotencyKey,
+    ),
+    check(
+      "referral_fraud_review_status_check",
+      sql`${table.status} IN ('open', 'held', 'cleared', 'rejected')`,
+    ),
+    check(
+      "referral_fraud_review_score_check",
+      sql`${table.riskScore} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "referral_fraud_review_fingerprint_check",
+      sql`${table.fingerprintEvaluation} IN ('evaluated', 'not_available')`,
+    ),
+  ],
+);
+
+export const referralFraudReviewEventsTable = pgTable(
+  "referral_fraud_review_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id").notNull(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => referralFraudReviewsTable.id),
+    referralId: integer("referral_id")
+      .notNull()
+      .references(() => referralsTable.id),
+    previousStatus: text("previous_status").notNull(),
+    newStatus: text("new_status").notNull(),
+    note: text("note").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("referral_fraud_event_tenant_idempotency").on(
+      table.clientId,
+      table.idempotencyKey,
+    ),
+    check(
+      "referral_fraud_event_previous_status_check",
+      sql`${table.previousStatus} IN ('open', 'held', 'cleared', 'rejected')`,
+    ),
+    check(
+      "referral_fraud_event_new_status_check",
+      sql`${table.newStatus} IN ('held', 'cleared', 'rejected')`,
     ),
   ],
 );

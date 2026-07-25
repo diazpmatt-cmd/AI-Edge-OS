@@ -109,6 +109,7 @@ jobs:
         if: steps.merge.outputs.conflicted == 'false'
         run: |
           set -euo pipefail
+          pnpm run typecheck:libs
           pnpm exec tsc -p lib/db/tsconfig.json --noEmit
           pnpm --filter @workspace/api-server run typecheck
           pnpm --filter @workspace/ai-edge-solutions run typecheck

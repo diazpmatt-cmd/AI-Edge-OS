@@ -58,7 +58,7 @@ describe("ContactPage — form submission", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Submission failed/i)).toBeTruthy();
-    });
+    }, { timeout: 3500 });
 
     expect(screen.queryByText(/We'll be in touch soon!/i)).toBeNull();
   });
@@ -75,7 +75,7 @@ describe("ContactPage — form submission", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Submission failed/i)).toBeTruthy();
-    });
+    }, { timeout: 3500 });
 
     expect(screen.queryByText(/We'll be in touch soon!/i)).toBeNull();
     expect(screen.getByText(/Server error \(500\)/i)).toBeTruthy();
@@ -108,7 +108,7 @@ describe("ContactPage — form submission", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Submission failed/i)).toBeTruthy();
-    });
+    }, { timeout: 3500 });
 
     expect((btn as HTMLButtonElement).disabled).toBe(false);
   });

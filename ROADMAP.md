@@ -475,14 +475,15 @@ affiliate or ambassador programs.
 |---|---|
 | Existing program/referral schema, CRUD, KPI dashboard, and manual status workflow | ✅ Implemented |
 | Production demo-data removal and authenticated tenant isolation | ✅ Implemented and verified |
-| **RGE-1 — Customer Enrollment & Attribution** | 🟡 **Implemented locally; preservation and production acceptance pending** |
-| Automated invitations and follow-up | 🔵 Planned |
+| **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged via PR #42; deployment and production acceptance pending** |
+| **RGE-2 — Referral Invitations & Follow-Up Preparation** | 🟡 **Implemented locally; delivery intentionally disabled** |
+| Live invitation delivery and scheduled follow-up | 🔵 Requires separate authorization |
 | Reward ledger, approval, and fulfillment | 🔵 Planned |
 | Fraud review and duplicate controls beyond enrollment | 🔵 Planned |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
 | Campaign reporting and referral ROI | 🔵 Planned |
 
-**Honest completion estimate:** approximately **70%** of the currently defined Referral Growth V1.
+**Honest completion estimate:** approximately **82%** of the currently defined Referral Growth V1.
 This is not a production acceptance declaration.
 
 ### RGE-1 — Customer Enrollment & Attribution
@@ -499,6 +500,33 @@ Implemented scope:
 5. Transactional row locking so attribution and program usage increments remain consistent during
    concurrent submissions.
 6. No automatic payout, publication, message, CRM write, or scheduler side effect.
+
+### RGE-2 — Referral Invitations & Follow-Up Preparation
+
+Implemented scope:
+
+1. Tenant-scoped SMS and email invitation templates with the bounded tokens
+   `{{first_name}}`, `{{business_name}}`, and `{{referral_link}}`.
+2. Consent-backed invitation drafts that require a canonical destination, documented consent source
+   and time, an active tenant-owned program, and an optional active tenant-owned template.
+3. Per-tenant idempotency plus a transaction-serialized 24-hour duplicate guard for the same
+   program, channel, and contact.
+4. Contact opt-out suppression that blocks new drafts, blocks approval, and suppresses matching
+   draft/approved invitations.
+5. Human approval and cancellation workflow with follow-up copy and delay metadata.
+6. A visible Invitations tab for templates, drafts, approval, cancellation, and suppression.
+7. Delivery is intentionally absent: no Telnyx call, email-provider call, sender import, send route,
+   scheduler, automatic follow-up, or production message.
+
+Local verification:
+
+- RGE-2 API contract and database-invariant tests: 28/28 pass.
+- RGE-2 UI contract tests: 6/6 pass.
+- All focused referral API tests: 53/53 pass.
+- Complete API suite against a disposable test database: 1,321/1,321 pass.
+- API/frontend TypeScript and production builds: pass.
+- Complete frontend suite: 52/53 files and 2,248 tests pass; the only three failures are the
+  pre-existing, unrelated `ContactPage.test.tsx` expectations.
 
 Local verification:
 

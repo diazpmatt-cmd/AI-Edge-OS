@@ -195,6 +195,53 @@ export const referralContactPreferencesTable = pgTable(
   ],
 );
 
+export const referralDeliveryAttemptsTable = pgTable(
+  "referral_delivery_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id").notNull(),
+    invitationId: uuid("invitation_id")
+      .notNull()
+      .references(() => referralInvitationsTable.id),
+    channel: text("channel").notNull(),
+    recipientDestination: text("recipient_destination").notNull(),
+    sequenceStep: integer("sequence_step").notNull().default(0),
+    requestedMode: text("requested_mode").notNull(),
+    status: text("status").notNull(),
+    provider: text("provider"),
+    providerMessageId: text("provider_message_id"),
+    failureCode: text("failure_code"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestedByUserId: text("requested_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("referral_delivery_attempt_tenant_idempotency").on(
+      table.clientId,
+      table.idempotencyKey,
+    ),
+    check(
+      "referral_delivery_attempt_channel_check",
+      sql`${table.channel} IN ('sms', 'email')`,
+    ),
+    check(
+      "referral_delivery_attempt_mode_check",
+      sql`${table.requestedMode} IN ('dry_run', 'live')`,
+    ),
+    check(
+      "referral_delivery_attempt_status_check",
+      sql`${table.status} IN ('simulated', 'dispatching', 'delivered', 'failed', 'blocked')`,
+    ),
+    check(
+      "referral_delivery_attempt_sequence_step_check",
+      sql`${table.sequenceStep} = 0`,
+    ),
+  ],
+);
+
 export const insertReferralProgramSchema = createInsertSchema(referralProgramsTable).omit({ id: true, createdAt: true, updatedAt: true, usesCount: true });
 export type InsertReferralProgram = z.infer<typeof insertReferralProgramSchema>;
 export type ReferralProgram = typeof referralProgramsTable.$inferSelect;

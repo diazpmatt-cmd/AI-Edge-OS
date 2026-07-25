@@ -1,7 +1,7 @@
 # AI Edge OS — Master Roadmap
 
-**Last updated:** 2026-07-21
-**Deployed commit:** `e44141e5` (July 19, 2026)
+**Last updated:** 2026-07-25
+**Deployed baseline:** RGE-2 production acceptance confirmed July 25, 2026
 
 ---
 
@@ -427,7 +427,7 @@ These completion percentages are final and must not be modified by future docume
 | AI Visibility V1 (C9R-1–C9R-7) | ✅ 100% — **GO** (DP-001 PASS 2026-07-21) |
 | Competitor Intelligence (P1–P7) | ✅ V1 Complete |
 | Local Presence Engine | ✅ Foundation complete |
-| Referral Growth Engine | 🟡 82% — RGE-1 merged; RGE-2 invitations/consent/approval implemented locally with delivery disabled |
+| Referral Growth Engine | 🟡 90% — RGE-2 production accepted; RGE-3 controlled delivery implemented locally in dry-run mode, production acceptance pending |
 | AI Traffic Attribution (WS-1) | ⬜ Not started |
 | Traffic & Channel Intelligence (WS-2) | ⬜ Not started |
 | Baldwin County Search Intelligence (WS-3) | ⬜ Not started |

@@ -273,6 +273,17 @@ export const referralContactPreferenceSchema = z
     }
   });
 
+export const referralDeliveryRequestSchema = z.object({
+  requestedMode: z.enum(["dry_run", "live"]).default("dry_run"),
+  confirmDispatch: z.literal(true),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(8)
+    .max(120)
+    .regex(/^[A-Za-z0-9._:-]+$/),
+});
+
 export type ReferralInvitationTemplateInput = z.infer<
   typeof referralInvitationTemplateSchema
 >;

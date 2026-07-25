@@ -37,6 +37,24 @@ interface ReferralInvitation {
   suppressionReason: string | null;
 }
 
+interface ReferralDeliveryConfig {
+  defaultMode: "dry_run";
+  liveDeliveryEnabled: boolean;
+  emergencyStop: boolean;
+  allowlistConfigured: boolean;
+  hourlyLimit: number;
+  schedulerEnabled: false;
+}
+
+interface ReferralDeliveryAttempt {
+  id: string;
+  invitationId: string;
+  channel: "sms" | "email";
+  requestedMode: "dry_run" | "live";
+  status: "simulated" | "dispatching" | "delivered" | "failed" | "blocked";
+  createdAt: string;
+}
+
 interface ReferralInvitationsPanelProps {
   programs: ReferralProgramOption[];
 }
@@ -82,6 +100,13 @@ function invitationIdempotencyKey(): string {
   return `referral-invite:${id}`;
 }
 
+function deliveryIdempotencyKey(): string {
+  const id =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `referral-delivery-dry-run:${id}`;
+}
+
 function invitationStatusColor(status: ReferralInvitation["status"]): string {
   if (status === "draft") return "#F59E0B";
   if (status === "approved") return "#38BDF8";
@@ -99,6 +124,11 @@ export function ReferralInvitationsPanel({
   );
   const [templates, setTemplates] = useState<InvitationTemplate[]>([]);
   const [invitations, setInvitations] = useState<ReferralInvitation[]>([]);
+  const [deliveryConfig, setDeliveryConfig] =
+    useState<ReferralDeliveryConfig | null>(null);
+  const [deliveryAttempts, setDeliveryAttempts] = useState<
+    ReferralDeliveryAttempt[]
+  >([]);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showInvitationForm, setShowInvitationForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -134,14 +164,25 @@ export function ReferralInvitationsPanel({
     setLoading(true);
     setError("");
     try {
-      const [templateRows, invitationResponse] = await Promise.all([
+      const [
+        templateRows,
+        invitationResponse,
+        deliveryConfigResponse,
+        deliveryAttemptsResponse,
+      ] = await Promise.all([
         apiFetch<InvitationTemplate[]>("/referrals/invitation-templates"),
         apiFetch<{ sendingEnabled: false; invitations: ReferralInvitation[] }>(
           "/referrals/invitations",
         ),
+        apiFetch<ReferralDeliveryConfig>("/referrals/delivery-config"),
+        apiFetch<ReferralDeliveryAttempt[]>(
+          "/referrals/delivery-attempts",
+        ),
       ]);
       setTemplates(templateRows);
       setInvitations(invitationResponse.invitations);
+      setDeliveryConfig(deliveryConfigResponse);
+      setDeliveryAttempts(deliveryAttemptsResponse);
     } catch {
       setError("Invitation data could not be loaded.");
     } finally {
@@ -274,6 +315,34 @@ export function ReferralInvitationsPanel({
     }
   };
 
+  const runDryRun = async (id: string) => {
+    const confirmed = window.confirm(
+      "Run a dry-run delivery simulation? No SMS or email will be sent.",
+    );
+    if (!confirmed) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await apiFetch(`/referrals/invitations/${id}/dispatch`, {
+        method: "POST",
+        body: JSON.stringify({
+          requestedMode: "dry_run",
+          confirmDispatch: true,
+          idempotencyKey: deliveryIdempotencyKey(),
+        }),
+      });
+      setNotice("Dry run completed. No SMS or email was sent.");
+      await loadInvitationData();
+    } catch {
+      setError(
+        "The dry run was blocked. Confirm approval, consent, suppression, and delivery safety controls.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const suppressContact = async (invitation: ReferralInvitation) => {
     const confirmed = window.confirm(
       `Suppress ${invitation.recipientDestination} from future referral invitations? No message will be sent.`,
@@ -313,9 +382,45 @@ export function ReferralInvitationsPanel({
           lineHeight: 1.5,
         }}
       >
-        <strong>Preparation mode:</strong> real SMS and email delivery is
-        disabled. Drafting and approval never call Telnyx, an email provider, or
-        a scheduler.
+        <strong>Controlled delivery:</strong> this interface runs dry-run
+        simulations only. Drafting, approval, and dry runs never call Telnyx,
+        an email provider, or a scheduler.
+      </div>
+
+      <div
+        style={{
+          ...panelStyle,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {[
+          ["Interface mode", "DRY RUN"],
+          [
+            "Emergency stop",
+            deliveryConfig?.emergencyStop === false ? "Released" : "ENGAGED",
+          ],
+          ["Hourly limit", String(deliveryConfig?.hourlyLimit ?? "—")],
+          ["Scheduler", "OFF"],
+        ].map(([label, value]) => (
+          <div key={label}>
+            <div style={{ color: "#64748B", fontSize: 9 }}>{label}</div>
+            <div
+              style={{
+                color:
+                  value === "DRY RUN" || value === "ENGAGED"
+                    ? "#FBBF24"
+                    : "#CBD5E1",
+                fontSize: 11,
+                fontWeight: 800,
+                marginTop: 3,
+              }}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
       </div>
 
       {(error || notice) && (
@@ -898,6 +1003,21 @@ export function ReferralInvitationsPanel({
                       Approve — no send
                     </button>
                   )}
+                  {invitation.status === "approved" && (
+                    <button
+                      type="button"
+                      onClick={() => void runDryRun(invitation.id)}
+                      disabled={saving}
+                      style={{
+                        ...inputStyle,
+                        width: "auto",
+                        color: "#22C55E",
+                        cursor: saving ? "wait" : "pointer",
+                      }}
+                    >
+                      Run dry run — no send
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => void suppressContact(invitation)}
@@ -928,6 +1048,43 @@ export function ReferralInvitationsPanel({
           );
         })}
       </div>
+      {deliveryAttempts.length > 0 && (
+        <div style={{ ...panelStyle, display: "grid", gap: 8 }}>
+          <div style={{ color: "#94A3B8", fontSize: 10, fontWeight: 700 }}>
+            Delivery receipts
+          </div>
+          {deliveryAttempts.slice(0, 5).map((attempt) => (
+            <div
+              key={attempt.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                color: "#64748B",
+                fontSize: 9,
+              }}
+            >
+              <span>
+                {attempt.channel.toUpperCase()} ·{" "}
+                {attempt.requestedMode.replace("_", " ")}
+              </span>
+              <strong
+                style={{
+                  color:
+                    attempt.status === "simulated" ||
+                    attempt.status === "delivered"
+                      ? "#22C55E"
+                      : attempt.status === "failed"
+                        ? "#F87171"
+                        : "#94A3B8",
+                }}
+              >
+                {attempt.status.toUpperCase()}
+              </strong>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

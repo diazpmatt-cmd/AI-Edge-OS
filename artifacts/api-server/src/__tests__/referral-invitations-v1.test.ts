@@ -17,7 +17,7 @@ const routeSource = readFileSync(
 const compactRoute = routeSource.replace(/\s+/g, " ");
 const invitationRoutes = compactRoute.slice(
   compactRoute.indexOf("// ── RGE-2: invitation templates"),
-  compactRoute.indexOf("// ── GET /api/referrals/stats"),
+  compactRoute.indexOf("// ── RGE-3:"),
 );
 
 const validDraft = {

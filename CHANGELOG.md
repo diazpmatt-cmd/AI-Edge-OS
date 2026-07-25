@@ -6,6 +6,24 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Controlled Invitation Delivery (RGE-3, 2026-07-25)
+
+#### Added
+
+- Tenant-scoped Telnyx SMS and SMTP email adapters behind a fail-closed delivery gate.
+- Dry-run-by-default delivery attempts, an exact test-recipient allowlist, a global emergency stop,
+  strict per-tenant hourly limits, idempotency, live-delivery duplicate prevention, and durable
+  provider receipts/failure codes.
+- A second explicit human confirmation for each delivery attempt and a dry-run-only Referral Growth
+  interface with visible emergency-stop, rate-limit, and scheduler status.
+
+#### Safety
+
+- No scheduler or automatic follow-up was added. The interface cannot request live delivery.
+- Live provider calls require explicit environment enablement, explicit live mode, emergency-stop
+  release, exact destination allowlisting, an approved invitation, and current opt-in status.
+- No real SMS or email was sent. No production deployment was performed.
+
 ### Referral Growth — Invitations & Follow-Up Preparation (RGE-2, 2026-07-24)
 
 #### Added
@@ -32,8 +50,8 @@ All notable changes to the AI Edge Solutions platform.
 - API/frontend TypeScript and production builds pass. The complete frontend suite passes 52/53
   files and 2,248 tests, with the same three unrelated pre-existing `ContactPage.test.tsx`
   expectation failures.
-- Implemented locally on `feat/referral-invitations-followup-v1`; not committed, pushed, merged,
-  deployed, or production-accepted. No message was sent and no production data was changed.
+- Merged through PR #43 and production-accepted on 2026-07-25 using deployed UI, bundle,
+  authentication, and no-delivery evidence. See `docs/RGE-2-PRODUCTION-ACCEPTANCE.md`.
 
 ### Referral Growth — Customer Enrollment & Attribution (2026-07-24)
 

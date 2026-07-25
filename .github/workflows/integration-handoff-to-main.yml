@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - integration/handoff-to-main-rge-v1-2026-07-25
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -112,7 +115,7 @@ jobs:
           git diff --check
 
       - name: Commit and push merge
-        if: steps.merge.outputs.conflicted == 'false'
+        if: steps.merge.outputs.conflicted == 'false' && github.event_name == 'push'
         run: |
           set -euo pipefail
           git commit -m "Merge handoff branch into main integration"

@@ -1,0 +1,130 @@
+name: RGE stacked PR validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rge-stack-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.event.pull_request.number == 49
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_edge_rge_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_edge_rge_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ai_edge_rge_ci
+      PGPASSWORD: postgres
+      AI_VISIBILITY_SCHEDULER_ENABLED: "false"
+      DISCOVERY_SCHEDULER_ENABLED: "false"
+      REFERRAL_DELIVERY_ENABLED: "false"
+      REFERRAL_DELIVERY_MODE: dry_run
+      REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
+      REFERRAL_DELIVERY_ALLOWLIST: ""
+      STRIPE_SECRET_KEY: ""
+      TELNYX_API_KEY: ""
+      TELNYX_FROM_NUMBER: ""
+      SMTP_HOST: ""
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      GORILLADESK_API_KEY: ""
+      OPENAI_API_KEY: ""
+      AI_INTEGRATIONS_OPENAI_API_KEY: ""
+      SCHEDULER_SECRET: ""
+
+    steps:
+      - name: Check out the stacked PR
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply SQL migrations from scratch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in lib/db/migrations/*.sql; do
+            echo "Applying ${migration}"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$migration"
+          done
+
+      - name: Verify SQL migration idempotency
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in lib/db/migrations/*.sql; do
+            echo "Reapplying ${migration}"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$migration"
+          done
+
+      - name: Complete API test suite
+        run: pnpm --filter @workspace/api-server test
+
+      - name: Complete frontend test suite
+        run: pnpm --filter @workspace/ai-edge-solutions test
+
+      - name: Referral Growth aggregate tests
+        shell: bash
+        run: |
+          mapfile -t api_tests < <(find artifacts/api-server/src/__tests__ -maxdepth 1 -name 'referral*.test.ts' -print | sort)
+          mapfile -t ui_tests < <(find artifacts/ai-edge-solutions/src/lib/__tests__ -maxdepth 1 -name 'referral*.test.ts' -print | sort)
+          pnpm --filter @workspace/api-server exec vitest run "${api_tests[@]#artifacts/api-server/}"
+          pnpm --filter @workspace/ai-edge-solutions exec vitest run \
+            --configLoader runner \
+            --config vitest.config.ts \
+            "${ui_tests[@]#artifacts/ai-edge-solutions/}"
+
+      - name: Database TypeScript validation
+        run: pnpm exec tsc -p lib/db/tsconfig.json --noEmit
+
+      - name: API TypeScript validation
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: Frontend TypeScript validation
+        run: pnpm --filter @workspace/ai-edge-solutions typecheck
+
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Production frontend build
+        run: pnpm --filter @workspace/ai-edge-solutions build
+
+      - name: Diff whitespace validation
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...HEAD"
+
+      - name: Destroy disposable database
+        if: always()
+        shell: bash
+        run: dropdb --if-exists --force --host=127.0.0.1 --username=postgres ai_edge_rge_ci

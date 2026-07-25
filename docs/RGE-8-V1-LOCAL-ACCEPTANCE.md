@@ -1,6 +1,6 @@
 # Referral Growth Engine V1 — Local Acceptance
 
-**Date:** 2026-07-25  
+**Date:** 2026-07-25
 **Decision:** Local implementation PASS; production acceptance PENDING
 
 ## Scope

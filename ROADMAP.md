@@ -478,14 +478,15 @@ affiliate or ambassador programs.
 | **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged and deployed** |
 | **RGE-2 — Referral Invitations & Follow-Up Preparation** | ✅ **Production accepted (2026-07-25)** |
 | **RGE-3 — Controlled Invitation Delivery** | 🟡 **Implemented and locally verified; production acceptance pending** |
+| **RGE-4 — Reward Ledger, Approval & Fulfillment Controls** | 🟡 **Implemented and locally verified; production acceptance pending** |
 | Scheduled follow-up | 🔵 Requires separate authorization |
-| Reward ledger, approval, and fulfillment | 🔵 Planned |
 | Fraud review and duplicate controls beyond enrollment | 🔵 Planned |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
 | Campaign reporting and referral ROI | 🔵 Planned |
 
-**Honest completion estimate:** approximately **90%** of the currently defined Referral Growth V1.
-RGE-2 is production-accepted. RGE-3 remains unmerged, undeployed, and not production-accepted.
+**Honest completion estimate:** approximately **94%** of the currently defined Referral Growth V1.
+RGE-2 is production-accepted. RGE-3 and RGE-4 remain unmerged, undeployed, and not
+production-accepted.
 
 ### RGE-1 — Customer Enrollment & Attribution
 
@@ -562,6 +563,35 @@ Local verification:
 - API and frontend production builds: pass.
 - Full frontend suite: 51/52 files pass and 2,242 tests pass; the only three failures are the
   pre-existing, unrelated `ContactPage.test.tsx` expectations.
+
+### RGE-4 — Reward Ledger, Approval & Fulfillment Controls
+
+Implemented scope:
+
+1. An immutable, tenant-owned reward snapshot is created exactly once when a pending referral is
+   converted.
+2. Reward approval and fulfillment are separate human decisions, serialized with transaction locks
+   and protected by tenant-scoped idempotency keys.
+3. Fulfillment requires a method and external evidence reference. AI Edge OS records that the
+   reward was fulfilled elsewhere; it never issues cash, credit, discounts, or payments.
+4. The former direct **Mark Paid** action is removed. Generic referral transitions cannot set
+   `paid`; that state is reached only after approved fulfillment evidence is recorded.
+5. Pending and fulfilled reward totals are calculated from ledger state rather than inferred from
+   referral status.
+6. No payment provider, scheduler, automatic fulfillment, real message, or production action was
+   added.
+
+Local verification:
+
+- Focused referral API tests: 41/41 pass.
+- Focused Referral Growth UI tests: 9/9 pass.
+- API, frontend, and database TypeScript checks: pass.
+- API and frontend production builds: pass.
+- Full frontend suite: 50 files and 2,117 tests pass; three known `ContactPage.test.tsx` assertions
+  fail, and three database-importing files cannot load because this environment has no safe
+  development/test `DATABASE_URL`.
+- Full API database-dependent verification remains pending until a safe disposable test database is
+  available.
 
 ### Separate future workstream — Local Opportunity Radar
 

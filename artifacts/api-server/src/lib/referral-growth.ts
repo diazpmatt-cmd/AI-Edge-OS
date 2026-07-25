@@ -284,6 +284,29 @@ export const referralDeliveryRequestSchema = z.object({
     .regex(/^[A-Za-z0-9._:-]+$/),
 });
 
+export const referralRewardApprovalSchema = z.object({
+  confirmApproval: z.literal(true),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(8)
+    .max(120)
+    .regex(/^[A-Za-z0-9._:-]+$/),
+});
+
+export const referralRewardFulfillmentSchema = z.object({
+  confirmFulfillment: z.literal(true),
+  method: z.enum(["manual_credit", "cash", "discount", "other"]),
+  reference: z.string().trim().min(3).max(160),
+  note: z.string().trim().max(500).nullable().optional(),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .min(8)
+    .max(120)
+    .regex(/^[A-Za-z0-9._:-]+$/),
+});
+
 export type ReferralInvitationTemplateInput = z.infer<
   typeof referralInvitationTemplateSchema
 >;

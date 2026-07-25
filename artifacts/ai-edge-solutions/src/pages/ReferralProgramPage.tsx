@@ -3,6 +3,7 @@ import { useApiFetch } from "@/lib/api";
 import { AdminLayout } from "@/components/AdminLayout";
 import { buildReferralShareUrl } from "@/lib/referral-growth";
 import { ReferralInvitationsPanel } from "@/components/referrals/ReferralInvitationsPanel";
+import { ReferralRewardsPanel } from "@/components/referrals/ReferralRewardsPanel";
 
 interface Program {
   id: number;
@@ -45,6 +46,8 @@ interface Stats {
   conversionRate: number;
   totalPaidOut: string;
   pendingPayout: string;
+  pendingRewardCount: number;
+  fulfilledRewardCount: number;
 }
 
 type Tab = "overview" | "programs" | "invitations" | "referrals" | "payouts";
@@ -420,8 +423,6 @@ export default function ReferralProgramPage() {
     { id: "payouts",   label: "Payouts",    icon: "💵" },
   ];
 
-  const pendingPayouts = referrals.filter(r => r.status === "converted");
-
   return (
     <AdminLayout>
       {showAddReferral && (
@@ -506,8 +507,8 @@ export default function ReferralProgramPage() {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
               <KpiCard icon="👥" label="Total Referrals"   value={stats.total}                                    color="#38BDF8" />
               <KpiCard icon="✅" label="Conversion Rate"   value={`${stats.conversionRate}%`} sub={`${stats.converted + stats.paid} converted`} color="#22C55E" />
-              <KpiCard icon="⏳" label="Pending Payouts"   value={fmt$(stats.pendingPayout)}  sub={`${stats.pending + stats.converted} referrals`} color="#F59E0B" />
-              <KpiCard icon="💵" label="Total Paid Out"    value={fmt$(stats.totalPaidOut)}   sub={`${stats.paid} completed`} color="#A78BFA" />
+              <KpiCard icon="⏳" label="Pending Rewards"   value={fmt$(stats.pendingPayout)}  sub={`${stats.pendingRewardCount} awaiting fulfillment`} color="#F59E0B" />
+              <KpiCard icon="💵" label="Fulfilled Rewards" value={fmt$(stats.totalPaidOut)}   sub={`${stats.fulfilledRewardCount} recorded`} color="#A78BFA" />
             </div>
           )}
 
@@ -533,11 +534,11 @@ export default function ReferralProgramPage() {
                 }}
               >
                 <span>{t.icon}</span> {t.label}
-                {t.id === "payouts" && pendingPayouts.length > 0 && (
+                {t.id === "payouts" && stats && stats.pendingRewardCount > 0 && (
                   <span style={{
                     background: "#F59E0B", color: "#030612", borderRadius: 20,
                     fontSize: 9, fontWeight: 800, padding: "1px 6px",
-                  }}>{pendingPayouts.length}</span>
+                  }}>{stats.pendingRewardCount}</span>
                 )}
               </button>
             ))}
@@ -827,94 +828,7 @@ export default function ReferralProgramPage() {
 
           {/* ── Tab: Payouts ── */}
           {tab === "payouts" && (
-            <div>
-              {pendingPayouts.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
-                  }}>
-                    <span style={{
-                      background: "#F59E0B", color: "#030612", borderRadius: 20,
-                      fontSize: 9, fontWeight: 800, padding: "2px 8px",
-                    }}>{pendingPayouts.length} PENDING</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1" }}>Awaiting Payout</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B", marginLeft: "auto" }}>
-                      Total: {fmt$(pendingPayouts.reduce((a, r) => a + parseFloat(r.rewardAmount ?? "0"), 0))}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {pendingPayouts.map(r => (
-                      <div key={r.id} style={{
-                        background: "rgba(11,22,41,0.85)",
-                        border: "1px solid rgba(245,158,11,0.18)",
-                        borderLeft: "3px solid #F59E0B",
-                        borderRadius: 10, padding: "13px 16px",
-                        display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
-                      }}>
-                        <div style={{ fontSize: 22 }}>💳</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0" }}>
-                            {r.referrerName}
-                          </div>
-                          <div style={{ fontSize: 10, color: "#64748B", marginTop: 1 }}>
-                            {r.programName} · Converted {fmtDate(r.convertedAt)} · Referred: {r.referredName ?? "N/A"}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 20, fontWeight: 900, color: "#22C55E" }}>
-                          {fmt$(r.rewardAmount)}
-                        </div>
-                        <button
-                          onClick={() => updateStatus(r.id, "paid")}
-                          style={{
-                            padding: "7px 16px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                            cursor: "pointer", background: "rgba(34,197,94,0.12)",
-                            border: "1px solid rgba(34,197,94,0.3)", color: "#22C55E",
-                          }}
-                        >Mark Paid ✓</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {pendingPayouts.length === 0 && (
-                <div style={{
-                  background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.15)",
-                  borderRadius: 12, padding: "24px", textAlign: "center", marginBottom: 20,
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#22C55E" }}>All caught up!</div>
-                  <div style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>No pending payouts. Nice work.</div>
-                </div>
-              )}
-
-              {/* Paid history */}
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#CBD5E1", marginBottom: 12 }}>Payment History</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  {referrals.filter(r => r.status === "paid").map(r => (
-                    <div key={r.id} style={{
-                      background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.05)",
-                      borderLeft: "3px solid rgba(34,197,94,0.4)",
-                      borderRadius: 9, padding: "11px 16px",
-                      display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
-                    }}>
-                      <div style={{ fontSize: 16 }}>✓</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "#CBD5E1" }}>{r.referrerName}</div>
-                        <div style={{ fontSize: 10, color: "#475569" }}>Paid {fmtDate(r.paidAt)} · {r.programName}</div>
-                      </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(34,197,94,0.7)" }}>
-                        {fmt$(r.rewardAmount)}
-                      </div>
-                    </div>
-                  ))}
-                  {referrals.filter(r => r.status === "paid").length === 0 && (
-                    <div style={{ fontSize: 11, color: "#475569", padding: "12px 0" }}>No payments yet.</div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <ReferralRewardsPanel />
           )}
 
         </div>

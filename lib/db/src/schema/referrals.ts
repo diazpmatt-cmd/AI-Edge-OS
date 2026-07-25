@@ -242,6 +242,62 @@ export const referralDeliveryAttemptsTable = pgTable(
   ],
 );
 
+export const referralRewardLedgerTable = pgTable(
+  "referral_reward_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id").notNull(),
+    referralId: integer("referral_id")
+      .notNull()
+      .references(() => referralsTable.id),
+    programId: integer("program_id").references(() => referralProgramsTable.id),
+    rewardType: text("reward_type").notNull(),
+    rewardAmount: numeric("reward_amount", {
+      precision: 10,
+      scale: 2,
+    }).notNull(),
+    status: text("status").notNull().default("pending_review"),
+    approvalIdempotencyKey: text("approval_idempotency_key"),
+    approvedByUserId: text("approved_by_user_id"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    fulfillmentIdempotencyKey: text("fulfillment_idempotency_key"),
+    fulfillmentMethod: text("fulfillment_method"),
+    fulfillmentReference: text("fulfillment_reference"),
+    fulfillmentNote: text("fulfillment_note"),
+    fulfilledByUserId: text("fulfilled_by_user_id"),
+    fulfilledAt: timestamp("fulfilled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("referral_reward_ledger_tenant_referral").on(
+      table.clientId,
+      table.referralId,
+    ),
+    uniqueIndex("referral_reward_ledger_approval_idempotency").on(
+      table.clientId,
+      table.approvalIdempotencyKey,
+    ),
+    uniqueIndex("referral_reward_ledger_fulfillment_idempotency").on(
+      table.clientId,
+      table.fulfillmentIdempotencyKey,
+    ),
+    check(
+      "referral_reward_ledger_status_check",
+      sql`${table.status} IN ('pending_review', 'approved', 'fulfilled', 'rejected')`,
+    ),
+    check(
+      "referral_reward_ledger_amount_check",
+      sql`${table.rewardAmount} >= 0`,
+    ),
+  ],
+);
+
 export const insertReferralProgramSchema = createInsertSchema(referralProgramsTable).omit({ id: true, createdAt: true, updatedAt: true, usesCount: true });
 export type InsertReferralProgram = z.infer<typeof insertReferralProgramSchema>;
 export type ReferralProgram = typeof referralProgramsTable.$inferSelect;

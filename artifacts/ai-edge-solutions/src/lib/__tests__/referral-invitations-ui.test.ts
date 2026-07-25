@@ -17,15 +17,19 @@ describe("RGE-2 invitation UI safety contract", () => {
     );
   });
 
-  it("states clearly that sending is disabled", () => {
+  it("states clearly that the interface is dry-run only", () => {
     expect(normalizedPanelSource).toContain(
-      "real SMS and email delivery is disabled",
+      "this interface runs dry-run simulations only",
     );
     expect(normalizedPanelSource).toContain(
       "never call Telnyx, an email provider, or a scheduler",
     );
     expect(panelSource).toContain("Create draft — do not send");
     expect(panelSource).toContain("Approve — no send");
+    expect(panelSource).toContain("Run dry run — no send");
+    expect(panelSource).toContain('requestedMode: "dry_run"');
+    expect(panelSource).toContain("confirmDispatch: true");
+    expect(panelSource).not.toContain('requestedMode: "live"');
   });
 
   it("requires affirmative consent in the invitation form", () => {
@@ -47,10 +51,13 @@ describe("RGE-2 invitation UI safety contract", () => {
     expect(panelSource).toContain("matching pending invitations blocked");
   });
 
-  it("never calls a provider or exposes a send endpoint", () => {
+  it("never calls a provider and exposes only the controlled dispatch endpoint", () => {
     expect(panelSource).not.toContain("sendSms");
     expect(panelSource).not.toContain("TELNYX");
     expect(panelSource).not.toContain("nodemailer");
     expect(panelSource).not.toContain("/send");
+    expect(panelSource).toContain("/dispatch");
+    expect(panelSource).toContain("Emergency stop");
+    expect(panelSource).toContain('["Scheduler", "OFF"]');
   });
 });

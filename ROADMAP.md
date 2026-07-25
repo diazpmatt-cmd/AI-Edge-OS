@@ -475,16 +475,17 @@ affiliate or ambassador programs.
 |---|---|
 | Existing program/referral schema, CRUD, KPI dashboard, and manual status workflow | ✅ Implemented |
 | Production demo-data removal and authenticated tenant isolation | ✅ Implemented and verified |
-| **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged via PR #42; deployment and production acceptance pending** |
-| **RGE-2 — Referral Invitations & Follow-Up Preparation** | 🟡 **Implemented locally; delivery intentionally disabled** |
-| Live invitation delivery and scheduled follow-up | 🔵 Requires separate authorization |
+| **RGE-1 — Customer Enrollment & Attribution** | ✅ **Merged and deployed** |
+| **RGE-2 — Referral Invitations & Follow-Up Preparation** | ✅ **Production accepted (2026-07-25)** |
+| **RGE-3 — Controlled Invitation Delivery** | 🟡 **Implemented and locally verified; production acceptance pending** |
+| Scheduled follow-up | 🔵 Requires separate authorization |
 | Reward ledger, approval, and fulfillment | 🔵 Planned |
 | Fraud review and duplicate controls beyond enrollment | 🔵 Planned |
 | GorillaDesk, Telnyx, and CRM integration | 🔵 Planned |
 | Campaign reporting and referral ROI | 🔵 Planned |
 
-**Honest completion estimate:** approximately **82%** of the currently defined Referral Growth V1.
-This is not a production acceptance declaration.
+**Honest completion estimate:** approximately **90%** of the currently defined Referral Growth V1.
+RGE-2 is production-accepted. RGE-3 remains unmerged, undeployed, and not production-accepted.
 
 ### RGE-1 — Customer Enrollment & Attribution
 
@@ -518,7 +519,7 @@ Implemented scope:
 7. Delivery is intentionally absent: no Telnyx call, email-provider call, sender import, send route,
    scheduler, automatic follow-up, or production message.
 
-Local verification:
+Production acceptance:
 
 - RGE-2 API contract and database-invariant tests: 28/28 pass.
 - RGE-2 UI contract tests: 6/6 pass.
@@ -527,6 +528,29 @@ Local verification:
 - API/frontend TypeScript and production builds: pass.
 - Complete frontend suite: 52/53 files and 2,248 tests pass; the only three failures are the
   pre-existing, unrelated `ContactPage.test.tsx` expectations.
+- Deployed Invitations UI and bundle confirmed, protected production routes return 401 without
+  authentication, and the operator completed the authenticated visual smoke check.
+- Formal decision: **GO for preparation and approval only**. No live delivery was authorized.
+
+### RGE-3 — Controlled Invitation Delivery
+
+Implemented scope:
+
+1. Tenant-isolated Telnyx SMS and SMTP email adapters.
+2. Dry-run default with a dry-run-only UI; no provider is invoked during simulation.
+3. Explicit invitation approval plus explicit per-attempt confirmation.
+4. Exact test-recipient allowlisting, tenant hourly rate limiting, idempotency keys, transaction
+   locks, and duplicate live-delivery prevention.
+5. Durable simulated/delivered/failed receipts and provider failure codes.
+6. A fail-closed global emergency stop that is engaged by default.
+7. No scheduler, automatic follow-up, or real delivery activation.
+
+Acceptance boundary:
+
+- Implemented locally; production acceptance is pending.
+- No real SMS or email has been sent.
+- Live delivery remains unavailable unless separately authorized environment controls are all
+  deliberately enabled.
 
 Local verification:
 

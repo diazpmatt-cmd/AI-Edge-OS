@@ -14,11 +14,18 @@ import {
   normalizeInvitationDestination,
   publicReferralSubmissionSchema,
   referralContactPreferenceSchema,
+  referralDeliveryRequestSchema,
   referralInvitationDraftSchema,
   referralInvitationTemplateSchema,
   referralSubmissionRateLimiter,
   renderReferralInvitation,
 } from "../lib/referral-growth.js";
+import {
+  createReferralDeliveryProviders,
+  dispatchReferralDelivery,
+  evaluateReferralDeliveryGate,
+  resolveReferralDeliveryConfig,
+} from "../lib/referral-delivery.js";
 
 const router = Router();
 
@@ -118,10 +125,35 @@ const router = Router();
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (client_id, channel, destination)
       );
+      CREATE TABLE IF NOT EXISTS referral_delivery_attempts (
+        id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id             TEXT NOT NULL,
+        invitation_id         UUID NOT NULL REFERENCES referral_invitations(id),
+        channel               TEXT NOT NULL CHECK (channel IN ('sms', 'email')),
+        recipient_destination TEXT NOT NULL,
+        sequence_step         INTEGER NOT NULL DEFAULT 0 CHECK (sequence_step = 0),
+        requested_mode        TEXT NOT NULL CHECK (requested_mode IN ('dry_run', 'live')),
+        status                TEXT NOT NULL CHECK (
+          status IN ('simulated', 'dispatching', 'delivered', 'failed', 'blocked')
+        ),
+        provider              TEXT,
+        provider_message_id   TEXT,
+        failure_code          TEXT,
+        idempotency_key       TEXT NOT NULL,
+        requested_by_user_id  TEXT NOT NULL,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+        completed_at          TIMESTAMPTZ,
+        UNIQUE (client_id, idempotency_key)
+      );
       CREATE INDEX IF NOT EXISTS referral_invitations_tenant_status_created
         ON referral_invitations(client_id, status, created_at DESC);
       CREATE INDEX IF NOT EXISTS referral_contact_preferences_suppression
         ON referral_contact_preferences(client_id, channel, destination, status);
+      CREATE INDEX IF NOT EXISTS referral_delivery_attempts_tenant_created
+        ON referral_delivery_attempts(client_id, created_at DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS referral_delivery_attempts_live_once
+        ON referral_delivery_attempts(client_id, invitation_id, sequence_step)
+        WHERE requested_mode = 'live' AND status IN ('dispatching', 'delivered');
     `);
     console.log("[referrals] tables ready");
     // Production data must originate from real referral activity. Demo seeding is intentionally disabled.
@@ -924,6 +956,332 @@ router.post("/referrals/contact-preferences/opt-out", async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// ── RGE-3: explicitly requested controlled delivery ─────────────────────────
+// There is deliberately no scheduler. The UI only requests dry-runs. Live
+// provider delivery additionally requires environment enablement, live mode,
+// a disengaged emergency stop, and exact destination allowlisting.
+
+router.get("/referrals/delivery-config", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const config = resolveReferralDeliveryConfig();
+  res.json({
+    defaultMode: "dry_run",
+    liveDeliveryEnabled:
+      config.enabled &&
+      config.mode === "live" &&
+      !config.emergencyStop &&
+      config.allowlist.size > 0,
+    emergencyStop: config.emergencyStop,
+    allowlistConfigured: config.allowlist.size > 0,
+    hourlyLimit: config.hourlyLimit,
+    schedulerEnabled: false,
+  });
+});
+
+router.get("/referrals/delivery-attempts", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        invitation_id AS "invitationId",
+        channel,
+        recipient_destination AS "recipientDestination",
+        sequence_step AS "sequenceStep",
+        requested_mode AS "requestedMode",
+        status,
+        provider,
+        provider_message_id AS "providerMessageId",
+        failure_code AS "failureCode",
+        created_at AS "createdAt",
+        completed_at AS "completedAt"
+      FROM referral_delivery_attempts
+      WHERE client_id = $1
+      ORDER BY created_at DESC
+      LIMIT 250
+    `,
+      [auth.clientId],
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("[referrals] delivery attempt list error:", error);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.post("/referrals/invitations/:id/dispatch", async (req, res) => {
+  const auth = await resolveClient(req, res);
+  if (!auth) return;
+  const parsed = referralDeliveryRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "explicit_dispatch_confirmation_required" });
+    return;
+  }
+
+  const config = resolveReferralDeliveryConfig();
+  const client = await pool.connect();
+  let attempt:
+    | {
+        id: string;
+        channel: "sms" | "email";
+        destination: string;
+        subject: string | null;
+        body: string;
+        mode: "dry_run" | "live";
+      }
+    | undefined;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-delivery:${req.params.id}`,
+    ]);
+
+    const existing = await client.query(
+      `
+      SELECT
+        id,
+        invitation_id AS "invitationId",
+        requested_mode AS "requestedMode",
+        status,
+        provider_message_id AS "providerMessageId",
+        failure_code AS "failureCode",
+        created_at AS "createdAt",
+        completed_at AS "completedAt"
+      FROM referral_delivery_attempts
+      WHERE client_id = $1 AND idempotency_key = $2
+      LIMIT 1
+    `,
+      [auth.clientId, parsed.data.idempotencyKey],
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].invitationId !== req.params.id) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "idempotency_conflict" });
+        return;
+      }
+      await client.query("COMMIT");
+      res.json({ idempotent: true, attempt: existing.rows[0] });
+      return;
+    }
+
+    const invitationResult = await client.query(
+      `
+      SELECT
+        ri.id,
+        ri.channel,
+        ri.recipient_destination AS destination,
+        ri.subject,
+        ri.initial_message AS body,
+        ri.status,
+        ri.delivery_state AS "deliveryState",
+        ri.sequence_step AS "sequenceStep",
+        ri.approved_by_user_id AS "approvedByUserId",
+        ri.approved_at AS "approvedAt",
+        rcp.status AS "contactStatus"
+      FROM referral_invitations ri
+      LEFT JOIN referral_contact_preferences rcp
+        ON rcp.client_id = ri.client_id
+       AND rcp.channel = ri.channel
+       AND rcp.destination = ri.recipient_destination
+      WHERE ri.id = $1 AND ri.client_id = $2
+      FOR UPDATE OF ri
+    `,
+      [req.params.id, auth.clientId],
+    );
+    const invitation = invitationResult.rows[0];
+    if (
+      !invitation ||
+      invitation.status !== "approved" ||
+      invitation.deliveryState !== "not_dispatched" ||
+      invitation.sequenceStep !== 0 ||
+      !invitation.approvedByUserId ||
+      !invitation.approvedAt
+    ) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "invitation_not_dispatchable" });
+      return;
+    }
+    if (invitation.contactStatus !== "opted_in") {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "contact_not_opted_in" });
+      return;
+    }
+
+    const gate = evaluateReferralDeliveryGate(
+      config,
+      parsed.data.requestedMode,
+      invitation.destination,
+    );
+    if (!gate.allowed) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: gate.reason });
+      return;
+    }
+
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${auth.clientId}:referral-delivery-rate-limit`,
+    ]);
+    const rateResult = await client.query(
+      `
+      SELECT COUNT(*)::int AS count
+      FROM referral_delivery_attempts
+      WHERE client_id = $1
+        AND created_at > NOW() - INTERVAL '1 hour'
+        AND status IN ('simulated', 'dispatching', 'delivered', 'failed')
+    `,
+      [auth.clientId],
+    );
+    if ((rateResult.rows[0]?.count ?? 0) >= config.hourlyLimit) {
+      await client.query("ROLLBACK");
+      res.status(429).json({
+        error: "referral_delivery_rate_limited",
+        retryAfterSeconds: 3600,
+      });
+      return;
+    }
+
+    if (gate.mode === "live") {
+      const duplicate = await client.query(
+        `
+        SELECT id
+        FROM referral_delivery_attempts
+        WHERE client_id = $1
+          AND invitation_id = $2
+          AND sequence_step = 0
+          AND requested_mode = 'live'
+          AND status IN ('dispatching', 'delivered')
+        LIMIT 1
+      `,
+        [auth.clientId, invitation.id],
+      );
+      if (duplicate.rows[0]) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ error: "delivery_already_attempted" });
+        return;
+      }
+    }
+
+    const inserted = await client.query(
+      `
+      INSERT INTO referral_delivery_attempts (
+        client_id,
+        invitation_id,
+        channel,
+        recipient_destination,
+        sequence_step,
+        requested_mode,
+        status,
+        provider,
+        idempotency_key,
+        requested_by_user_id,
+        completed_at
+      )
+      VALUES (
+        $1, $2, $3, $4, 0, $5,
+        CASE WHEN $5 = 'dry_run' THEN 'simulated' ELSE 'dispatching' END,
+        CASE WHEN $5 = 'dry_run' THEN NULL
+             WHEN $3 = 'sms' THEN 'telnyx'
+             ELSE 'smtp' END,
+        $6, $7,
+        CASE WHEN $5 = 'dry_run' THEN NOW() ELSE NULL END
+      )
+      RETURNING id
+    `,
+      [
+        auth.clientId,
+        invitation.id,
+        invitation.channel,
+        invitation.destination,
+        gate.mode,
+        parsed.data.idempotencyKey,
+        auth.userId,
+      ],
+    );
+    attempt = {
+      id: inserted.rows[0].id,
+      channel: invitation.channel,
+      destination: invitation.destination,
+      subject: invitation.subject,
+      body: invitation.body,
+      mode: gate.mode,
+    };
+    await client.query("COMMIT");
+  } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    if (error?.code === "23505") {
+      res.status(409).json({ error: "duplicate_delivery_attempt" });
+      return;
+    }
+    console.error("[referrals] controlled delivery prepare error:", error);
+    res.status(500).json({ error: "Failed" });
+    return;
+  } finally {
+    client.release();
+  }
+
+  if (!attempt) {
+    res.status(500).json({ error: "delivery_attempt_not_created" });
+    return;
+  }
+  if (attempt.mode === "dry_run") {
+    res.json({
+      idempotent: false,
+      mode: "dry_run",
+      sent: false,
+      message: "Dry-run recorded. No SMS or email was sent.",
+      attemptId: attempt.id,
+    });
+    return;
+  }
+
+  const providerResult = await dispatchReferralDelivery(
+    createReferralDeliveryProviders(),
+    {
+      channel: attempt.channel,
+      destination: attempt.destination,
+      subject: attempt.subject,
+      body: attempt.body,
+    },
+    "live",
+  );
+  await pool.query(
+    `
+    UPDATE referral_delivery_attempts
+    SET
+      status = $3,
+      provider_message_id = $4,
+      failure_code = $5,
+      completed_at = NOW()
+    WHERE id = $1 AND client_id = $2 AND status = 'dispatching'
+  `,
+    [
+      attempt.id,
+      auth.clientId,
+      providerResult.ok ? "delivered" : "failed",
+      providerResult.ok ? providerResult.providerMessageId : null,
+      providerResult.ok ? null : providerResult.errorCode,
+    ],
+  );
+  if (!providerResult.ok) {
+    res.status(502).json({
+      error: "provider_delivery_failed",
+      failureCode: providerResult.errorCode,
+      attemptId: attempt.id,
+    });
+    return;
+  }
+  res.json({
+    idempotent: false,
+    mode: "live",
+    sent: true,
+    attemptId: attempt.id,
+    providerMessageId: providerResult.providerMessageId,
+  });
 });
 
 

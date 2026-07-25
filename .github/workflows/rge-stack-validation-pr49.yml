@@ -71,6 +71,9 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace TypeScript libraries
+        run: pnpm run typecheck:libs
+
       - name: Apply production migrations from scratch and verify idempotency
         shell: bash
         run: |

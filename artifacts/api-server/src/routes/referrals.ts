@@ -3,6 +3,17 @@ import { getAuth } from "@clerk/express";
 import { pool, db, eq, and } from "@workspace/db";
 import { referralProgramsTable, referralsTable } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
+import {
+  createReferralProgramSchema,
+  generateReferralCode,
+  getPublicProgramAvailability,
+  isSelfReferral,
+  normalizeEmail,
+  normalizePhone,
+  normalizeReferralCode,
+  publicReferralSubmissionSchema,
+  referralSubmissionRateLimiter,
+} from "../lib/referral-growth.js";
 
 const router = Router();
 
@@ -71,6 +82,196 @@ async function resolveClient(req: any, res: any): Promise<{ userId: string; clie
   return { userId, clientId: resolved.client.id };
 }
 
+// ── Public referral enrollment ───────────────────────────────────────────────
+// These routes intentionally do not require Clerk authentication. The
+// unguessable referral code is resolved to exactly one active program, and the
+// program supplies the canonical client_id for every inserted referral.
+router.get("/referrals/public/:code", async (req, res) => {
+  const code = normalizeReferralCode(req.params.code);
+  if (!code) {
+    res.status(404).json({ error: "program_not_found" });
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        rp.id,
+        rp.name,
+        rp.description,
+        rp.reward_type AS "rewardType",
+        rp.reward_value AS "rewardValue",
+        rp.promo_message AS "promoMessage",
+        rp.referral_code AS "referralCode",
+        rp.status,
+        rp.uses_count AS "usesCount",
+        rp.max_uses AS "maxUses",
+        rp.expires_at AS "expiresAt",
+        c.client_name AS "businessName"
+      FROM referral_programs rp
+      JOIN clients c ON c.id::text = rp.client_id
+      WHERE rp.referral_code = $1
+        AND c.is_active = TRUE
+      LIMIT 1
+    `, [code]);
+
+    const program = rows[0];
+    if (!program) {
+      res.status(404).json({ error: "program_not_found" });
+      return;
+    }
+
+    const availability = getPublicProgramAvailability(program);
+    if (!availability.available) {
+      res.status(410).json({ error: "program_unavailable", reason: availability.reason });
+      return;
+    }
+
+    const {
+      id: _id,
+      status: _status,
+      usesCount: _usesCount,
+      maxUses: _maxUses,
+      expiresAt: _expiresAt,
+      ...publicProgram
+    } = program;
+    res.json(publicProgram);
+  } catch (err) {
+    console.error("[referrals] public program error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+router.post("/referrals/public/:code", async (req, res) => {
+  const code = normalizeReferralCode(req.params.code);
+  if (!code) {
+    res.status(404).json({ error: "program_not_found" });
+    return;
+  }
+
+  const rateLimit = referralSubmissionRateLimiter.check(`${code}:${req.ip || req.socket.remoteAddress || "unknown"}`);
+  if (!rateLimit.allowed) {
+    res.setHeader("Retry-After", String(rateLimit.retryAfterSeconds));
+    res.status(429).json({ error: "rate_limit_exceeded", retryAfterSeconds: rateLimit.retryAfterSeconds });
+    return;
+  }
+
+  const parsed = publicReferralSubmissionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "invalid_submission",
+      issues: parsed.error.issues.map(issue => ({ path: issue.path.join("."), message: issue.message })),
+    });
+    return;
+  }
+  if (isSelfReferral(parsed.data)) {
+    res.status(422).json({ error: "self_referral_not_allowed" });
+    return;
+  }
+
+  const submission = parsed.data;
+  const referredEmail = normalizeEmail(submission.referredEmail);
+  const referredPhone = normalizePhone(submission.referredPhone);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(`
+      SELECT
+        rp.id,
+        rp.client_id AS "clientId",
+        rp.reward_value AS "rewardValue",
+        rp.status,
+        rp.uses_count AS "usesCount",
+        rp.max_uses AS "maxUses",
+        rp.expires_at AS "expiresAt"
+      FROM referral_programs rp
+      JOIN clients c ON c.id::text = rp.client_id
+      WHERE rp.referral_code = $1
+        AND c.is_active = TRUE
+      FOR UPDATE OF rp
+    `, [code]);
+
+    const program = rows[0];
+    if (!program) {
+      await client.query("ROLLBACK");
+      res.status(404).json({ error: "program_not_found" });
+      return;
+    }
+
+    const availability = getPublicProgramAvailability(program);
+    if (!availability.available) {
+      await client.query("ROLLBACK");
+      res.status(410).json({ error: "program_unavailable", reason: availability.reason });
+      return;
+    }
+
+    const duplicate = await client.query(`
+      SELECT id
+      FROM referrals
+      WHERE program_id = $1
+        AND (
+          ($2::text IS NOT NULL AND LOWER(referred_email) = $2)
+          OR
+          ($3::text IS NOT NULL AND REGEXP_REPLACE(COALESCE(referred_phone, ''), '\\D', '', 'g') = $3)
+        )
+      LIMIT 1
+    `, [program.id, referredEmail, referredPhone]);
+    if (duplicate.rowCount) {
+      await client.query("ROLLBACK");
+      res.status(409).json({ error: "referral_already_submitted" });
+      return;
+    }
+
+    const inserted = await client.query(`
+      INSERT INTO referrals (
+        program_id,
+        client_id,
+        referrer_name,
+        referrer_email,
+        referrer_phone,
+        referred_name,
+        referred_email,
+        referred_phone,
+        status,
+        reward_amount,
+        source,
+        referral_code,
+        notes
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, 'link', $10, $11)
+      RETURNING id, status, created_at AS "createdAt"
+    `, [
+      program.id,
+      program.clientId,
+      submission.referrerName,
+      normalizeEmail(submission.referrerEmail),
+      submission.referrerPhone?.trim() || null,
+      submission.referredName,
+      referredEmail,
+      submission.referredPhone?.trim() || null,
+      program.rewardValue,
+      code,
+      submission.notes?.trim() || null,
+    ]);
+
+    await client.query(`
+      UPDATE referral_programs
+      SET uses_count = uses_count + 1, updated_at = NOW()
+      WHERE id = $1 AND client_id = $2
+    `, [program.id, program.clientId]);
+    await client.query("COMMIT");
+
+    res.status(201).json({ ok: true, referral: inserted.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    console.error("[referrals] public submission error:", err);
+    res.status(500).json({ error: "Failed" });
+  } finally {
+    client.release();
+  }
+});
+
 // ── GET /api/referrals/stats ──────────────────────────────────────────────────
 router.get("/referrals/stats", async (req, res) => {
   const auth = await resolveClient(req, res);
@@ -119,12 +320,19 @@ router.post("/referrals/programs", async (req, res) => {
   const auth = await resolveClient(req, res);
   if (!auth) return;
   try {
-    const { name, description, rewardType, rewardValue, promoMessage, maxUses, expiresAt } = req.body;
-    if (!name) { res.status(400).json({ error: "name required" }); return; }
-    const code = `${auth.clientId.toUpperCase().slice(0, 3)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const parsed = createReferralProgramSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "invalid_program",
+        issues: parsed.error.issues.map(issue => ({ path: issue.path.join("."), message: issue.message })),
+      });
+      return;
+    }
+    const { name, description, rewardType, rewardValue, promoMessage, maxUses, expiresAt } = parsed.data;
+    const code = generateReferralCode();
     const [prog] = await db
       .insert(referralProgramsTable)
-      .values({ clientId: auth.clientId, name, description, rewardType: rewardType ?? "credit", rewardValue: String(rewardValue ?? "25"), promoMessage, maxUses, expiresAt, referralCode: code })
+      .values({ clientId: auth.clientId, name, description, rewardType, rewardValue: String(rewardValue), promoMessage, maxUses, expiresAt, referralCode: code })
       .returning();
     res.status(201).json(prog);
   } catch (err) {

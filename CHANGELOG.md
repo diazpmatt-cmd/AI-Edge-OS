@@ -6,6 +6,31 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — Customer Enrollment & Attribution (2026-07-24)
+
+#### Added
+
+- Tenant-derived public referral program lookup and customer enrollment routes using secure
+  referral codes, bounded public metadata, active-client checks, and transactional program locking.
+- Public referral landing page with referrer/referred-customer contact capture, consent copy,
+  honeypot protection, client-side validation, and explicit duplicate/self-referral feedback.
+- Admin referral-program creation with reward type/value, optional expiration and capacity, secure
+  generated codes, and copyable share links.
+- Duplicate and self-referral normalization, paused/expired/full-program rejection, and bounded
+  per-code/requester submission rate limiting.
+
+#### Security and verification
+
+- Public submissions derive `client_id` only from the locked referral program; request bodies cannot
+  select a tenant. Usage increments remain scoped by both program and client.
+- No automatic payout, message, CRM write, publication, scheduler, or demo-data insertion was added.
+- Focused referral tests pass 25/25; URL helper tests pass 2/2; the complete API suite passes
+  1,293/1,293 against a disposable test database. API/frontend TypeScript and production builds pass.
+- Full frontend verification has one unrelated existing baseline: three failing
+  `ContactPage.test.tsx` expectations. Referral Growth tests and builds are green.
+- Implemented locally on `feat/referral-enrollment-attribution-v1`; not yet committed, pushed,
+  merged, deployed, or production-accepted.
+
 ### AI Visibility V1 — Production Accepted (GO) (2026-07-21)
 
 #### Release

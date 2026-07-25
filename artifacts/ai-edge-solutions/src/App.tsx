@@ -31,6 +31,7 @@ const PricingPage     = lazy(() => import("./pages/marketing/PricingPage"));
 const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
 const PrivacyPage     = lazy(() => import("./pages/marketing/PrivacyPage"));
 const TermsPage       = lazy(() => import("./pages/marketing/TermsPage"));
+const PublicReferralPage = lazy(() => import("./pages/PublicReferralPage"));
 
 // ── Admin / Command Center pages (auth-gated) ───────────────────────────────
 const AdminAccessPage     = lazy(() => import("./pages/AdminAccessPage"));
@@ -121,6 +122,7 @@ function AppRouter() {
         <Route path="/demo">
           <Suspense fallback={<PageLoader />}><DemoPage /></Suspense>
         </Route>
+        <Route path="/refer/:code" component={PublicReferralPage} />
 
         {/* Development-only mock UI preview; excluded from production routing. */}
         {isSecretsPreviewAvailable(import.meta.env.DEV) && (

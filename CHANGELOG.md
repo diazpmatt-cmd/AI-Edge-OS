@@ -6,6 +6,16 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Referral Growth — V1 Operational Readiness (RGE-8, 2026-07-25)
+
+#### Added
+
+- A visible Readiness tab exposing delivery mode, emergency-stop state, scheduler absence,
+  unresolved fraud/reward/delivery queues, and milestone production-acceptance coverage.
+- A deterministic readiness model that never authorizes autonomous referral operation.
+- Formal local V1 acceptance evidence separating 100% implementation from 2/8 production
+  acceptance.
+
 ### Referral Growth — Read-Only CRM Attribution (RGE-7, 2026-07-25)
 
 #### Added

@@ -71,23 +71,90 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply SQL migrations from scratch
+      - name: Apply production migrations from scratch and verify idempotency
         shell: bash
         run: |
           set -euo pipefail
-          for migration in lib/db/migrations/*.sql; do
-            echo "Applying ${migration}"
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$migration"
-          done
+          migration_test="artifacts/api-server/src/__tests__/.rge-ci-fresh-database.test.ts"
+          trap 'rm -f "$migration_test"' EXIT
+          cat > "$migration_test" <<'EOF'
+          import { afterAll, describe, expect, it } from "vitest";
+          import { readFile, readdir } from "node:fs/promises";
+          import { resolve } from "node:path";
+          import { pool } from "@workspace/db";
+          import { migrateSchema } from "../lib/schema-migrate.js";
 
-      - name: Verify SQL migration idempotency
-        shell: bash
-        run: |
-          set -euo pipefail
-          for migration in lib/db/migrations/*.sql; do
-            echo "Reapplying ${migration}"
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$migration"
-          done
+          const migrationDirectory = resolve(process.cwd(), "../../lib/db/migrations");
+          const referralTables = [
+            "referral_programs",
+            "referrals",
+            "referral_invitation_templates",
+            "referral_invitations",
+            "referral_contact_preferences",
+            "referral_delivery_attempts",
+            "referral_reward_ledger",
+            "referral_fraud_reviews",
+            "referral_fraud_review_events",
+            "referral_crm_attributions",
+          ];
+
+          async function applySqlMigrations(): Promise<void> {
+            const files = (await readdir(migrationDirectory))
+              .filter((file) => file.endsWith(".sql"))
+              .sort();
+            for (const file of files) {
+              const sql = await readFile(resolve(migrationDirectory, file), "utf8");
+              const client = await pool.connect();
+              try {
+                await client.query("BEGIN");
+                await client.query(sql);
+                await client.query("COMMIT");
+              } catch (error) {
+                await client.query("ROLLBACK");
+                throw new Error(`Migration ${file} failed`, { cause: error });
+              } finally {
+                client.release();
+              }
+            }
+          }
+
+          async function waitForReferralTables(): Promise<string[]> {
+            for (let attempt = 0; attempt < 50; attempt += 1) {
+              const result = await pool.query<{ table_name: string }>(
+                `SELECT table_name
+                   FROM information_schema.tables
+                  WHERE table_schema = 'public'
+                    AND table_name = ANY($1::text[])
+                  ORDER BY table_name`,
+                [referralTables],
+              );
+              if (result.rows.length === referralTables.length) {
+                return result.rows.map((row) => row.table_name);
+              }
+              await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+            }
+            return [];
+          }
+
+          describe("fresh PostgreSQL migration chain", () => {
+            it("applies the production bootstrap and SQL migrations twice", async () => {
+              await migrateSchema();
+              await applySqlMigrations();
+              await migrateSchema();
+              await applySqlMigrations();
+
+              await import("../routes/referrals.js");
+              const actualTables = await waitForReferralTables();
+              expect(actualTables).toEqual([...referralTables].sort());
+            });
+          });
+
+          afterAll(async () => {
+            await pool.end();
+          });
+          EOF
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/__tests__/.rge-ci-fresh-database.test.ts
 
       - name: Complete API test suite
         run: pnpm --filter @workspace/api-server test

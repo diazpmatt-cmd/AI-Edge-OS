@@ -1,5 +1,6 @@
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
+import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
 
@@ -28,7 +29,11 @@ migrateSchema()
       }
 
       logger.info({ port }, "Server listening");
-      startScheduler();
+      if (isSchedulerEnabled()) {
+        startScheduler();
+      } else {
+        logger.info("[scheduler] disabled by SCHEDULER_ENABLED");
+      }
     });
   })
   .catch((err) => {

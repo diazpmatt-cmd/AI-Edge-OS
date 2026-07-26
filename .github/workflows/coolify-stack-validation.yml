@@ -1,0 +1,72 @@
+name: Coolify stack validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - Dockerfile.web
+      - docker-compose.coolify.yml
+      - deploy/**
+      - .dockerignore
+      - artifacts/api-server/**
+      - artifacts/ai-edge-solutions/**
+      - lib/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/coolify-stack-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_edge_coolify_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ai_edge_coolify_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_ci
+      CLERK_SECRET_KEY: sk_test_ci
+      SCHEDULER_SECRET: ci-only-not-production
+      VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci
+      VITE_CLERK_PROXY_URL: ""
+      SCHEDULER_ENABLED: "false"
+      REFERRAL_SCHEDULER_ENABLED: "false"
+      AI_VISIBILITY_SCHEDULER_ENABLED: "false"
+      REFERRAL_DELIVERY_ENABLED: "false"
+      REFERRAL_DELIVERY_MODE: dry_run
+      REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts
+      - run: pnpm --filter @workspace/api-server run build
+      - run: pnpm --filter @workspace/ai-edge-solutions run build
+      - name: Validate Compose rendering
+        run: docker compose -f docker-compose.coolify.yml config >/tmp/coolify-compose.yml
+      - name: Build production images
+        run: docker compose -f docker-compose.coolify.yml build
+      - run: git diff --check

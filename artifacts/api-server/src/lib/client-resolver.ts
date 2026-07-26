@@ -36,6 +36,7 @@ import {
   loadClientServiceRegistry,
   createDbServiceRegistryProvider,
 } from "./service-registry-loader.js";
+import { selectClientRecordByUserId } from "./client-record-lookup.js";
 
 export type { ClientResolveResult };
 
@@ -111,10 +112,10 @@ export type { ClientResolveResult };
 export async function resolveClientContentContextFromDb(
   userId: string,
 ): Promise<ClientResolveResult> {
-  const [clientRow] = await db
-    .select()
-    .from(clientsTable)
-    .where(eq(clientsTable.userId, userId));
+  const clientRow = await selectClientRecordByUserId(
+    (text, values) => pool.query(text, values),
+    userId,
+  );
 
   if (!clientRow) {
     return { found: false, reason: "not_found" };
@@ -263,15 +264,10 @@ export async function resolveClientActiveCheck(userId: string): Promise<
   | { ok: true;  clientName: string; slug: string; clientId: string }
   | { ok: false; reason: "not_found" | "inactive" }
 > {
-  const [row] = await db
-    .select({
-      id:         clientsTable.id,
-      slug:       clientsTable.slug,
-      clientName: clientsTable.clientName,
-      isActive:   clientsTable.isActive,
-    })
-    .from(clientsTable)
-    .where(eq(clientsTable.userId, userId));
+  const row = await selectClientRecordByUserId(
+    (text, values) => pool.query(text, values),
+    userId,
+  );
 
   if (!row) return { ok: false, reason: "not_found" };
   if (!row.isActive) return { ok: false, reason: "inactive" };

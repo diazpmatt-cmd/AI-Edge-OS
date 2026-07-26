@@ -64,6 +64,11 @@ export function mapRawClientRecord(row: RawClientRecordRow): ClientRecord {
   };
 }
 
+function maskUserId(userId: string): string {
+  if (userId.length <= 12) return "[masked]";
+  return `${userId.slice(0, 8)}...${userId.slice(-4)}`;
+}
+
 /**
  * Resolve one client by its exact Clerk user ID.
  *
@@ -71,6 +76,7 @@ export function mapRawClientRecord(row: RawClientRecordRow): ClientRecord {
  * - The authenticated ID is always passed as a PostgreSQL parameter.
  * - No slug fallback, default tenant, or cross-tenant substitution is allowed.
  * - Unknown users return null and remain fail-closed at the caller.
+ * - Temporary acceptance diagnostics log only a masked user ID and lookup result.
  */
 export async function selectClientRecordByUserId(
   query: ClientRecordQuery,
@@ -78,5 +84,11 @@ export async function selectClientRecordByUserId(
 ): Promise<ClientRecord | null> {
   const result = await query(SELECT_CLIENT_BY_USER_ID_SQL, [userId]);
   const row = result.rows[0];
+
+  console.info(
+    `[CLIENT-LOOKUP] user=${maskUserId(userId)} found=${Boolean(row)}` +
+      (row ? ` slug=${row.slug} active=${row.is_active}` : ""),
+  );
+
   return row ? mapRawClientRecord(row) : null;
 }

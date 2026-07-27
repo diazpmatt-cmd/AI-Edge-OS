@@ -3,10 +3,6 @@ import cors from "cors";
 import pinoHttpImport from "pino-http";
 import path from "path";
 import { fileURLToPath } from "url";
-
-const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
@@ -18,6 +14,18 @@ import {
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
+
+const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDir = path.join(
+  __dirname,
+  "..",
+  "..",
+  "ai-edge-solutions",
+  "dist",
+  "public",
+);
 
 const app: Express = express();
 
@@ -46,6 +54,13 @@ app.use("/api/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 // Serve custom audio greetings (public — fetched by Telnyx during calls)
 app.use("/api/audio", express.static(path.join(__dirname, "..", "public", "audio")));
+
+// Serve the Alex/AI Edge frontend before Clerk middleware so public pages and the
+// login shell remain available even when an API authentication setting is missing.
+app.use(express.static(frontendDir));
+app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+  res.sendFile(path.join(frontendDir, "index.html"));
+});
 
 // PUBLIC routes — mounted before Clerk middleware (no auth required)
 // OAuth callbacks: Google/Meta/TikTok redirects verified via state tokens

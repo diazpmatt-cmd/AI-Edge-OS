@@ -1,3 +1,6 @@
+import { useLayoutEffect, useRef } from "react";
+import type { SocialProvider } from "@/lib/social-providers";
+
 // ── PlatformStateChip ────────────────────────────────────────────────────────
 // Small inline badge showing a platform's current publishing availability.
 // Used in Publishing Center and Content Autopilot.
@@ -7,10 +10,11 @@
 // Every platform card, chip, badge, border, and background must derive its
 // color from operational STATUS only — never from platform brand colors.
 //
+// SELECTED       Blue    (#00AEEF) — currently selected by the user
 // READY          Green   (#22C55E) — connected + publishing works
-// ACTION_REQUIRED Yellow  (#F59E0B) — needs user action (connect / reconnect)
-// BLOCKED        Red     (#EF4444) — fatal: no backend / API removed / disabled
-// PENDING        Gray    (#94A3B8) — future feature / roadmap / not yet released
+// WARNING        Yellow  (#F59E0B) — demo, pending approval, or needs attention
+// BLOCKED        Red     (#EF4444) — disconnected, failed, or unavailable
+// COMING SOON    Gray    (#94A3B8) — disabled / roadmap / not yet released
 
 // ── Canonical Status Color Map ────────────────────────────────────────────────
 // Import this in any page that needs to derive card/border/badge colors.
@@ -49,23 +53,23 @@ export const PLATFORM_STATUS_COLORS = {
 
 export type PlatformUIState =
   | "ready"        // operational + connected + publish capable
-  | "disconnected" // operational but not connected in the DB  → ACTION_REQUIRED
-  | "pending"      // pending_approval or coming_soon          → PENDING
-  | "coming_soon"; // no publish pipeline yet                  → PENDING
+  | "disconnected" // operational but not connected in the DB  → BLOCKED
+  | "pending"      // pending_approval / demo                   → WARNING
+  | "coming_soon"; // no publish pipeline yet                   → COMING SOON
 
-// Map legacy PlatformUIState strings to canonical status keys
+// Map PlatformUIState strings to canonical status keys.
 const UI_STATE_TO_STATUS: Record<PlatformUIState, keyof typeof PLATFORM_STATUS_COLORS> = {
-  ready:       "ready",
-  disconnected: "action_required",
-  pending:     "pending",
-  coming_soon: "pending",
+  ready:        "ready",
+  disconnected: "blocked",
+  pending:      "action_required",
+  coming_soon:  "pending",
 };
 
 const STATE_LABEL: Record<PlatformUIState, string> = {
-  ready:       "Ready",
+  ready:        "Ready",
   disconnected: "Disconnected",
-  pending:     "Pending Approval",
-  coming_soon: "Coming Soon",
+  pending:      "Pending Approval",
+  coming_soon:  "Coming Soon",
 };
 
 interface Props {
@@ -75,22 +79,48 @@ interface Props {
 }
 
 export function PlatformStateChip({ state, showConnectLink = false, size = "xs" }: Props) {
+  const chipRef = useRef<HTMLSpanElement>(null);
   const statusKey = UI_STATE_TO_STATUS[state];
   const m = PLATFORM_STATUS_COLORS[statusKey];
   const label = STATE_LABEL[state];
   const fs = size === "xs" ? 9 : 10.5;
 
+  // The Publishing Center still applies platform brand colors inline. Mark the
+  // shared parent with the canonical state and current selection so global CSS
+  // can safely override those legacy colors without rewriting the large page.
+  useLayoutEffect(() => {
+    const parent = chipRef.current?.parentElement;
+    if (!parent) return;
+
+    parent.dataset.platformState = state;
+
+    const button = parent.querySelector(":scope > button") as HTMLButtonElement | null;
+    if (!button) {
+      delete parent.dataset.platformSelected;
+      return;
+    }
+
+    const background = button.style.background.replace(/\s/g, "");
+    const isNeutral = background === "rgba(255,255,255,0.04)";
+    parent.dataset.platformSelected = String(!isNeutral);
+  });
+
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      fontSize: fs, fontWeight: 700, letterSpacing: "0.25px",
-      color: m.color,
-      background: m.bg,
-      border: `1px solid ${m.border}`,
-      borderRadius: 6, padding: size === "xs" ? "1px 6px" : "2px 8px",
-      whiteSpace: "nowrap" as const,
-      verticalAlign: "middle",
-    }}>
+    <span
+      ref={chipRef}
+      className="platform-state-chip"
+      data-platform-state={state}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        fontSize: fs, fontWeight: 700, letterSpacing: "0.25px",
+        color: m.color,
+        background: m.bg,
+        border: `1px solid ${m.border}`,
+        borderRadius: 6, padding: size === "xs" ? "1px 6px" : "2px 8px",
+        whiteSpace: "nowrap" as const,
+        verticalAlign: "middle",
+      }}
+    >
       <span style={{
         width: 5, height: 5, borderRadius: "50%",
         background: m.color, flexShrink: 0,
@@ -110,8 +140,6 @@ export function PlatformStateChip({ state, showConnectLink = false, size = "xs" 
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-import type { SocialProvider } from "@/lib/social-providers";
 
 export function resolvePlatformUIState(
   provider: SocialProvider,

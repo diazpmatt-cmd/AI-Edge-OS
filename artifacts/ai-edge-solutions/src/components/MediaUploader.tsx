@@ -12,19 +12,19 @@ import {
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export interface MediaAttachment {
-  objectPath:  string;
-  kind:        MediaKind;
-  mimeType:    string;
-  filename:    string;
-  byteSize:    number;
+  objectPath: string;
+  kind: MediaKind;
+  mimeType: string;
+  filename: string;
+  byteSize: number;
 }
 
 export interface MediaUploaderProps {
-  value:    MediaAttachment | null;
+  value: MediaAttachment | null;
   onChange: (v: MediaAttachment | null) => void;
-  accept?:  MediaKind[];          // defaults to all three kinds
+  accept?: MediaKind[];
   disabled?: boolean;
-  style?:   React.CSSProperties;
+  style?: React.CSSProperties;
 }
 
 const KIND_ICON: Record<MediaKind, string> = {
@@ -41,11 +41,12 @@ export function MediaUploader({
   style,
 }: MediaUploaderProps) {
   const { getToken } = useAuth();
-  const fileRef      = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
-  const [uploading,  setUploading]  = useState(false);
-  const [progress,   setProgress]   = useState(0);   // 0–100
-  const [error,      setError]      = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const acceptAttr = buildAcceptAttr(accept);
 
@@ -53,7 +54,93 @@ export function MediaUploader({
     ? resolvePreviewUrl(value.objectPath, BASE)
     : null;
 
+  const directImageUpload = useCallback(async (file: File, token: string | null) => {
+    const form = new FormData();
+    form.append("image", file);
+
+    return await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${BASE}/api/social-posts/upload-image`);
+      xhr.withCredentials = true;
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          setProgress(Math.max(1, Math.round((event.loaded / event.total) * 100)));
+        }
+      });
+
+      xhr.onload = () => {
+        let data: { imageUrl?: string; error?: string } = {};
+        try {
+          data = JSON.parse(xhr.responseText || "{}");
+        } catch {
+          // Leave data empty and use the HTTP status below.
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300 && data.imageUrl) {
+          setProgress(100);
+          resolve(data.imageUrl);
+          return;
+        }
+
+        reject(new Error(data.error || `Image upload failed (${xhr.status || "network error"}).`));
+      };
+
+      xhr.onerror = () => reject(new Error("The image upload could not reach the server. Please try again."));
+      xhr.onabort = () => reject(new Error("The image upload was cancelled."));
+      xhr.send(form);
+    });
+  }, []);
+
+  const signedStorageUpload = useCallback(async (file: File, token: string | null) => {
+    const metaRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+    });
+
+    const metaData = await metaRes.json().catch(() => ({})) as {
+      uploadURL?: string;
+      objectPath?: string;
+      error?: string;
+    };
+
+    if (!metaRes.ok || !metaData.uploadURL || !metaData.objectPath) {
+      throw new Error(metaData.error || "Could not prepare the media upload.");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", metaData.uploadURL!);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          setProgress(Math.max(1, Math.round((event.loaded / event.total) * 100)));
+        }
+      });
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setProgress(100);
+          resolve();
+        } else {
+          reject(new Error(`Media upload failed (${xhr.status}).`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("The media upload could not reach storage."));
+      xhr.onabort = () => reject(new Error("The media upload was cancelled."));
+      xhr.send(file);
+    });
+
+    return metaData.objectPath;
+  }, []);
+
   const upload = useCallback(async (file: File) => {
+    lastFileRef.current = file;
     setError(null);
 
     const validation = validateMediaFile(file.type, file.name, file.size);
@@ -71,98 +158,100 @@ export function MediaUploader({
 
     try {
       const token = await getToken().catch(() => null);
-
-      // Step 1: request signed PUT URL
-      const metaRes = await fetch(`${BASE}/api/storage/uploads/request-url`, {
-        method:  "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-      const metaData = await metaRes.json() as any;
-      if (!metaRes.ok) throw new Error(metaData.error ?? "Failed to get upload URL");
-
-      const { uploadURL, objectPath } = metaData as { uploadURL: string; objectPath: string };
-
-      // Step 2: PUT to object storage with XHR (for progress)
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", uploadURL);
-        xhr.setRequestHeader("Content-Type", file.type);
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
-        });
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed (${xhr.status})`));
-        };
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.send(file);
-      });
+      const objectPath = validation.kind === "image"
+        ? await directImageUpload(file, token)
+        : await signedStorageUpload(file, token);
 
       onChange({
         objectPath,
-        kind:     validation.kind!,
+        kind: validation.kind!,
         mimeType: file.type,
         filename: file.name,
         byteSize: file.size,
       });
-    } catch (e: any) {
-      setError(e.message ?? "Upload failed. Try again.");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Upload failed.";
+      setError(`${message} You can retry without selecting the file again.`);
     } finally {
       setUploading(false);
       setProgress(0);
     }
-  }, [accept, getToken, onChange]);
+  }, [accept, directImageUpload, getToken, onChange, signedStorageUpload]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && !disabled) upload(file);
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file && !disabled) void upload(file);
   };
 
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) upload(file);
-    e.target.value = "";
+  const handleInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void upload(file);
+    event.target.value = "";
   };
 
   const remove = () => {
     onChange(null);
     setError(null);
+    lastFileRef.current = null;
   };
 
-  // ── Styles ──────────────────────────────────────────────────────────────────
+  const retry = () => {
+    if (lastFileRef.current && !uploading && !disabled) {
+      void upload(lastFileRef.current);
+    }
+  };
+
   const dropZone: React.CSSProperties = {
-    border: "2px dashed rgba(0,174,239,0.25)", borderRadius: 12,
-    padding: "36px 20px", textAlign: "center", cursor: disabled ? "not-allowed" : "pointer",
+    border: "2px dashed rgba(0,174,239,0.25)",
+    borderRadius: 12,
+    padding: "36px 20px",
+    textAlign: "center",
+    cursor: disabled ? "not-allowed" : "pointer",
     background: "rgba(0,174,239,0.03)",
     transition: "border-color 0.15s",
     ...style,
   };
   const errorBox: React.CSSProperties = {
-    marginBottom: 10, padding: "8px 12px", borderRadius: 8,
-    background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
-    color: "#EF4444", fontSize: 12,
+    marginBottom: 10,
+    padding: "10px 12px",
+    borderRadius: 8,
+    background: "rgba(239,68,68,0.1)",
+    border: "1px solid rgba(239,68,68,0.25)",
+    color: "#EF4444",
+    fontSize: 12,
   };
   const btn: React.CSSProperties = {
-    marginTop: 8, width: "100%", padding: "7px",
-    borderRadius: 8, background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8",
-    fontSize: 12, cursor: "pointer",
+    marginTop: 8,
+    width: "100%",
+    padding: "7px",
+    borderRadius: 8,
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "#94A3B8",
+    fontSize: 12,
+    cursor: "pointer",
   };
   const progressBar: React.CSSProperties = {
-    height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)",
-    marginTop: 8, overflow: "hidden",
+    height: 4,
+    borderRadius: 2,
+    background: "rgba(255,255,255,0.08)",
+    marginTop: 8,
+    overflow: "hidden",
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div>
-      {error && <div style={errorBox}>⚠ {error}</div>}
+      {error && (
+        <div style={errorBox}>
+          <div>⚠ {error}</div>
+          {lastFileRef.current && (
+            <button type="button" onClick={retry} disabled={uploading || disabled} style={{ ...btn, color: "#fff", borderColor: "rgba(239,68,68,0.45)" }}>
+              Retry upload
+            </button>
+          )}
+        </div>
+      )}
 
       {uploading && (
         <div style={{ border: "2px dashed rgba(0,174,239,0.3)", borderRadius: 12, padding: "32px 20px", textAlign: "center", background: "rgba(0,174,239,0.04)" }}>
@@ -178,19 +267,10 @@ export function MediaUploader({
       {!uploading && value && (
         <div style={{ position: "relative" }}>
           {value.kind === "image" && previewUrl && (
-            <img
-              src={previewUrl}
-              alt="Preview"
-              style={{ width: "100%", borderRadius: 10, objectFit: "cover", maxHeight: 260, display: "block" }}
-            />
+            <img src={previewUrl} alt="Preview" style={{ width: "100%", borderRadius: 10, objectFit: "cover", maxHeight: 260, display: "block" }} />
           )}
           {value.kind === "video" && previewUrl && (
-            <video
-              src={previewUrl}
-              controls
-              preload="metadata"
-              style={{ width: "100%", borderRadius: 10, maxHeight: 260, display: "block", background: "#000" }}
-            />
+            <video src={previewUrl} controls preload="metadata" style={{ width: "100%", borderRadius: 10, maxHeight: 260, display: "block", background: "#000" }} />
           )}
           {value.kind === "audio" && previewUrl && (
             <div style={{ padding: "16px", background: "rgba(0,174,239,0.06)", borderRadius: 10, border: "1px solid rgba(0,174,239,0.15)" }}>
@@ -206,17 +286,25 @@ export function MediaUploader({
           </div>
 
           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-            <button onClick={() => fileRef.current?.click()} style={btn} disabled={disabled}>Replace</button>
-            <button onClick={remove} style={{ ...btn, color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }} disabled={disabled}>Remove</button>
+            <button type="button" onClick={() => fileRef.current?.click()} style={btn} disabled={disabled}>Replace</button>
+            <button type="button" onClick={remove} style={{ ...btn, color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }} disabled={disabled}>Remove</button>
           </div>
         </div>
       )}
 
       {!uploading && !value && (
         <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
           onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
+          onDragOver={(event) => event.preventDefault()}
           onClick={() => !disabled && fileRef.current?.click()}
+          onKeyDown={(event) => {
+            if (!disabled && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault();
+              fileRef.current?.click();
+            }
+          }}
           style={dropZone}
         >
           <div style={{ fontSize: 32, marginBottom: 8 }}>📎</div>
@@ -226,9 +314,9 @@ export function MediaUploader({
           <div style={{ fontSize: 11, color: "#475569" }}>
             {accept.includes("image") && "JPG, PNG, WEBP, GIF"}
             {accept.includes("image") && accept.includes("video") && " · "}
-            {accept.includes("video") && "MP4 (max " + formatMaxSize("video/mp4") + ")"}
+            {accept.includes("video") && `MP4 (max ${formatMaxSize("video/mp4")})`}
             {(accept.includes("image") || accept.includes("video")) && accept.includes("audio") && " · "}
-            {accept.includes("audio") && "MP3 (max " + formatMaxSize("audio/mpeg") + ")"}
+            {accept.includes("audio") && `MP3 (max ${formatMaxSize("audio/mpeg")})`}
           </div>
         </div>
       )}
@@ -237,7 +325,7 @@ export function MediaUploader({
         ref={fileRef}
         type="file"
         accept={acceptAttr}
-        style={{ display: "none" }}
+        style={{ position: "fixed", left: "-10000px", top: 0, width: 1, height: 1, opacity: 0 }}
         onChange={handleInput}
         disabled={disabled}
       />

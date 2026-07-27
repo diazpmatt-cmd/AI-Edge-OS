@@ -9,6 +9,7 @@ RUN pnpm install --frozen-lockfile
 
 RUN pnpm exec tsc --build lib/db/tsconfig.json lib/api-zod/tsconfig.json
 
+RUN pnpm --filter @workspace/ai-edge-solutions run build
 RUN pnpm --filter @workspace/api-server run build
 
 RUN pnpm deploy --filter @workspace/api-server --prod --legacy /deploy
@@ -17,8 +18,8 @@ FROM node:24-slim AS runner
 WORKDIR /app
 
 COPY --from=builder /deploy/node_modules ./node_modules
-
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
+COPY --from=builder /app/artifacts/ai-edge-solutions/dist/public ./artifacts/ai-edge-solutions/dist/public
 
 RUN mkdir -p artifacts/api-server/uploads artifacts/api-server/public/audio
 

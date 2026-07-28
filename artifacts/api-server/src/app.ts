@@ -49,8 +49,10 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// Serve uploaded social-post images (public — no auth required for image display)
-app.use("/api/uploads", express.static(path.join(__dirname, "..", "uploads")));
+// Serve uploaded social-post images from the same absolute directory used by
+// the upload route (process.cwd()/uploads). This keeps browser previews and
+// external providers such as Google Business Profile on the identical path.
+app.use("/api/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Serve custom audio greetings (public — fetched by Telnyx during calls)
 app.use("/api/audio", express.static(path.join(__dirname, "..", "public", "audio")));

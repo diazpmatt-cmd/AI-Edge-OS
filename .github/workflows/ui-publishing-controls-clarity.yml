@@ -1,20 +1,23 @@
 name: Apply publishing control clarity
 
 on:
-  push:
+  pull_request:
     branches:
-      - ui/publishing-controls-clarity
+      - main
     paths:
       - .github/workflows/ui-publishing-controls-clarity.yml
+      - artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply-ui-change:
+    if: github.head_ref == 'ui/publishing-controls-clarity'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out feature branch
         uses: actions/checkout@v4
         with:
           ref: ui/publishing-controls-clarity
@@ -34,14 +37,17 @@ jobs:
           old_edit = '''<button onClick={() => startEdit(post)} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>✏</button>'''
           new_edit = '''<button onClick={() => startEdit(post)} title="Edit post" aria-label="Edit post" style={{ padding: "6px 11px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.22)", color: "#FFFFFF", whiteSpace: "nowrap" }}>✏️ Edit</button>'''
 
-          if text.count(old_platform) != 1:
-              raise SystemExit(f"Expected one platform selector style, found {text.count(old_platform)}")
-          if text.count(old_edit) != 1:
-              raise SystemExit(f"Expected one edit control, found {text.count(old_edit)}")
-
-          text = text.replace(old_platform, new_platform)
-          text = text.replace(old_edit, new_edit)
-          path.write_text(text, encoding="utf-8")
+          already_done = new_platform in text and new_edit in text
+          if already_done:
+              print("UI controls already updated; no changes needed.")
+          else:
+              if text.count(old_platform) != 1:
+                  raise SystemExit(f"Expected one platform selector style, found {text.count(old_platform)}")
+              if text.count(old_edit) != 1:
+                  raise SystemExit(f"Expected one edit control, found {text.count(old_edit)}")
+              text = text.replace(old_platform, new_platform)
+              text = text.replace(old_edit, new_edit)
+              path.write_text(text, encoding="utf-8")
           PY
 
       - name: Verify intended UI contract
@@ -51,9 +57,13 @@ jobs:
           grep -F 'color: checked ? "#22C55E" : isDemoMode ? "#F59E0B" : "#FFFFFF"' artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
           grep -F '>✏️ Edit</button>' artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
 
-      - name: Commit branch change
+      - name: Commit feature branch change when needed
         shell: bash
         run: |
+          if git diff --quiet; then
+            echo "No code changes to commit."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx

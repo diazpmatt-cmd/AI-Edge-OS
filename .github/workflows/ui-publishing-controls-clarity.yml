@@ -69,3 +69,5 @@ jobs:
           git add artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
           git commit -m "Improve publishing selector and edit controls"
           git push origin HEAD:ui/publishing-controls-clarity
+
+# Triggered after workflow registration on main.

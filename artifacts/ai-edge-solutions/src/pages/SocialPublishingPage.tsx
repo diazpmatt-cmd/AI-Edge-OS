@@ -512,7 +512,7 @@ export default function SocialPublishingPage() {
                         <div key={p} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
                           <button
                             onClick={() => togglePlatform(p)}
-                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : isDemoMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : isDemoMode ? "#F59E0B" : "#6B7280", fontWeight: 700, fontSize: 12.5 }}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)", border: `1px solid ${checked ? "rgba(34,197,94,0.65)" : isDemoMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.22)"}`, color: checked ? "#22C55E" : isDemoMode ? "#F59E0B" : "#FFFFFF", fontWeight: 700, fontSize: 12.5 }}
                           >
                             <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{s.icon}</span>
                             {s.label}
@@ -909,7 +909,7 @@ export default function SocialPublishingPage() {
                           style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(107,158,255,0.08)", border: "1px solid rgba(107,158,255,0.2)", color: "#6B9EFF" }}
                         >🖼</button>
                       )}
-                      <button onClick={() => startEdit(post)} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>✏</button>
+                      <button onClick={() => startEdit(post)} title="Edit post" aria-label="Edit post" style={{ padding: "6px 11px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.22)", color: "#FFFFFF", whiteSpace: "nowrap" }}>✏️ Edit</button>
                       <button onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(post.id); }} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>🗑</button>
                     </div>
                   </div>

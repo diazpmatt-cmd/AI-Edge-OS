@@ -1,0 +1,61 @@
+name: Apply publishing control clarity
+
+on:
+  push:
+    branches:
+      - ui/publishing-controls-clarity
+    paths:
+      - .github/workflows/ui-publishing-controls-clarity.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-ui-change:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/publishing-controls-clarity
+
+      - name: Update platform and edit controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx")
+          text = path.read_text(encoding="utf-8")
+
+          old_platform = '''style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? s.bg : "rgba(255,255,255,0.04)", border: `1px solid ${checked ? s.color + "55" : isDemoMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.1)"}`, color: checked ? s.color : isDemoMode ? "#F59E0B" : "#6B7280", fontWeight: 700, fontSize: 12.5 }}'''
+          new_platform = '''style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: checked ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)", border: `1px solid ${checked ? "rgba(34,197,94,0.65)" : isDemoMode ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.22)"}`, color: checked ? "#22C55E" : isDemoMode ? "#F59E0B" : "#FFFFFF", fontWeight: 700, fontSize: 12.5 }}'''
+
+          old_edit = '''<button onClick={() => startEdit(post)} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8" }}>✏</button>'''
+          new_edit = '''<button onClick={() => startEdit(post)} title="Edit post" aria-label="Edit post" style={{ padding: "6px 11px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.22)", color: "#FFFFFF", whiteSpace: "nowrap" }}>✏️ Edit</button>'''
+
+          if text.count(old_platform) != 1:
+              raise SystemExit(f"Expected one platform selector style, found {text.count(old_platform)}")
+          if text.count(old_edit) != 1:
+              raise SystemExit(f"Expected one edit control, found {text.count(old_edit)}")
+
+          text = text.replace(old_platform, new_platform)
+          text = text.replace(old_edit, new_edit)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify intended UI contract
+        shell: bash
+        run: |
+          grep -F 'background: checked ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)"' artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
+          grep -F 'color: checked ? "#22C55E" : isDemoMode ? "#F59E0B" : "#FFFFFF"' artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
+          grep -F '>✏️ Edit</button>' artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
+
+      - name: Commit branch change
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/ai-edge-solutions/src/pages/SocialPublishingPage.tsx
+          git commit -m "Improve publishing selector and edit controls"
+          git push origin HEAD:ui/publishing-controls-clarity

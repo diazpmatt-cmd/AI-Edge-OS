@@ -6,13 +6,48 @@ const router = Router();
 // Compatibility boundary for the Referral Engine UI.
 // The legacy SQL list query returns snake_case fields, while the React page
 // consumes the API's established camelCase contract.
+// Production acceptance is currently verified through RGE-6; RGE-7 and RGE-8
+// remain pending separate production acceptance.
 router.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+
+  if (req.method === "GET" && req.path === "/referrals/readiness") {
+    res.json = ((body: unknown) => {
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return sendJson(body);
+      }
+
+      const response = body as Record<string, unknown>;
+      const currentAcceptance =
+        response.productionAcceptance &&
+        typeof response.productionAcceptance === "object" &&
+        !Array.isArray(response.productionAcceptance)
+          ? (response.productionAcceptance as Record<string, unknown>)
+          : {};
+
+      return sendJson({
+        ...response,
+        productionAcceptance: {
+          ...currentAcceptance,
+          accepted: 6,
+          total: 8,
+          complete: false,
+        },
+        blockers: Array.isArray(response.blockers)
+          ? response.blockers
+          : ["production_acceptance_incomplete"],
+      });
+    }) as Response["json"];
+
+    next();
+    return;
+  }
+
   if (req.method !== "GET" || req.path !== "/referrals") {
     next();
     return;
   }
 
-  const sendJson = res.json.bind(res);
   res.json = ((body: unknown) => {
     if (!Array.isArray(body)) return sendJson(body);
 

@@ -6,8 +6,8 @@ const router = Router();
 // Compatibility boundary for the Referral Engine UI.
 // The legacy SQL list query returns snake_case fields, while the React page
 // consumes the API's established camelCase contract.
-// Production acceptance is currently verified through RGE-6; RGE-7 and RGE-8
-// remain pending separate production acceptance.
+// Production acceptance is currently verified through RGE-7; RGE-8 remains
+// pending separate final production acceptance.
 router.use((req, res, next) => {
   const sendJson = res.json.bind(res);
 
@@ -29,7 +29,7 @@ router.use((req, res, next) => {
         ...response,
         productionAcceptance: {
           ...currentAcceptance,
-          accepted: 6,
+          accepted: 7,
           total: 8,
           complete: false,
         },

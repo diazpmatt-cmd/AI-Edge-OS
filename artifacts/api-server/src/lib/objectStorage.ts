@@ -11,23 +11,101 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
+export type ObjectStorageProvider = "replit" | "gcs";
+
+export class ObjectStorageConfigurationError extends Error {
+  readonly code = "object_storage_configuration_error";
+
+  constructor(
+    message: string,
+    readonly missingVariables: string[] = [],
+  ) {
+    super(message);
+    this.name = "ObjectStorageConfigurationError";
+    Object.setPrototypeOf(this, ObjectStorageConfigurationError.prototype);
+  }
+}
+
+type ObjectStorageEnvironment = Record<string, string | undefined>;
+
+function getObjectStorageProvider(environment: ObjectStorageEnvironment): ObjectStorageProvider {
+  const provider = (environment.OBJECT_STORAGE_PROVIDER || "replit").trim().toLowerCase();
+  if (provider !== "replit" && provider !== "gcs") {
+    throw new ObjectStorageConfigurationError(
+      `Unsupported OBJECT_STORAGE_PROVIDER: ${provider || "empty"}`,
+    );
+  }
+  return provider;
+}
+
+function getGcsClientConfiguration(environment: ObjectStorageEnvironment) {
+  const encodedCredentials = environment.OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64?.trim();
+  if (!encodedCredentials) {
+    throw new ObjectStorageConfigurationError(
+      "Google Cloud Storage credentials are not configured.",
+      ["OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64"],
+    );
+  }
+
+  let rawCredentials: unknown;
+  try {
+    rawCredentials = JSON.parse(Buffer.from(encodedCredentials, "base64").toString("utf8"));
+  } catch {
+    throw new ObjectStorageConfigurationError(
+      "OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64 is not valid base64-encoded JSON.",
+    );
+  }
+
+  if (!rawCredentials || typeof rawCredentials !== "object") {
+    throw new ObjectStorageConfigurationError(
+      "OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64 does not contain a service-account object.",
+    );
+  }
+
+  const credentials = rawCredentials as Record<string, unknown>;
+  const projectId = typeof credentials.project_id === "string" ? credentials.project_id : "";
+  const clientEmail = typeof credentials.client_email === "string" ? credentials.client_email : "";
+  const privateKey = typeof credentials.private_key === "string" ? credentials.private_key : "";
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new ObjectStorageConfigurationError(
+      "The object-storage service account is missing project_id, client_email, or private_key.",
+    );
+  }
+
+  return {
+    projectId,
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey,
     },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+  };
+}
+
+export function createObjectStorageClient(
+  environment: ObjectStorageEnvironment = process.env,
+): Storage {
+  return getObjectStorageProvider(environment) === "gcs"
+    ? new Storage(getGcsClientConfiguration(environment))
+    : new Storage({
+        credentials: {
+          audience: "replit",
+          subject_token_type: "access_token",
+          token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+          type: "external_account",
+          credential_source: {
+            url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+            format: {
+              type: "json",
+              subject_token_field_name: "access_token",
+            },
+          },
+          universe_domain: "googleapis.com",
+        },
+        projectId: "",
+      });
+}
+
+export const objectStorageClient = createObjectStorageClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -38,10 +116,13 @@ export class ObjectNotFoundError extends Error {
 }
 
 export class ObjectStorageService {
-  constructor() {}
+  constructor(
+    private readonly client: Storage = objectStorageClient,
+    private readonly environment: ObjectStorageEnvironment = process.env,
+  ) {}
 
   getPublicObjectSearchPaths(): Array<string> {
-    const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
+    const pathsStr = this.environment.PUBLIC_OBJECT_SEARCH_PATHS || "";
     const paths = Array.from(
       new Set(
         pathsStr
@@ -51,20 +132,22 @@ export class ObjectStorageService {
       )
     );
     if (paths.length === 0) {
-      throw new Error(
+      throw new ObjectStorageConfigurationError(
         "PUBLIC_OBJECT_SEARCH_PATHS not set. Create a bucket in 'Object Storage' " +
-          "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths)."
+          "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths).",
+        ["PUBLIC_OBJECT_SEARCH_PATHS"],
       );
     }
     return paths;
   }
 
   getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
+    const dir = this.environment.PRIVATE_OBJECT_DIR || "";
     if (!dir) {
-      throw new Error(
+      throw new ObjectStorageConfigurationError(
         "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
+          "tool and set PRIVATE_OBJECT_DIR env var.",
+        ["PRIVATE_OBJECT_DIR"],
       );
     }
     return dir;
@@ -75,7 +158,7 @@ export class ObjectStorageService {
       const fullPath = `${searchPath}/${filePath}`;
 
       const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
+      const bucket = this.client.bucket(bucketName);
       const file = bucket.file(objectName);
 
       const [exists] = await file.exists();
@@ -108,19 +191,14 @@ export class ObjectStorageService {
 
   async getObjectEntityUploadURL(): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
-    if (!privateObjectDir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
-    }
-
     const objectId = randomUUID();
     const fullPath = `${privateObjectDir}/uploads/${objectId}`;
 
     const { bucketName, objectName } = parseObjectPath(fullPath);
 
     return signObjectURL({
+      client: this.client,
+      provider: getObjectStorageProvider(this.environment),
       bucketName,
       objectName,
       method: "PUT",
@@ -145,7 +223,7 @@ export class ObjectStorageService {
     }
     const objectEntityPath = `${entityDir}${entityId}`;
     const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
+    const bucket = this.client.bucket(bucketName);
     const objectFile = bucket.file(objectName);
     const [exists] = await objectFile.exists();
     if (!exists) {
@@ -228,16 +306,29 @@ function parseObjectPath(path: string): {
 }
 
 async function signObjectURL({
+  client,
+  provider,
   bucketName,
   objectName,
   method,
   ttlSec,
 }: {
+  client: Storage;
+  provider: ObjectStorageProvider;
   bucketName: string;
   objectName: string;
   method: "GET" | "PUT" | "DELETE" | "HEAD";
   ttlSec: number;
 }): Promise<string> {
+  if (provider === "gcs") {
+    const [signedURL] = await client.bucket(bucketName).file(objectName).getSignedUrl({
+      version: "v4",
+      action: method === "PUT" ? "write" : method === "GET" ? "read" : method.toLowerCase() as "delete" | "read",
+      expires: Date.now() + ttlSec * 1000,
+    });
+    return signedURL;
+  }
+
   const request = {
     bucket_name: bucketName,
     object_name: objectName,

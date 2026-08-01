@@ -1,11 +1,24 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { getAuth } from "@clerk/express";
 import { Readable } from "stream";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import {
+  ObjectStorageConfigurationError,
+  ObjectStorageService,
+  ObjectNotFoundError,
+} from "../lib/objectStorage";
 import { validateUploadRequest, isBlockedExtension } from "../lib/media-config";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+
+function safeStorageFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Unknown object-storage failure";
+  return message
+    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
+    .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[redacted-key]")
+    .replace(/(token|secret|password|credential)=\S+/gi, "$1=[redacted]")
+    .slice(0, 500);
+}
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   const { userId } = getAuth(req);
@@ -35,8 +48,19 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
     res.json({ uploadURL, objectPath, metadata: { name, size, contentType: validation.normalizedMimeType } });
   } catch (error) {
-    console.error("Error generating upload URL", error);
-    res.status(500).json({ error: "Failed to generate upload URL" });
+    const configurationFailure = error instanceof ObjectStorageConfigurationError;
+    console.error("[storage/request-url] signed upload URL generation failed", {
+      code: configurationFailure ? error.code : "object_storage_signing_failed",
+      provider: process.env.OBJECT_STORAGE_PROVIDER || "replit",
+      missingVariables: configurationFailure ? error.missingVariables : [],
+      reason: safeStorageFailureReason(error),
+    });
+    res.status(configurationFailure ? 503 : 502).json({
+      error: configurationFailure
+        ? "Durable media storage is not configured."
+        : "The durable media upload service could not generate an upload URL.",
+      code: configurationFailure ? error.code : "object_storage_signing_failed",
+    });
   }
 });
 

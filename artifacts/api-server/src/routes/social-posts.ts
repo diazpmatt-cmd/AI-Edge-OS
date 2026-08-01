@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { socialPostsTable, socialConnectionsTable, imageAssetsTable, platformDeliveriesTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNotNull, isNull } from "drizzle-orm";
 import { bootstrapPlatformDeliveries, publishingService } from "../lib/publishing-service";
 import { getAuth } from "@clerk/express";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
@@ -121,9 +121,31 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     comments:        r.comments   ? parseInt(r.comments,    10) : null,
     shares:          r.shares     ? parseInt(r.shares,      10) : null,
     engagementScore: r.engagementScore ? parseFloat(r.engagementScore) : null,
+    archivedAt:      r.archivedAt?.toISOString() ?? null,
+    archivedBy:      r.archivedBy ?? null,
     createdAt:       r.createdAt.toISOString(),
     updatedAt:       r.updatedAt.toISOString(),
   };
+}
+
+export type SocialPostListView = "active" | "archived" | "all";
+
+export const ARCHIVABLE_POST_STATUSES = new Set([
+  "draft",
+  "published",
+  "partial",
+  "failed",
+  "cancelled",
+]);
+
+export function parseSocialPostListView(value: unknown): SocialPostListView | null {
+  if (value === undefined || value === "active") return "active";
+  if (value === "archived" || value === "all") return value;
+  return null;
+}
+
+export function isArchivablePostStatus(status: string): boolean {
+  return ARCHIVABLE_POST_STATUSES.has(status);
 }
 
 // ── Image upload ──────────────────────────────────────────────────────────────
@@ -150,8 +172,20 @@ router.post("/social-posts/upload-image", (req, res) => {
 router.get("/social-posts", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const view = parseSocialPostListView(req.query.view);
+  if (!view) {
+    res.status(400).json({ error: "view must be active, archived, or all" });
+    return;
+  }
+  const visibility = view === "active"
+    ? isNull(socialPostsTable.archivedAt)
+    : view === "archived"
+      ? isNotNull(socialPostsTable.archivedAt)
+      : undefined;
   const rows = await db.select().from(socialPostsTable)
-    .where(eq(socialPostsTable.userId, userId))
+    .where(visibility
+      ? and(eq(socialPostsTable.userId, userId), visibility)
+      : eq(socialPostsTable.userId, userId))
     .orderBy(desc(socialPostsTable.createdAt));
   res.json(rows.map(rowToDto));
 });
@@ -202,6 +236,59 @@ router.patch("/social-posts/:id", async (req, res) => {
     updatedAt: new Date(),
   }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
   if (!row) { res.status(404).send(); return; }
+  res.json(rowToDto(row));
+});
+
+router.post("/social-posts/:id/archive", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const existing = await db.select().from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
+    .then(rows => rows[0]);
+  if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+  if (existing.archivedAt) { res.json(rowToDto(existing)); return; }
+  if (!isArchivablePostStatus(existing.status)) {
+    res.status(409).json({
+      error: "Queued, approved, scheduled, or publishing posts cannot be archived while delivery is pending.",
+    });
+    return;
+  }
+
+  const [row] = await db.update(socialPostsTable).set({
+    archivedAt: new Date(),
+    archivedBy: userId,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    isNull(socialPostsTable.archivedAt),
+  )).returning();
+  if (!row) { res.status(409).json({ error: "Post archive state changed; refresh and try again." }); return; }
+  res.json(rowToDto(row));
+});
+
+router.post("/social-posts/:id/restore", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [row] = await db.update(socialPostsTable).set({
+    archivedAt: null,
+    archivedBy: null,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    isNotNull(socialPostsTable.archivedAt),
+  )).returning();
+  if (!row) {
+    const existing = await db.select({ id: socialPostsTable.id }).from(socialPostsTable)
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
+      .then(rows => rows[0]);
+    if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+    res.status(409).json({ error: "Post is not archived." });
+    return;
+  }
   res.json(rowToDto(row));
 });
 

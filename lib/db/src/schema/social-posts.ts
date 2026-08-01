@@ -67,10 +67,18 @@ export const socialPostsTable = pgTable("social_posts", {
   cancelledAt:     timestamp("cancelled_at",  { withTimezone: true }),
   cancelledBy:     text("cancelled_by"),
   cancelReason:    text("cancel_reason"),
+  archivedAt:      timestamp("archived_at", { withTimezone: true }),
+  archivedBy:      text("archived_by"),
   createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
-export const insertSocialPostSchema = createInsertSchema(socialPostsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSocialPostSchema = createInsertSchema(socialPostsTable).omit({
+  id: true,
+  archivedAt: true,
+  archivedBy: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type InsertSocialPost = z.infer<typeof insertSocialPostSchema>;
 export type SocialPost = typeof socialPostsTable.$inferSelect;

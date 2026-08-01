@@ -6,6 +6,27 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Publishing Center — Archive & Readability
+
+#### Added
+
+- A tenant-scoped, non-destructive archive and restore workflow with separate Active and Archived views.
+- Backward-compatible archive metadata that leaves publishing status, timestamps, provider results,
+  warnings, delivery history, and activity-log evidence intact.
+- Focused API and interface coverage for archive, restore, active-list exclusion, cross-tenant denial,
+  pending-delivery safeguards, and history preservation.
+
+#### Changed
+
+- Improved only the Publishing Center's secondary-label contrast and compact text sizing, with more
+  prominent client and platform names.
+
+#### Safety
+
+- Delete remains a separate permanent action. Posts are never archived automatically, and queued,
+  approved, scheduled, or publishing records cannot be hidden while delivery is pending.
+- No publishing, scheduler, OAuth, credential, infrastructure, or deployment behavior changed.
+
 ### Referral Growth — V1 Operational Readiness (RGE-8, 2026-07-25)
 
 #### Added

@@ -13,7 +13,7 @@ import { PLATFORM_MEDIA_COMPAT } from "@/lib/media-compat";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube" | "tiktok";
 
-type SocialPost = {
+export type SocialPost = {
   id: string;
   clientName: string;
   platforms: Platform[];
@@ -46,9 +46,30 @@ type SocialPost = {
   comments: number | null;
   shares: number | null;
   engagementScore: number | null;
+  archivedAt: string | null;
+  archivedBy: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export type PublishingPostView = "active" | "archived";
+
+const ARCHIVABLE_POST_STATUSES = new Set(["draft", "published", "partial", "failed", "cancelled"]);
+
+export function isPostArchivable(status: string): boolean {
+  return ARCHIVABLE_POST_STATUSES.has(status);
+}
+
+export function postsForPublishingView(posts: SocialPost[], view: PublishingPostView): SocialPost[] {
+  return posts.filter(post => view === "archived" ? post.archivedAt !== null : post.archivedAt === null);
+}
+
+export function publishingActivityPosts(posts: SocialPost[]): SocialPost[] {
+  return [...posts]
+    .filter(post => post.status === "published" || post.status === "partial" || post.status === "failed")
+    .sort((a, b) => new Date(b.publishedAt ?? b.updatedAt).getTime() - new Date(a.publishedAt ?? a.updatedAt).getTime())
+    .slice(0, 20);
+}
 
 const CTA_OPTIONS = [
   { value: "none",       label: "None" },
@@ -154,6 +175,7 @@ export default function SocialPublishingPage() {
   const { colors: t } = useTheme();
 
   const [showForm,      setShowForm]      = useState(false);
+  const [postView,      setPostView]      = useState<PublishingPostView>("active");
   const [editId,        setEditId]        = useState<string | null>(null);
   const [form,          setForm]          = useState({ ...EMPTY_FORM });
   const [publishingId,      setPublishingId]      = useState<string | null>(null);
@@ -164,9 +186,13 @@ export default function SocialPublishingPage() {
 
   const { data: posts = [], isLoading } = useQuery<SocialPost[]>({
     queryKey: ["social-posts"],
-    queryFn: () => authFetch("/social-posts"),
+    queryFn: () => authFetch("/social-posts?view=all"),
     refetchInterval: 30000,
   });
+
+  const activePosts = useMemo(() => postsForPublishingView(posts, "active"), [posts]);
+  const archivedPosts = useMemo(() => postsForPublishingView(posts, "archived"), [posts]);
+  const visiblePosts = postView === "active" ? activePosts : archivedPosts;
 
   const saveMut = useMutation({
     mutationFn: (payload: any) =>
@@ -179,6 +205,22 @@ export default function SocialPublishingPage() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => authFetch(`/social-posts/${id}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["social-posts"] }),
+  });
+
+  const archiveMut = useMutation({
+    mutationFn: (id: string) => authFetch(`/social-posts/${id}/archive`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["social-posts"] });
+      toast.success("Post archived. Publishing history was preserved.");
+    },
+  });
+
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => authFetch(`/social-posts/${id}/restore`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["social-posts"] });
+      toast.success("Post restored to Active.");
+    },
   });
 
   const publishMut = useMutation({
@@ -327,13 +369,13 @@ export default function SocialPublishingPage() {
     fontFamily: "inherit", outline: "none",
   };
   const labelStyle: React.CSSProperties = {
-    fontSize: 11, color: "#475569", fontWeight: 700,
+    fontSize: 12, color: "#94A3B8", fontWeight: 700,
     textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: 6,
   };
   const sectionStyle: React.CSSProperties = { marginBottom: 18 };
 
   const counts = { draft: 0, scheduled: 0, published: 0, failed: 0 };
-  for (const p of posts) {
+  for (const p of activePosts) {
     if (p.status === "draft")                                  counts.draft++;
     else if (p.status === "scheduled")                         counts.scheduled++;
     else if (p.status === "published" || p.status === "partial") counts.published++;
@@ -364,7 +406,7 @@ export default function SocialPublishingPage() {
         </div>
 
         {/* ── Publishing Status Banner ── */}
-        {!isLoading && posts.length > 0 && (() => {
+        {!isLoading && activePosts.length > 0 && (() => {
           const hasFailed = counts.failed > 0;
           const hasScheduled = counts.scheduled > 0;
           const allGood = !hasFailed && counts.published > 0;
@@ -765,7 +807,7 @@ export default function SocialPublishingPage() {
           ].map(s => (
             <div key={s.label} style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "14px 16px" }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: s.color, marginBottom: 2 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600 }}>{s.label}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -773,29 +815,44 @@ export default function SocialPublishingPage() {
         {/* ── Post list ── */}
         <div style={{ background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>All Posts</span>
-            <span style={{ fontSize: 12, color: "#475569" }}>{posts.length} total</span>
+            <div role="tablist" aria-label="Publishing Center post views" style={{ display: "flex", gap: 6 }}>
+              {([
+                ["active", `Active (${activePosts.length})`],
+                ["archived", `Archived (${archivedPosts.length})`],
+              ] as const).map(([view, label]) => (
+                <button
+                  key={view}
+                  role="tab"
+                  aria-selected={postView === view}
+                  onClick={() => setPostView(view)}
+                  style={{ padding: "6px 12px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", border: postView === view ? "1px solid rgba(0,174,239,0.45)" : "1px solid rgba(255,255,255,0.1)", background: postView === view ? "rgba(0,174,239,0.13)" : "rgba(255,255,255,0.03)", color: postView === view ? "#38BDF8" : "#CBD5E1" }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{visiblePosts.length} shown</span>
           </div>
 
           {isLoading && <div style={{ padding: 48, textAlign: "center", color: "#6B7280" }}>Loading posts…</div>}
 
-          {!isLoading && posts.length === 0 && (
+          {!isLoading && visiblePosts.length === 0 && (
             <div style={{ padding: 64, textAlign: "center" }}>
               <div style={{ fontSize: 40, marginBottom: 14 }}>📭</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>No posts yet</div>
-              <div style={{ fontSize: 13, color: "#6B7280", maxWidth: 360, margin: "0 auto" }}>
-                Create your first post using the button above. Connect Facebook or Instagram in Connected Accounts first.
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#FFFFFF", marginBottom: 8 }}>{postView === "archived" ? "No archived posts" : "No active posts yet"}</div>
+              <div style={{ fontSize: 13, color: "#94A3B8", maxWidth: 360, margin: "0 auto" }}>
+                {postView === "archived" ? "Posts you archive will appear here and can be restored." : "Create your first post using the button above. Connect a publishing account first."}
               </div>
             </div>
           )}
 
-          {posts.length > 0 && (
+          {visiblePosts.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {posts.map((post, i) => {
+              {visiblePosts.map((post, i) => {
                 const ss = STATUS_STYLE[post.status] ?? STATUS_STYLE.draft;
                 const isPublishing = publishingId === post.id;
                 return (
-                  <div key={post.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 16, padding: "14px 20px", borderBottom: i < posts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "start" }}>
+                  <div key={post.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 16, padding: "14px 20px", borderBottom: i < visiblePosts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "start" }}>
 
                     <div style={{ width: 64, height: 64, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.05)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                       {post.imageUrl || post.matchedImageUrl ? (
@@ -817,12 +874,12 @@ export default function SocialPublishingPage() {
                           const pr = parsePlatformResults(post)[p];
                           const dot = pr?.ok === true ? "🟢" : pr?.ok === false ? "🔴" : post.status === "scheduled" ? "🟡" : "⚪";
                           return (
-                            <span key={p} title={pr?.error ?? undefined} style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: ps.bg, color: ps.color, textTransform: "uppercase", letterSpacing: "0.4px", cursor: pr?.error ? "help" : "default" }}>
-                              {dot} {ps.label.split(" ")[0]}
+                            <span key={p} title={pr?.error ?? undefined} style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, background: ps.bg, color: ps.color, letterSpacing: "0.2px", cursor: pr?.error ? "help" : "default" }}>
+                              {dot} {ps.label}
                             </span>
                           );
                         })}
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: ss.bg, color: ss.color, textTransform: "capitalize" }}>{post.status}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: ss.bg, color: ss.color, textTransform: "capitalize" }}>{post.status}</span>
                         {post.ctaType !== "none" && (
                           <span style={{ fontSize: 10, color: "#F59E0B", background: "rgba(245,158,11,0.1)", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>
                             {CTA_OPTIONS.find(o => o.value === post.ctaType)?.label ?? post.ctaType}
@@ -857,10 +914,11 @@ export default function SocialPublishingPage() {
                       )}
 
                       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 11, color: "#475569" }}>{post.clientName}</span>
-                        {post.scheduledAt && <span style={{ fontSize: 11, color: "#6B7280" }}>🗓 {fmtDate(post.scheduledAt)}</span>}
-                        {post.publishedAt && <span style={{ fontSize: 11, color: "#22C55E" }}>✓ Published {fmtDate(post.publishedAt)}</span>}
-                        {!post.scheduledAt && !post.publishedAt && <span style={{ fontSize: 11, color: "#475569" }}>Created {timeAgo(post.createdAt)}</span>}
+                        <span style={{ fontSize: 12, color: "#E2E8F0", fontWeight: 700 }}>{post.clientName}</span>
+                        {post.scheduledAt && <span style={{ fontSize: 12, color: "#CBD5E1" }}>🗓 {fmtDate(post.scheduledAt)}</span>}
+                        {post.publishedAt && <span style={{ fontSize: 12, color: "#4ADE80", fontWeight: 600 }}>✓ Published {fmtDate(post.publishedAt)}</span>}
+                        {!post.scheduledAt && !post.publishedAt && <span style={{ fontSize: 12, color: "#94A3B8" }}>Created {timeAgo(post.createdAt)}</span>}
+                        {post.archivedAt && <span style={{ fontSize: 12, color: "#FBBF24", fontWeight: 600 }}>Archived {fmtDate(post.archivedAt)}</span>}
                       </div>
 
                       {post.errorMessage && (
@@ -892,6 +950,14 @@ export default function SocialPublishingPage() {
                     </div>
 
                     <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "flex-start" }}>
+                      {postView === "archived" ? (
+                        <button
+                          onClick={() => restoreMut.mutate(post.id)}
+                          disabled={restoreMut.isPending}
+                          title="Restore archived post"
+                          style={{ padding: "6px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ADE80", whiteSpace: "nowrap" }}
+                        >Restore</button>
+                      ) : (<>
                       {(post.status === "draft" || post.status === "failed" || post.status === "scheduled") && (
                         <button
                           onClick={() => { setPublishingId(post.id); publishMut.mutate(post.id); }}
@@ -910,7 +976,16 @@ export default function SocialPublishingPage() {
                         >🖼</button>
                       )}
                       <button onClick={() => startEdit(post)} title="Edit post" aria-label="Edit post" style={{ padding: "6px 11px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.22)", color: "#FFFFFF", whiteSpace: "nowrap" }}>✏️ Edit</button>
-                      <button onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(post.id); }} style={{ padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>🗑</button>
+                      {isPostArchivable(post.status) && (
+                        <button
+                          onClick={() => { if (confirm("Archive this post? Its publishing history will be preserved.")) archiveMut.mutate(post.id); }}
+                          disabled={archiveMut.isPending}
+                          title="Archive post"
+                          style={{ padding: "6px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "#FBBF24", whiteSpace: "nowrap" }}
+                        >Archive</button>
+                      )}
+                      </>)}
+                      <button onClick={() => { if (confirm("Delete this post?")) deleteMut.mutate(post.id); }} title="Delete post permanently" aria-label="Delete post permanently" style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#EF4444" }}>🗑</button>
                     </div>
                   </div>
                 );
@@ -921,21 +996,18 @@ export default function SocialPublishingPage() {
 
         {/* ── Activity Log ── */}
         {(() => {
-          const actPosts = [...posts]
-            .filter(p => p.status === "published" || p.status === "partial" || p.status === "failed")
-            .sort((a, b) => new Date(b.publishedAt ?? b.updatedAt).getTime() - new Date(a.publishedAt ?? a.updatedAt).getTime())
-            .slice(0, 20);
+          const actPosts = publishingActivityPosts(posts);
           return (
             <div style={{ marginTop: 28, background: "rgba(11,22,41,0.7)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden" }}>
               <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: "#FFFFFF" }}>📋 Activity Log</span>
-                <span style={{ fontSize: 12, color: "#475569" }}>Publish history — all results are API-confirmed</span>
+                <span style={{ fontSize: 13, color: "#94A3B8" }}>Publish history — archived records remain visible here</span>
               </div>
               {actPosts.length === 0 ? (
                 <div style={{ padding: "40px 24px", textAlign: "center" }}>
                   <div style={{ fontSize: 32, marginBottom: 10 }}>📭</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 4 }}>No publish activity yet</div>
-                  <div style={{ fontSize: 12, color: "#334155" }}>Published and failed posts appear here with per-platform results.</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#CBD5E1", marginBottom: 4 }}>No publish activity yet</div>
+                  <div style={{ fontSize: 13, color: "#94A3B8" }}>Published and failed posts appear here with per-platform results.</div>
                 </div>
               ) : (
                 <div>
@@ -944,8 +1016,8 @@ export default function SocialPublishingPage() {
                     return (
                       <div key={p.id} style={{ display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 16, padding: "12px 20px", borderBottom: i < actPosts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "center" }}>
                         <div>
-                          <div style={{ fontSize: 11, color: "#475569", marginBottom: 2 }}>{fmtDate(p.publishedAt ?? p.updatedAt)}</div>
-                          <div style={{ fontSize: 10, color: "#334155" }}>{timeAgo(p.publishedAt ?? p.updatedAt)}</div>
+                          <div style={{ fontSize: 12, color: "#CBD5E1", marginBottom: 2 }}>{fmtDate(p.publishedAt ?? p.updatedAt)}</div>
+                          <div style={{ fontSize: 11, color: "#94A3B8" }}>{timeAgo(p.publishedAt ?? p.updatedAt)}</div>
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
@@ -954,9 +1026,9 @@ export default function SocialPublishingPage() {
                               const r  = pr[plt];
                               const ok = r?.ok;
                               return (
-                                <span key={plt} title={r?.error ?? undefined} style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 20, cursor: r?.error ? "help" : "default", background: ok === true ? "rgba(34,197,94,0.12)" : ok === false ? "rgba(239,68,68,0.12)" : "rgba(100,116,139,0.12)", color: ok === true ? "#22C55E" : ok === false ? "#EF4444" : "#64748B" }}>
+                                <span key={plt} title={r?.error ?? undefined} style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20, cursor: r?.error ? "help" : "default", background: ok === true ? "rgba(34,197,94,0.12)" : ok === false ? "rgba(239,68,68,0.12)" : "rgba(100,116,139,0.12)", color: ok === true ? "#4ADE80" : ok === false ? "#F87171" : "#CBD5E1" }}>
                                   <span style={{ color: ps.color, marginRight: 3 }}>{ps.icon}</span>
-                                  {ok === true ? "✓" : ok === false ? "✗" : "○"} {ps.label.split(" ")[0]}
+                                  {ok === true ? "✓" : ok === false ? "✗" : "○"} {ps.label}
                                 </span>
                               );
                             })}

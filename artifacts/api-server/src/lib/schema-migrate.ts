@@ -207,11 +207,16 @@ export async function migrateSchema(): Promise<void> {
       cancelled_at         TIMESTAMPTZ,
       cancelled_by         TEXT,
       cancel_reason        TEXT,
+      archived_at          TIMESTAMPTZ,
+      archived_by          TEXT,
       created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
   await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS client_id TEXT`);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS archived_by TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS social_posts_user_archived_created_idx ON social_posts (user_id, archived_at, created_at DESC)`);
 
   // ── Auto Content Settings ──────────────────────────────────────────────────
   await pool.query(`

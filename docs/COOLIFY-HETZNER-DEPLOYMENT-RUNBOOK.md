@@ -20,10 +20,14 @@ Store these only in Coolify's protected environment-variable store:
 - `CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
 - `SCHEDULER_SECRET`
+- `PRIVATE_OBJECT_DIR` (the private Google Cloud Storage path, beginning with the bucket name)
+- `OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64` (base64-encoded Google Cloud service-account JSON)
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_CLERK_PROXY_URL` when a Clerk proxy is used
 
 Do not commit provider secrets, database credentials, OAuth secrets, Telnyx credentials, SMTP credentials, or production API keys.
+
+The Compose application pins `OBJECT_STORAGE_PROVIDER=gcs`. The service account must be able to create V4 signed URLs and read/write objects in the configured private bucket. Configure the bucket CORS policy separately to allow HTTPS `PUT` requests from `https://aiedgesolutions.online`; never make the bucket public.
 
 ## Enforced safety state
 

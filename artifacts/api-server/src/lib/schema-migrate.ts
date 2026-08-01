@@ -157,6 +157,9 @@ export async function migrateSchema(): Promise<void> {
       client_name          TEXT        NOT NULL DEFAULT '',
       platforms            TEXT        NOT NULL DEFAULT '[]',
       image_data           TEXT,
+      media_filename       TEXT,
+      media_mime_type      TEXT,
+      media_file_size      INTEGER,
       caption              TEXT        NOT NULL DEFAULT '',
       cta_type             TEXT        NOT NULL DEFAULT 'none',
       cta_value            TEXT,
@@ -214,6 +217,9 @@ export async function migrateSchema(): Promise<void> {
     );
   `);
   await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS client_id TEXT`);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS media_filename TEXT`);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS media_mime_type TEXT`);
+  await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS media_file_size INTEGER`);
   await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS archived_by TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS social_posts_user_archived_created_idx ON social_posts (user_id, archived_at, created_at DESC)`);

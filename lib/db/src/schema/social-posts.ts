@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,6 +9,9 @@ export const socialPostsTable = pgTable("social_posts", {
   clientName:   text("client_name").notNull().default(""),
   platforms:    text("platforms").notNull().default("[]"),
   imageData:    text("image_data"),
+  mediaFilename: text("media_filename"),
+  mediaMimeType: text("media_mime_type"),
+  mediaFileSize: integer("media_file_size"),
   caption:      text("caption").notNull().default(""),
   ctaType:      text("cta_type").notNull().default("none"),
   ctaValue:     text("cta_value"),

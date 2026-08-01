@@ -6,6 +6,27 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Publishing Center — Instagram Public Media Readiness
+
+#### Fixed
+
+- Routed new Publishing Center image uploads through the existing durable object-storage flow instead
+  of the legacy instance-local upload directory.
+- Persisted bounded media filename, MIME type, and nonzero byte-size metadata so saved and reopened
+  drafts retain accurate attachment details instead of displaying `0 B`.
+- Corrected durable `/objects/...` references to resolve to the public HTTPS storage route required by
+  Instagram, while preserving Facebook-hosted photo URL reuse for paired Facebook + Instagram posts.
+- Added clear pre-publish blocking for Instagram drafts that lack either a durable public image or a
+  paired Facebook image capable of producing a hosted URL.
+- Prevented expired browser `blob:` preview URLs from being treated as persisted attachments.
+
+#### Safety
+
+- Legacy local image references remain supported for existing Facebook drafts but are not treated as
+  Instagram-ready when publishing Instagram alone.
+- No post was published or retried, and no OAuth, scheduler, secret, infrastructure, deployment, or
+  existing published-record behavior changed.
+
 ### Publishing Center — Archive & Readability
 
 #### Added

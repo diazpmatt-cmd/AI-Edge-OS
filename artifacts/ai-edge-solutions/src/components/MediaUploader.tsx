@@ -23,6 +23,7 @@ export interface MediaUploaderProps {
   value: MediaAttachment | null;
   onChange: (v: MediaAttachment | null) => void;
   accept?: MediaKind[];
+  durableImages?: boolean;
   disabled?: boolean;
   style?: React.CSSProperties;
 }
@@ -33,10 +34,15 @@ const KIND_ICON: Record<MediaKind, string> = {
   audio: "🎵",
 };
 
+export function usesDurableMediaUpload(kind: MediaKind, durableImages: boolean): boolean {
+  return kind !== "image" || durableImages;
+}
+
 export function MediaUploader({
   value,
   onChange,
   accept = ["image", "video", "audio"],
+  durableImages = false,
   disabled = false,
   style,
 }: MediaUploaderProps) {
@@ -158,9 +164,9 @@ export function MediaUploader({
 
     try {
       const token = await getToken().catch(() => null);
-      const objectPath = validation.kind === "image"
-        ? await directImageUpload(file, token)
-        : await signedStorageUpload(file, token);
+      const objectPath = usesDurableMediaUpload(validation.kind!, durableImages)
+        ? await signedStorageUpload(file, token)
+        : await directImageUpload(file, token);
 
       onChange({
         objectPath,
@@ -176,7 +182,7 @@ export function MediaUploader({
       setUploading(false);
       setProgress(0);
     }
-  }, [accept, directImageUpload, getToken, onChange, signedStorageUpload]);
+  }, [accept, directImageUpload, durableImages, getToken, onChange, signedStorageUpload]);
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();

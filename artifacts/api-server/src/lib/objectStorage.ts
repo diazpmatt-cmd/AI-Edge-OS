@@ -1,4 +1,6 @@
-import { Storage, File } from "@google-cloud/storage";
+import { Storage, File, type StorageOptions } from "@google-cloud/storage";
+import { GoogleAuth } from "google-auth-library";
+import { existsSync } from "node:fs";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import {
@@ -11,7 +13,7 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-export type ObjectStorageProvider = "replit" | "gcs";
+export type ObjectStorageProvider = "replit" | "gcs-wif";
 
 export class ObjectStorageConfigurationError extends Error {
   readonly code = "object_storage_configuration_error";
@@ -30,7 +32,7 @@ type ObjectStorageEnvironment = Record<string, string | undefined>;
 
 function getObjectStorageProvider(environment: ObjectStorageEnvironment): ObjectStorageProvider {
   const provider = (environment.OBJECT_STORAGE_PROVIDER || "replit").trim().toLowerCase();
-  if (provider !== "replit" && provider !== "gcs") {
+  if (provider !== "replit" && provider !== "gcs-wif") {
     throw new ObjectStorageConfigurationError(
       `Unsupported OBJECT_STORAGE_PROVIDER: ${provider || "empty"}`,
     );
@@ -38,55 +40,71 @@ function getObjectStorageProvider(environment: ObjectStorageEnvironment): Object
   return provider;
 }
 
-function getGcsClientConfiguration(environment: ObjectStorageEnvironment) {
-  const encodedCredentials = environment.OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64?.trim();
-  if (!encodedCredentials) {
+function getGcsWifClientConfiguration(
+  environment: ObjectStorageEnvironment,
+  fileExists: (path: string) => boolean,
+) {
+  const requiredVariables = [
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_API_CERTIFICATE_CONFIG",
+  ] as const;
+  const missingVariables = requiredVariables.filter(
+    (name) => !environment[name]?.trim(),
+  );
+  if (missingVariables.length > 0) {
     throw new ObjectStorageConfigurationError(
-      "Google Cloud Storage credentials are not configured.",
-      ["OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64"],
+      "Google Cloud keyless workload identity is not completely configured.",
+      [...missingVariables],
     );
   }
 
-  let rawCredentials: unknown;
-  try {
-    rawCredentials = JSON.parse(Buffer.from(encodedCredentials, "base64").toString("utf8"));
-  } catch {
+  const credentialFiles = [
+    environment.GOOGLE_APPLICATION_CREDENTIALS!.trim(),
+    environment.GOOGLE_API_CERTIFICATE_CONFIG!.trim(),
+  ];
+  if (credentialFiles.some((path) => !fileExists(path))) {
     throw new ObjectStorageConfigurationError(
-      "OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64 is not valid base64-encoded JSON.",
-    );
-  }
-
-  if (!rawCredentials || typeof rawCredentials !== "object") {
-    throw new ObjectStorageConfigurationError(
-      "OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64 does not contain a service-account object.",
-    );
-  }
-
-  const credentials = rawCredentials as Record<string, unknown>;
-  const projectId = typeof credentials.project_id === "string" ? credentials.project_id : "";
-  const clientEmail = typeof credentials.client_email === "string" ? credentials.client_email : "";
-  const privateKey = typeof credentials.private_key === "string" ? credentials.private_key : "";
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new ObjectStorageConfigurationError(
-      "The object-storage service account is missing project_id, client_email, or private_key.",
+      "Google Cloud keyless workload identity files are unavailable.",
     );
   }
 
   return {
-    projectId,
-    credentials: {
-      client_email: clientEmail,
-      private_key: privateKey,
-    },
+    projectId: environment.GOOGLE_CLOUD_PROJECT!.trim(),
+    keyFilename: environment.GOOGLE_APPLICATION_CREDENTIALS!.trim(),
   };
+}
+
+export function safeStorageFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Unknown object-storage failure";
+  return message
+    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
+    .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[redacted-key]")
+    .replace(/\beyJ[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]{10,}){1,2}\b/g, "[redacted-token]")
+    .replace(/(token|secret|password|credential|assertion|signature)(\s*[:=]\s*)\S+/gi, "$1$2[redacted]")
+    .slice(0, 500);
 }
 
 export function createObjectStorageClient(
   environment: ObjectStorageEnvironment = process.env,
+  fileExists: (path: string) => boolean = existsSync,
 ): Storage {
-  return getObjectStorageProvider(environment) === "gcs"
-    ? new Storage(getGcsClientConfiguration(environment))
-    : new Storage({
+  if (getObjectStorageProvider(environment) === "gcs-wif") {
+    const configuration = getGcsWifClientConfiguration(environment, fileExists);
+    const authClient = new GoogleAuth({
+      ...configuration,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+    return new Storage({
+      projectId: configuration.projectId,
+      // Storage currently carries an older duplicate auth-library type. The
+      // runtime interface is compatible, while the direct v10 client is
+      // required for X.509 external-account credentials.
+      authClient: authClient as unknown as StorageOptions["authClient"],
+    });
+  }
+
+  return new Storage({
         credentials: {
           audience: "replit",
           subject_token_type: "access_token",
@@ -320,7 +338,7 @@ async function signObjectURL({
   method: "GET" | "PUT" | "DELETE" | "HEAD";
   ttlSec: number;
 }): Promise<string> {
-  if (provider === "gcs") {
+  if (provider === "gcs-wif") {
     const [signedURL] = await client.bucket(bucketName).file(objectName).getSignedUrl({
       version: "v4",
       action: method === "PUT" ? "write" : method === "GET" ? "read" : method.toLowerCase() as "delete" | "read",

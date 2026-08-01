@@ -20,14 +20,159 @@ Store these only in Coolify's protected environment-variable store:
 - `CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
 - `SCHEDULER_SECRET`
-- `PRIVATE_OBJECT_DIR` (the private Google Cloud Storage path, beginning with the bucket name)
-- `OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64` (base64-encoded Google Cloud service-account JSON)
+- `PRIVATE_OBJECT_DIR=/ai-edge-os-media-prod-bbb-4827/private`
+- `GOOGLE_CLOUD_PROJECT=project-4978b26c-b88e-454b-875`
+- `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp/workload-identity-credential.json`
+- `GOOGLE_API_CERTIFICATE_CONFIG=/run/secrets/gcp/certificate-config.json`
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_CLERK_PROXY_URL` when a Clerk proxy is used
 
 Do not commit provider secrets, database credentials, OAuth secrets, Telnyx credentials, SMTP credentials, or production API keys.
 
-The Compose application pins `OBJECT_STORAGE_PROVIDER=gcs`. The service account must be able to create V4 signed URLs and read/write objects in the configured private bucket. Configure the bucket CORS policy separately to allow HTTPS `PUT` requests from `https://aiedgesolutions.online`; never make the bucket public.
+The Compose application pins `OBJECT_STORAGE_PROVIDER=gcs-wif`. It deliberately rejects the former `OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64` path. Production uses X.509 Workload Identity Federation, one-hour service-account impersonation tokens, and the IAM Credentials `signBlob` API. No Google service-account private key is created or stored.
+
+## Keyless Google Cloud Storage authentication
+
+### Fixed identities
+
+- Project ID: `project-4978b26c-b88e-454b-875`
+- Bucket: `ai-edge-os-media-prod-bbb-4827`
+- Service account: `ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com`
+- Workload identity pool ID: `ai-edge-coolify-prod`
+- X.509 provider ID: `hetzner-x509`
+- Certificate subject: `ai-edge-os-coolify-prod`
+
+Obtain `PROJECT_NUMBER` with `gcloud projects describe project-4978b26c-b88e-454b-875 --format=value(projectNumber)`. Use the numeric value in principal and provider resource names; do not substitute the project ID.
+
+### Google Cloud setup
+
+1. Keep the enforced `iam.disableServiceAccountKeyCreation` policy enabled. Do not create or download a service-account JSON key.
+2. Enable `iam.googleapis.com`, `iamcredentials.googleapis.com`, `sts.googleapis.com`, `cloudresourcemanager.googleapis.com`, and `storage.googleapis.com` in project `project-4978b26c-b88e-454b-875`.
+3. Create a private certificate authority or offline self-signed CA. Keep the CA private key outside Coolify. Issue a rotatable client-auth certificate whose subject common name is exactly `ai-edge-os-coolify-prod`. Coolify receives only the leaf certificate, its private key, and the public trust chain. Prefer a 30-90 day leaf lifetime and rotate before expiry.
+4. Build `trust_store.yaml` from the public CA chain:
+
+   ```yaml
+   trustStore:
+     trustAnchors:
+     - pemCertificate: "<PEM root certificate with newlines encoded as \\n>"
+     intermediateCas:
+     - pemCertificate: "<PEM intermediate certificate with newlines encoded as \\n>"
+   ```
+
+5. Create the pool and X.509 provider. The condition admits only the exact certificate subject:
+
+   ```bash
+   gcloud iam workload-identity-pools create ai-edge-coolify-prod \
+     --project=project-4978b26c-b88e-454b-875 \
+     --location=global \
+     --display-name="AI Edge Coolify production" \
+     --description="Hetzner Coolify media-upload signer"
+
+   gcloud iam workload-identity-pools providers create-x509 hetzner-x509 \
+     --project=project-4978b26c-b88e-454b-875 \
+     --location=global \
+     --workload-identity-pool=ai-edge-coolify-prod \
+     --trust-store-config-path=trust_store.yaml \
+     --attribute-mapping="google.subject=assertion.subject.dn.cn" \
+     --attribute-condition='assertion.subject.dn.cn=="ai-edge-os-coolify-prod"'
+   ```
+
+6. Bind only that subject to the existing service account for impersonation:
+
+   ```bash
+   gcloud iam service-accounts add-iam-policy-binding \
+     ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com \
+     --project=project-4978b26c-b88e-454b-875 \
+     --role=roles/iam.workloadIdentityUser \
+     --member="principal://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/ai-edge-coolify-prod/subject/ai-edge-os-coolify-prod"
+   ```
+
+7. Grant the service account permission to create Cloud Storage signatures. V4 signing through impersonated credentials requires `iam.serviceAccounts.signBlob`. `roles/iam.workloadIdentityUser` does not contain it; `roles/iam.serviceAccountTokenCreator` does. Prefer a custom project role containing only `iam.serviceAccounts.signBlob`, granted to the service account on itself:
+
+   ```bash
+   gcloud iam roles create aiEdgeGcsV4Signer \
+     --project=project-4978b26c-b88e-454b-875 \
+     --title="AI Edge GCS V4 signer" \
+     --description="Allows only IAM signBlob for V4 media upload URLs" \
+     --permissions=iam.serviceAccounts.signBlob \
+     --stage=GA
+
+   gcloud iam service-accounts add-iam-policy-binding \
+     ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com \
+     --project=project-4978b26c-b88e-454b-875 \
+     --role=projects/project-4978b26c-b88e-454b-875/roles/aiEdgeGcsV4Signer \
+     --member="serviceAccount:ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com"
+   ```
+
+   If organization policy does not permit that custom-role binding, use the supported but broader `roles/iam.serviceAccountTokenCreator` self-binding:
+
+   ```bash
+   gcloud iam service-accounts add-iam-policy-binding \
+     ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com \
+     --project=project-4978b26c-b88e-454b-875 \
+     --role=roles/iam.serviceAccountTokenCreator \
+     --member="serviceAccount:ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com"
+   ```
+
+   No `iam.serviceAccounts.actAs`, `signJwt`, or service-account key permission is required by this application. The predefined Token Creator role includes extra token permissions; record its use if the custom signBlob-only role is unavailable.
+
+8. Grant bucket access only on `gs://ai-edge-os-media-prod-bbb-4827`. The supported predefined fallback is `roles/storage.objectUser`. For strict least privilege, create and bind this narrower custom role:
+
+   ```bash
+   gcloud iam roles create aiEdgeMediaObjectAccess \
+     --project=project-4978b26c-b88e-454b-875 \
+     --title="AI Edge media object access" \
+     --description="Create, read, update, and delete private media objects" \
+     --permissions=storage.objects.create,storage.objects.get,storage.objects.update,storage.objects.delete \
+     --stage=GA
+
+   gcloud storage buckets add-iam-policy-binding gs://ai-edge-os-media-prod-bbb-4827 \
+     --member="serviceAccount:ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com" \
+     --role=projects/project-4978b26c-b88e-454b-875/roles/aiEdgeMediaObjectAccess
+   ```
+
+   Do not grant bucket administration, legacy ACL roles, or public access.
+9. Preserve uniform bucket-level access and public access prevention. Save the following as `cors.json`, then apply it with `gcloud storage buckets update gs://ai-edge-os-media-prod-bbb-4827 --cors-file=cors.json`:
+
+   ```json
+   [
+     {
+       "origin": ["https://aiedgesolutions.online"],
+       "method": ["PUT", "GET", "HEAD"],
+       "responseHeader": ["Content-Type"],
+       "maxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+### Credential and certificate configuration
+
+Generate the external-account configuration with service-account impersonation. This JSON file contains no private key and is not a service-account key:
+
+```bash
+gcloud iam workload-identity-pools create-cred-config \
+  projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/ai-edge-coolify-prod/providers/hetzner-x509 \
+  --service-account=ai-edge-os-media-prod@project-4978b26c-b88e-454b-875.iam.gserviceaccount.com \
+  --service-account-token-lifetime-seconds=3600 \
+  --credential-cert-path=/run/secrets/gcp/client-cert.pem \
+  --credential-cert-private-key-path=/run/secrets/gcp/client-key.pem \
+  --credential-cert-trust-chain-path=/run/secrets/gcp/trust-chain.pem \
+  --output-file=workload-identity-credential.json
+```
+
+The command also creates `certificate_config.json`. Before mounting it, verify its certificate and private-key paths are the `/run/secrets/gcp/...` container paths above.
+
+In Coolify, use protected file mounts rather than environment-variable contents:
+
+- `/run/secrets/gcp/workload-identity-credential.json` - generated external-account configuration; non-secret, but protect against alteration.
+- `/run/secrets/gcp/certificate-config.json` - generated certificate-path configuration; non-secret, but protect against alteration.
+- `/run/secrets/gcp/client-cert.pem` - rotatable leaf certificate.
+- `/run/secrets/gcp/client-key.pem` - rotatable workload private key; secret, read-only, and never logged.
+- `/run/secrets/gcp/trust-chain.pem` - public intermediate chain.
+
+Set the four runtime variables listed above. Do not set `OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64`, do not inject certificate material into environment variables, and do not pass any of these values as Docker build arguments. The Google auth library exchanges the client certificate for a short-lived federated token, impersonates the dedicated service account for a one-hour access token, and calls `signBlob` without exposing a Google private key.
+
+Replit remains unchanged: when `OBJECT_STORAGE_PROVIDER` is absent, the existing Replit local sidecar supplies its external-account credential and signed URL.
 
 ## Enforced safety state
 

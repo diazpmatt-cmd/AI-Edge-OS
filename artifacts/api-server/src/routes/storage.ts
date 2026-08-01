@@ -5,20 +5,12 @@ import {
   ObjectStorageConfigurationError,
   ObjectStorageService,
   ObjectNotFoundError,
+  safeStorageFailureReason,
 } from "../lib/objectStorage";
 import { validateUploadRequest, isBlockedExtension } from "../lib/media-config";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
-
-function safeStorageFailureReason(error: unknown): string {
-  const message = error instanceof Error ? error.message : "Unknown object-storage failure";
-  return message
-    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
-    .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[redacted-key]")
-    .replace(/(token|secret|password|credential)=\S+/gi, "$1=[redacted]")
-    .slice(0, 500);
-}
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   const { userId } = getAuth(req);

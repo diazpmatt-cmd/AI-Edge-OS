@@ -1,48 +1,55 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Storage } from "@google-cloud/storage";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Storage } from "@google-cloud/storage";
 import {
   ObjectStorageConfigurationError,
   ObjectStorageService,
   createObjectStorageClient,
+  safeStorageFailureReason,
 } from "../lib/objectStorage";
 
-const SERVICE_ACCOUNT = Buffer.from(JSON.stringify({
-  project_id: "test-project",
-  client_email: "storage@example.invalid",
-  private_key: "test-private-key",
-})).toString("base64");
+const KEYLESS_ENVIRONMENT = {
+  OBJECT_STORAGE_PROVIDER: "gcs-wif",
+  GOOGLE_CLOUD_PROJECT: "test-project",
+  GOOGLE_APPLICATION_CREDENTIALS: "/run/secrets/gcp/workload-identity-credential.json",
+  GOOGLE_API_CERTIFICATE_CONFIG: "/run/secrets/gcp/certificate-config.json",
+  PRIVATE_OBJECT_DIR: "/media-bucket/private",
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("production object-storage configuration", () => {
-  it("fails closed when the direct GCS credential is missing", () => {
-    expect(() => createObjectStorageClient({ OBJECT_STORAGE_PROVIDER: "gcs" }))
+  it("initializes keyless external-account credentials without a service-account key", () => {
+    const client = createObjectStorageClient(KEYLESS_ENVIRONMENT, () => true);
+
+    expect(client).toBeInstanceOf(Storage);
+    expect(KEYLESS_ENVIRONMENT).not.toHaveProperty("OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64");
+  });
+
+  it.each([
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_API_CERTIFICATE_CONFIG",
+  ])("fails closed when %s is missing", (missingVariable) => {
+    const environment = { ...KEYLESS_ENVIRONMENT, [missingVariable]: "" };
+
+    expect(() => createObjectStorageClient(environment, () => true))
       .toThrowError(ObjectStorageConfigurationError);
 
     try {
-      createObjectStorageClient({ OBJECT_STORAGE_PROVIDER: "gcs" });
+      createObjectStorageClient(environment, () => true);
     } catch (error) {
       expect(error).toMatchObject({
         code: "object_storage_configuration_error",
-        missingVariables: ["OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64"],
+        missingVariables: [missingVariable],
       });
-      expect(String(error)).not.toContain("private_key");
     }
   });
 
-  it("rejects malformed credentials without logging their value", () => {
-    const malformedValue = "not-valid-base64-json";
-    expect(() => createObjectStorageClient({
-      OBJECT_STORAGE_PROVIDER: "gcs",
-      OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64: malformedValue,
-    })).toThrowError("is not valid base64-encoded JSON");
-
-    try {
-      createObjectStorageClient({
-        OBJECT_STORAGE_PROVIDER: "gcs",
-        OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64: malformedValue,
-      });
-    } catch (error) {
-      expect(String(error)).not.toContain(malformedValue);
-    }
+  it("fails closed when configured workload identity files are unavailable", () => {
+    expect(() => createObjectStorageClient(KEYLESS_ENVIRONMENT, () => false))
+      .toThrowError("Google Cloud keyless workload identity files are unavailable.");
   });
 
   it("generates a V4 signed PUT URL and returns a stable object path", async () => {
@@ -52,11 +59,7 @@ describe("production object-storage configuration", () => {
     const file = vi.fn(() => ({ getSignedUrl }));
     const bucket = vi.fn(() => ({ file }));
     const client = { bucket } as unknown as Storage;
-    const service = new ObjectStorageService(client, {
-      OBJECT_STORAGE_PROVIDER: "gcs",
-      OBJECT_STORAGE_SERVICE_ACCOUNT_JSON_B64: SERVICE_ACCOUNT,
-      PRIVATE_OBJECT_DIR: "/media-bucket/private",
-    });
+    const service = new ObjectStorageService(client, KEYLESS_ENVIRONMENT);
 
     const uploadURL = await service.getObjectEntityUploadURL();
     const objectPath = service.normalizeObjectEntityPath(uploadURL);
@@ -70,11 +73,47 @@ describe("production object-storage configuration", () => {
     }));
   });
 
-  it("preserves the Replit signer as the default outside Coolify", async () => {
+  it("fails closed and redacts diagnostics when impersonated signing fails", async () => {
+    const sensitiveToken = "eyJhbGciOiJSUzI1NiJ9.sensitive-payload.signaturevalue";
+    const getSignedUrl = vi.fn().mockRejectedValue(new Error(
+      `PERMISSION_DENIED credential=private-value assertion=${sensitiveToken} https://signed.example.invalid/object?signature=secret`,
+    ));
+    const client = {
+      bucket: vi.fn(() => ({ file: vi.fn(() => ({ getSignedUrl })) })),
+    } as unknown as Storage;
+    const service = new ObjectStorageService(client, KEYLESS_ENVIRONMENT);
+
+    let failure: unknown;
+    try {
+      await service.getObjectEntityUploadURL();
+    } catch (error) {
+      failure = error;
+    }
+
+    const diagnostic = safeStorageFailureReason(failure);
+    expect(diagnostic).toContain("PERMISSION_DENIED");
+    expect(diagnostic).not.toContain("private-value");
+    expect(diagnostic).not.toContain(sensitiveToken);
+    expect(diagnostic).not.toContain("signed.example.invalid");
+  });
+
+  it("preserves the Replit sidecar signing path as the default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        signed_url: "https://storage.googleapis.com/media-bucket/private/uploads/replit-object",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const client = { bucket: vi.fn() } as unknown as Storage;
     const service = new ObjectStorageService(client, {
       PRIVATE_OBJECT_DIR: "/media-bucket/private",
     });
-    await expect(service.getObjectEntityUploadURL()).rejects.toThrow();
+
+    await expect(service.getObjectEntityUploadURL()).resolves.toContain("replit-object");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:1106/object-storage/signed-object-url",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

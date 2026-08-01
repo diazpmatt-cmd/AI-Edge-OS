@@ -10,6 +10,11 @@ import { PlatformStateChip, resolvePlatformUIState } from "@/components/Platform
 import { MediaUploader, type MediaAttachment } from "@/components/MediaUploader";
 import { resolvePreviewUrl } from "@/lib/media-config";
 import { PLATFORM_MEDIA_COMPAT } from "@/lib/media-compat";
+import {
+  instagramMediaBlocker,
+  mediaMetadataPayload,
+  persistedMediaAttachment,
+} from "@/lib/publishing-media";
 
 type Platform = "facebook" | "instagram" | "google" | "youtube" | "tiktok";
 
@@ -18,6 +23,9 @@ export type SocialPost = {
   clientName: string;
   platforms: Platform[];
   imageUrl: string | null;
+  mediaFilename: string | null;
+  mediaMimeType: string | null;
+  mediaFileSize: number | null;
   videoUrl: string | null;
   audioUrl: string | null;
   youtubeTitle:   string | null;
@@ -140,6 +148,9 @@ const EMPTY_FORM = {
   clientName:   "Bed Bugs & Beyond",
   platforms:    ["facebook"] as Platform[],
   imageUrl:     null as string | null,
+  mediaFilename: null as string | null,
+  mediaMimeType: null as string | null,
+  mediaFileSize: null as number | null,
   videoUrl:     "" as string,
   audioUrl:     null as string | null,
   youtubeTitle:   "" as string,
@@ -299,6 +310,9 @@ export default function SocialPublishingPage() {
       clientName:   post.clientName,
       platforms:    post.platforms,
       imageUrl:     post.imageUrl,
+      mediaFilename: post.mediaFilename,
+      mediaMimeType: post.mediaMimeType,
+      mediaFileSize: post.mediaFileSize,
       videoUrl:     post.videoUrl ?? "",
       audioUrl:     post.audioUrl ?? null,
       youtubeTitle:   post.youtubeTitle   ?? "",
@@ -315,15 +329,18 @@ export default function SocialPublishingPage() {
 
   // Derive current media attachment from form fields (for MediaUploader)
   const currentMedia = useMemo((): MediaAttachment | null => {
-    if (form.imageUrl) return { objectPath: form.imageUrl, kind: "image", mimeType: "image/jpeg", filename: "", byteSize: 0 };
-    if (form.videoUrl) return { objectPath: form.videoUrl, kind: "video", mimeType: "video/mp4", filename: "", byteSize: 0 };
-    if (form.audioUrl) return { objectPath: form.audioUrl, kind: "audio", mimeType: "audio/mpeg", filename: "", byteSize: 0 };
-    return null;
-  }, [form.imageUrl, form.videoUrl, form.audioUrl]);
+    return persistedMediaAttachment(form);
+  }, [form]);
 
   const handleMediaChange = useCallback((att: MediaAttachment | null) => {
     if (!att) {
-      setForm(f => ({ ...f, imageUrl: null, videoUrl: "", audioUrl: null }));
+      setForm(f => ({
+        ...f,
+        imageUrl: null,
+        videoUrl: "",
+        audioUrl: null,
+        ...mediaMetadataPayload(null),
+      }));
       return;
     }
     setForm(f => ({
@@ -331,6 +348,7 @@ export default function SocialPublishingPage() {
       imageUrl: att.kind === "image" ? att.objectPath : null,
       videoUrl: att.kind === "video" ? att.objectPath : "",
       audioUrl: att.kind === "audio" ? att.objectPath : null,
+      ...mediaMetadataPayload(att),
     }));
   }, []);
 
@@ -344,6 +362,9 @@ export default function SocialPublishingPage() {
     clientName:  form.clientName,
     platforms:   form.platforms,
     imageUrl:    form.imageUrl,
+    mediaFilename: form.mediaFilename,
+    mediaMimeType: form.mediaMimeType,
+    mediaFileSize: form.mediaFileSize,
     videoUrl:       form.videoUrl.trim() || null,
     audioUrl:       form.audioUrl || null,
     youtubeTitle:   form.platforms.includes("youtube") ? form.youtubeTitle.trim() || null : null,
@@ -383,7 +404,12 @@ export default function SocialPublishingPage() {
   }
 
   const canSave    = !saveMut.isPending;
-  const canPublish = canSave && !publishMut.isPending && form.platforms.length > 0 && !!form.caption.trim();
+  const instagramBlocker = instagramMediaBlocker(form.platforms, form.imageUrl);
+  const canPublish = canSave
+    && !publishMut.isPending
+    && form.platforms.length > 0
+    && !!form.caption.trim()
+    && !instagramBlocker;
 
   return (
     <AppShell>
@@ -655,7 +681,7 @@ export default function SocialPublishingPage() {
                     {saveMut.isPending ? "Saving…" : "💾 Save Draft"}
                   </button>
                   {form.scheduleMode === "later" && (
-                    <button onClick={() => saveMut.mutate(buildPayload("scheduled"))} disabled={!canSave || !form.scheduledAt || form.platforms.length === 0} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF", opacity: (!canSave || !form.scheduledAt || form.platforms.length === 0) ? 0.5 : 1 }}>
+                    <button onClick={() => saveMut.mutate(buildPayload("scheduled"))} disabled={!canSave || !form.scheduledAt || form.platforms.length === 0 || !!instagramBlocker} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", color: "#00AEEF", opacity: (!canSave || !form.scheduledAt || form.platforms.length === 0 || !!instagramBlocker) ? 0.5 : 1 }}>
                       🗓 Schedule Post
                     </button>
                   )}
@@ -677,7 +703,14 @@ export default function SocialPublishingPage() {
                 <MediaUploader
                   value={currentMedia}
                   onChange={handleMediaChange}
+                  durableImages
                 />
+
+                {instagramBlocker && (
+                  <div role="alert" style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#FCA5A5", fontSize: 12, lineHeight: 1.45 }}>
+                    <strong>Instagram not ready:</strong> {instagramBlocker}
+                  </div>
+                )}
 
                 {/* Platform / media compatibility warnings */}
                 {currentMedia && form.platforms.length > 0 && (() => {
@@ -851,6 +884,10 @@ export default function SocialPublishingPage() {
               {visiblePosts.map((post, i) => {
                 const ss = STATUS_STYLE[post.status] ?? STATUS_STYLE.draft;
                 const isPublishing = publishingId === post.id;
+                const postInstagramBlocker = instagramMediaBlocker(
+                  post.platforms,
+                  post.imageUrl ?? post.matchedImageUrl,
+                );
                 return (
                   <div key={post.id} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 16, padding: "14px 20px", borderBottom: i < visiblePosts.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none", alignItems: "start" }}>
 
@@ -927,6 +964,12 @@ export default function SocialPublishingPage() {
                         </div>
                       )}
 
+                      {postInstagramBlocker && (post.status === "draft" || post.status === "failed" || post.status === "scheduled") && (
+                        <div role="alert" style={{ marginTop: 6, fontSize: 11, color: "#FCA5A5", background: "rgba(239,68,68,0.08)", borderRadius: 6, padding: "4px 8px" }}>
+                          Instagram not ready: {postInstagramBlocker}
+                        </div>
+                      )}
+
                       {/* V4: Performance metrics */}
                       {(post.status === "published" || post.status === "partial") && (
                         <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -961,8 +1004,9 @@ export default function SocialPublishingPage() {
                       {(post.status === "draft" || post.status === "failed" || post.status === "scheduled") && (
                         <button
                           onClick={() => { setPublishingId(post.id); publishMut.mutate(post.id); }}
-                          disabled={isPublishing || publishMut.isPending}
-                          style={{ padding: "6px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "linear-gradient(135deg,#00AEEF,#0080CC)", border: "none", color: "#fff", opacity: (isPublishing || publishMut.isPending) ? 0.6 : 1, whiteSpace: "nowrap" }}
+                          disabled={isPublishing || publishMut.isPending || !!postInstagramBlocker}
+                          title={postInstagramBlocker ?? "Publish post"}
+                          style={{ padding: "6px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "linear-gradient(135deg,#00AEEF,#0080CC)", border: "none", color: "#fff", opacity: (isPublishing || publishMut.isPending || !!postInstagramBlocker) ? 0.6 : 1, whiteSpace: "nowrap" }}
                         >
                           {isPublishing ? "…" : "🚀 Publish"}
                         </button>

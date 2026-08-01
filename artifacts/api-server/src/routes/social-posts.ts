@@ -15,6 +15,11 @@ import path from "path";
 import fs from "fs";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { resolveGoogleToken } from "../lib/google-token.js";
+import {
+  normalizePersistedMediaMetadata,
+  resolvePublicImageUrl,
+  selectInstagramImageUrl,
+} from "../lib/social-media-publishing.js";
 
 const router = Router();
 const objectStorageService = new ObjectStorageService();
@@ -91,6 +96,9 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     clientName:      r.clientName,
     platforms:       JSON.parse(r.platforms || "[]") as string[],
     imageUrl:        r.imageData,
+    mediaFilename:   r.mediaFilename ?? null,
+    mediaMimeType:   r.mediaMimeType ?? null,
+    mediaFileSize:   r.mediaFileSize ?? null,
     videoUrl:        r.videoUrl ?? null,
     youtubeTitle:    r.youtubeTitle   ?? null,
     youtubePrivacy:  r.youtubePrivacy ?? null,
@@ -194,11 +202,19 @@ router.post("/social-posts", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const b = req.body as any;
+  const mediaMetadata = normalizePersistedMediaMetadata({
+    filename: b.mediaFilename,
+    mimeType: b.mediaMimeType,
+    fileSize: b.mediaFileSize,
+  });
   const [row] = await db.insert(socialPostsTable).values({
     userId,
     clientName:  b.clientName  ?? "Bed Bugs & Beyond",
     platforms:   JSON.stringify(b.platforms ?? []),
     imageData:   b.imageUrl    ?? null,
+    mediaFilename: mediaMetadata.filename,
+    mediaMimeType: mediaMetadata.mimeType,
+    mediaFileSize: mediaMetadata.fileSize,
     videoUrl:       b.videoUrl       ?? null,
     audioUrl:       b.audioUrl       ?? null,
     youtubeTitle:   b.youtubeTitle   ?? null,
@@ -217,10 +233,18 @@ router.patch("/social-posts/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const b = req.body as any;
+  const mediaMetadata = normalizePersistedMediaMetadata({
+    filename: b.mediaFilename,
+    mimeType: b.mediaMimeType,
+    fileSize: b.mediaFileSize,
+  });
   const [row] = await db.update(socialPostsTable).set({
     ...(b.clientName      !== undefined && { clientName:      b.clientName }),
     ...(b.platforms       !== undefined && { platforms:       JSON.stringify(b.platforms) }),
     ...(b.imageUrl        !== undefined && { imageData:       b.imageUrl }),
+    ...(b.mediaFilename   !== undefined && { mediaFilename:   mediaMetadata.filename }),
+    ...(b.mediaMimeType   !== undefined && { mediaMimeType:   mediaMetadata.mimeType }),
+    ...(b.mediaFileSize   !== undefined && { mediaFileSize:   mediaMetadata.fileSize }),
     ...(b.videoUrl        !== undefined && { videoUrl:        b.videoUrl }),
     ...(b.audioUrl        !== undefined && { audioUrl:        b.audioUrl }),
     ...(b.youtubeTitle    !== undefined && { youtubeTitle:    b.youtubeTitle }),
@@ -348,17 +372,8 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     return data.data;
   };
 
-  // Converts any stored image path to a public HTTPS URL usable by Facebook/Instagram/GBP.
-  // /objects/{id}  → https://aiedgesolutions.online/api/storage/objects/{id}
-  // http(s)://...  → returned as-is
-  // anything else  → null (e.g. local /api/uploads/ paths are handled by buildImageForm, not here)
-  function resolveImageUrl(val: string | null | undefined): string | null {
-    if (!val) return null;
-    if (val.startsWith("http")) return val;
-    if (val.startsWith("/objects/")) return `https://aiedgesolutions.online/api/storage${val}`;
-    return null;
-  }
-
+  // Legacy local uploads remain supported for Facebook blob upload. Durable
+  // object paths and existing HTTPS assets are resolved by the shared helper.
   const buildImageForm = async (imageData: string | null): Promise<{ blob: Blob; filename: string } | null> => {
     if (!imageData) return null;
     if (imageData.startsWith("/api/uploads/")) {
@@ -439,7 +454,9 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     try {
       const fbCaption = post.captionFacebook ?? post.caption;
       const fullCaption = buildCaption(fbCaption, post.ctaType, post.ctaValue);
-      const fbImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
+      const fbImageSource = resolvePublicImageUrl(post.imageData)
+        ?? post.imageData
+        ?? resolvePublicImageUrl(post.matchedImageUrl);
       const photoResult = await uploadPhotoToFacebook(page.id, page.access_token, fullCaption, fbImageSource);
       results.facebook = { ok: true, postId: photoResult.post_id ?? photoResult.id };
       fbPhotoUrl = await getPhotoUrl(photoResult.id, page.access_token);
@@ -457,10 +474,11 @@ router.post("/social-posts/:id/publish", async (req, res) => {
       const igAccountId = igData.instagram_business_account?.id;
       if (!igAccountId) throw new Error("No Instagram Business Account linked to this Facebook Page.");
 
-      const imageUrl =
-        fbPhotoUrl ??
-        (post.imageData?.startsWith("http") ? post.imageData : null) ??
-        resolveImageUrl(post.matchedImageUrl);
+      const imageUrl = selectInstagramImageUrl({
+        facebookHostedUrl: fbPhotoUrl,
+        postImageUrl: post.imageData,
+        matchedImageUrl: post.matchedImageUrl,
+      });
       if (!imageUrl) throw new Error("Instagram requires a public image URL. Upload an image to the post or add images to the Image Assets library.");
 
       const igCaption = post.captionFacebook ?? post.caption;
@@ -516,7 +534,9 @@ router.post("/social-posts/:id/publish", async (req, res) => {
         }
         const token = tokenResult.token;
         const googleCaption = post.captionGoogle ?? post.caption;
-        const gbpImageSource = post.imageData ?? resolveImageUrl(post.matchedImageUrl) ?? null;
+        const gbpImageSource = resolvePublicImageUrl(post.imageData)
+          ?? post.imageData
+          ?? resolvePublicImageUrl(post.matchedImageUrl);
         const gbpResult = await publishToGBP(token, gbpConn, googleCaption, post.ctaType, post.ctaValue, gbpImageSource);
         results.google = { ok: true, postId: gbpResult.id };
       } catch (e: any) {

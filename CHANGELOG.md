@@ -6,6 +6,22 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Command Edge Center — Floating Navigation Control
+
+#### Changed
+
+- Replaced the small non-dashboard Command Edge Center breadcrumb with a large, fixed left-side
+  navigation control using a neutral high-contrast surface, terminal icon, and directional chevron.
+- Reserved a desktop content gutter and added compact bottom docking on narrower screens so the
+  control remains stationary and usable without obscuring navigation or final page content.
+- Added keyboard focus, hover, pressed, responsive, and reduced-motion behavior without changing
+  the existing `/admin/dashboard` destination or unrelated global typography.
+
+#### Safety
+
+- No Publishing Center, archive, post, scheduler, OAuth, infrastructure, assistant mascot,
+  deployment, or application-data behavior changed.
+
 ### Publishing Center — Archive & Readability
 
 #### Added

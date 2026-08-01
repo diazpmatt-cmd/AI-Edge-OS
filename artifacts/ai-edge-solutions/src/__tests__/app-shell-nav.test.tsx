@@ -191,23 +191,61 @@ describe("AppShell — sidebar removed", () => {
   });
 });
 
-// ── BREADCRUMB ────────────────────────────────────────────────────────────────
+// ── COMMAND EDGE CENTER FLOATING CONTROL ─────────────────────────────────────
 
-describe("AppShell — breadcrumb navigation", () => {
+describe("AppShell — Command Edge Center floating control", () => {
   beforeEach(() => vi.resetModules());
 
-  it("shows ← Command Edge Center breadcrumb on non-dashboard routes", async () => {
+  it("shows the exact visible label on non-dashboard routes", async () => {
     await renderShell("/admin/lead-recovery");
-    expect(screen.getAllByText(/← Command Edge Center/i).length).toBeGreaterThanOrEqual(1);
+    const link = screen.getByRole("link", { name: "Open Command Edge Center" });
+    expect(link.textContent?.trim()).toBe("Command Edge Center");
+    expect(link.querySelector(".command-edge-center-icon")).toBeTruthy();
+    expect(link.querySelector(".command-edge-center-chevron")).toBeTruthy();
   });
 
-  it("does NOT show breadcrumb on /admin/dashboard", async () => {
-    await renderShell("/admin/dashboard");
-    expect(screen.queryAllByText(/← Command Edge Center/i)).toHaveLength(0);
-  });
-
-  it("shows breadcrumb on /admin/reviews", async () => {
+  it("preserves the dashboard destination", async () => {
     await renderShell("/admin/reviews");
-    expect(screen.getAllByText(/← Command Edge Center/i).length).toBeGreaterThanOrEqual(1);
+    const link = screen.getByRole("link", { name: "Open Command Edge Center" });
+    expect(link.getAttribute("href")).toBe("/admin/dashboard");
+  });
+
+  it("is a fixed floating control with a reserved content gutter", async () => {
+    await renderShell("/admin/reviews");
+    const link = screen.getByRole("link", { name: "Open Command Edge Center" });
+    const main = document.querySelector("main");
+    const styles = Array.from(document.querySelectorAll("style")).map(style => style.textContent).join("\n");
+
+    expect(link.classList.contains("command-edge-center-link")).toBe(true);
+    expect(main?.classList.contains("app-main--with-command-edge")).toBe(true);
+    expect(styles).toContain("position: fixed");
+    expect(styles).toContain("padding-left: 252px");
+  });
+
+  it("is keyboard focusable and exposes a visible focus treatment", async () => {
+    await renderShell("/admin/reviews");
+    const link = screen.getByRole("link", { name: "Open Command Edge Center" });
+    link.focus();
+    const styles = Array.from(document.querySelectorAll("style")).map(style => style.textContent).join("\n");
+
+    expect(document.activeElement).toBe(link);
+    expect(link.tabIndex).toBe(0);
+    expect(styles).toContain(".command-edge-center-link:focus-visible");
+  });
+
+  it("ships compact responsive docking and reduced-motion rules", async () => {
+    await renderShell("/admin/reviews");
+    const styles = Array.from(document.querySelectorAll("style")).map(style => style.textContent).join("\n");
+
+    expect(styles).toContain("@media (max-width: 1100px)");
+    expect(styles).toContain("@media (max-width: 560px)");
+    expect(styles).toContain("padding-bottom: 88px");
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("does NOT show the return control on /admin/dashboard", async () => {
+    await renderShell("/admin/dashboard");
+    expect(screen.queryByRole("link", { name: "Open Command Edge Center" })).toBeNull();
+    expect(document.querySelector("main")?.classList.contains("app-main--with-command-edge")).toBe(false);
   });
 });

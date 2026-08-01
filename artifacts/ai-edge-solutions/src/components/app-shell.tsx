@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LogOut } from "lucide-react";
+import { ChevronRight, LogOut, SquareTerminal } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode } from "react";
@@ -8,6 +8,7 @@ import { useActiveBusiness } from "@/contexts/business-context";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const TOP_NAV_H = 70;
+export const COMMAND_EDGE_CENTER_DESTINATION = "/admin/dashboard";
 
 // Darken a hex color by mixing with black for gradient endpoints
 function accentDark(hex: string): string {
@@ -213,10 +214,25 @@ function UserMenu() {
   );
 }
 
+function CommandEdgeCenterButton() {
+  return (
+    <Link
+      to={COMMAND_EDGE_CENTER_DESTINATION}
+      className="command-edge-center-link"
+      aria-label="Open Command Edge Center"
+    >
+      <SquareTerminal className="command-edge-center-icon" aria-hidden="true" />
+      <span>Command Edge Center</span>
+      <ChevronRight className="command-edge-center-chevron" aria-hidden="true" />
+    </Link>
+  );
+}
+
 // ── App shell ─────────────────────────────────────────────────────────────────
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { setTheme, isDark } = useTheme();
+  const showCommandEdgeButton = !location.startsWith(COMMAND_EDGE_CENTER_DESTINATION);
 
   return (
     <div style={{ minHeight: "100vh", background: isDark ? "#030612" : "#F1F5F9", transition: "background 0.25s" }}>
@@ -275,29 +291,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* ── Main content — full width below top nav ── */}
       <main
-        className="app-main"
+        className={`app-main${showCommandEdgeButton ? " app-main--with-command-edge" : ""}`}
         style={{ paddingTop: TOP_NAV_H, minWidth: 0, overflowX: "hidden" }}
       >
-        {!location.startsWith("/admin/dashboard") && (
-          <div style={{
-            padding: "8px 24px",
-            borderBottom: isDark ? "1px solid rgba(0,174,239,0.07)" : "1px solid rgba(0,174,239,0.12)",
-            background: isDark ? "rgba(3,6,18,0.6)" : "rgba(240,247,255,0.8)",
-          }}>
-            <Link
-              to="/admin/dashboard"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 5,
-                fontSize: 11, fontWeight: 600, color: "#00AEEF",
-                textDecoration: "none", opacity: 0.75, transition: "opacity 0.15s",
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "1")}
-              onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.opacity = "0.75")}
-            >
-              ← Command Edge Center
-            </Link>
-          </div>
-        )}
+        {showCommandEdgeButton && <CommandEdgeCenterButton />}
 
         <div style={{
           maxWidth: 1200, width: "100%",
@@ -311,6 +308,101 @@ export function AppShell({ children }: { children: ReactNode }) {
       <style>{`
         * { transition: background-color 0.2s, border-color 0.2s, color 0.2s; }
         [role="tablist"]::-webkit-scrollbar { display: none; }
+        .app-main--with-command-edge {
+          box-sizing: border-box;
+          padding-left: 252px;
+        }
+        .command-edge-center-link {
+          position: fixed;
+          z-index: 24;
+          top: calc(50% + 35px);
+          left: 16px;
+          width: 220px;
+          min-height: 58px;
+          box-sizing: border-box;
+          display: grid;
+          grid-template-columns: 24px minmax(0, 1fr) 20px;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 16px;
+          border: 1px solid #CBD5E1;
+          border-radius: 999px;
+          background: #F8FAFC;
+          color: #0F172A;
+          box-shadow: 0 10px 28px rgba(15,23,42,0.18), 0 2px 8px rgba(15,23,42,0.12);
+          font-size: 16px;
+          font-weight: 750;
+          line-height: 1.25;
+          text-decoration: none;
+          transform: translateY(-50%);
+          transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+        }
+        .command-edge-center-icon {
+          width: 24px;
+          height: 24px;
+          stroke-width: 2.25;
+        }
+        .command-edge-center-chevron {
+          width: 20px;
+          height: 20px;
+          stroke-width: 2.5;
+        }
+        .command-edge-center-link:hover {
+          background: #FFFFFF;
+          box-shadow: 0 14px 34px rgba(15,23,42,0.22), 0 3px 10px rgba(15,23,42,0.14);
+          transform: translateY(-50%) translateX(3px);
+        }
+        .command-edge-center-link:active {
+          box-shadow: 0 6px 18px rgba(15,23,42,0.18), 0 1px 4px rgba(15,23,42,0.12);
+          transform: translateY(-50%) translateX(1px);
+        }
+        .command-edge-center-link:focus-visible {
+          outline: 3px solid #38BDF8;
+          outline-offset: 4px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .command-edge-center-link {
+            transition: none;
+          }
+          .command-edge-center-link:hover,
+          .command-edge-center-link:active {
+            transform: translateY(-50%);
+          }
+        }
+        @media (max-width: 1100px) {
+          .app-main--with-command-edge {
+            padding-left: 0;
+            padding-bottom: 88px;
+          }
+          .command-edge-center-link,
+          .command-edge-center-link:hover,
+          .command-edge-center-link:active {
+            top: auto;
+            bottom: 16px;
+            left: 16px;
+            width: 210px;
+            min-height: 50px;
+            padding: 10px 14px;
+            font-size: 15px;
+            transform: none;
+          }
+        }
+        @media (max-width: 560px) {
+          .app-main--with-command-edge {
+            padding-bottom: 92px;
+          }
+          .command-edge-center-link,
+          .command-edge-center-link:hover,
+          .command-edge-center-link:active {
+            right: 12px;
+            bottom: 12px;
+            left: 12px;
+            width: auto;
+            max-width: 360px;
+            min-height: 52px;
+            margin-right: auto;
+          }
+        }
         @media (max-width: 640px) {
           .app-topnav { padding: 0 10px; gap: 8px; }
         }

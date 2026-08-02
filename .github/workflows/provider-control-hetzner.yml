@@ -1,0 +1,25 @@
+name: Provider Control Hetzner Verification
+
+on:
+  pull_request:
+    paths:
+      - "lib/provider-control-hetzner/**"
+      - ".github/workflows/provider-control-hetzner.yml"
+      - "pnpm-lock.yaml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/provider-control-hetzner typecheck
+      - run: pnpm --filter @workspace/provider-control-hetzner test
+      - run: git diff --check

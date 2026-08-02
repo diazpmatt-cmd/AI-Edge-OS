@@ -37,10 +37,12 @@ import competitorIntelligenceRouter from "./competitor-intelligence";
 import contactRouter from "./contact";
 import referralsRouter from "./referrals";
 import backlinksRouter from "./backlinks";
+import dabStatusRouter from "./dab-status";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(dabStatusRouter);
 router.use(keywordsRouter);
 router.use(articlesRouter);
 router.use(articleAssetsRouter);

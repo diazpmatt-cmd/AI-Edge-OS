@@ -1,17 +1,20 @@
 import { pool } from "@workspace/db";
-import { planNextOperation, type TaskSnapshot } from "@workspace/development-control-runner";
+import {
+  planNextOperation,
+  type TaskSnapshot,
+} from "../../../lib/development-control-runner/src/index.js";
 import {
   createRunnerRuntime,
   type RunnerCycleRecord,
-} from "@workspace/development-control-runner-runtime";
+} from "../../../lib/development-control-runner-runtime/src/index.js";
 import {
   createWakeupController,
   type PriorHeartbeatSnapshot,
-} from "@workspace/development-control-runner-runtime/scheduler";
+} from "../../../lib/development-control-runner-runtime/src/scheduler.js";
 import {
   evaluateActivationReadiness,
   INITIAL_PLANNER_RUNTIME_OPERATIONS,
-} from "@workspace/development-control-runner-runtime/readiness";
+} from "../../../lib/development-control-runner-runtime/src/readiness.js";
 import { logger } from "./lib/logger";
 import { readDabPlannerWorkerConfig } from "./lib/dab-planner-worker-config";
 

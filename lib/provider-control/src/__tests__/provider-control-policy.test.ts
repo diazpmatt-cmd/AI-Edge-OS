@@ -21,9 +21,16 @@ describe("provider-control policy", () => {
 
   it("rejects an unregistered resource", () => {
     const request = createProviderRequestEnvelope({
-      ...providerControlFixtureReadRequest,
+      provider: providerControlFixtureReadRequest.provider,
+      operation: providerControlFixtureReadRequest.operation,
       resourceId: "project/unregistered-project",
-      requestFingerprint: undefined as never,
+      principal: providerControlFixtureReadRequest.principal,
+      authorizationClass: providerControlFixtureReadRequest.authorizationClass,
+      nonce: "fixture-nonce-unregistered",
+      issuedAt: providerControlFixtureReadRequest.issuedAt,
+      expiresAt: providerControlFixtureReadRequest.expiresAt,
+      correlationId: "fixture-correlation-unregistered",
+      idempotencyKey: "fixture-idempotency-unregistered",
     });
     expect(evaluateProviderPolicy({
       request,

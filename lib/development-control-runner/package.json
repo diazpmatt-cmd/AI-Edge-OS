@@ -1,0 +1,11 @@
+{
+  "name": "@workspace/development-control-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test test/development-control-runner.test.mjs && rm -rf .test-dist"
+  }
+}

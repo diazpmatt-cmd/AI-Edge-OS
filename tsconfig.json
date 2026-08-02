@@ -20,6 +20,9 @@
     },
     {
       "path": "./lib/development-control-store"
+    },
+    {
+      "path": "./lib/provider-control"
     }
   ]
 }

@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/development-control-runner-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src/__tests__/runtime.test.ts"
+  },
+  "dependencies": {
+    "@workspace/development-control-runner": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

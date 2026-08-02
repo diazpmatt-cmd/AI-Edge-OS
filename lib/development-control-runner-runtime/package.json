@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./scheduler": "./src/scheduler.ts"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test test/runtime.test.mjs && rm -rf .test-dist"
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test test/runtime.test.mjs test/scheduler.test.mjs && rm -rf .test-dist"
   }
 }

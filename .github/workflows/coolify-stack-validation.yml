@@ -51,6 +51,7 @@ jobs:
       REFERRAL_DELIVERY_ENABLED: "false"
       REFERRAL_DELIVERY_MODE: dry_run
       REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
+      GORILLADESK_API_KEY: ci-only-not-production
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

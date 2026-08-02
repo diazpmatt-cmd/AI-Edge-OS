@@ -77,10 +77,13 @@ export function evaluateProviderPolicy(input: {
     }
   }
 
-  const unique = [...new Set(reasons)].sort();
+  const unique = [...new Set<ProviderPolicyReasonCode>(reasons)].sort();
+  const reasonCodes: readonly ProviderPolicyReasonCode[] = Object.freeze(
+    unique.length === 0 ? ["ALLOWED"] : unique,
+  );
   return Object.freeze({
     status: unique.length === 0 ? "allowed" : "denied",
-    reasonCodes: Object.freeze(unique.length === 0 ? ["ALLOWED"] : unique),
+    reasonCodes,
     requestFingerprint: input.request.requestFingerprint,
     resourceId: input.request.resourceId,
     operation: input.request.operation,

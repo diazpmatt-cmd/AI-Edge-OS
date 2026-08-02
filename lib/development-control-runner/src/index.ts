@@ -107,15 +107,19 @@ export interface ExecutionPlan {
   readonly fingerprint: string;
 }
 
+function categories(...values: AuthorizationCategory[]): readonly AuthorizationCategory[] {
+  return Object.freeze(values);
+}
+
 const OPERATION_CATEGORIES: Readonly<Record<Exclude<RunnerOperation, "stop">, readonly AuthorizationCategory[]>> = Object.freeze({
-  claim_approved_task: Object.freeze(["scope"]),
-  renew_claim: Object.freeze(["scope"]),
-  transition_to_in_progress: Object.freeze(["scope", "editing"]),
-  request_review: Object.freeze(["scope", "pull_request_creation"]),
-  submit_completion_report: Object.freeze(["scope"]),
-  verify_task: Object.freeze(["scope"]),
-  complete_task: Object.freeze(["scope", "merging"]),
-  release_claim: Object.freeze(["scope"]),
+  claim_approved_task: categories("scope"),
+  renew_claim: categories("scope"),
+  transition_to_in_progress: categories("scope", "editing"),
+  request_review: categories("scope", "pull_request_creation"),
+  submit_completion_report: categories("scope"),
+  verify_task: categories("scope"),
+  complete_task: categories("scope", "merging"),
+  release_claim: categories("scope"),
 });
 
 function canonical(value: unknown): string {
@@ -135,7 +139,7 @@ function hash(input: string): string {
 }
 
 function stop(taskId: string | null, code: RunnerStopCode): ExecutionPlan {
-  const plan = { taskId, operation: "stop" as const, stopCode: code, requiredCategories: Object.freeze([] as AuthorizationCategory[]) };
+  const plan = { taskId, operation: "stop" as const, stopCode: code, requiredCategories: categories() };
   return Object.freeze({ ...plan, fingerprint: hash(canonical(plan)) });
 }
 
@@ -196,7 +200,7 @@ function evaluateTask(task: TaskSnapshot, actorId: string, nowMs: number): Execu
     taskId: task.taskId,
     operation,
     stopCode: null,
-    requiredCategories: Object.freeze([...requiredCategories]),
+    requiredCategories: categories(...requiredCategories),
   };
   return Object.freeze({ ...body, fingerprint: hash(canonical(body)) });
 }

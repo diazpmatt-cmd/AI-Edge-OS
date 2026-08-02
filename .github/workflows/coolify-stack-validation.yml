@@ -63,7 +63,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck:libs
-      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts
+      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/ai-edge-solutions run build
       - name: Validate Compose rendering

@@ -1,12 +1,75 @@
-import {
-  planNextOperation,
-  type AuthorizationCategory,
-  type ExecutionPlan,
-  type RunnerInput,
-  type RunnerOperation,
-  type RunnerStopCode,
-  type TaskSnapshot,
-} from "@workspace/development-control-runner";
+export type AuthorizationCategory =
+  | "scope"
+  | "editing"
+  | "committing"
+  | "pushing"
+  | "pull_request_creation"
+  | "merging"
+  | "deployment"
+  | "credentials"
+  | "paid_providers"
+  | "external_actions";
+
+export type RunnerOperation =
+  | "claim_approved_task"
+  | "renew_claim"
+  | "transition_to_in_progress"
+  | "request_review"
+  | "submit_completion_report"
+  | "verify_task"
+  | "complete_task"
+  | "release_claim"
+  | "stop";
+
+export type RunnerStopCode =
+  | "NO_ELIGIBLE_TASK"
+  | "APPROVAL_MISSING"
+  | "CATEGORY_MISSING"
+  | "STALE_SHA"
+  | "STALE_SPECIFICATION"
+  | "ACTIVE_FOREIGN_LEASE"
+  | "LEASE_EXPIRED_REQUIRES_RECOVERY"
+  | "GIT_EVIDENCE_UNAVAILABLE"
+  | "POLICY_DENIED"
+  | "OPERATION_DEFERRED"
+  | "HUMAN_REQUIRED"
+  | "KILL_SWITCH_ACTIVE"
+  | "IDEMPOTENCY_CONFLICT"
+  | "INVALID_SNAPSHOT";
+
+export interface TaskSnapshot {
+  readonly taskId: string;
+  readonly priority: number;
+  readonly createdAt: string;
+  readonly state: string;
+  readonly specificationRevision: number;
+  readonly specificationHash: string;
+  readonly observedSpecificationRevision: number;
+  readonly observedSpecificationHash: string;
+  readonly expectedSha: string;
+  readonly approvals: readonly unknown[];
+  readonly lease?: unknown;
+  readonly gitEvidence: Readonly<Record<string, unknown>>;
+  readonly requestedOperation?: Exclude<RunnerOperation, "stop"> | null;
+  readonly policyDecision: "allowed" | "denied" | "deferred";
+  readonly humanRequired?: boolean;
+  readonly idempotency?: unknown;
+}
+
+export interface RunnerInput {
+  readonly actorId: string;
+  readonly now: string;
+  readonly killSwitch: boolean;
+  readonly tasks: readonly TaskSnapshot[];
+}
+
+export interface ExecutionPlan {
+  readonly taskId: string | null;
+  readonly operation: RunnerOperation;
+  readonly stopCode: RunnerStopCode | null;
+  readonly requiredCategories: readonly AuthorizationCategory[];
+  readonly fingerprint: string;
+}
 
 export type RuntimeFailureCode =
   | "INVALID_CYCLE"
@@ -62,6 +125,7 @@ export interface RunnerRuntimeWritePort {
 export interface RunnerRuntimeDependencies {
   readonly reads: RunnerRuntimeReadPort;
   readonly writes: RunnerRuntimeWritePort;
+  readonly plan: (input: RunnerInput) => ExecutionPlan;
   readonly now: () => string;
 }
 
@@ -101,11 +165,7 @@ function parseTime(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function failure(
-  cycleKey: string,
-  failureCode: RuntimeFailureCode,
-  inputFingerprint: string | null,
-): RunnerCycleFailure {
+function failure(cycleKey: string, failureCode: RuntimeFailureCode, inputFingerprint: string | null): RunnerCycleFailure {
   return Object.freeze({ cycleKey, failureCode, inputFingerprint });
 }
 
@@ -184,11 +244,9 @@ export function createRunnerRuntime(dependencies: RunnerRuntimeDependencies) {
         return failure(request.cycleKey, "IDEMPOTENCY_CONFLICT", inputFingerprint);
       }
 
-      const plan = planNextOperation(runnerInput);
+      const plan = dependencies.plan(runnerInput);
       const completedAt = dependencies.now();
-      if (parseTime(completedAt) === null) {
-        return failure(request.cycleKey, "INVALID_CYCLE", inputFingerprint);
-      }
+      if (parseTime(completedAt) === null) return failure(request.cycleKey, "INVALID_CYCLE", inputFingerprint);
 
       const record = toRecord(request, startedAt, completedAt, inputFingerprint, plan);
       try {

@@ -39,7 +39,7 @@ export function readDabAgentWorkerConfig(env: NodeJS.ProcessEnv = process.env): 
     throw new Error("DAB_AGENT_RUNTIME_ID is required when the agent worker is enabled");
   }
   if (enabled && providerEnabled && killSwitch) {
-    throw new Error("DAB_AGENT_KILL_SWITCH must be false before provider dispatch can be enabled");
+    throw new Error("The DAB agent kill switch must be false before provider dispatch can be enabled");
   }
   if (model.length > 120) throw new Error("DAB_AGENT_MODEL is too long");
 

@@ -1,15 +1,20 @@
 import { pool } from "@workspace/db";
 import {
   planNextOperation,
-  type TaskSnapshot,
+  type ExecutionPlan as PlannerExecutionPlan,
+  type RunnerInput as PlannerRunnerInput,
 } from "../../../lib/development-control-runner/src/index.js";
 import {
   createRunnerRuntime,
+  type ExecutionPlan as RuntimeExecutionPlan,
   type RunnerCycleRecord,
+  type RunnerInput as RuntimeRunnerInput,
+  type TaskSnapshot as RuntimeTaskSnapshot,
 } from "../../../lib/development-control-runner-runtime/src/index.js";
 import {
   createWakeupController,
   type PriorHeartbeatSnapshot,
+  type WakeupHeartbeat,
 } from "../../../lib/development-control-runner-runtime/src/scheduler.js";
 import {
   evaluateActivationReadiness,
@@ -20,6 +25,12 @@ import { readDabPlannerWorkerConfig } from "./lib/dab-planner-worker-config";
 
 const config = readDabPlannerWorkerConfig();
 let stopped = false;
+
+function planRuntimeInput(input: RuntimeRunnerInput): RuntimeExecutionPlan {
+  return planNextOperation(
+    input as unknown as PlannerRunnerInput,
+  ) as PlannerExecutionPlan as RuntimeExecutionPlan;
+}
 
 async function bootstrapRunnerTables(): Promise<void> {
   await pool.query(`
@@ -99,12 +110,12 @@ async function canonicalStoreReady(): Promise<boolean> {
   return result.rows[0]?.ready === true;
 }
 
-async function readTasks(limit: number): Promise<readonly TaskSnapshot[]> {
+async function readTasks(limit: number): Promise<readonly RuntimeTaskSnapshot[]> {
   const result = await pool.query<{
     task_id: string;
     active_revision: number;
     specification_hash: string;
-    state: TaskSnapshot["state"];
+    state: string;
     created_at: Date;
     expected_origin_main_sha: string;
     approvals: unknown;
@@ -139,7 +150,7 @@ async function readTasks(limit: number): Promise<readonly TaskSnapshot[]> {
     [limit],
   );
 
-  return Object.freeze(result.rows.map((row) => Object.freeze({
+  return Object.freeze(result.rows.map((row): RuntimeTaskSnapshot => Object.freeze({
     taskId: row.task_id,
     priority: 0,
     createdAt: row.created_at.toISOString(),
@@ -149,7 +160,7 @@ async function readTasks(limit: number): Promise<readonly TaskSnapshot[]> {
     observedSpecificationRevision: row.active_revision,
     observedSpecificationHash: row.specification_hash,
     expectedSha: row.expected_origin_main_sha,
-    approvals: Array.isArray(row.approvals) ? row.approvals as TaskSnapshot["approvals"] : [],
+    approvals: Array.isArray(row.approvals) ? row.approvals : [],
     lease: row.owner_actor_id && row.claim_expires_at && row.lease_version
       ? Object.freeze({
           ownerId: row.owner_actor_id,
@@ -162,7 +173,7 @@ async function readTasks(limit: number): Promise<readonly TaskSnapshot[]> {
       expectedSha: row.expected_origin_main_sha,
       observedSha: row.expected_origin_main_sha,
     }),
-    policyDecision: "allowed" as const,
+    policyDecision: "allowed",
   })));
 }
 
@@ -170,11 +181,9 @@ async function readPriorHeartbeat(): Promise<PriorHeartbeatSnapshot> {
   const result = await pool.query<{
     due_slot: string | null;
     evaluated_at: Date;
-    attempted_cycle_key: string | null;
-    reason_code: string;
     consecutive_failures: number;
   }>(
-    `SELECT due_slot, evaluated_at, attempted_cycle_key, reason_code, consecutive_failures
+    `SELECT due_slot, evaluated_at, consecutive_failures
        FROM dab_runner_heartbeats
       WHERE schedule_id = $1
       ORDER BY evaluated_at DESC, heartbeat_id DESC
@@ -194,7 +203,7 @@ async function readPriorHeartbeat(): Promise<PriorHeartbeatSnapshot> {
 async function appendHeartbeat(input: {
   now: string;
   readiness: ReturnType<typeof evaluateActivationReadiness>;
-  heartbeat: Awaited<ReturnType<ReturnType<typeof createWakeupController>["tick"]>>;
+  heartbeat: WakeupHeartbeat;
   consecutiveFailures: number;
 }): Promise<void> {
   await pool.query(
@@ -230,7 +239,11 @@ async function tick(): Promise<void> {
 
   try {
     const storeReady = await canonicalStoreReady();
-    const evidence = (ready: boolean, ref: string) => Object.freeze({ ready, evidenceRef: ref, observedAt: now });
+    const evidence = (ready: boolean, ref: string) => Object.freeze({
+      ready,
+      evidenceRef: ref,
+      observedAt: now,
+    });
     const readiness = evaluateActivationReadiness({
       runtimeId: config.runtimeId,
       environment: "production",
@@ -258,19 +271,28 @@ async function tick(): Promise<void> {
     const prior = await readPriorHeartbeat();
     const runtime = createRunnerRuntime({
       now: () => new Date().toISOString(),
-      plan: planNextOperation,
+      plan: planRuntimeInput,
       reads: {
         readTasks: storeReady ? readTasks : async () => [],
         async readCycleLease() {
           return Object.freeze({ available: false, ownerId: null, expiresAt: null });
         },
         async readPriorCycle(cycleKey) {
-          const result = await pool.query<{ input_fingerprint: string; record: RunnerCycleRecord }>(
+          const result = await pool.query<{
+            input_fingerprint: string;
+            record: RunnerCycleRecord;
+          }>(
             `SELECT input_fingerprint, record FROM dab_runner_cycles WHERE cycle_key = $1`,
             [cycleKey],
           );
           const row = result.rows[0];
-          return row ? Object.freeze({ cycleKey, inputFingerprint: row.input_fingerprint, result: row.record }) : null;
+          return row
+            ? Object.freeze({
+                cycleKey,
+                inputFingerprint: row.input_fingerprint,
+                result: row.record,
+              })
+            : null;
         },
       },
       writes: {
@@ -283,10 +305,18 @@ async function tick(): Promise<void> {
              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12::jsonb)
              ON CONFLICT (cycle_key) DO NOTHING`,
             [
-              record.cycleKey, record.actorId, record.startedAt, record.completedAt,
-              record.taskId, record.operation, record.stopCode,
-              JSON.stringify(record.requiredCategories), record.planFingerprint,
-              record.inputFingerprint, record.outcome, JSON.stringify(record),
+              record.cycleKey,
+              record.actorId,
+              record.startedAt,
+              record.completedAt,
+              record.taskId,
+              record.operation,
+              record.stopCode,
+              JSON.stringify(record.requiredCategories),
+              record.planFingerprint,
+              record.inputFingerprint,
+              record.outcome,
+              JSON.stringify(record),
             ],
           );
         },
@@ -294,7 +324,7 @@ async function tick(): Promise<void> {
     });
 
     const controller = createWakeupController({ runCycle: runtime.runCycle });
-    const heartbeat = readiness.status === "ready"
+    const heartbeat: WakeupHeartbeat = readiness.status === "ready"
       ? await controller.tick({
           now,
           policy: {
@@ -313,7 +343,7 @@ async function tick(): Promise<void> {
           scheduleId: config.scheduleId,
           evaluatedAt: now,
           due: false,
-          reasonCode: "PAUSED" as const,
+          reasonCode: "PAUSED",
           attemptedCycleKey: null,
           dueSlot: null,
           nextEligibleAt: null,
@@ -335,7 +365,9 @@ async function tick(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "[dab-planner] tick failed closed");
   } finally {
-    await releaseLease().catch((err) => logger.error({ err }, "[dab-planner] lease release failed"));
+    await releaseLease().catch((err) =>
+      logger.error({ err }, "[dab-planner] lease release failed"),
+    );
   }
 }
 
@@ -345,7 +377,10 @@ async function main(): Promise<void> {
     return;
   }
   await bootstrapRunnerTables();
-  logger.info({ runtimeId: config.runtimeId, intervalMs: config.intervalMs }, "[dab-planner] planner-only worker started");
+  logger.info(
+    { runtimeId: config.runtimeId, intervalMs: config.intervalMs },
+    "[dab-planner] planner-only worker started",
+  );
   while (!stopped) {
     await tick();
     await new Promise((resolve) => setTimeout(resolve, config.intervalMs));

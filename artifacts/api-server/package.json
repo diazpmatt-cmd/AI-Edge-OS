@@ -27,7 +27,7 @@
     "ai": "^7.0.3",
     "archiver": "^8.0.0",
     "cookie-parser": "^1.4.7",
-    "cors": "^5.2.1",
+    "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
     "google-auth-library": "^10.9.0",

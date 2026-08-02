@@ -24,6 +24,8 @@ services:
       REFERRAL_DELIVERY_MODE: dry_run
       REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
       REFERRAL_DELIVERY_ALLOWLIST: ""
+      DAB_PLANNER_WORKER_ENABLED: "true"
+      DAB_PLANNER_INTERVAL_MS: "60000"
     volumes:
       - type: bind
         source: ./secrets/gcp/workload-identity-credential.json

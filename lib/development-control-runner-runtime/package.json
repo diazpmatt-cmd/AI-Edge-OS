@@ -3,15 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src/__tests__/runtime.test.ts"
-  },
-  "dependencies": {
-    "@workspace/development-control-runner": "workspace:*"
-  },
-  "devDependencies": {
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test test/runtime.test.mjs && rm -rf .test-dist"
   }
 }

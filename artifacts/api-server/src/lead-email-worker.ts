@@ -1,9 +1,17 @@
 import { OAuth2Client } from "google-auth-library";
-import { and, eq } from "drizzle-orm";
-import { db } from "@workspace/db";
-import { leadsTable } from "@workspace/db/schema";
+import { pool } from "@workspace/db";
 import { logger } from "./lib/logger.js";
-import { classifyLeadEmail } from "./lib/lead-email-classifier.js";
+import { classifyLeadEmail, type ClassifiedLeadEmail } from "./lib/lead-email-classifier.js";
+import {
+  buildCheckpointedGmailQuery,
+  classifyWorkerErrorCode,
+  computeRetryDelayMs,
+  nextCheckpointInternalDateMs,
+  sanitizeWorkerError,
+} from "./lib/lead-email-worker-policy.js";
+
+const WORKER_KEY = "gmail-lead-bridge-v1";
+const PROVIDER = "gmail";
 
 const required = (name: string) => {
   const value = process.env[name]?.trim();
@@ -23,8 +31,9 @@ const maxBackoffMs = numberSetting("LEAD_EMAIL_MAX_BACKOFF_MS", 3600000);
 const requestTimeoutMs = numberSetting("GMAIL_REQUEST_TIMEOUT_MS", 20000);
 const maxPages = numberSetting("GMAIL_MAX_PAGES_PER_POLL", 10);
 const maxMessageTextChars = numberSetting("GMAIL_MAX_MESSAGE_TEXT_CHARS", 100000);
+const checkpointOverlapMs = numberSetting("GMAIL_CHECKPOINT_OVERLAP_MS", 21600000);
 const userId = process.env.GMAIL_USER_ID?.trim() || "me";
-const query = process.env.GMAIL_LEAD_QUERY?.trim()
+const baseQuery = process.env.GMAIL_LEAD_QUERY?.trim()
   || "newer_than:14d (from:(messaging.yelp.com) OR from:(email.nextdoor.com))";
 
 let stopping = false;
@@ -35,43 +44,41 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-function safeErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : "Unknown error";
-  return message
-    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
-    .replace(/ya29\.[A-Za-z0-9._-]+/g, "[redacted-token]")
-    .slice(0, 300);
-}
+type TextExtraction = { text: string; truncated: boolean };
+type PersistenceResult = "persisted" | "ignored" | "duplicate" | "conflict";
 
 function decodeBase64Url(value: string | undefined): string {
   if (!value) return "";
   return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 }
 
-function extractText(payload: any, depth = 0): string {
-  if (!payload || depth > 10) return "";
+function extractText(payload: any, depth = 0): TextExtraction {
+  if (!payload) return { text: "", truncated: false };
+  if (depth > 10) return { text: "", truncated: true };
 
   if (payload.mimeType === "text/plain" && payload.body?.data) {
-    return decodeBase64Url(payload.body.data).slice(0, maxMessageTextChars);
+    const decoded = decodeBase64Url(payload.body.data);
+    return { text: decoded.slice(0, maxMessageTextChars), truncated: decoded.length > maxMessageTextChars };
   }
 
   if (Array.isArray(payload.parts)) {
-    const plain = payload.parts
-      .slice(0, 100)
-      .map((part: any) => extractText(part, depth + 1))
-      .filter(Boolean)
-      .join("\n")
-      .slice(0, maxMessageTextChars);
-    if (plain) return plain;
+    let text = "";
+    let truncated = payload.parts.length > 100;
+    for (const part of payload.parts.slice(0, 100)) {
+      const extracted = extractText(part, depth + 1);
+      if (extracted.text) text += `${text ? "\n" : ""}${extracted.text}`;
+      truncated ||= extracted.truncated || text.length > maxMessageTextChars;
+      if (text.length >= maxMessageTextChars) break;
+    }
+    if (text) return { text: text.slice(0, maxMessageTextChars), truncated };
   }
 
   if (payload.body?.data) {
-    return decodeBase64Url(payload.body.data)
-      .replace(/<[^>]+>/g, " ")
-      .slice(0, maxMessageTextChars);
+    const decoded = decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, " ");
+    return { text: decoded.slice(0, maxMessageTextChars), truncated: decoded.length > maxMessageTextChars };
   }
 
-  return "";
+  return { text: "", truncated: false };
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -97,22 +104,126 @@ async function gmailFetch(path: string, accessToken: string) {
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      throw new Error(`Gmail API request failed with status ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`Gmail API request failed with status ${response.status}`);
     return await response.json() as any;
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`Gmail API request timed out after ${requestTimeoutMs}ms`);
-    }
+    if (controller.signal.aborted) throw new Error(`Gmail API request timed out after ${requestTimeoutMs}ms`);
     throw error;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function listMessageIds(accessToken: string): Promise<string[]> {
+async function bootstrapPersistence(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lead_email_events (
+      provider text NOT NULL,
+      external_message_id text NOT NULL,
+      platform text NOT NULL,
+      classification text NOT NULL,
+      payload_hash text NOT NULL,
+      state text NOT NULL CHECK (state IN ('claimed','persisted','ignored','quarantined','conflict')),
+      gmail_internal_date_ms bigint NOT NULL,
+      lead_id uuid,
+      safe_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      processed_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (provider, external_message_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_lead_email_events_processed_at
+      ON lead_email_events(processed_at DESC);
+
+    CREATE TABLE IF NOT EXISTS lead_email_quarantine (
+      provider text NOT NULL,
+      external_message_id text NOT NULL,
+      reason_code text NOT NULL,
+      safe_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      attempts integer NOT NULL DEFAULT 1,
+      first_seen_at timestamptz NOT NULL DEFAULT now(),
+      last_seen_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (provider, external_message_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_email_worker_state (
+      worker_key text PRIMARY KEY,
+      checkpoint_internal_date_ms bigint,
+      last_attempt_at timestamptz,
+      last_successful_poll_at timestamptz,
+      last_failure_at timestamptz,
+      consecutive_failures integer NOT NULL DEFAULT 0,
+      last_error_code text,
+      last_error_message text,
+      last_listed_count integer NOT NULL DEFAULT 0,
+      last_ingested_count integer NOT NULL DEFAULT 0,
+      last_skipped_count integer NOT NULL DEFAULT 0,
+      last_quarantined_count integer NOT NULL DEFAULT 0,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    INSERT INTO lead_email_worker_state(worker_key)
+      VALUES ($1) ON CONFLICT(worker_key) DO NOTHING;
+  `, [WORKER_KEY]);
+}
+
+async function getCheckpointInternalDateMs(): Promise<number | null> {
+  const result = await pool.query<{ checkpoint_internal_date_ms: string | null }>(
+    "SELECT checkpoint_internal_date_ms FROM lead_email_worker_state WHERE worker_key=$1",
+    [WORKER_KEY],
+  );
+  const raw = result.rows[0]?.checkpoint_internal_date_ms;
+  if (raw === null || raw === undefined) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+async function markPollAttempt(): Promise<void> {
+  await pool.query(`UPDATE lead_email_worker_state
+    SET last_attempt_at=now(), updated_at=now()
+    WHERE worker_key=$1`, [WORKER_KEY]);
+}
+
+async function markPollSuccess(result: {
+  checkpointInternalDateMs: number | null;
+  listed: number;
+  ingested: number;
+  skipped: number;
+  quarantined: number;
+}): Promise<void> {
+  await pool.query(`UPDATE lead_email_worker_state SET
+      checkpoint_internal_date_ms=$2,
+      last_successful_poll_at=now(),
+      consecutive_failures=0,
+      last_error_code=NULL,
+      last_error_message=NULL,
+      last_listed_count=$3,
+      last_ingested_count=$4,
+      last_skipped_count=$5,
+      last_quarantined_count=$6,
+      updated_at=now()
+    WHERE worker_key=$1`, [
+    WORKER_KEY,
+    result.checkpointInternalDateMs,
+    result.listed,
+    result.ingested,
+    result.skipped,
+    result.quarantined,
+  ]);
+}
+
+async function markPollFailure(error: unknown, consecutiveFailures: number): Promise<void> {
+  await pool.query(`UPDATE lead_email_worker_state SET
+      last_failure_at=now(),
+      consecutive_failures=$2,
+      last_error_code=$3,
+      last_error_message=$4,
+      updated_at=now()
+    WHERE worker_key=$1`, [
+    WORKER_KEY,
+    consecutiveFailures,
+    classifyWorkerErrorCode(error),
+    sanitizeWorkerError(error),
+  ]);
+}
+
+async function listMessageIds(accessToken: string, query: string): Promise<string[]> {
   const ids: string[] = [];
   const seen = new Set<string>();
   let pageToken: string | undefined;
@@ -138,71 +249,216 @@ async function listMessageIds(accessToken: string): Promise<string[]> {
   return ids;
 }
 
+function safeMetadata(input: {
+  from: string;
+  subject: string;
+  classified?: ClassifiedLeadEmail;
+  receivedAt: Date;
+}) {
+  return {
+    from: input.from.slice(0, 1_000),
+    subject: input.subject.slice(0, 1_000),
+    platform: input.classified?.source ?? "unknown",
+    kind: input.classified?.kind ?? "unknown",
+    urgency: input.classified?.urgency ?? "none",
+    receivedAt: input.receivedAt.toISOString(),
+  };
+}
+
+async function quarantineMessage(input: {
+  messageId: string;
+  internalDateMs: number;
+  reasonCode: string;
+  metadata: Record<string, unknown>;
+}): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`INSERT INTO lead_email_quarantine(
+        provider,external_message_id,reason_code,safe_metadata,attempts,first_seen_at,last_seen_at)
+      VALUES($1,$2,$3,$4::jsonb,1,now(),now())
+      ON CONFLICT(provider,external_message_id) DO UPDATE SET
+        reason_code=EXCLUDED.reason_code,
+        safe_metadata=EXCLUDED.safe_metadata,
+        attempts=lead_email_quarantine.attempts+1,
+        last_seen_at=now()`, [PROVIDER, input.messageId, input.reasonCode, JSON.stringify(input.metadata)]);
+    await client.query(`INSERT INTO lead_email_events(
+        provider,external_message_id,platform,classification,payload_hash,state,gmail_internal_date_ms,safe_metadata)
+      VALUES($1,$2,'unknown','unknown',$3,'quarantined',$4,$5::jsonb)
+      ON CONFLICT(provider,external_message_id) DO NOTHING`, [
+      PROVIDER,
+      input.messageId,
+      `quarantine:${input.reasonCode}`,
+      input.internalDateMs,
+      JSON.stringify(input.metadata),
+    ]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function persistClassifiedEmail(input: {
+  messageId: string;
+  internalDateMs: number;
+  classified: ClassifiedLeadEmail;
+  summary: string;
+  metadata: Record<string, unknown>;
+}): Promise<PersistenceResult> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const claimed = await client.query<{ external_message_id: string }>(`INSERT INTO lead_email_events(
+        provider,external_message_id,platform,classification,payload_hash,state,gmail_internal_date_ms,safe_metadata)
+      VALUES($1,$2,$3,$4,$5,'claimed',$6,$7::jsonb)
+      ON CONFLICT(provider,external_message_id) DO NOTHING
+      RETURNING external_message_id`, [
+      PROVIDER,
+      input.messageId,
+      input.classified.source,
+      input.classified.kind,
+      input.classified.payloadHash,
+      input.internalDateMs,
+      JSON.stringify(input.metadata),
+    ]);
+
+    if (!claimed.rowCount) {
+      const existing = await client.query<{ payload_hash: string }>(
+        "SELECT payload_hash FROM lead_email_events WHERE provider=$1 AND external_message_id=$2 FOR UPDATE",
+        [PROVIDER, input.messageId],
+      );
+      if (existing.rows[0]?.payload_hash === input.classified.payloadHash) {
+        await client.query("COMMIT");
+        return "duplicate";
+      }
+
+      await client.query(`INSERT INTO lead_email_quarantine(
+          provider,external_message_id,reason_code,safe_metadata,attempts,first_seen_at,last_seen_at)
+        VALUES($1,$2,'payload_conflict',$3::jsonb,1,now(),now())
+        ON CONFLICT(provider,external_message_id) DO UPDATE SET
+          reason_code='payload_conflict',
+          safe_metadata=EXCLUDED.safe_metadata,
+          attempts=lead_email_quarantine.attempts+1,
+          last_seen_at=now()`, [PROVIDER, input.messageId, JSON.stringify(input.metadata)]);
+      await client.query(`UPDATE lead_email_events SET state='conflict', processed_at=now()
+        WHERE provider=$1 AND external_message_id=$2`, [PROVIDER, input.messageId]);
+      await client.query("COMMIT");
+      return "conflict";
+    }
+
+    const actionable = input.classified.kind === "lead" || input.classified.kind === "follow_up";
+    let leadId: string | null = null;
+    if (actionable) {
+      const lead = await client.query<{ id: string }>(`INSERT INTO leads(
+          client_name,source,phone,customer_name,message,event_type,status,notes)
+        VALUES('Bed Bugs and Beyond','gmail-lead-bridge','',$1,$2,$3,'new',$4)
+        RETURNING id`, [
+        input.classified.customerName,
+        input.summary || null,
+        `gmail:${input.messageId}`,
+        JSON.stringify({ ...input.metadata, payloadHash: input.classified.payloadHash, gmailMessageId: input.messageId }).slice(0, 20_000),
+      ]);
+      leadId = lead.rows[0]?.id ?? null;
+    }
+
+    const finalState = actionable ? "persisted" : "ignored";
+    await client.query(`UPDATE lead_email_events SET state=$3, lead_id=$4, processed_at=now()
+      WHERE provider=$1 AND external_message_id=$2`, [PROVIDER, input.messageId, finalState, leadId]);
+    await client.query("COMMIT");
+    return finalState;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function pollOnce(client: OAuth2Client) {
+  await markPollAttempt();
+  const checkpoint = await getCheckpointInternalDateMs();
+  const query = buildCheckpointedGmailQuery(baseQuery, checkpoint, checkpointOverlapMs);
   const token = await withTimeout(client.getAccessToken(), requestTimeoutMs, "Gmail token refresh");
   if (!token.token) throw new Error("Unable to obtain Gmail access token");
 
-  const messageIds = await listMessageIds(token.token);
+  const messageIds = await listMessageIds(token.token, query);
+  const processedDates: number[] = [];
   let ingested = 0;
   let skipped = 0;
+  let quarantined = 0;
 
   for (const messageId of messageIds.reverse()) {
     if (stopping) break;
 
-    const eventType = `gmail:${messageId}`;
-    const existing = await db.select({ id: leadsTable.id }).from(leadsTable)
-      .where(and(eq(leadsTable.source, "gmail-lead-bridge"), eq(leadsTable.eventType, eventType)))
-      .limit(1);
-    if (existing.length) {
-      skipped += 1;
+    const message = await gmailFetch(`/messages/${messageId}?format=full`, token.token);
+    const internalDateMs = Number(message.internalDate);
+    if (!Number.isFinite(internalDateMs) || internalDateMs < 0) {
+      await quarantineMessage({
+        messageId,
+        internalDateMs: Date.now(),
+        reasonCode: "invalid_internal_date",
+        metadata: { gmailMessageId: messageId },
+      });
+      quarantined += 1;
       continue;
     }
 
-    const message = await gmailFetch(`/messages/${messageId}?format=full`, token.token);
-    const headers = Object.fromEntries((message.payload?.headers ?? [])
-      .slice(0, 200)
-      .map((header: any) => [String(header.name).toLowerCase(), String(header.value).slice(0, 1000)]));
-    const receivedAt = new Date(Number(message.internalDate ?? Date.now()));
+    const rawHeaders = Array.isArray(message.payload?.headers) ? message.payload.headers : [];
+    const headers = Object.fromEntries(rawHeaders.slice(0, 200)
+      .map((header: any) => [String(header.name).toLowerCase(), String(header.value).slice(0, 1_000)]));
+    const receivedAt = new Date(internalDateMs);
+    const extracted = extractText(message.payload);
+    if (rawHeaders.length > 200 || extracted.truncated) {
+      await quarantineMessage({
+        messageId,
+        internalDateMs,
+        reasonCode: rawHeaders.length > 200 ? "too_many_headers" : "message_text_too_large",
+        metadata: safeMetadata({ from: headers.from ?? "", subject: headers.subject ?? "", receivedAt }),
+      });
+      processedDates.push(internalDateMs);
+      quarantined += 1;
+      continue;
+    }
+
     const classified = classifyLeadEmail({
       messageId,
       from: headers.from ?? "",
       subject: headers.subject ?? "",
-      body: extractText(message.payload),
+      body: extracted.text,
       receivedAt,
     });
-
-    const actionable = classified.kind === "lead" || classified.kind === "follow_up";
     const summary = [
       classified.service && `Service: ${classified.service}`,
       classified.location && `Location: ${classified.location}`,
       classified.details && `Details: ${classified.details}`,
-    ].filter(Boolean).join("\n").slice(0, 10000);
-
-    await db.insert(leadsTable).values({
-      clientName: "Bed Bugs and Beyond",
-      source: "gmail-lead-bridge",
-      phone: "",
-      customerName: classified.customerName,
-      message: summary || headers.subject || null,
-      eventType,
-      status: actionable ? "new" : "ignored",
-      notes: JSON.stringify({
-        platform: classified.source,
-        kind: classified.kind,
-        urgency: classified.urgency,
-        payloadHash: classified.payloadHash,
-        gmailMessageId: messageId,
-        subject: headers.subject ?? "",
-        from: headers.from ?? "",
-        receivedAt: receivedAt.toISOString(),
-      }).slice(0, 20000),
+    ].filter(Boolean).join("\n").slice(0, 10_000);
+    const metadata = safeMetadata({
+      from: headers.from ?? "",
+      subject: headers.subject ?? "",
+      classified,
+      receivedAt,
     });
 
-    ingested += 1;
-    logger.info({ gmailMessageId: messageId, source: classified.source, kind: classified.kind }, "Lead email ingested");
+    const result = await persistClassifiedEmail({ messageId, internalDateMs, classified, summary, metadata });
+    processedDates.push(internalDateMs);
+    if (result === "persisted") {
+      ingested += 1;
+      logger.info({ gmailMessageId: messageId, source: classified.source, kind: classified.kind }, "Lead email ingested");
+    } else if (result === "conflict") {
+      quarantined += 1;
+      logger.warn({ gmailMessageId: messageId }, "Lead email payload conflict quarantined");
+    } else {
+      skipped += 1;
+    }
   }
 
-  return { listed: messageIds.length, ingested, skipped };
+  const checkpointInternalDateMs = nextCheckpointInternalDateMs(checkpoint, processedDates);
+  const result = { listed: messageIds.length, ingested, skipped, quarantined, checkpointInternalDateMs };
+  await markPollSuccess(result);
+  return result;
 }
 
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -218,7 +474,9 @@ async function main() {
   if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1000 || requestTimeoutMs > 120000) throw new Error("GMAIL_REQUEST_TIMEOUT_MS must be between 1000 and 120000");
   if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new Error("GMAIL_MAX_PAGES_PER_POLL must be between 1 and 100");
   if (!Number.isInteger(maxMessageTextChars) || maxMessageTextChars < 1000 || maxMessageTextChars > 1000000) throw new Error("GMAIL_MAX_MESSAGE_TEXT_CHARS must be between 1000 and 1000000");
+  if (!Number.isInteger(checkpointOverlapMs) || checkpointOverlapMs < 0 || checkpointOverlapMs > 604800000) throw new Error("GMAIL_CHECKPOINT_OVERLAP_MS must be between 0 and 604800000");
 
+  await bootstrapPersistence();
   const client = new OAuth2Client(required("GMAIL_CLIENT_ID"), required("GMAIL_CLIENT_SECRET"));
   client.setCredentials({ refresh_token: required("GMAIL_REFRESH_TOKEN") });
 
@@ -232,15 +490,24 @@ async function main() {
       await sleep(pollMs);
     } catch (error) {
       consecutiveFailures += 1;
-      const retryMs = Math.min(maxBackoffMs, pollMs * (2 ** Math.min(consecutiveFailures - 1, 6)));
-      logger.error({ consecutiveFailures, retryMs, error: safeErrorMessage(error) }, "Lead email poll failed");
+      const retryMs = computeRetryDelayMs(consecutiveFailures, pollMs, maxBackoffMs);
+      await markPollFailure(error, consecutiveFailures).catch((stateError) => {
+        logger.error({ error: sanitizeWorkerError(stateError) }, "Unable to persist Lead Bridge failure state");
+      });
+      logger.error({
+        consecutiveFailures,
+        retryMs,
+        code: classifyWorkerErrorCode(error),
+        error: sanitizeWorkerError(error),
+      }, "Lead email poll failed");
       if (runOnce) throw error;
       await sleep(retryMs);
     }
   }
 }
 
-main().catch((error) => {
-  logger.error({ error: safeErrorMessage(error) }, "Lead email worker crashed");
+main().then(() => pool.end()).catch(async (error) => {
+  logger.error({ code: classifyWorkerErrorCode(error), error: sanitizeWorkerError(error) }, "Lead email worker crashed");
+  await pool.end().catch(() => undefined);
   process.exit(1);
 });

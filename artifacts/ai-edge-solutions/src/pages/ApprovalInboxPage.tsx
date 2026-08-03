@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Clock3, RefreshCw, ShieldAlert, SlidersHorizontal, XCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useApiFetch } from "@/lib/api";
+import PreparationReviewPanel from "@/components/PreparationReviewPanel";
 
 type Proposal = {
   proposalId: string;
@@ -60,12 +61,12 @@ export default function ApprovalInboxPage() {
         <Link href="/admin/mission-board" style={{ color: C.blue, textDecoration: "none", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><ArrowLeft size={14}/> Mission Board</Link>
         <div style={{ marginTop: 12, color: C.blue, fontSize: 10, letterSpacing: "3px", fontWeight: 800, textTransform: "uppercase" }}>AI Edge OS · Human Authority</div>
         <h1 style={{ margin: "6px 0", fontSize: 30 }}>🛡️ Approval Inbox</h1>
-        <p style={{ margin: 0, color: C.silver, maxWidth: 760 }}>Review exact-scope preparation requests. Decisions are durable and attributable, but DAB-7A cannot execute any proposal.</p>
+        <p style={{ margin: 0, color: C.silver, maxWidth: 760 }}>Review exact-scope preparation requests and the disposable-sandbox packages created after approval.</p>
       </div>
       <button onClick={() => approvals.refetch()} style={{ alignSelf: "flex-start", background: `${C.blue}18`, border: `1px solid ${C.blue}55`, color: C.blue, borderRadius: 10, padding: "10px 14px", fontWeight: 800, display: "flex", gap: 8 }}><RefreshCw size={15}/> Refresh</button>
     </header>
 
-    <div style={{ border: `1px solid ${C.gold}55`, background: `${C.gold}12`, color: C.gold, padding: 14, borderRadius: 12, marginBottom: 18, display: "flex", gap: 9 }}><ShieldAlert size={19}/><div><strong>Preparation only.</strong> Approval does not apply changes, write GitHub, merge, deploy, publish, contact customers, or trigger external action.</div></div>
+    <div style={{ border: `1px solid ${C.gold}55`, background: `${C.gold}12`, color: C.gold, padding: 14, borderRadius: 12, marginBottom: 18, display: "flex", gap: 9 }}><ShieldAlert size={19}/><div><strong>Preparation only.</strong> Approval may create review artifacts in a disposable sandbox. It never applies changes, writes GitHub, merges, deploys, publishes, contacts customers, or triggers external action.</div></div>
 
     {approvals.isLoading && <p style={{ color: C.silver }}>Reading the durable approval ledger…</p>}
     {approvals.error && <p style={{ color: C.red }}>The approval inbox could not be loaded. It will retry automatically.</p>}
@@ -100,5 +101,7 @@ export default function ApprovalInboxPage() {
       })}
       {approvals.data && approvals.data.proposals.length === 0 && <section style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14, padding: 28, color: C.silver }}>No supported approval request is pending. A proposal appears only when the agent explicitly requests human approval for an allowlisted preparation capability.</section>}
     </div>
+
+    <PreparationReviewPanel />
   </main>;
 }

@@ -7,12 +7,32 @@ Business: Bed Bugs & Beyond
 
 Prepare the business identity, listing content, verification evidence, and operating controls required to claim or add Bed Bugs & Beyond in Apple Business (formerly Apple Business Connect) without storing Apple credentials in source control.
 
+## Internal source package
+
+Use `docs/audits/BED-BUGS-AND-BEYOND-BUSINESS-IDENTITY-AUDIT.md` as the repository-level source audit before entering data in Apple Business.
+
+Repository-verified starting facts:
+
+- Customer-facing name: `Bed Bugs & Beyond`.
+- Industry: pest control.
+- Region: Gulf Coast of Alabama / Baldwin County.
+- Time zone: America/Chicago.
+- Repository-defined service areas: Foley, Daphne, Loxley, Fairhope, Gulf Shores, Orange Beach, Summerdale, Spanish Fort, Elberta, Lillian, and Perdido Beach, Alabama.
+- Termite service is coming soon, not currently offered.
+- Wildlife removal is disabled.
+- Whole-home bed bug heat treatment must not be represented as offered.
+- Bed bug positioning should emphasize targeted treatment of affected furniture and specific areas.
+- Fumigation is active, with educational and safety limits on public claims.
+
+These seed values require a live database read and owner confirmation before submission. Do not treat repository defaults as proof that public phone, website, hours, address visibility, categories, or imagery are current.
+
 ## Owner-required actions
 
 - Sign in with an Apple Account or Managed Apple Account.
 - Accept Apple's terms.
 - Complete organization or location verification.
 - Approve any phone verification, transfer request, or supporting-document submission.
+- Confirm the final phone, website, hours, service-area/location representation, categories, and approved imagery.
 
 ## Data package to prepare before sign-in
 
@@ -48,9 +68,11 @@ The Apple channel is not marked connected until all applicable items are verifie
 - Organization ownership confirmed.
 - Correct business/location selected.
 - Display name, phone, website, categories, hours, and map placement verified.
+- Active and unavailable services match the canonical AI Edge OS service registry.
 - Apple approval or phone verification completed.
 - Public Apple Maps place card checked on an Apple device or web view.
 - At least one action link tested.
+- Public identifiers, verification date, and evidence recorded without secrets.
 - Credential-revocation and team-access paths documented.
 - No Apple Account password, verification code, or session token stored in GitHub.
 

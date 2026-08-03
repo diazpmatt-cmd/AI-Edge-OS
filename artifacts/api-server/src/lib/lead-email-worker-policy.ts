@@ -42,8 +42,8 @@ export function sanitizeWorkerError(error: unknown): string {
   return message
     .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
     .replace(/ya29\.[A-Za-z0-9._-]+/g, "[redacted-token]")
-    .replace(/(?:client_secret|refresh_token|access_token|id_token)=([^&\s]+)/gi, "$1=[redacted]")
-    .replace(/"(?:client_secret|refresh_token|access_token|id_token)"\s*:\s*"[^"]+"/gi, '"credential":"[redacted]"')
+    .replace(/\b(client_secret|refresh_token|access_token|id_token)=([^&\s]+)/gi, "$1=[redacted]")
+    .replace(/"(client_secret|refresh_token|access_token|id_token)"\s*:\s*"[^"]+"/gi, '"$1":"[redacted]"')
     .slice(0, MAX_SAFE_ERROR_CHARS);
 }
 

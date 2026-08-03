@@ -18,6 +18,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/dab-planner-worker.ts"),
       path.resolve(artifactDir, "src/dab-agent-worker.ts"),
+      path.resolve(artifactDir, "src/dab-preparation-worker.ts"),
     ],
     platform: "node",
     bundle: true,

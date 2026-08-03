@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGmailFetch,
   extractGmailText,
+  gmailMessagePath,
   listGmailMessageIds,
   parseRetryAfterMs,
   withTimeout,
@@ -56,6 +57,56 @@ describe("Gmail message listing", () => {
       query: "newer_than:14d",
       maxPages: 1,
     })).resolves.toEqual({ ids: ["m1"], capped: true });
+  });
+
+  it("drops malformed provider IDs and bounds each provider page to 50 entries", async () => {
+    const messages = [
+      ...Array.from({ length: 50 }, (_, index) => ({ id: `valid_${index}` })),
+      { id: "../path-injection" },
+      { id: "ignored_after_page_bound" },
+    ];
+    const gmailFetch: GmailFetch = async () => ({ messages });
+
+    const result = await listGmailMessageIds({
+      gmailFetch,
+      accessToken: "token",
+      query: "newer_than:14d",
+      maxPages: 1,
+    });
+
+    expect(result.ids).toHaveLength(50);
+    expect(result.ids[0]).toBe("valid_0");
+    expect(result.ids[49]).toBe("valid_49");
+    expect(result.ids).not.toContain("../path-injection");
+    expect(result.ids).not.toContain("ignored_after_page_bound");
+  });
+
+  it("rejects empty credentials and oversized queries before calling Gmail", async () => {
+    const gmailFetch = vi.fn(async () => ({ messages: [] })) as GmailFetch;
+
+    await expect(listGmailMessageIds({
+      gmailFetch,
+      accessToken: " ",
+      query: "newer_than:14d",
+      maxPages: 1,
+    })).rejects.toThrow("Gmail access token must not be empty");
+
+    await expect(listGmailMessageIds({
+      gmailFetch,
+      accessToken: "token",
+      query: "x".repeat(4_097),
+      maxPages: 1,
+    })).rejects.toThrow("Gmail query must not exceed 4096 characters");
+
+    expect(gmailFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("Gmail message paths", () => {
+  it("builds a full-message path only from a bounded Gmail ID", () => {
+    expect(gmailMessagePath("18f0_ab-CD")).toBe("/messages/18f0_ab-CD?format=full");
+    expect(() => gmailMessagePath("../messages/other")).toThrow("Invalid Gmail message ID");
+    expect(() => gmailMessagePath("x".repeat(257))).toThrow("Invalid Gmail message ID");
   });
 });
 

@@ -101,7 +101,7 @@ router.get("/dab/approvals", async (req, res) => {
      ORDER BY created_at DESC
      LIMIT 50
   `);
-  res.json({
+  return res.json({
     executionEnabled: false,
     authorityNotice: "A decision authorizes future sandboxed preparation only. No action is executed by DAB-7A.",
     proposals: result.rows.map((row: any) => ({

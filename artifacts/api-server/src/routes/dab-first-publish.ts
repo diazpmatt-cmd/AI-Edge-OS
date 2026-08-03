@@ -1,9 +1,8 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, pool } from "@workspace/db";
-import { socialPostsTable } from "@workspace/db/schema";
-import { and, desc, eq } from "drizzle-orm";
-import { validatePreFlight } from "../lib/publishing-service.js";
+import { socialConnectionsTable, socialPostsTable } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 import { isDab8aPlatform, stablePublishPayloadHash, validateBbbCaption, validateSchedule, type Dab8aPlatform, type PublishPayload } from "../lib/dab-publishing-policy.js";
 
 const router = Router();
@@ -68,22 +67,33 @@ async function assess(postId: string, userId: string, platformValue: unknown, sc
   const caption = validateBbbCaption(post.caption);
   if (!caption.ok) return { ok: false as const, status: 409, code: caption.code };
 
-  // Preflight evaluates the selected platform without mutating the post.
-  const originalPlatforms = post.platforms;
-  const originalApproval = post.approvalStatus;
-  await db.update(socialPostsTable).set({
-    platforms: JSON.stringify([platformValue]),
-    approvalStatus: "approved",
-  }).where(and(eq(socialPostsTable.id, post.id), eq(socialPostsTable.userId, userId)));
-  const preflight = await validatePreFlight(post.id, userId);
-  await db.update(socialPostsTable).set({
-    platforms: originalPlatforms,
-    approvalStatus: originalApproval,
-  }).where(and(eq(socialPostsTable.id, post.id), eq(socialPostsTable.userId, userId)));
+  const provider = platformValue === "google" ? "google_business" : platformValue;
+  const connection = await db.select({ expiresAt: socialConnectionsTable.expiresAt })
+    .from(socialConnectionsTable)
+    .where(and(eq(socialConnectionsTable.userId, userId), eq(socialConnectionsTable.provider, provider)))
+    .then((rows) => rows[0]);
+  const connected = Boolean(connection);
+  const expired = connection?.expiresAt ? connection.expiresAt <= new Date() : false;
+  const platformReadiness = {
+    platform: platformValue,
+    connected,
+    mediaValid: true,
+    reason: !connected ? "Platform is not connected" : expired ? "Platform connection is expired" : null,
+    canPublish: connected && !expired,
+  };
 
   const platform = platformValue as Dab8aPlatform;
   const payload = buildPayload(post, userId, platform, schedule.value);
-  return { ok: true as const, post, platform, scheduledAt: schedule.value, payload, payloadHash: stablePublishPayloadHash(payload), preflight };
+  return {
+    ok: true as const,
+    post,
+    platform,
+    scheduledAt: schedule.value,
+    payload,
+    payloadHash: stablePublishPayloadHash(payload),
+    platformReadiness,
+    blockers: platformReadiness.canPublish ? [] : [platformReadiness.reason ?? "Platform is not ready"],
+  };
 }
 
 router.get("/dab/first-publish", async (req, res) => {
@@ -130,13 +140,12 @@ router.post("/dab/first-publish/preflight", async (req, res) => {
   const postId = typeof req.body?.postId === "string" ? req.body.postId : "";
   const result = await assess(postId, userId, req.body?.platform, req.body?.scheduledAt);
   if (!result.ok) return res.status(result.status).json({ error: result.code });
-  const selected = result.preflight.platforms.find((item) => item.platform === result.platform);
   return res.json({
-    canArm: result.preflight.canProceed && selected?.canPublish === true,
+    canArm: result.platformReadiness.canPublish,
     payloadHash: result.payloadHash,
     payload: result.payload,
-    platformReadiness: selected ?? null,
-    blockers: result.preflight.blockers,
+    platformReadiness: result.platformReadiness,
+    blockers: result.blockers,
     confirmationText: `ARM ${result.payloadHash.slice(0, 12)}`,
   });
 });
@@ -148,8 +157,7 @@ router.post("/dab/first-publish/arm", async (req, res) => {
   const postId = typeof req.body?.postId === "string" ? req.body.postId : "";
   const result = await assess(postId, userId, req.body?.platform, req.body?.scheduledAt);
   if (!result.ok) return res.status(result.status).json({ error: result.code });
-  const selected = result.preflight.platforms.find((item) => item.platform === result.platform);
-  if (!result.preflight.canProceed || selected?.canPublish !== true) return res.status(409).json({ error: "PREFLIGHT_BLOCKED", blockers: result.preflight.blockers, platformReadiness: selected ?? null });
+  if (!result.platformReadiness.canPublish) return res.status(409).json({ error: "PREFLIGHT_BLOCKED", blockers: result.blockers, platformReadiness: result.platformReadiness });
   if (req.body?.payloadHash !== result.payloadHash) return res.status(409).json({ error: "PAYLOAD_HASH_MISMATCH" });
   if (req.body?.confirmation !== `ARM ${result.payloadHash.slice(0, 12)}`) return res.status(400).json({ error: "CONFIRMATION_MISMATCH" });
 

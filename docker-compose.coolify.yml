@@ -74,10 +74,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command:
-      - node
-      - --enable-source-maps
-      - ./artifacts/api-server/dist/dab-planner-worker.mjs
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -100,10 +97,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command:
-      - node
-      - --enable-source-maps
-      - ./artifacts/api-server/dist/dab-agent-worker.mjs
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -135,10 +129,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command:
-      - node
-      - --enable-source-maps
-      - ./artifacts/api-server/dist/dab-preparation-worker.mjs
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -157,6 +148,37 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     tmpfs:
       - /tmp/dab-preparation:size=128m,mode=0700
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dab-publishing-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-publishing-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:?SCHEDULER_SECRET is required}
+      DAB_PUBLISHING_WORKER_ENABLED: "true"
+      DAB_PUBLISHING_KILL_SWITCH: "false"
+      DAB_PUBLISHING_RUNTIME_ID: dab-publishing-production-1
+      DAB_PUBLISHING_INTERVAL_MS: "15000"
+      DAB_PUBLISHING_LEASE_MS: "120000"
+      DAB_PUBLISHING_INTERNAL_BASE_URL: http://api:3000
     read_only: true
     security_opt:
       - no-new-privileges:true

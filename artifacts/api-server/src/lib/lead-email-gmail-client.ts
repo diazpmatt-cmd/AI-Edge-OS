@@ -38,7 +38,7 @@ export function extractGmailText(
       truncated ||= extracted.truncated || text.length > maxMessageTextChars;
       if (text.length >= maxMessageTextChars) break;
     }
-    if (text) return { text: text.slice(0, maxMessageTextChars), truncated };
+    return { text: text.slice(0, maxMessageTextChars), truncated };
   }
 
   if (payload.body?.data) {

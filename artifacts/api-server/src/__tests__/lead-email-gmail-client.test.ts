@@ -61,8 +61,8 @@ describe("Gmail message listing", () => {
 
   it("drops malformed provider IDs and bounds each provider page to 50 entries", async () => {
     const messages = [
-      ...Array.from({ length: 50 }, (_, index) => ({ id: `valid_${index}` })),
       { id: "../path-injection" },
+      ...Array.from({ length: 50 }, (_, index) => ({ id: `valid_${index}` })),
       { id: "ignored_after_page_bound" },
     ];
     const gmailFetch: GmailFetch = async () => ({ messages });
@@ -74,10 +74,11 @@ describe("Gmail message listing", () => {
       maxPages: 1,
     });
 
-    expect(result.ids).toHaveLength(50);
+    expect(result.ids).toHaveLength(49);
     expect(result.ids[0]).toBe("valid_0");
-    expect(result.ids[49]).toBe("valid_49");
+    expect(result.ids[48]).toBe("valid_48");
     expect(result.ids).not.toContain("../path-injection");
+    expect(result.ids).not.toContain("valid_49");
     expect(result.ids).not.toContain("ignored_after_page_bound");
   });
 

@@ -1,6 +1,6 @@
 # Channel Expansion Master Execution Checklist
 
-Last updated: 2026-08-02
+Last updated: 2026-08-03
 Owner: Bed Bugs & Beyond / AI Edge OS
 
 This is the single ordered execution list for production recovery, lead intake, channel expansion, measurement, and operating documentation. A checked box means the result is verified, not merely planned or partially coded.
@@ -101,7 +101,7 @@ This is the single ordered execution list for production recovery, lead intake, 
 71. [ ] Prepare the Bing Places name, service area, phone, hours, category, website, and media checklist.
 72. [ ] Claim or verify Bing Places. **Owner Microsoft login/verification required.**
 73. [ ] Add Bing/Maps referral and call attribution where observable.
-74. [ ] Prepare the Apple Business Connect profile and verification checklist.
+74. [x] Prepare the Apple Business Connect profile and verification checklist. See `docs/runbooks/APPLE-BUSINESS-PREPARATION.md` and Issue #112.
 75. [ ] Claim or verify Apple Business Connect / Apple Maps. **Owner Apple login/verification required.**
 76. [ ] Maintain Apple hours, contact data, imagery, and action links.
 77. [ ] Add Apple Maps referral attribution where observable.
@@ -143,13 +143,13 @@ This is the single ordered execution list for production recovery, lead intake, 
 101. [x] Add the local discovery and channel expansion plan to the AI Edge OS Autonomy Roadmap.
 102. [x] Create this single numbered master execution checklist.
 103. [ ] Create or update architecture decision records for Gmail intake, unified lead identity, source attribution, and human-approved replies.
-104. [ ] Create the Gmail OAuth and Coolify secret-configuration runbook.
-105. [ ] Create the Lead Bridge deployment, rollback, and failure-recovery runbook.
-106. [ ] Create the channel activation checklist covering permissions, testing, deduplication, attribution, costs, health, fallback, and kill switch.
-107. [ ] Create separate implementation issues for Thumbtack, Angi, Google, Meta, Bing, Apple, TikTok, Craigslist, Bark, Porch, and partnerships.
-108. [ ] Add acceptance criteria and test plans to every implementation issue.
+104. [x] Create the Gmail OAuth and Coolify secret-configuration runbook. See `docs/runbooks/GMAIL-OAUTH-COOLIFY-SECRETS.md`.
+105. [x] Create the Lead Bridge deployment, rollback, and failure-recovery runbook. See `docs/runbooks/LEAD-BRIDGE-DEPLOYMENT-RECOVERY.md`.
+106. [x] Create the channel activation checklist covering permissions, testing, deduplication, attribution, costs, health, fallback, and kill switch. See `docs/runbooks/CHANNEL-ACTIVATION-CHECKLIST.md`.
+107. [x] Create separate implementation issues for Thumbtack, Angi, Google, Meta, Bing, Apple, TikTok, Craigslist, Bark, Porch, and partnerships. See Issues #112 and #114–#123.
+108. [x] Add acceptance criteria and test plans to every implementation issue created for this channel package.
 109. [ ] Update the changelog and session handoff after each completed delivery package.
-110. [ ] Produce a factual progress report listing completed, blocked, failed, and owner-required items without marking partial work complete.
+110. [x] Produce a factual progress report listing completed, blocked, failed, and owner-required items without marking partial work complete. See `docs/reports/2026-08-03-OVERNIGHT-ROADMAP-PROGRESS-01.md`.
 
 ## Completion standard
 

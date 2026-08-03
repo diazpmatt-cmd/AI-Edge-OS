@@ -154,6 +154,52 @@ describe("Lead Bridge atomic event persistence", () => {
     );
     expect(Number(leads.rows[0]?.count ?? 0)).toBe(0);
   });
+
+  it("rolls back a failed lead insert and leaves the durable checkpoint unchanged", async () => {
+    const checkpointBefore = Date.parse("2026-08-03T05:00:00Z");
+    await markLeadEmailPollSuccess({
+      checkpointInternalDateMs: checkpointBefore,
+      listed: 0,
+      ingested: 0,
+      skipped: 0,
+      quarantined: 0,
+    });
+
+    await pool.query(`CREATE OR REPLACE FUNCTION lead_email_test_fail_insert()
+      RETURNS trigger AS $$
+      BEGIN
+        IF NEW.event_type = 'gmail:gmail-fault-injection' THEN
+          RAISE EXCEPTION 'controlled lead insert failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`);
+    await pool.query("DROP TRIGGER IF EXISTS lead_email_test_fail_insert_trigger ON leads");
+    await pool.query(`CREATE TRIGGER lead_email_test_fail_insert_trigger
+      BEFORE INSERT ON leads
+      FOR EACH ROW EXECUTE FUNCTION lead_email_test_fail_insert()`);
+
+    try {
+      await expect(persistClassifiedLeadEmail(input("gmail-fault-injection")))
+        .rejects.toThrow("controlled lead insert failure");
+
+      const events = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM lead_email_events WHERE provider=$1 AND external_message_id=$2",
+        [LEAD_EMAIL_PROVIDER, "gmail-fault-injection"],
+      );
+      const leads = await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM leads WHERE source='gmail-lead-bridge' AND event_type=$1",
+        ["gmail:gmail-fault-injection"],
+      );
+
+      expect(Number(events.rows[0]?.count ?? 0)).toBe(0);
+      expect(Number(leads.rows[0]?.count ?? 0)).toBe(0);
+      expect(await getLeadEmailCheckpointInternalDateMs()).toBe(checkpointBefore);
+    } finally {
+      await pool.query("DROP TRIGGER IF EXISTS lead_email_test_fail_insert_trigger ON leads");
+      await pool.query("DROP FUNCTION IF EXISTS lead_email_test_fail_insert()");
+    }
+  });
 });
 
 describe("Lead Bridge durable checkpoint and health state", () => {

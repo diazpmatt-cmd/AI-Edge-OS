@@ -3,7 +3,9 @@ import {
   createGmailFetch,
   extractGmailText,
   listGmailMessageIds,
+  parseRetryAfterMs,
   withTimeout,
+  type GmailApiError,
   type GmailFetch,
 } from "../lib/lead-email-gmail-client.js";
 
@@ -98,6 +100,14 @@ describe("Gmail request boundaries", () => {
     await assertion;
   });
 
+  it("parses delta-seconds and HTTP-date Retry-After values with a hard cap", () => {
+    const now = Date.parse("2026-08-03T10:00:00Z");
+    expect(parseRetryAfterMs("120", now)).toBe(120_000);
+    expect(parseRetryAfterMs("Mon, 03 Aug 2026 10:02:00 GMT", now)).toBe(120_000);
+    expect(parseRetryAfterMs("999999", now, 600_000)).toBe(600_000);
+    expect(parseRetryAfterMs("not-a-date", now)).toBeNull();
+  });
+
   it("returns only the HTTP status and never includes a Gmail response body", async () => {
     const fetchImpl = vi.fn(async () => new Response("sensitive provider response", { status: 500 })) as unknown as typeof fetch;
     const gmailFetch = createGmailFetch({ userId: "me", requestTimeoutMs: 1_000, fetchImpl });
@@ -106,6 +116,25 @@ describe("Gmail request boundaries", () => {
       .rejects.toThrow("Gmail API request failed with status 500");
     await expect(gmailFetch("/messages", "access-token-value"))
       .rejects.not.toThrow("sensitive provider response");
+  });
+
+  it("preserves a bounded Retry-After hint on Gmail API failures", async () => {
+    const fetchImpl = vi.fn(async () => new Response("provider body must stay private", {
+      status: 429,
+      headers: { "Retry-After": "180" },
+    })) as unknown as typeof fetch;
+    const gmailFetch = createGmailFetch({ userId: "me", requestTimeoutMs: 1_000, fetchImpl });
+
+    try {
+      await gmailFetch("/messages", "access-token-value");
+      throw new Error("Expected Gmail request to fail");
+    } catch (error) {
+      const gmailError = error as GmailApiError;
+      expect(gmailError.message).toBe("Gmail API request failed with status 429");
+      expect(gmailError.status).toBe(429);
+      expect(gmailError.retryAfterMs).toBe(180_000);
+      expect(gmailError.message).not.toContain("provider body must stay private");
+    }
   });
 
   it("aborts an overdue Gmail request and returns a bounded timeout error", async () => {

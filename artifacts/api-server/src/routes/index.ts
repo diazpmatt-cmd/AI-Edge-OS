@@ -40,6 +40,7 @@ import backlinksRouter from "./backlinks";
 import dabStatusRouter from "./dab-status";
 import dabApprovalsRouter from "./dab-approvals";
 import dabPreparationsRouter from "./dab-preparations";
+import dabFirstPublishRouter from "./dab-first-publish";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,7 @@ router.use(healthRouter);
 router.use(dabStatusRouter);
 router.use(dabApprovalsRouter);
 router.use(dabPreparationsRouter);
+router.use(dabFirstPublishRouter);
 router.use(keywordsRouter);
 router.use(articlesRouter);
 router.use(articleAssetsRouter);

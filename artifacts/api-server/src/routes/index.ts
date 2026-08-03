@@ -38,11 +38,13 @@ import contactRouter from "./contact";
 import referralsRouter from "./referrals";
 import backlinksRouter from "./backlinks";
 import dabStatusRouter from "./dab-status";
+import dabApprovalsRouter from "./dab-approvals";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(dabStatusRouter);
+router.use(dabApprovalsRouter);
 router.use(keywordsRouter);
 router.use(articlesRouter);
 router.use(articleAssetsRouter);

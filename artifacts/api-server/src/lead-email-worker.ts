@@ -3,6 +3,13 @@ import { pool } from "@workspace/db";
 import { logger } from "./lib/logger.js";
 import { classifyLeadEmail, type ClassifiedLeadEmail } from "./lib/lead-email-classifier.js";
 import {
+  createGmailFetch,
+  extractGmailText,
+  listGmailMessageIds,
+  withTimeout,
+  type GmailFetch,
+} from "./lib/lead-email-gmail-client.js";
+import {
   bootstrapLeadEmailPersistence,
   getLeadEmailCheckpointInternalDateMs,
   markLeadEmailPollAttempt,
@@ -14,10 +21,13 @@ import {
 import {
   buildCheckpointedGmailQuery,
   classifyWorkerErrorCode,
-  computeRetryDelayMs,
   nextCheckpointInternalDateMs,
   sanitizeWorkerError,
 } from "./lib/lead-email-worker-policy.js";
+import {
+  createInterruptibleWait,
+  runLeadEmailWorkerLoop,
+} from "./lib/lead-email-worker-runtime.js";
 
 const required = (name: string) => {
   const value = process.env[name]?.trim();
@@ -43,106 +53,16 @@ const baseQuery = process.env.GMAIL_LEAD_QUERY?.trim()
   || "newer_than:14d (from:(messaging.yelp.com) OR from:(email.nextdoor.com))";
 
 let stopping = false;
+let resolveStopSignal!: () => void;
+const stopSignal = new Promise<void>((resolve) => {
+  resolveStopSignal = resolve;
+});
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     stopping = true;
+    resolveStopSignal();
     logger.info({ signal }, "Lead email worker stopping after current operation");
   });
-}
-
-type TextExtraction = { text: string; truncated: boolean };
-
-function decodeBase64Url(value: string | undefined): string {
-  if (!value) return "";
-  return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-}
-
-function extractText(payload: any, depth = 0): TextExtraction {
-  if (!payload) return { text: "", truncated: false };
-  if (depth > 10) return { text: "", truncated: true };
-
-  if (payload.mimeType === "text/plain" && payload.body?.data) {
-    const decoded = decodeBase64Url(payload.body.data);
-    return { text: decoded.slice(0, maxMessageTextChars), truncated: decoded.length > maxMessageTextChars };
-  }
-
-  if (Array.isArray(payload.parts)) {
-    let text = "";
-    let truncated = payload.parts.length > 100;
-    for (const part of payload.parts.slice(0, 100)) {
-      const extracted = extractText(part, depth + 1);
-      if (extracted.text) text += `${text ? "\n" : ""}${extracted.text}`;
-      truncated ||= extracted.truncated || text.length > maxMessageTextChars;
-      if (text.length >= maxMessageTextChars) break;
-    }
-    if (text) return { text: text.slice(0, maxMessageTextChars), truncated };
-  }
-
-  if (payload.body?.data) {
-    const decoded = decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, " ");
-    return { text: decoded.slice(0, maxMessageTextChars), truncated: decoded.length > maxMessageTextChars };
-  }
-
-  return { text: "", truncated: false };
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-async function gmailFetch(path: string, accessToken: string) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
-
-  try {
-    const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}${path}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) throw new Error(`Gmail API request failed with status ${response.status}`);
-    return await response.json() as any;
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error(`Gmail API request timed out after ${requestTimeoutMs}ms`);
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function listMessageIds(accessToken: string, query: string): Promise<string[]> {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  let pageToken: string | undefined;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const params = new URLSearchParams({ q: query, maxResults: "50" });
-    if (pageToken) params.set("pageToken", pageToken);
-
-    const list = await gmailFetch(`/messages?${params.toString()}`, accessToken);
-    for (const item of list.messages ?? []) {
-      const id = String(item.id ?? "").trim();
-      if (id && !seen.has(id)) {
-        seen.add(id);
-        ids.push(id);
-      }
-    }
-
-    pageToken = typeof list.nextPageToken === "string" ? list.nextPageToken : undefined;
-    if (!pageToken) return ids;
-  }
-
-  logger.warn({ maxPages, messagesFound: ids.length }, "Gmail result pagination capped for this poll");
-  return ids;
 }
 
 function safeMetadata(input: {
@@ -161,14 +81,24 @@ function safeMetadata(input: {
   };
 }
 
-async function pollOnce(client: OAuth2Client) {
+async function pollOnce(client: OAuth2Client, gmailFetch: GmailFetch) {
   await markLeadEmailPollAttempt();
   const checkpoint = await getLeadEmailCheckpointInternalDateMs();
   const query = buildCheckpointedGmailQuery(baseQuery, checkpoint, checkpointOverlapMs);
   const token = await withTimeout(client.getAccessToken(), requestTimeoutMs, "Gmail token refresh");
   if (!token.token) throw new Error("Unable to obtain Gmail access token");
 
-  const messageIds = await listMessageIds(token.token, query);
+  const listing = await listGmailMessageIds({
+    gmailFetch,
+    accessToken: token.token,
+    query,
+    maxPages,
+  });
+  const messageIds = listing.ids;
+  if (listing.capped) {
+    logger.warn({ maxPages, messagesFound: messageIds.length }, "Gmail result pagination capped for this poll");
+  }
+
   const processedDates: number[] = [];
   let ingested = 0;
   let skipped = 0;
@@ -194,7 +124,7 @@ async function pollOnce(client: OAuth2Client) {
     const headers = Object.fromEntries(rawHeaders.slice(0, 200)
       .map((header: any) => [String(header.name).toLowerCase(), String(header.value).slice(0, 1_000)]));
     const receivedAt = new Date(internalDateMs);
-    const extracted = extractText(message.payload);
+    const extracted = extractGmailText(message.payload, maxMessageTextChars);
     if (rawHeaders.length > 200 || extracted.truncated) {
       await quarantineLeadEmail({
         messageId,
@@ -245,8 +175,6 @@ async function pollOnce(client: OAuth2Client) {
   return result;
 }
 
-const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
 async function main() {
   if (!enabled) {
     logger.info("Lead email worker disabled");
@@ -263,18 +191,19 @@ async function main() {
   await bootstrapLeadEmailPersistence();
   const client = new OAuth2Client(required("GMAIL_CLIENT_ID"), required("GMAIL_CLIENT_SECRET"));
   client.setCredentials({ refresh_token: required("GMAIL_REFRESH_TOKEN") });
+  const gmailFetch = createGmailFetch({ userId, requestTimeoutMs });
+  const wait = createInterruptibleWait(stopSignal);
 
-  let consecutiveFailures = 0;
-  while (!stopping) {
-    try {
-      const result = await pollOnce(client);
-      consecutiveFailures = 0;
+  await runLeadEmailWorkerLoop({
+    runOnce,
+    pollMs,
+    maxBackoffMs,
+    shouldStop: () => stopping,
+    pollOnce: () => pollOnce(client, gmailFetch),
+    onSuccess: (result) => {
       logger.info(result, "Lead email poll completed");
-      if (runOnce) return;
-      await sleep(pollMs);
-    } catch (error) {
-      consecutiveFailures += 1;
-      const retryMs = computeRetryDelayMs(consecutiveFailures, pollMs, maxBackoffMs);
+    },
+    onFailure: async (error, consecutiveFailures, retryMs) => {
       await markLeadEmailPollFailure(error, consecutiveFailures).catch((stateError) => {
         logger.error({ error: sanitizeWorkerError(stateError) }, "Unable to persist Lead Bridge failure state");
       });
@@ -284,10 +213,9 @@ async function main() {
         code: classifyWorkerErrorCode(error),
         error: sanitizeWorkerError(error),
       }, "Lead email poll failed");
-      if (runOnce) throw error;
-      await sleep(retryMs);
-    }
-  }
+    },
+    wait,
+  });
 }
 
 main().then(() => pool.end()).catch(async (error) => {

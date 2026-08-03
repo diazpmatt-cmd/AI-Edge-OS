@@ -18,10 +18,10 @@ This is the single ordered execution list for production recovery, lead intake, 
 9. [x] Add initial classifier tests and confirm the Coolify stack validation workflow passes for PR #111.
 10. [ ] Diagnose the current production application crash using runtime logs and exact failure evidence.
 11. [ ] Restore the main AI Edge OS application to a stable healthy state with restart count and health checks verified.
-12. [ ] Add a separate lead-worker service so website failure does not stop inbox monitoring.
-13. [ ] Add durable Gmail checkpoint storage and restart-safe catch-up scanning.
-14. [ ] Add exponential backoff, failed-message quarantine, structured redacted logging, and stale-worker detection.
-15. [ ] Add health/readiness reporting and a visible `last successful Gmail check` timestamp.
+12. [x] Add a separate lead-worker service so website failure does not stop inbox monitoring. Compose rendering and production image builds passed at `7dee4418`.
+13. [x] Add durable Gmail checkpoint storage and restart-safe catch-up scanning. Database checkpoint, replay overlap, and atomic duplicate handling are CI-verified; live restart verification remains item 20.
+14. [x] Add exponential backoff, failed-message quarantine, structured redacted logging, and stale-worker detection. Policy and database integration tests pass.
+15. [x] Add health/readiness reporting and a visible `last successful Gmail check` timestamp. See `/lead-email/status` and durable worker state.
 16. [ ] Configure `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, and `GMAIL_REFRESH_TOKEN` as protected Coolify secrets. **Owner action required.**
 17. [ ] Run a controlled live Gmail ingestion test in production.
 18. [ ] Verify one real Yelp email creates exactly one durable lead record after repeated worker runs.
@@ -97,11 +97,11 @@ This is the single ordered execution list for production recovery, lead intake, 
 
 ## H. Bing Places and Apple Business Connect
 
-70. [ ] Audit the business identity data already stored in AI Edge OS for listing consistency.
+70. [x] Audit the business identity data already stored in AI Edge OS for listing consistency. See `docs/audits/BED-BUGS-AND-BEYOND-BUSINESS-IDENTITY-AUDIT.md`.
 71. [ ] Prepare the Bing Places name, service area, phone, hours, category, website, and media checklist.
 72. [ ] Claim or verify Bing Places. **Owner Microsoft login/verification required.**
 73. [ ] Add Bing/Maps referral and call attribution where observable.
-74. [x] Prepare the Apple Business Connect profile and verification checklist. See `docs/runbooks/APPLE-BUSINESS-PREPARATION.md` and Issue #112.
+74. [x] Prepare the Apple Business Connect profile and verification checklist. See `docs/runbooks/APPLE-BUSINESS-PREPARATION.md`, `docs/templates/APPLE-BUSINESS-LISTING-DATA-SHEET.md`, and Issue #112.
 75. [ ] Claim or verify Apple Business Connect / Apple Maps. **Owner Apple login/verification required.**
 76. [ ] Maintain Apple hours, contact data, imagery, and action links.
 77. [ ] Add Apple Maps referral attribution where observable.

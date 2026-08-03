@@ -19,10 +19,7 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
-// ── OAuth popup close page (public — no auth, used by popup OAuth flows) ────
 const OAuthClosePage  = lazy(() => import("./pages/OAuthClosePage"));
-
-// ── Public marketing pages ──────────────────────────────────────────────────
 const HomePage        = lazy(() => import("./pages/marketing/HomePage"));
 const ServicesPage    = lazy(() => import("./pages/marketing/ServicesPage"));
 const ProductsPage    = lazy(() => import("./pages/marketing/ProductsPage"));
@@ -32,8 +29,6 @@ const ContactPage     = lazy(() => import("./pages/marketing/ContactPage"));
 const PrivacyPage     = lazy(() => import("./pages/marketing/PrivacyPage"));
 const TermsPage       = lazy(() => import("./pages/marketing/TermsPage"));
 const PublicReferralPage = lazy(() => import("./pages/PublicReferralPage"));
-
-// ── Admin / Command Center pages (auth-gated) ───────────────────────────────
 const AdminAccessPage     = lazy(() => import("./pages/AdminAccessPage"));
 const AdminLoginPage      = lazy(() => import("./pages/AdminLoginPage"));
 const DashboardPage       = lazy(() => import("./pages/DashboardPage"));
@@ -67,7 +62,8 @@ const MediaEnginePage               = lazy(() => import("./pages/MediaEnginePage
 const AssetLibraryPage              = lazy(() => import("./pages/AssetLibraryPage"));
 const BBBSuccessPage                = lazy(() => import("./pages/BBBSuccessPage"));
 const MorningBriefPage              = lazy(() => import("./pages/MorningBriefPage"));
-const MissionControlPage            = lazy(() => import("./pages/MissionControlPage"));
+const MissionControlPage            = lazy(() => import("./pages/MissionControlWithBoardLinkPage"));
+const MissionBoardPage              = lazy(() => import("./pages/MissionBoardPage"));
 const CustomerTimelinePage          = lazy(() => import("./pages/CustomerTimelinePage"));
 const ProfitCenterPage              = lazy(() => import("./pages/ProfitCenterPage"));
 const ApollosPage                   = lazy(() => import("./pages/ApollosPage"));
@@ -113,168 +109,69 @@ function AppRouter() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {/* ── Clerk auth routes (keep for OAuth callbacks) ── */}
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/oauth-close" component={() => <Suspense fallback={<PageLoader />}><OAuthClosePage /></Suspense>} />
-
-        {/* ── Public demo (no auth) ── */}
-        <Route path="/demo">
-          <Suspense fallback={<PageLoader />}><DemoPage /></Suspense>
-        </Route>
+        <Route path="/demo"><Suspense fallback={<PageLoader />}><DemoPage /></Suspense></Route>
         <Route path="/refer/:code" component={PublicReferralPage} />
-
-        {/* Development-only mock UI preview; excluded from production routing. */}
         {isSecretsPreviewAvailable(import.meta.env.DEV) && (
-          <Route path="/secrets-preview">
-            <Suspense fallback={<PageLoader />}><SecretsPage developmentPreview /></Suspense>
-          </Route>
+          <Route path="/secrets-preview"><Suspense fallback={<PageLoader />}><SecretsPage developmentPreview /></Suspense></Route>
         )}
-
-        {/* ── Admin access gate (passcode) + login ── */}
         <Route path="/admin-access" component={() => <Suspense fallback={<PageLoader />}><AdminAccessPage /></Suspense>} />
         <Route path="/admin/login/*?" component={() => <Suspense fallback={<PageLoader />}><AdminLoginPage /></Suspense>} />
-
-        {/* ── Protected admin / Command Center routes ── */}
-        <Route path="/admin/dashboard">
-          <Authenticated><DashboardPage /></Authenticated>
-        </Route>
-        <Route path="/admin/article/:id">
-          <Authenticated><ArticlePage /></Authenticated>
-        </Route>
-        <Route path="/admin/publishing">
-          <Authenticated><PublishingPage /></Authenticated>
-        </Route>
-        <Route path="/admin/repurpose/:id">
-          <Authenticated><RepurposeDetailPage /></Authenticated>
-        </Route>
-        <Route path="/admin/repurpose">
-          <Authenticated><RepurposePage /></Authenticated>
-        </Route>
-        <Route path="/admin/distribution">
-          <Authenticated><DistributionPage /></Authenticated>
-        </Route>
-        <Route path="/admin/connections">
-          <Authenticated><ConnectionsPage /></Authenticated>
-        </Route>
-        <Route path="/admin/lead-recovery">
-          <Authenticated><LeadRecoveryPage /></Authenticated>
-        </Route>
-        <Route path="/admin/social-publishing">
-          <Authenticated><SocialPublishingPage /></Authenticated>
-        </Route>
-        <Route path="/admin/auto-content">
-          <Authenticated><AutoContentEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/image-assets">
-          <Authenticated><ImageAssetManagerPage /></Authenticated>
-        </Route>
-        <Route path="/admin/diagnostics">
-          <Authenticated><SystemDiagnosticsPage /></Authenticated>
-        </Route>
-        <Route path="/admin/gbp-audit">
-          <Authenticated><GbpAuditPage /></Authenticated>
-        </Route>
-        <Route path="/admin/local-presence">
-          <Authenticated><LocalPresenceEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/voice-search">
-          <Authenticated><VoiceSearchEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/reviews">
-          <Authenticated><ReviewsEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/ai-visibility">
-          <Authenticated><AIVisibilityEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/assessments">
-          <Authenticated><AssessmentsInboxPage /></Authenticated>
-        </Route>
-        <Route path="/admin/ai-receptionist">
-          <Authenticated><AIReceptionistPage /></Authenticated>
-        </Route>
-        <Route path="/admin/call-intelligence">
-          <Authenticated><CallIntelligencePage /></Authenticated>
-        </Route>
-        <Route path="/admin/bizai">
-          <Authenticated><LocalBizAIPage /></Authenticated>
-        </Route>
-        <Route path="/admin/client-onboarding">
-          <Authenticated><ClientOnboardingPage /></Authenticated>
-        </Route>
-        <Route path="/admin/revenue-attribution">
-          <Authenticated><RevenueAttributionPage /></Authenticated>
-        </Route>
-        <Route path="/admin/bbb-operations">
-          <Authenticated><BBBOperationsCenterPage /></Authenticated>
-        </Route>
-        <Route path="/admin/bbb-execution">
-          <Authenticated><BBBExecutionPage /></Authenticated>
-        </Route>
-        <Route path="/admin/bbb-autopilot">
-          <Authenticated><BBBContentAutopilotPage /></Authenticated>
-        </Route>
-        <Route path="/admin/media-engine">
-          <Authenticated><MediaEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/asset-library">
-          <Authenticated><AssetLibraryPage /></Authenticated>
-        </Route>
-        <Route path="/admin/bbb-success">
-          <Authenticated><BBBSuccessPage /></Authenticated>
-        </Route>
-        <Route path="/admin/morning-brief">
-          <Authenticated><MorningBriefPage /></Authenticated>
-        </Route>
-        <Route path="/admin/mission-control">
-          <Authenticated><MissionControlPage /></Authenticated>
-        </Route>
-        <Route path="/admin/customer-timeline">
-          <Authenticated><CustomerTimelinePage /></Authenticated>
-        </Route>
-        <Route path="/admin/profit-center">
-          <Authenticated><ProfitCenterPage /></Authenticated>
-        </Route>
-        <Route path="/admin/apollos">
-          <Authenticated><ApollosPage /></Authenticated>
-        </Route>
-        <Route path="/admin/secrets">
-          <Authenticated><SecretsPage /></Authenticated>
-        </Route>
-        <Route path="/admin/competitor-intelligence">
-          <Authenticated><CompetitorIntelligencePage /></Authenticated>
-        </Route>
-        <Route path="/admin/authority-engine">
-          <Authenticated><AuthorityEnginePage /></Authenticated>
-        </Route>
-        <Route path="/admin/edge-opportunities">
-          <Authenticated><EdgeOpportunitiesPage /></Authenticated>
-        </Route>
-        <Route path="/admin/web-leads">
-          <Authenticated><WebLeadsPage /></Authenticated>
-        </Route>
-        <Route path="/admin/referrals">
-          <Authenticated><ReferralProgramPage /></Authenticated>
-        </Route>
-
-        {/* /admin root → redirect to dashboard */}
-        <Route path="/admin">
-          <Authenticated><Redirect to="/admin/dashboard" /></Authenticated>
-        </Route>
-
-        {/* ── Public marketing pages ── */}
-        <Route path="/services"          component={ServicesPage} />
-        <Route path="/products"          component={ProductsPage} />
-        <Route path="/case-studies"      component={CaseStudiesPage} />
-        <Route path="/pricing"           component={PricingPage} />
-        <Route path="/contact"           component={ContactPage} />
+        <Route path="/admin/dashboard"><Authenticated><DashboardPage /></Authenticated></Route>
+        <Route path="/admin/article/:id"><Authenticated><ArticlePage /></Authenticated></Route>
+        <Route path="/admin/publishing"><Authenticated><PublishingPage /></Authenticated></Route>
+        <Route path="/admin/repurpose/:id"><Authenticated><RepurposeDetailPage /></Authenticated></Route>
+        <Route path="/admin/repurpose"><Authenticated><RepurposePage /></Authenticated></Route>
+        <Route path="/admin/distribution"><Authenticated><DistributionPage /></Authenticated></Route>
+        <Route path="/admin/connections"><Authenticated><ConnectionsPage /></Authenticated></Route>
+        <Route path="/admin/lead-recovery"><Authenticated><LeadRecoveryPage /></Authenticated></Route>
+        <Route path="/admin/social-publishing"><Authenticated><SocialPublishingPage /></Authenticated></Route>
+        <Route path="/admin/auto-content"><Authenticated><AutoContentEnginePage /></Authenticated></Route>
+        <Route path="/admin/image-assets"><Authenticated><ImageAssetManagerPage /></Authenticated></Route>
+        <Route path="/admin/diagnostics"><Authenticated><SystemDiagnosticsPage /></Authenticated></Route>
+        <Route path="/admin/gbp-audit"><Authenticated><GbpAuditPage /></Authenticated></Route>
+        <Route path="/admin/local-presence"><Authenticated><LocalPresenceEnginePage /></Authenticated></Route>
+        <Route path="/admin/voice-search"><Authenticated><VoiceSearchEnginePage /></Authenticated></Route>
+        <Route path="/admin/reviews"><Authenticated><ReviewsEnginePage /></Authenticated></Route>
+        <Route path="/admin/ai-visibility"><Authenticated><AIVisibilityEnginePage /></Authenticated></Route>
+        <Route path="/admin/assessments"><Authenticated><AssessmentsInboxPage /></Authenticated></Route>
+        <Route path="/admin/ai-receptionist"><Authenticated><AIReceptionistPage /></Authenticated></Route>
+        <Route path="/admin/call-intelligence"><Authenticated><CallIntelligencePage /></Authenticated></Route>
+        <Route path="/admin/bizai"><Authenticated><LocalBizAIPage /></Authenticated></Route>
+        <Route path="/admin/client-onboarding"><Authenticated><ClientOnboardingPage /></Authenticated></Route>
+        <Route path="/admin/revenue-attribution"><Authenticated><RevenueAttributionPage /></Authenticated></Route>
+        <Route path="/admin/bbb-operations"><Authenticated><BBBOperationsCenterPage /></Authenticated></Route>
+        <Route path="/admin/bbb-execution"><Authenticated><BBBExecutionPage /></Authenticated></Route>
+        <Route path="/admin/bbb-autopilot"><Authenticated><BBBContentAutopilotPage /></Authenticated></Route>
+        <Route path="/admin/media-engine"><Authenticated><MediaEnginePage /></Authenticated></Route>
+        <Route path="/admin/asset-library"><Authenticated><AssetLibraryPage /></Authenticated></Route>
+        <Route path="/admin/bbb-success"><Authenticated><BBBSuccessPage /></Authenticated></Route>
+        <Route path="/admin/morning-brief"><Authenticated><MorningBriefPage /></Authenticated></Route>
+        <Route path="/admin/mission-control"><Authenticated><MissionControlPage /></Authenticated></Route>
+        <Route path="/admin/mission-board"><Authenticated><MissionBoardPage /></Authenticated></Route>
+        <Route path="/admin/customer-timeline"><Authenticated><CustomerTimelinePage /></Authenticated></Route>
+        <Route path="/admin/profit-center"><Authenticated><ProfitCenterPage /></Authenticated></Route>
+        <Route path="/admin/apollos"><Authenticated><ApollosPage /></Authenticated></Route>
+        <Route path="/admin/secrets"><Authenticated><SecretsPage /></Authenticated></Route>
+        <Route path="/admin/competitor-intelligence"><Authenticated><CompetitorIntelligencePage /></Authenticated></Route>
+        <Route path="/admin/authority-engine"><Authenticated><AuthorityEnginePage /></Authenticated></Route>
+        <Route path="/admin/edge-opportunities"><Authenticated><EdgeOpportunitiesPage /></Authenticated></Route>
+        <Route path="/admin/web-leads"><Authenticated><WebLeadsPage /></Authenticated></Route>
+        <Route path="/admin/referrals"><Authenticated><ReferralProgramPage /></Authenticated></Route>
+        <Route path="/admin"><Authenticated><Redirect to="/admin/dashboard" /></Authenticated></Route>
+        <Route path="/services" component={ServicesPage} />
+        <Route path="/products" component={ProductsPage} />
+        <Route path="/case-studies" component={CaseStudiesPage} />
+        <Route path="/pricing" component={PricingPage} />
+        <Route path="/contact" component={ContactPage} />
         <Route path="/business-assessment" component={BusinessAssessmentPage} />
-        {/* 10DLC compliance — must be public, no auth */}
-        <Route path="/privacy"           component={PrivacyPage} />
-        <Route path="/privacy-policy"    component={PrivacyPage} />
-        <Route path="/terms"             component={TermsPage} />
-        <Route path="/terms-of-service"  component={TermsPage} />
-        <Route path="/"                  component={HomePage} />
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/privacy-policy" component={PrivacyPage} />
+        <Route path="/terms" component={TermsPage} />
+        <Route path="/terms-of-service" component={TermsPage} />
+        <Route path="/" component={HomePage} />
       </Switch>
     </Suspense>
   );

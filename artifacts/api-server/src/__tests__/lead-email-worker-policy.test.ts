@@ -37,10 +37,11 @@ describe("Lead Bridge retry policy", () => {
 
 describe("Lead Bridge redaction and error classification", () => {
   it("redacts bearer and OAuth credential values", () => {
-    const error = new Error('Bearer abc123 refresh_token=secret "access_token":"top-secret" ya29.token-value');
+    const error = new Error('Bearer bearer-value-123 refresh_token=refresh-value-456 "access_token":"access-value-789" ya29.token-value');
     const safe = sanitizeWorkerError(error);
-    expect(safe).not.toContain("abc123");
-    expect(safe).not.toContain("secret");
+    expect(safe).not.toContain("bearer-value-123");
+    expect(safe).not.toContain("refresh-value-456");
+    expect(safe).not.toContain("access-value-789");
     expect(safe).not.toContain("token-value");
     expect(safe).toContain("[redacted]");
   });

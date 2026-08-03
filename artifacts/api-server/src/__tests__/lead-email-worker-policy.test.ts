@@ -3,6 +3,7 @@ import {
   buildCheckpointedGmailQuery,
   classifyWorkerErrorCode,
   computeRetryDelayMs,
+  getProviderRetryAfterMs,
   isWorkerStale,
   nextCheckpointInternalDateMs,
   sanitizeWorkerError,
@@ -32,6 +33,20 @@ describe("Lead Bridge retry policy", () => {
     expect(computeRetryDelayMs(1, 60_000, 600_000)).toBe(60_000);
     expect(computeRetryDelayMs(2, 60_000, 600_000)).toBe(120_000);
     expect(computeRetryDelayMs(10, 60_000, 600_000)).toBe(600_000);
+  });
+
+  it("honors a longer provider Retry-After without exceeding the approved maximum", () => {
+    expect(computeRetryDelayMs(1, 60_000, 600_000, 300_000)).toBe(300_000);
+    expect(computeRetryDelayMs(2, 60_000, 600_000, 30_000)).toBe(120_000);
+    expect(computeRetryDelayMs(1, 60_000, 600_000, 900_000)).toBe(600_000);
+  });
+
+  it("reads only a valid non-negative retryAfterMs hint from an error", () => {
+    expect(getProviderRetryAfterMs(Object.assign(new Error("rate limited"), { retryAfterMs: 180_000 })))
+      .toBe(180_000);
+    expect(getProviderRetryAfterMs({ retryAfterMs: -1 })).toBeNull();
+    expect(getProviderRetryAfterMs({ retryAfterMs: "180000" })).toBeNull();
+    expect(getProviderRetryAfterMs(new Error("no hint"))).toBeNull();
   });
 });
 

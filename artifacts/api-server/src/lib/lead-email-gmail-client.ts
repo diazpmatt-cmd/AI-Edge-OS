@@ -11,6 +11,23 @@ export type GmailApiError = Error & {
 };
 
 export const MAX_PROVIDER_RETRY_AFTER_MS = 15 * 60 * 1_000;
+export const MAX_GMAIL_MESSAGES_PER_PAGE = 50;
+export const MAX_GMAIL_QUERY_CHARS = 4_096;
+export const MAX_GMAIL_MESSAGE_ID_CHARS = 256;
+
+export function isValidGmailMessageId(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length >= 1
+    && value.length <= MAX_GMAIL_MESSAGE_ID_CHARS
+    && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+export function gmailMessagePath(messageId: unknown): string {
+  if (!isValidGmailMessageId(messageId)) {
+    throw new Error("Invalid Gmail message ID");
+  }
+  return `/messages/${encodeURIComponent(messageId)}?format=full`;
+}
 
 export function parseRetryAfterMs(
   value: string | null,
@@ -162,26 +179,36 @@ export async function listGmailMessageIds(input: {
   if (!Number.isInteger(input.maxPages) || input.maxPages < 1) {
     throw new Error("maxPages must be a positive integer");
   }
+  const accessToken = input.accessToken.trim();
+  if (!accessToken) throw new Error("Gmail access token must not be empty");
+  const query = input.query.trim();
+  if (!query) throw new Error("Gmail query must not be empty");
+  if (query.length > MAX_GMAIL_QUERY_CHARS) {
+    throw new Error(`Gmail query must not exceed ${MAX_GMAIL_QUERY_CHARS} characters`);
+  }
 
   const ids: string[] = [];
   const seen = new Set<string>();
   let pageToken: string | undefined;
 
   for (let page = 0; page < input.maxPages; page += 1) {
-    const params = new URLSearchParams({ q: input.query, maxResults: "50" });
+    const params = new URLSearchParams({ q: query, maxResults: String(MAX_GMAIL_MESSAGES_PER_PAGE) });
     if (pageToken) params.set("pageToken", pageToken);
 
-    const list = await input.gmailFetch(`/messages?${params.toString()}`, input.accessToken);
-    for (const item of list.messages ?? []) {
-      const id = String(item.id ?? "").trim();
-      if (id && !seen.has(id)) {
+    const list = await input.gmailFetch(`/messages?${params.toString()}`, accessToken);
+    const messages = Array.isArray(list.messages)
+      ? list.messages.slice(0, MAX_GMAIL_MESSAGES_PER_PAGE)
+      : [];
+    for (const item of messages) {
+      const id = typeof item?.id === "string" ? item.id.trim() : "";
+      if (isValidGmailMessageId(id) && !seen.has(id)) {
         seen.add(id);
         ids.push(id);
       }
     }
 
     pageToken = typeof list.nextPageToken === "string" && list.nextPageToken.trim()
-      ? list.nextPageToken
+      ? list.nextPageToken.trim()
       : undefined;
     if (!pageToken) return { ids, capped: false };
   }

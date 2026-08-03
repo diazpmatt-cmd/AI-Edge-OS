@@ -14,16 +14,13 @@ Last updated: 2026-08-02
 - DAB-5B: planner heartbeat/cycle visibility, stale detection, and recovery runbook.
 - DAB-6A: unattended reasoning worker with durable requests, runs, structured recommendations, hard budgets, timeout, idempotency, and no action tools.
 - DAB-6B: authenticated Mission Board showing planner state, agent state, provider readiness, budgets, queue state, and the latest recommendation.
+- DAB-6C: fixed-allowlist trusted read-only project context with redaction, provenance, digests, truncation, total-byte limits, prompt-injection resistance, and Mission Board coverage visibility.
 
 ## Current authority boundary
 
-The system may wake, inspect approved operational metadata, reason, persist a recommendation, and report its state. It may not execute its recommendation, mutate tasks, write Git/GitHub, deploy, call customer systems, publish content, or use arbitrary tools.
+The system may wake, inspect approved operational metadata and packaged durable project documents, reason, persist a recommendation, and report its state. It may not execute its recommendation, mutate tasks, write Git/GitHub, deploy, call customer systems, publish content, or use arbitrary tools.
 
 ## Next phases
-
-### DAB-6C — Trusted read-only context expansion
-
-Add bounded read-only context adapters for the Engineering Handbook, roadmap, Session Handoff, ADRs, open issues, recent merges, CI state, deployment health, and approved business priorities. Every source must be versioned, redacted, size-bounded, and attributable.
 
 ### DAB-7A — Human approval inbox
 

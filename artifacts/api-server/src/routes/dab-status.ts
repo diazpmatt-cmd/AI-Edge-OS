@@ -16,9 +16,8 @@ router.get("/dab/status", async (_req, res) => {
   const now = new Date().toISOString();
 
   const tables = await pool.query<{ heartbeats: string | null; cycles: string | null }>(`
-    SELECT
-      to_regclass('public.dab_runner_heartbeats')::text AS heartbeats,
-      to_regclass('public.dab_runner_cycles')::text AS cycles
+    SELECT to_regclass('public.dab_runner_heartbeats')::text AS heartbeats,
+           to_regclass('public.dab_runner_cycles')::text AS cycles
   `);
 
   if (!tables.rows[0]?.heartbeats) {
@@ -76,6 +75,32 @@ router.get("/dab/status", async (_req, res) => {
   });
 });
 
+function contextCoverage(context: unknown) {
+  if (!context || typeof context !== "object") return null;
+  const trustedProject = (context as { trustedProject?: unknown }).trustedProject;
+  if (!trustedProject || typeof trustedProject !== "object") return null;
+  const project = trustedProject as { totalContentBytes?: unknown; coverageDigest?: unknown; sources?: unknown };
+  const sources = Array.isArray(project.sources) ? project.sources : [];
+  return {
+    totalContentBytes: typeof project.totalContentBytes === "number" ? project.totalContentBytes : 0,
+    coverageDigest: typeof project.coverageDigest === "string" ? project.coverageDigest : null,
+    sources: sources.map((source) => {
+      const item = source && typeof source === "object" ? source as Record<string, unknown> : {};
+      return {
+        id: typeof item.id === "string" ? item.id : "unknown",
+        relativePath: typeof item.relativePath === "string" ? item.relativePath : "unknown",
+        available: item.available === true,
+        required: item.required === true,
+        bytes: typeof item.bytes === "number" ? item.bytes : 0,
+        digest: typeof item.digest === "string" ? item.digest : null,
+        truncated: item.truncated === true,
+        provenance: item.provenance === "packaged_repository_document" ? item.provenance : "unknown",
+        errorCode: typeof item.errorCode === "string" ? item.errorCode : null,
+      };
+    }),
+  };
+}
+
 router.get("/dab/agent-status", async (_req, res) => {
   const checkedAt = new Date().toISOString();
   const workerEnabled = process.env.DAB_AGENT_WORKER_ENABLED === "true";
@@ -102,6 +127,7 @@ router.get("/dab/agent-status", async (_req, res) => {
       budget: { dailyRequestLimit, dailyTokenLimit, requestsUsed: 0, tokensUsed: 0 },
       latestRun: null,
       latestResult: null,
+      contextCoverage: null,
     });
     return;
   }
@@ -124,6 +150,7 @@ router.get("/dab/agent-status", async (_req, res) => {
   const latestResult = tables.rows[0]?.results ? await pool.query<{
     request_id: string; run_id: string; created_at: Date; recommendation: unknown;
   }>(`SELECT request_id, run_id, created_at, recommendation FROM dab_agent_results ORDER BY created_at DESC LIMIT 1`) : null;
+  const latestRequest = await pool.query<{ context: unknown }>(`SELECT context FROM dab_agent_requests ORDER BY created_at DESC LIMIT 1`);
 
   const requestsUsed = Number(budget.rows[0]?.requests_used ?? 0);
   const tokensUsed = Number(budget.rows[0]?.tokens_used ?? 0);
@@ -163,6 +190,7 @@ router.get("/dab/agent-status", async (_req, res) => {
       createdAt: latestResult.rows[0].created_at.toISOString(),
       recommendation: latestResult.rows[0].recommendation,
     } : null,
+    contextCoverage: contextCoverage(latestRequest.rows[0]?.context),
   });
 });
 

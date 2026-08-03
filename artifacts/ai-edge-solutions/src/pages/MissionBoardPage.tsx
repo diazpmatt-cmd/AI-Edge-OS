@@ -66,6 +66,21 @@ interface AgentResponse {
     createdAt: string;
     recommendation: Recommendation;
   };
+  contextCoverage: null | {
+    totalContentBytes: number;
+    coverageDigest: string | null;
+    sources: Array<{
+      id: string;
+      relativePath: string;
+      available: boolean;
+      required: boolean;
+      bytes: number;
+      digest: string | null;
+      truncated: boolean;
+      provenance: string;
+      errorCode: string | null;
+    }>;
+  };
 }
 
 const palette = {
@@ -81,8 +96,8 @@ const palette = {
 };
 
 function colorFor(status: string): string {
-  if (["healthy", "ready", "completed", "succeeded"].includes(status)) return palette.green;
-  if (["stale", "blocked", "budget_exhausted", "failed"].includes(status)) return status === "failed" ? palette.red : palette.gold;
+  if (["healthy", "ready", "completed", "succeeded", "available"].includes(status)) return palette.green;
+  if (["stale", "blocked", "budget_exhausted", "failed", "unavailable"].includes(status)) return status === "failed" ? palette.red : palette.gold;
   return palette.silver;
 }
 
@@ -112,6 +127,7 @@ export default function MissionBoardPage() {
   const refreshing = planner.isFetching || agent.isFetching;
   const refresh = () => Promise.all([planner.refetch(), agent.refetch()]);
   const recommendation = agent.data?.latestResult?.recommendation;
+  const coverage = agent.data?.contextCoverage;
   const error = planner.error || agent.error;
 
   return <main style={{ minHeight: "100vh", background: palette.navy, color: palette.white, padding: "28px 32px", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
@@ -120,7 +136,7 @@ export default function MissionBoardPage() {
         <Link href="/admin/mission-control" style={{ color: palette.blue, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", marginBottom: 12 }}><ArrowLeft size={14}/> Mission Control</Link>
         <div style={{ color: palette.blue, fontSize: 10, letterSpacing: "3px", fontWeight: 800, textTransform: "uppercase" }}>AI Edge OS · Development Autonomy</div>
         <h1 style={{ margin: "6px 0", fontSize: 30 }}>🧭 Mission Board</h1>
-        <p style={{ margin: 0, color: palette.silver, fontSize: 13 }}>Read-only proof of when the system woke, what it observed, and what it recommends.</p>
+        <p style={{ margin: 0, color: palette.silver, fontSize: 13 }}>Read-only proof of when the system woke, what it understood, and what it recommends.</p>
       </div>
       <button onClick={refresh} disabled={refreshing} style={{ background: `${palette.blue}18`, color: palette.blue, border: `1px solid ${palette.blue}55`, borderRadius: 10, padding: "10px 14px", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}><RefreshCw size={15} style={{ animation: refreshing ? "spin 1s linear infinite" : undefined }}/>{refreshing ? "Refreshing" : "Refresh"}</button>
     </header>
@@ -158,6 +174,30 @@ export default function MissionBoardPage() {
         </> : <p style={{ color: palette.silver }}>No agent status is available.</p>}
       </Card>
     </div>
+
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <div><div style={{ fontWeight: 900, fontSize: 18 }}>Trusted Context Coverage</div><div style={{ color: palette.silver, fontSize: 12, marginTop: 4 }}>Metadata only. Raw project documents are never rendered in the browser.</div></div>
+        <ShieldCheck size={24} color={palette.blue}/>
+      </div>
+      {coverage ? <>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 14, marginBottom: 16 }}>
+          <Metric label="Sources" value={coverage.sources.length}/>
+          <Metric label="Available" value={coverage.sources.filter(source => source.available).length}/>
+          <Metric label="Context bytes" value={coverage.totalContentBytes}/>
+          <Metric label="Coverage digest" value={coverage.coverageDigest?.slice(0, 12) ?? "None"}/>
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {coverage.sources.map(source => <div key={source.id} style={{ display: "grid", gridTemplateColumns: "minmax(170px,1fr) auto auto", gap: 12, alignItems: "center", borderTop: `1px solid ${palette.border}`, paddingTop: 10 }}>
+            <div><div style={{ fontWeight: 800 }}>{source.id.replaceAll("_", " ")}</div><div style={{ color: palette.silver, fontSize: 11 }}>{source.relativePath} · {source.provenance}</div></div>
+            <StatusPill value={source.available ? "available" : "unavailable"}/>
+            <div style={{ color: source.truncated ? palette.gold : palette.silver, fontSize: 11 }}>{source.bytes} bytes{source.truncated ? " · truncated" : ""}</div>
+          </div>)}
+        </div>
+      </> : <div style={{ color: palette.silver }}>No trusted-context request has been observed yet.</div>}
+    </Card>
+
+    <div style={{ height: 16 }}/>
 
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>

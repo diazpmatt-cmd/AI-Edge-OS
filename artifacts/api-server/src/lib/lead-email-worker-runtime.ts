@@ -1,4 +1,7 @@
-import { computeRetryDelayMs } from "./lead-email-worker-policy.js";
+import {
+  computeRetryDelayMs,
+  getProviderRetryAfterMs,
+} from "./lead-email-worker-policy.js";
 
 export type WorkerWaitResult = "elapsed" | "stopped";
 
@@ -29,6 +32,7 @@ export async function runLeadEmailWorkerLoop<T>(options: WorkerLoopOptions<T>): 
         consecutiveFailures,
         options.pollMs,
         options.maxBackoffMs,
+        getProviderRetryAfterMs(error),
       );
       await options.onFailure(error, consecutiveFailures, retryMs);
       if (options.runOnce) throw error;

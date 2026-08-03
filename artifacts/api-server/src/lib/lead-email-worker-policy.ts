@@ -24,17 +24,34 @@ export function buildCheckpointedGmailQuery(
   return `(${normalized}) after:${afterSeconds}`;
 }
 
+export function getProviderRetryAfterMs(error: unknown): number | null {
+  if (!error || typeof error !== "object" || !("retryAfterMs" in error)) return null;
+  const value = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return Math.floor(value);
+}
+
 export function computeRetryDelayMs(
   failureCount: number,
   pollMs: number,
   maxBackoffMs: number,
+  providerRetryAfterMs: number | null = null,
 ): number {
   if (!Number.isInteger(failureCount) || failureCount < 1) throw new Error("failureCount must be at least 1");
   if (!Number.isFinite(pollMs) || pollMs < 1) throw new Error("pollMs must be positive");
   if (!Number.isFinite(maxBackoffMs) || maxBackoffMs < pollMs) {
     throw new Error("maxBackoffMs must be at least pollMs");
   }
-  return Math.min(maxBackoffMs, pollMs * (2 ** Math.min(failureCount - 1, 6)));
+
+  const exponentialDelayMs = Math.min(
+    maxBackoffMs,
+    pollMs * (2 ** Math.min(failureCount - 1, 6)),
+  );
+  if (providerRetryAfterMs === null) return exponentialDelayMs;
+  if (!Number.isFinite(providerRetryAfterMs) || providerRetryAfterMs < 0) {
+    throw new Error("providerRetryAfterMs must be a non-negative finite number or null");
+  }
+  return Math.min(maxBackoffMs, Math.max(exponentialDelayMs, Math.floor(providerRetryAfterMs)));
 }
 
 export function sanitizeWorkerError(error: unknown): string {

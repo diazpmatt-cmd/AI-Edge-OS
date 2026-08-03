@@ -61,6 +61,7 @@ const MorningBriefPage = lazy(() => import("./pages/MorningBriefPage"));
 const MissionControlPage = lazy(() => import("./pages/MissionControlWithBoardLinkPage"));
 const MissionBoardPage = lazy(() => import("./pages/MissionBoardWithApprovalLinkPage"));
 const ApprovalInboxPage = lazy(() => import("./pages/ApprovalInboxPage"));
+const FirstPublishPage = lazy(() => import("./pages/FirstPublishPage"));
 const CustomerTimelinePage = lazy(() => import("./pages/CustomerTimelinePage"));
 const ProfitCenterPage = lazy(() => import("./pages/ProfitCenterPage"));
 const ApollosPage = lazy(() => import("./pages/ApollosPage"));
@@ -73,18 +74,9 @@ const ReferralProgramPage = lazy(() => import("./pages/ReferralProgramPage"));
 const WebLeadsPage = lazy(() => import("./pages/WebLeadsPage"));
 
 const PageLoader = () => <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612" }}><Loader2 style={{ width: 24, height: 24, color: "#00AEEF", animation: "spin 1s linear infinite" }} /></div>;
-
-function Authenticated({ children }: { children: React.ReactNode }) {
-  return <><Show when="signed-in"><Suspense fallback={<PageLoader />}>{children}</Suspense></Show><Show when="signed-out"><Redirect to="/admin/login" /></Show></>;
-}
-
-function SignInPage() {
-  return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>;
-}
-
-function SignUpPage() {
-  return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/admin/login`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>;
-}
+function Authenticated({ children }: { children: React.ReactNode }) { return <><Show when="signed-in"><Suspense fallback={<PageLoader />}>{children}</Suspense></Show><Show when="signed-out"><Redirect to="/admin/login" /></Show></>; }
+function SignInPage() { return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>; }
+function SignUpPage() { return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/admin/login`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>; }
 
 function AppRouter() {
   return <Suspense fallback={<PageLoader />}><Switch>
@@ -129,6 +121,7 @@ function AppRouter() {
     <Route path="/admin/mission-control"><Authenticated><MissionControlPage /></Authenticated></Route>
     <Route path="/admin/mission-board"><Authenticated><MissionBoardPage /></Authenticated></Route>
     <Route path="/admin/approval-inbox"><Authenticated><ApprovalInboxPage /></Authenticated></Route>
+    <Route path="/admin/first-publish"><Authenticated><FirstPublishPage /></Authenticated></Route>
     <Route path="/admin/customer-timeline"><Authenticated><CustomerTimelinePage /></Authenticated></Route>
     <Route path="/admin/profit-center"><Authenticated><ProfitCenterPage /></Authenticated></Route>
     <Route path="/admin/apollos"><Authenticated><ApollosPage /></Authenticated></Route>
@@ -153,8 +146,5 @@ function AppRouter() {
   </Switch></Suspense>;
 }
 
-function App() {
-  return <ThemeProvider><BusinessProvider><ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><AppRouter /><Toaster /></WouterRouter></TooltipProvider></QueryClientProvider></ClerkProvider></BusinessProvider></ThemeProvider>;
-}
-
+function App() { return <ThemeProvider><BusinessProvider><ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><AppRouter /><Toaster /></WouterRouter></TooltipProvider></QueryClientProvider></ClerkProvider></BusinessProvider></ThemeProvider>; }
 export default App;

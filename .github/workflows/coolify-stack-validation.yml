@@ -69,7 +69,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck:libs
-      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-publishing-policy.test.ts src/__tests__/lead-email-classifier.test.ts
+      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-publishing-policy.test.ts src/__tests__/lead-email-classifier.test.ts src/__tests__/lead-email-worker-policy.test.ts
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/ai-edge-solutions run build
       - name: Validate Compose rendering

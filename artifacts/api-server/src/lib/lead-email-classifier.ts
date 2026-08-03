@@ -30,13 +30,46 @@ const pick = (body: string, label: string) => {
   return match?.[1]?.trim() || null;
 };
 
+const mailboxPattern = /[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+/i;
+
+/**
+ * Extract the actual mailbox from an RFC-5322-style From header.
+ * Prefer the address inside angle brackets so a deceptive display name cannot
+ * make an unrelated mailbox look like a trusted sender.
+ */
+export function extractMailboxAddress(from: string): string | null {
+  const angleAddress = from.match(new RegExp(`<\\s*(${mailboxPattern.source})\\s*>`, "i"))?.[1];
+  const address = angleAddress ?? from.match(mailboxPattern)?.[0];
+  return address?.toLowerCase() ?? null;
+}
+
+function isDomainOrSubdomain(domain: string, expected: string): boolean {
+  return domain === expected || domain.endsWith(`.${expected}`);
+}
+
+/**
+ * Classify only by the parsed mailbox domain. Substring checks are forbidden:
+ * domains such as yelp.com.example.org and nextdoor.com.attacker.test are not
+ * trusted platform senders.
+ */
+export function classifySenderSource(from: string): LeadEmailSource {
+  const address = extractMailboxAddress(from);
+  if (!address) return "other";
+
+  const domain = address.slice(address.lastIndexOf("@") + 1).replace(/\.$/, "");
+  if (isDomainOrSubdomain(domain, "yelp.com")) return "yelp";
+  if (isDomainOrSubdomain(domain, "nextdoor.com")) return "nextdoor";
+  return "other";
+}
+
 export function classifyLeadEmail(input: LeadEmailInput): ClassifiedLeadEmail {
   const from = input.from.toLowerCase();
+  const source = classifySenderSource(input.from);
   const subject = input.subject.trim();
   const body = input.body.trim();
   const payloadHash = hash([input.messageId, from, subject, body].join("\n"));
 
-  if (from.includes("messaging.yelp.com") || from.includes("yelp.com")) {
+  if (source === "yelp") {
     const isLead = /new lead on yelp|message from .+ for bed bugs and beyond/i.test(subject);
     const isAccountNotice = /password|verification|account|security/i.test(subject);
     const customerName = subject.match(/Message from (.+?) for/i)?.[1]?.trim()
@@ -61,7 +94,7 @@ export function classifyLeadEmail(input: LeadEmailInput): ClassifiedLeadEmail {
     };
   }
 
-  if (from.includes("nextdoor.com")) {
+  if (source === "nextdoor") {
     const isPromotion = /opportunity alerts|try opportunity alerts|set up your business|advertis|we miss you|get your business noticed/i.test(`${subject}\n${body}`);
     const isOpportunity = /neighbor .* pest control pro|someone nearby needs a pest control pro/i.test(`${subject}\n${body}`);
     const line = body.match(/^([A-Z])\s*\n\s*([^\n]+?)\s+·\s+([^\n]+?)\s+·/m);

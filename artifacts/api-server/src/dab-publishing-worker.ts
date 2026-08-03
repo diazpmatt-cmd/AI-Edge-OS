@@ -7,6 +7,7 @@ import { readPublishingWorkerConfig, stablePublishPayloadHash, type Dab8aPlatfor
 import { SCHEDULER_SECRET } from "./lib/scheduler-secret.js";
 
 const config = readPublishingWorkerConfig();
+const internalBase = process.env.DAB_PUBLISHING_INTERNAL_BASE_URL ?? "http://api:3000";
 let stopped = false;
 
 async function bootstrap() {
@@ -87,8 +88,7 @@ async function processOne() {
     });
     if (currentHash !== execution.payload_hash) throw new Error("PAYLOAD_HASH_MISMATCH");
 
-    const port = Number(process.env.PORT ?? 3000);
-    const result = await publishingService.publishPost(post.id, execution.user_id, execution.armed_by, `http://127.0.0.1:${port}`, SCHEDULER_SECRET);
+    const result = await publishingService.publishPost(post.id, execution.user_id, execution.armed_by, internalBase, SCHEDULER_SECRET);
     const delivery = result.deliveries.find((item) => item.platform === execution.platform);
     if (!delivery || (delivery.status !== "published" && delivery.status !== "published_with_warning" && delivery.status !== "idempotency_hit")) {
       throw new Error(delivery?.errorMessage ? `DELIVERY_FAILED:${delivery.errorMessage}` : "DELIVERY_NOT_VERIFIED");
@@ -119,7 +119,7 @@ async function processOne() {
 async function main() {
   if (!config.enabled || config.killSwitch) { logger.info("[dab8a-publishing] disabled"); return; }
   await bootstrap();
-  logger.info({ runtimeId: config.runtimeId }, "[dab8a-publishing] worker started");
+  logger.info({ runtimeId: config.runtimeId, internalBase }, "[dab8a-publishing] worker started");
   while (!stopped) {
     try { await processOne(); } catch (error) { logger.error({ error }, "[dab8a-publishing] tick failed closed"); }
     await new Promise((resolve) => setTimeout(resolve, config.intervalMs));

@@ -5,6 +5,7 @@ import { classifyLeadEmail, type ClassifiedLeadEmail } from "./lib/lead-email-cl
 import {
   createGmailFetch,
   extractGmailText,
+  gmailMessagePath,
   listGmailMessageIds,
   withTimeout,
   type GmailFetch,
@@ -107,7 +108,7 @@ async function pollOnce(client: OAuth2Client, gmailFetch: GmailFetch) {
   for (const messageId of messageIds.reverse()) {
     if (stopping) break;
 
-    const message = await gmailFetch(`/messages/${messageId}?format=full`, token.token);
+    const message = await gmailFetch(gmailMessagePath(messageId), token.token);
     const internalDateMs = Number(message.internalDate);
     if (!Number.isFinite(internalDateMs) || internalDateMs < 0) {
       await quarantineLeadEmail({

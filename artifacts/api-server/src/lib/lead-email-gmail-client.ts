@@ -5,6 +5,41 @@ export type TextExtraction = {
   truncated: boolean;
 };
 
+export type GmailApiError = Error & {
+  status?: number;
+  retryAfterMs?: number;
+};
+
+export const MAX_PROVIDER_RETRY_AFTER_MS = 15 * 60 * 1_000;
+
+export function parseRetryAfterMs(
+  value: string | null,
+  nowMs = Date.now(),
+  maxRetryAfterMs = MAX_PROVIDER_RETRY_AFTER_MS,
+): number | null {
+  if (!Number.isFinite(nowMs) || nowMs < 0) {
+    throw new Error("nowMs must be a non-negative finite number");
+  }
+  if (!Number.isFinite(maxRetryAfterMs) || maxRetryAfterMs < 0) {
+    throw new Error("maxRetryAfterMs must be a non-negative finite number");
+  }
+
+  const normalized = value?.trim();
+  if (!normalized) return null;
+
+  let retryAfterMs: number;
+  if (/^\d+$/.test(normalized)) {
+    retryAfterMs = Number(normalized) * 1_000;
+  } else {
+    const retryAtMs = Date.parse(normalized);
+    if (!Number.isFinite(retryAtMs)) return null;
+    retryAfterMs = Math.max(0, retryAtMs - nowMs);
+  }
+
+  if (!Number.isFinite(retryAfterMs)) return maxRetryAfterMs;
+  return Math.min(maxRetryAfterMs, Math.max(0, Math.floor(retryAfterMs)));
+}
+
 export function decodeBase64Url(value: string | undefined): string {
   if (!value) return "";
   return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
@@ -99,7 +134,12 @@ export function createGmailFetch(input: {
       );
 
       if (!response.ok) {
-        throw new Error(`Gmail API request failed with status ${response.status}`);
+        const error = new Error(`Gmail API request failed with status ${response.status}`) as GmailApiError;
+        error.name = "GmailApiError";
+        error.status = response.status;
+        const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+        if (retryAfterMs !== null) error.retryAfterMs = retryAfterMs;
+        throw error;
       }
       return await response.json() as any;
     } catch (error) {

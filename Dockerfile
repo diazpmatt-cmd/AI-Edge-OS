@@ -21,9 +21,19 @@ COPY --from=builder /deploy/node_modules ./node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /app/artifacts/ai-edge-solutions/dist/public ./artifacts/ai-edge-solutions/dist/public
 
+# DAB-6C fixed read-only context allowlist. No repository traversal or .git data is copied.
+RUN mkdir -p /app/context/docs/roadmaps
+COPY --from=builder /app/AGENTS.md /app/context/AGENTS.md
+COPY --from=builder /app/replit.md /app/context/replit.md
+COPY --from=builder /app/ROADMAP.md /app/context/ROADMAP.md
+COPY --from=builder /app/CHANGELOG.md /app/context/CHANGELOG.md
+COPY --from=builder /app/SESSION_HANDOFF.md /app/context/SESSION_HANDOFF.md
+COPY --from=builder /app/docs/roadmaps/AI-EDGE-AUTONOMY-ROADMAP.md /app/context/docs/roadmaps/AI-EDGE-AUTONOMY-ROADMAP.md
+
 RUN mkdir -p artifacts/api-server/uploads artifacts/api-server/public/audio
 
 ENV NODE_ENV=production
+ENV DAB_AGENT_CONTEXT_ROOT=/app/context
 
 EXPOSE 3000
 

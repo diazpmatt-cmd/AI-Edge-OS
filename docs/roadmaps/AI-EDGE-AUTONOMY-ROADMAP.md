@@ -16,20 +16,17 @@ Last updated: 2026-08-02
 - DAB-6B: authenticated Mission Board showing planner state, agent state, provider readiness, budgets, queue state, and the latest recommendation.
 - DAB-6C: fixed-allowlist trusted read-only project context with redaction, provenance, digests, truncation, total-byte limits, prompt-injection resistance, and Mission Board coverage visibility.
 - DAB-7A: durable exact-scope approval inbox with immutable proposal fingerprints, expiry, risk and resource display, authenticated approve/reject/modify decisions, concurrency protection, and no execution authority.
+- DAB-7B: isolated review-only preparation worker with a read-only source snapshot, disposable tmpfs workspace, structured file manifest, capability/path/size policy, hashed artifacts, unified diff, validation report, rollback plan, completion report, and Approval Inbox review visibility.
 
 ## Current authority boundary
 
-The system may wake, inspect approved operational metadata and packaged durable project documents, reason, persist a recommendation, present an exact-scope preparation proposal, and record an authenticated human decision. An approval currently authorizes nothing beyond a durable decision record. The system may not prepare or apply work, mutate tasks, write Git/GitHub, deploy, call customer systems, publish content, or use arbitrary tools.
+The system may wake, inspect approved operational metadata and packaged durable project documents, reason, persist a recommendation, present an exact-scope preparation proposal, record an authenticated human decision, and—only after approval—prepare bounded review artifacts inside a disposable workspace. It may not apply prepared work to the repository, mutate tasks, write Git/GitHub, create branches or commits, merge, deploy, call customer systems, publish content, install packages, run model-supplied commands, or use arbitrary tools.
 
-## Next phases
-
-### DAB-7B — Sandboxed work preparation
-
-Permit an independently authorized preparation worker to consume an approved, unexpired DAB-7A decision and create proposed patches, tests, preview artifacts, risk analysis, rollback plans, and completion reports in an isolated workspace. It may not apply changes to the repository, commit, push, merge, deploy, publish, contact customers, or perform external actions.
+## Next phase
 
 ### DAB-8 — First bounded action capability
 
-Grant one narrowly scoped capability at a time, beginning with low-risk internal documentation or task-record writes. Each capability requires an allowlist, authorization category, idempotency, audit record, kill switch, rate limit, and rollback procedure.
+Grant one narrowly scoped capability at a time, beginning with low-risk internal documentation or task-record writes. Each capability requires a distinct authorization category, exact resource allowlist, proposal and preparation fingerprint binding, idempotency, audit record, kill switch, rate limit, postcondition verification, and rollback procedure. Prepared artifacts do not automatically become executable.
 
 ## Product track after the autonomy foundation
 

@@ -142,7 +142,7 @@ This is the single ordered execution list for production recovery, lead intake, 
 
 101. [x] Add the local discovery and channel expansion plan to the AI Edge OS Autonomy Roadmap.
 102. [x] Create this single numbered master execution checklist.
-103. [ ] Create or update architecture decision records for Gmail intake, unified lead identity, source attribution, and human-approved replies.
+103. [x] Create or update architecture decision records for Gmail intake, unified lead identity, source attribution, and human-approved replies. See `docs/adr/ADR-LEAD-001-gmail-read-only-ingestion.md` through `ADR-LEAD-004-human-approved-outbound-responses.md`.
 104. [x] Create the Gmail OAuth and Coolify secret-configuration runbook. See `docs/runbooks/GMAIL-OAUTH-COOLIFY-SECRETS.md`.
 105. [x] Create the Lead Bridge deployment, rollback, and failure-recovery runbook. See `docs/runbooks/LEAD-BRIDGE-DEPLOYMENT-RECOVERY.md`.
 106. [x] Create the channel activation checklist covering permissions, testing, deduplication, attribution, costs, health, fallback, and kill switch. See `docs/runbooks/CHANNEL-ACTIVATION-CHECKLIST.md`.

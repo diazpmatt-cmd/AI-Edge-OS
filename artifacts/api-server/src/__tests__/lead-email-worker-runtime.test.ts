@@ -86,6 +86,40 @@ describe("Lead Bridge worker loop", () => {
     expect(waits).toEqual([60_000, 120_000]);
   });
 
+  it("honors a bounded provider Retry-After hint before polling again", async () => {
+    let attempt = 0;
+    let stopping = false;
+    const failure = Object.assign(new Error("Gmail API request failed with status 429"), {
+      retryAfterMs: 300_000,
+    });
+    const waits: number[] = [];
+    const onFailure = vi.fn();
+
+    await runLeadEmailWorkerLoop({
+      runOnce: false,
+      pollMs: 60_000,
+      maxBackoffMs: 600_000,
+      shouldStop: () => stopping,
+      pollOnce: async () => {
+        attempt += 1;
+        if (attempt === 1) throw failure;
+        return { attempt };
+      },
+      onSuccess: () => {
+        stopping = true;
+      },
+      onFailure,
+      wait: async (milliseconds) => {
+        waits.push(milliseconds);
+        return "elapsed";
+      },
+    });
+
+    expect(onFailure).toHaveBeenCalledWith(failure, 1, 300_000);
+    expect(waits).toEqual([300_000]);
+    expect(attempt).toBe(2);
+  });
+
   it("stops without another poll when shutdown interrupts the wait", async () => {
     const pollOnce = vi.fn(async () => ({ ingested: 0 }));
 

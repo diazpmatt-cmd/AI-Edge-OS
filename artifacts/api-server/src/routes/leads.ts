@@ -6,6 +6,7 @@ import { getAuth } from "@clerk/express";
 import { analyzeLead } from "../services/lead-analysis";
 import { reviewLead } from "../services/lead-review";
 import { sendApprovedLead } from "../services/lead-send";
+import { needsFollowUp } from "../services/lead-delivery";
 
 const router = Router();
 
@@ -76,7 +77,8 @@ router.get("/leads", async (req, res) => {
   const active = rows.filter(r => r.status === "new" || r.status === "contacted").length;
   const thisMonth = rows.filter(r => new Date(r.createdAt) >= startOfMonth).length;
   const withMessages = rows.filter(r => r.message && r.message.trim().length > 0).length;
-  res.json({ leads: rows.map(rowToDto), stats: { total: rows.length, active, thisMonth, withMessages } });
+  const followUpDue = rows.filter(r => needsFollowUp(r, now)).length;
+  res.json({ leads: rows.map(rowToDto), stats: { total: rows.length, active, thisMonth, withMessages, followUpDue } });
 });
 
 export function createLeadAnalysisHandler(analyzeLeadFn: typeof analyzeLead = analyzeLead, getAuthFn: typeof getAuth = getAuth) {
@@ -153,6 +155,11 @@ router.patch("/leads/:id", async (req, res) => {
   res.json(rowToDto(updated[0]));
 });
 
+function deliveryStatus(outcome: string | null): string | null {
+  if (!outcome?.startsWith("sms_")) return null;
+  return outcome.slice(4).split(":")[0] || null;
+}
+
 function rowToDto(r: typeof leadsTable.$inferSelect) {
   return {
     id: r.id, clientName: r.clientName, source: r.source, phone: r.phone,
@@ -162,7 +169,10 @@ function rowToDto(r: typeof leadsTable.$inferSelect) {
     draftResponse: r.draftResponse, responseStatus: r.responseStatus,
     receivedAt: r.receivedAt.toISOString(),
     lastFollowUpAt: r.lastFollowUpAt?.toISOString() ?? null,
-    outcome: r.outcome, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    outcome: r.outcome,
+    deliveryStatus: deliveryStatus(r.outcome),
+    needsFollowUp: needsFollowUp(r),
+    createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   };
 }
 

@@ -1,4 +1,4 @@
-# Verification workflow for Lead Intelligence review and human-triggered sending.
+# Verification workflow for Lead Intelligence review, sending, delivery, and follow-up.
 name: Lead Intelligence CI
 
 on:
@@ -6,6 +6,7 @@ on:
     branches:
       - feature/lead-intelligence-v1
       - feature/lead-intelligence-send-v1
+      - feature/lead-delivery-followup-v1
   pull_request:
     paths:
       - "artifacts/api-server/**"
@@ -65,3 +66,4 @@ jobs:
           src/__tests__/lead-intelligence-route.test.ts
           src/__tests__/lead-intelligence-review.test.ts
           src/__tests__/lead-intelligence-send.test.ts
+          src/__tests__/lead-intelligence-delivery.test.ts

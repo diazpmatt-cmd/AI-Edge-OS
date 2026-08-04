@@ -1,4 +1,4 @@
-# Verification workflow for Lead Intelligence review, sending, delivery, and follow-up.
+# Verification workflow for Lead Intelligence review, sending, delivery, follow-up, and conversion.
 name: Lead Intelligence CI
 
 on:
@@ -7,6 +7,7 @@ on:
       - feature/lead-intelligence-v1
       - feature/lead-intelligence-send-v1
       - feature/lead-delivery-followup-v1
+      - feature/lead-appointment-conversion-v1
   pull_request:
     paths:
       - "artifacts/api-server/**"
@@ -67,3 +68,4 @@ jobs:
           src/__tests__/lead-intelligence-review.test.ts
           src/__tests__/lead-intelligence-send.test.ts
           src/__tests__/lead-intelligence-delivery.test.ts
+          src/__tests__/lead-intelligence-conversion.test.ts

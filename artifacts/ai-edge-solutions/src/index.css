@@ -143,38 +143,30 @@
   }
 }
 
-/* Publishing Center canonical platform state colors.
-   Selected is always blue; otherwise color reflects operational state. */
+/* Publishing Center platform controls.
+   Selection and readiness are intentionally separate:
+   - unselected buttons are white / neutral
+   - selected buttons are green
+   - readiness remains visible in the chip below each button */
 [data-platform-state] > button {
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 [data-platform-selected="true"] > button {
-  background: rgba(0, 174, 239, 0.12) !important;
-  border-color: rgba(0, 174, 239, 0.45) !important;
-  color: #00AEEF !important;
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.8) !important;
+  color: #4ADE80 !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.18), 0 0 0 1px rgba(34, 197, 94, 0.08) !important;
 }
 
-[data-platform-selected="false"][data-platform-state="ready"] > button {
-  background: rgba(34, 197, 94, 0.08) !important;
-  border-color: rgba(34, 197, 94, 0.25) !important;
-  color: #22C55E !important;
+[data-platform-selected="false"] > button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.48) !important;
+  color: #FFFFFF !important;
+  box-shadow: none !important;
 }
 
-[data-platform-selected="false"][data-platform-state="pending"] > button {
-  background: rgba(245, 158, 11, 0.08) !important;
-  border-color: rgba(245, 158, 11, 0.28) !important;
-  color: #F59E0B !important;
-}
-
-[data-platform-selected="false"][data-platform-state="disconnected"] > button {
-  background: rgba(239, 68, 68, 0.08) !important;
-  border-color: rgba(239, 68, 68, 0.28) !important;
-  color: #EF4444 !important;
-}
-
-[data-platform-selected="false"][data-platform-state="coming_soon"] > button {
-  background: rgba(100, 116, 139, 0.06) !important;
-  border-color: rgba(100, 116, 139, 0.18) !important;
-  color: #94A3B8 !important;
+[data-platform-selected="false"] > button:hover {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border-color: rgba(255, 255, 255, 0.72) !important;
 }

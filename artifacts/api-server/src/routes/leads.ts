@@ -125,7 +125,7 @@ export function createLeadSendHandler(sendFn: typeof sendApprovedLead = sendAppr
       const result = await sendFn(req.params.id);
       if (result.status === "not_found") { res.status(404).json({ error: result.error }); return; }
       if (result.status === "invalid") {
-        const statusCode = result.error === "already_sent" || result.error === "send_in_progress" || result.error === "draft_not_approved" ? 409 : 422;
+        const statusCode = result.error === "already_sent" || result.error === "send_in_progress" ? 409 : 422;
         res.status(statusCode).json({ error: result.error });
         return;
       }

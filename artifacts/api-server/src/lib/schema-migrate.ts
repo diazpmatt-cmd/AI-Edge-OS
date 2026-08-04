@@ -144,10 +144,28 @@ export async function migrateSchema(): Promise<void> {
       event_type    TEXT        NOT NULL DEFAULT 'sms',
       status        TEXT        NOT NULL DEFAULT 'new',
       notes         TEXT,
+      service       TEXT,
+      location      TEXT,
+      urgency       TEXT        NOT NULL DEFAULT 'normal',
+      source_message_id TEXT,
+      draft_response    TEXT,
+      response_status   TEXT        NOT NULL DEFAULT 'pending',
+      received_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_follow_up_at TIMESTAMPTZ,
+      outcome           TEXT,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS service TEXT`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS location TEXT`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS urgency TEXT NOT NULL DEFAULT 'normal'`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS source_message_id TEXT`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS draft_response TEXT`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS response_status TEXT NOT NULL DEFAULT 'pending'`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_follow_up_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS outcome TEXT`);
 
   // ── Social Posts ───────────────────────────────────────────────────────────
   await pool.query(`

@@ -35,6 +35,7 @@ const RepurposeDetailPage = lazy(() => import("./pages/RepurposeDetailPage"));
 const DistributionPage = lazy(() => import("./pages/DistributionPage"));
 const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
 const LeadRecoveryPage = lazy(() => import("./pages/LeadRecoveryPage"));
+const LeadIntelligencePage = lazy(() => import("./pages/LeadIntelligencePage"));
 const SocialPublishingPage = lazy(() => import("./pages/SocialPublishingPage"));
 const AutoContentEnginePage = lazy(() => import("./pages/AutoContentEnginePage"));
 const ImageAssetManagerPage = lazy(() => import("./pages/ImageAssetManagerPage"));
@@ -96,6 +97,7 @@ function AppRouter() {
     <Route path="/admin/distribution"><Authenticated><DistributionPage /></Authenticated></Route>
     <Route path="/admin/connections"><Authenticated><ConnectionsPage /></Authenticated></Route>
     <Route path="/admin/lead-recovery"><Authenticated><LeadRecoveryPage /></Authenticated></Route>
+    <Route path="/admin/lead-intelligence"><Authenticated><LeadIntelligencePage /></Authenticated></Route>
     <Route path="/admin/social-publishing"><Authenticated><SocialPublishingPage /></Authenticated></Route>
     <Route path="/admin/auto-content"><Authenticated><AutoContentEnginePage /></Authenticated></Route>
     <Route path="/admin/image-assets"><Authenticated><ImageAssetManagerPage /></Authenticated></Route>

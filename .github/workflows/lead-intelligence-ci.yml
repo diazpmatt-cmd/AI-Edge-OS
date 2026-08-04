@@ -1,0 +1,63 @@
+# Verification trigger for the routed Lead Intelligence review queue.
+name: Lead Intelligence CI
+
+on:
+  push:
+    branches:
+      - feature/lead-intelligence-v1
+  pull_request:
+    paths:
+      - "artifacts/api-server/**"
+      - "artifacts/ai-edge-solutions/**"
+      - "lib/db/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/lead-intelligence-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lead-intelligence-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck and focused tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+
+      - name: Typecheck admin review queue
+        run: pnpm --filter @workspace/ai-edge-solutions run typecheck
+
+      - name: Run Lead Intelligence tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/__tests__/lead-intelligence-schema.test.ts
+          src/__tests__/lead-intelligence-intake.test.ts
+          src/__tests__/lead-intelligence-analysis.test.ts
+          src/__tests__/lead-intelligence-route.test.ts
+          src/__tests__/lead-intelligence-review.test.ts

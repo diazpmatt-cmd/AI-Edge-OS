@@ -58,6 +58,15 @@ app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
   res.sendFile(path.join(frontendDir, "index.html"));
 });
 
+app.get("/api/version", (_req, res) => {
+  res.json({
+    commit: process.env.APP_COMMIT_SHA || "unknown",
+    branch: process.env.COOLIFY_BRANCH || "unknown",
+    resource: process.env.COOLIFY_RESOURCE_UUID || "unknown",
+    builtAt: process.env.APP_BUILD_TIME || "unknown",
+  });
+});
+
 // PUBLIC routes — mounted before Clerk middleware (no auth required).
 // Lifecycle correlation runs before the existing Telnyx handlers and always
 // calls next(), preserving the current call-control and inbound intake flow.

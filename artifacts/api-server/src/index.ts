@@ -2,6 +2,7 @@ import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
 import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
+import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
 
 const rawPort = process.env["PORT"];
@@ -19,6 +20,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 migrateSchema()
+  .then(() => migrateLeadAuditEvents())
   .then(() => migrateAgentTasks())
   .then(() => import("./app.js"))
   .then(({ default: app }) => {

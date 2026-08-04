@@ -2,6 +2,7 @@ import { Router } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { leadsTable, callsTable, smsConversationsTable, aiReceptionistSettingsTable } from "@workspace/db/schema";
+import { intakeLead } from "../services/lead-intake";
 
 const router = Router();
 
@@ -236,13 +237,13 @@ router.post("/telnyx/sms", async (req, res) => {
     }
 
     // ── Generic inbound SMS (not a menu reply) ────────────────────────────────
-    await db.insert(leadsTable).values({
+    await intakeLead({
       clientName: getClientName(),
       source:     "telnyx_sms",
       phone:      from,
       message:    text,
       eventType:  "sms",
-      status:     "new",
+      sourceMessageId: msgId,
     });
 
     res.status(200).json({ received: true });
@@ -361,6 +362,7 @@ router.post("/telnyx/webhook", async (req, res) => {
     if (eventType === "message.received") {
       const from = payload?.from?.phone_number ?? payload?.from ?? "";
       const text = (payload?.text ?? "").trim();
+      const msgId = payload?.id ?? body?.data?.id ?? undefined;
 
       console.log(`[TELNYX] Inbound SMS (webhook) from ${from || "unknown"}: "${text.slice(0, 80)}"`);
 
@@ -383,13 +385,13 @@ router.post("/telnyx/webhook", async (req, res) => {
           status,
         });
       } else {
-        await db.insert(leadsTable).values({
+        await intakeLead({
           clientName: getClientName(),
           source:     "telnyx_sms",
           phone:      from,
           message:    text,
           eventType:  "sms",
-          status:     "new",
+          sourceMessageId: msgId,
         });
       }
     }

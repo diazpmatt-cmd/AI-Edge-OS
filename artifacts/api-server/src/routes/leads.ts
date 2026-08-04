@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db/schema";
-import { eq, desc, gte, and, isNotNull, sql } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { analyzeLead } from "../services/lead-analysis";
+import { reviewLead } from "../services/lead-review";
 
 const router = Router();
 
@@ -104,6 +106,82 @@ router.get("/leads", async (req, res) => {
   });
 });
 
+export function createLeadAnalysisHandler(
+  analyzeLeadFn: typeof analyzeLead = analyzeLead,
+  getAuthFn: typeof getAuth = getAuth,
+) {
+  return async (req: Parameters<typeof getAuth>[0] & { params: { id: string } }, res: any) => {
+    const { userId } = getAuthFn(req);
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    try {
+      const result = await analyzeLeadFn(req.params.id);
+
+      if (result.status === "not_found") {
+        res.status(404).json({ error: result.error });
+        return;
+      }
+
+      if (result.status === "failed") {
+        const statusCode = result.error === "provider_failure"
+          ? 503
+          : result.error === "invalid_ai_output"
+            ? 422
+            : 500;
+        res.status(statusCode).json({
+          error: result.error,
+          lead: rowToDto(result.lead),
+        });
+        return;
+      }
+
+      res.json({
+        lead: rowToDto(result.lead),
+        analysis: {
+          summary: result.analysis.summary,
+          missingInformation: result.analysis.missingInformation,
+        },
+      });
+    } catch {
+      res.status(500).json({ error: "analysis_unavailable" });
+    }
+  };
+}
+
+router.post("/leads/:id/analyze", createLeadAnalysisHandler() as any);
+
+export function createLeadReviewHandler(
+  reviewLeadFn: typeof reviewLead = reviewLead,
+  getAuthFn: typeof getAuth = getAuth,
+) {
+  return async (req: Parameters<typeof getAuth>[0] & { params: { id: string }; body: unknown }, res: any) => {
+    const { userId } = getAuthFn(req);
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    try {
+      const result = await reviewLeadFn(req.params.id, req.body);
+      if (result.status === "not_found") {
+        res.status(404).json({ error: result.error });
+        return;
+      }
+      if (result.status === "invalid") {
+        const statusCode = result.error === "draft_not_ready" ? 409 : 422;
+        res.status(statusCode).json({ error: result.error });
+        return;
+      }
+      if (result.status === "failed") {
+        res.status(500).json({ error: result.error });
+        return;
+      }
+      res.json({ action: result.status, lead: rowToDto(result.lead) });
+    } catch {
+      res.status(500).json({ error: "review_unavailable" });
+    }
+  };
+}
+
+router.patch("/leads/:id/review", createLeadReviewHandler() as any);
+
 router.patch("/leads/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -125,17 +203,26 @@ router.patch("/leads/:id", async (req, res) => {
 
 function rowToDto(r: typeof leadsTable.$inferSelect) {
   return {
-    id:           r.id,
-    clientName:   r.clientName,
-    source:       r.source,
-    phone:        r.phone,
-    customerName: r.customerName,
-    message:      r.message,
-    eventType:    r.eventType,
-    status:       r.status,
-    notes:        r.notes,
-    createdAt:    r.createdAt.toISOString(),
-    updatedAt:    r.updatedAt.toISOString(),
+    id:               r.id,
+    clientName:       r.clientName,
+    source:           r.source,
+    phone:            r.phone,
+    customerName:     r.customerName,
+    message:          r.message,
+    eventType:        r.eventType,
+    status:           r.status,
+    notes:            r.notes,
+    service:          r.service,
+    location:         r.location,
+    urgency:          r.urgency,
+    sourceMessageId:  r.sourceMessageId,
+    draftResponse:    r.draftResponse,
+    responseStatus:   r.responseStatus,
+    receivedAt:       r.receivedAt.toISOString(),
+    lastFollowUpAt:   r.lastFollowUpAt?.toISOString() ?? null,
+    outcome:          r.outcome,
+    createdAt:        r.createdAt.toISOString(),
+    updatedAt:        r.updatedAt.toISOString(),
   };
 }
 

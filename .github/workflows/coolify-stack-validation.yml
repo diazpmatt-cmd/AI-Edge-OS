@@ -59,14 +59,16 @@ jobs:
       REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
       GORILLADESK_API_KEY: ci-only-not-production
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.1
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-          cache: pnpm
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck:libs
       - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-publishing-policy.test.ts

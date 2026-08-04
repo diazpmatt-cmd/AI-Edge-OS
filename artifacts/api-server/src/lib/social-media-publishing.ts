@@ -14,7 +14,7 @@ export function resolvePublicImageUrl(
 ): string | null {
   if (!value) return null;
   if (isHttpsUrl(value)) return value;
-  if (/^\/objects\/[^/]+$/.test(value)) {
+  if (/^\/objects\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/.test(value)) {
     return `${publicOrigin.replace(/\/$/, "")}/api/storage/objects${value}`;
   }
   return null;

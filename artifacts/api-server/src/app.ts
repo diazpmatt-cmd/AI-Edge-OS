@@ -7,6 +7,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import oauthCallbacksRouter from "./routes/oauth-callbacks";
+import leadDeliveryWebhooksRouter from "./routes/lead-delivery-webhooks";
 import telnyxRouter from "./routes/telnyx";
 import { logger } from "./lib/logger";
 import {
@@ -49,25 +50,19 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// Serve uploaded social-post images from the same absolute directory used by
-// the upload route (process.cwd()/uploads). This keeps browser previews and
-// external providers such as Google Business Profile on the identical path.
 app.use("/api/uploads", express.static(path.join(process.cwd(), "uploads")));
-
-// Serve custom audio greetings (public — fetched by Telnyx during calls)
 app.use("/api/audio", express.static(path.join(__dirname, "..", "public", "audio")));
 
-// Serve the Alex/AI Edge frontend before Clerk middleware so public pages and the
-// login shell remain available even when an API authentication setting is missing.
 app.use(express.static(frontendDir));
 app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
   res.sendFile(path.join(frontendDir, "index.html"));
 });
 
-// PUBLIC routes — mounted before Clerk middleware (no auth required)
-// OAuth callbacks: Google/Meta/TikTok redirects verified via state tokens
-// Telnyx webhooks: incoming SMS/calls from Telnyx servers (verified by source IP / payload)
+// PUBLIC routes — mounted before Clerk middleware (no auth required).
+// Lifecycle correlation runs before the existing Telnyx handlers and always
+// calls next(), preserving the current call-control and inbound intake flow.
 app.use("/api", oauthCallbacksRouter);
+app.use("/api", leadDeliveryWebhooksRouter);
 app.use("/api", telnyxRouter);
 
 app.use(

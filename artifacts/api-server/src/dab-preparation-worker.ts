@@ -19,6 +19,29 @@ function getModel() {
 
 async function bootstrap() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS dab_approval_proposals (
+      proposal_id text PRIMARY KEY,
+      proposal_fingerprint text NOT NULL UNIQUE,
+      request_id text NOT NULL,
+      run_id text NOT NULL,
+      context_hash text NOT NULL,
+      capability text NOT NULL CHECK (capability IN ('prepare_documentation_change','prepare_task_record_change','prepare_code_patch')),
+      risk_level text NOT NULL CHECK (risk_level IN ('low','medium','high')),
+      summary text NOT NULL,
+      recommended_next_step text NOT NULL,
+      affected_resources jsonb NOT NULL,
+      rationale text NOT NULL,
+      confidence double precision NOT NULL,
+      status text NOT NULL CHECK (status IN ('pending','approved','rejected','modify','expired')),
+      created_at timestamptz NOT NULL,
+      expires_at timestamptz NOT NULL,
+      decided_at timestamptz,
+      decided_by text,
+      operator_instructions text,
+      decision_idempotency_key text UNIQUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_dab_approval_proposals_status_created
+      ON dab_approval_proposals(status, created_at DESC);
     CREATE TABLE IF NOT EXISTS dab_preparation_jobs (
       job_id text PRIMARY KEY,
       proposal_id text NOT NULL UNIQUE REFERENCES dab_approval_proposals(proposal_id),

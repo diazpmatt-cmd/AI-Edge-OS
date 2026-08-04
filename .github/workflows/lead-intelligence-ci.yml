@@ -1,10 +1,11 @@
-# Verification trigger for the routed Lead Intelligence review queue.
+# Verification workflow for Lead Intelligence review and human-triggered sending.
 name: Lead Intelligence CI
 
 on:
   push:
     branches:
       - feature/lead-intelligence-v1
+      - feature/lead-intelligence-send-v1
   pull_request:
     paths:
       - "artifacts/api-server/**"
@@ -26,6 +27,8 @@ jobs:
     name: Typecheck and focused tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_intelligence_ci
 
     steps:
       - name: Check out repository
@@ -61,3 +64,4 @@ jobs:
           src/__tests__/lead-intelligence-analysis.test.ts
           src/__tests__/lead-intelligence-route.test.ts
           src/__tests__/lead-intelligence-review.test.ts
+          src/__tests__/lead-intelligence-send.test.ts

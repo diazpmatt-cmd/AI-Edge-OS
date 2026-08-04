@@ -3,11 +3,13 @@ import { getAuth } from "@clerk/express";
 import { Readable, Transform } from "stream";
 import { pipeline } from "stream/promises";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { createReadStream, createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   ObjectStorageConfigurationError,
   ObjectStorageService,
   ObjectNotFoundError,
-  objectStorageClient,
   safeStorageFailureReason,
 } from "../lib/objectStorage";
 import { validateUploadRequest, isBlockedExtension } from "../lib/media-config";
@@ -17,6 +19,7 @@ const objectStorageService = new ObjectStorageService();
 const DIRECT_UPLOAD_TTL_MS = 15 * 60_000;
 const DIRECT_UPLOAD_TIMEOUT_MS = 2 * 60_000;
 const MAX_DIRECT_UPLOAD_BYTES = 110 * 1024 * 1024;
+const LOCAL_MEDIA_DIR = process.env.LOCAL_MEDIA_DIR?.trim() || "/data/media";
 
 function directUploadSecret(): string {
   const secret = process.env.SCHEDULER_SECRET?.trim();
@@ -41,17 +44,22 @@ function safeSignatureEquals(actual: string, expected: string): boolean {
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
-function privateObjectLocation(objectPath: string): { bucketName: string; objectName: string } {
-  if (!objectPath.startsWith("/objects/uploads/")) {
+function localObjectId(objectPath: string): string {
+  const prefix = "/objects/uploads/";
+  if (!objectPath.startsWith(prefix)) {
     throw new Error("Invalid durable upload object path.");
   }
-  const privateDir = objectStorageService.getPrivateObjectDir().replace(/\/$/, "");
-  const fullPath = `${privateDir}/${objectPath.slice("/objects/".length)}`;
-  const parts = fullPath.replace(/^\//, "").split("/");
-  if (parts.length < 2 || !parts[0]) {
-    throw new Error("Invalid private object directory.");
+  const objectId = objectPath.slice(prefix.length);
+  if (!/^[0-9a-f-]{36}$/i.test(objectId)) {
+    throw new Error("Invalid durable upload object id.");
   }
-  return { bucketName: parts[0], objectName: parts.slice(1).join("/") };
+  return objectId;
+}
+
+function localObjectPaths(objectPath: string) {
+  const objectId = localObjectId(objectPath);
+  const dataPath = join(LOCAL_MEDIA_DIR, "uploads", objectId);
+  return { dataPath, metadataPath: `${dataPath}.json` };
 }
 
 function buildDirectUploadFallback(contentType: string) {
@@ -122,12 +130,9 @@ router.put("/storage/uploads/direct", async (req: Request, res: Response) => {
 
   let timeout: NodeJS.Timeout | undefined;
   try {
-    const { bucketName, objectName } = privateObjectLocation(objectPath);
-    const destination = objectStorageClient.bucket(bucketName).file(objectName).createWriteStream({
-      metadata: { contentType },
-      resumable: false,
-      validation: "crc32c",
-    });
+    const { dataPath, metadataPath } = localObjectPaths(objectPath);
+    mkdirSync(dirname(dataPath), { recursive: true });
+    const destination = createWriteStream(dataPath, { flags: "wx" });
 
     timeout = setTimeout(() => {
       const error = new Error("Direct upload timed out.");
@@ -141,12 +146,17 @@ router.put("/storage/uploads/direct", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Upload body is empty." });
       return;
     }
+
+    await writeFile(metadataPath, JSON.stringify({ contentType, byteSize: uploadedBytes }), {
+      encoding: "utf-8",
+      flag: "wx",
+    });
     res.status(204).end();
   } catch (error) {
-    console.error("[storage/direct-upload] durable upload failed", {
-      provider: process.env.OBJECT_STORAGE_PROVIDER || "replit",
+    console.error("[storage/direct-upload] local durable upload failed", {
       reason: safeStorageFailureReason(error),
       uploadedBytes,
+      localMediaDir: LOCAL_MEDIA_DIR,
     });
     if (!res.headersSent && !res.writableEnded) {
       const message = error instanceof Error && error.message.includes("timed out")
@@ -193,19 +203,17 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
       reason: safeStorageFailureReason(error),
     });
 
-    if (provider === "gcs-wif") {
-      try {
-        const fallback = buildDirectUploadFallback(validation.normalizedMimeType);
-        res.json({
-          ...fallback,
-          metadata: { name, size, contentType: validation.normalizedMimeType, transport: "direct-api-fallback" },
-        });
-        return;
-      } catch (fallbackError) {
-        console.error("[storage/request-url] direct upload fallback unavailable", {
-          reason: safeStorageFailureReason(fallbackError),
-        });
-      }
+    try {
+      const fallback = buildDirectUploadFallback(validation.normalizedMimeType);
+      res.json({
+        ...fallback,
+        metadata: { name, size, contentType: validation.normalizedMimeType, transport: "persistent-local-fallback" },
+      });
+      return;
+    } catch (fallbackError) {
+      console.error("[storage/request-url] direct upload fallback unavailable", {
+        reason: safeStorageFailureReason(fallbackError),
+      });
     }
 
     const configurationFailure = error instanceof ObjectStorageConfigurationError;
@@ -238,6 +246,26 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 
 router.get("/storage/objects/*objectPath", async (req: Request, res: Response) => {
   const objectPath = "/" + ((req.params as Record<string, string>)["objectPath"] ?? "");
+
+  try {
+    const { dataPath, metadataPath } = localObjectPaths(objectPath);
+    if (existsSync(dataPath)) {
+      let contentType = "application/octet-stream";
+      try {
+        const metadata = JSON.parse(await readFile(metadataPath, "utf-8")) as { contentType?: string };
+        contentType = metadata.contentType || contentType;
+      } catch {
+        // Preserve download access even if metadata is unavailable.
+      }
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      createReadStream(dataPath).pipe(res);
+      return;
+    }
+  } catch {
+    // Non-local object paths continue through the configured object-storage provider.
+  }
+
   try {
     const file = await objectStorageService.getObjectEntityFile(objectPath);
     const response = await objectStorageService.downloadObject(file);

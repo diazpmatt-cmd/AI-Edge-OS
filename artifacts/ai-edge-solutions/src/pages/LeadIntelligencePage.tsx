@@ -12,7 +12,7 @@ interface Lead {
   updatedAt: string; lastFollowUpAt: string | null; outcome: string | null;
 }
 interface LeadsResponse { leads: Lead[]; stats: { total: number; active: number; thisMonth: number; withMessages: number }; }
-type ReviewAction = "approve" | "edit" | "reject";
+type ReviewAction = "edit" | "reject";
 
 const RESPONSE_LABELS: Record<string, string> = {
   pending: "Pending", ready_for_review: "Ready for review", approved: "Approved",
@@ -45,12 +45,12 @@ export default function LeadIntelligencePage() {
   const reviewMutation = useMutation({
     mutationFn: ({ id, action, draftResponse }: { id: string; action: ReviewAction; draftResponse?: string }) =>
       authFetch(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify({ action, ...(draftResponse !== undefined ? { draftResponse } : {}) }) }),
-    onSuccess: (_, vars) => { refresh(); toast.success(vars.action === "approve" ? "Draft approved" : vars.action === "reject" ? "Draft rejected" : "Draft saved for review"); },
+    onSuccess: (_, vars) => { refresh(); toast.success(vars.action === "reject" ? "Draft rejected" : "Draft saved for review"); },
     onError: () => toast.error("Could not update the draft"),
   });
   const sendMutation = useMutation({
     mutationFn: (id: string) => authFetch(`/leads/${id}/send`, { method: "POST" }),
-    onSuccess: () => { refresh(); toast.success("Approved response sent by SMS"); },
+    onSuccess: () => { refresh(); toast.success("Response approved and sent by SMS"); },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Message could not be sent"),
   });
 
@@ -62,16 +62,17 @@ export default function LeadIntelligencePage() {
     if (!selected) return;
     reviewMutation.mutate({ id: selected.id, action, ...(action === "edit" ? { draftResponse: draft.trim() } : {}) });
   };
+  const canApproveAndSend = selected?.responseStatus === "ready_for_review" || selected?.responseStatus === "approved";
 
   return <AppShell><div style={{ maxWidth: 1180, margin: "0 auto", fontFamily: "Inter, system-ui, sans-serif" }}>
     <div style={{ marginBottom: 24 }}>
       <div style={{ color: "#00AEEF", fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Lead Intelligence</div>
       <h1 style={{ color: t.text, fontSize: 30, margin: 0 }}>Human Review Queue</h1>
-      <p style={{ color: t.text2, marginTop: 8, maxWidth: 760 }}>Analyze inquiries, review every AI draft, approve it, then use the separate human-only Approve & Send control. Nothing sends automatically.</p>
+      <p style={{ color: t.text2, marginTop: 8, maxWidth: 760 }}>Review the AI draft, edit it when needed, then use one Approve & Send action. Nothing sends until that click.</p>
     </div>
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12, marginBottom: 20 }}>
-      {[["Total leads", data?.stats.total ?? 0], ["Active", data?.stats.active ?? 0], ["Ready to review", leads.filter(l => l.responseStatus === "ready_for_review").length], ["Approved to send", leads.filter(l => l.responseStatus === "approved").length]].map(([label, value]) =>
+      {[["Total leads", data?.stats.total ?? 0], ["Active", data?.stats.active ?? 0], ["Ready to send", leads.filter(l => l.responseStatus === "ready_for_review" || l.responseStatus === "approved").length], ["Sent", leads.filter(l => l.responseStatus === "sent").length]].map(([label, value]) =>
         <div key={String(label)} style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 16 }}><div style={{ color: t.text3, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: .8 }}>{label}</div><div style={{ color: t.text, fontSize: 28, fontWeight: 900, marginTop: 8 }}>{value}</div></div>)}
     </div>
 
@@ -100,11 +101,10 @@ export default function LeadIntelligencePage() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
           <button onClick={() => review("edit")} disabled={!draft.trim() || reviewMutation.isPending || selected.responseStatus === "sent"} style={{ padding: 10, borderRadius: 9, border: `1px solid ${t.border}`, background: "transparent", color: t.text2, cursor: "pointer", fontWeight: 800 }}>Save edit</button>
-          <button onClick={() => review("approve")} disabled={!selected.draftResponse || reviewMutation.isPending || selected.responseStatus === "sent"} style={{ padding: 10, borderRadius: 9, border: "1px solid rgba(34,197,94,.4)", background: "rgba(34,197,94,.12)", color: "#22C55E", cursor: "pointer", fontWeight: 800 }}>Approve</button>
-          <button onClick={() => review("reject")} disabled={!selected.draftResponse || reviewMutation.isPending || selected.responseStatus === "sent"} style={{ gridColumn: "1 / -1", padding: 10, borderRadius: 9, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", color: "#EF4444", cursor: "pointer", fontWeight: 800 }}>Reject draft</button>
-          <button onClick={() => sendMutation.mutate(selected.id)} disabled={selected.responseStatus !== "approved" || sendMutation.isPending} style={{ gridColumn: "1 / -1", padding: 12, borderRadius: 9, border: "1px solid rgba(0,174,239,.5)", background: "rgba(0,174,239,.16)", color: "#00AEEF", cursor: "pointer", fontWeight: 900 }}>{sendMutation.isPending ? "Sending..." : "Approve & Send SMS"}</button>
+          <button onClick={() => review("reject")} disabled={!selected.draftResponse || reviewMutation.isPending || selected.responseStatus === "sent"} style={{ padding: 10, borderRadius: 9, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.08)", color: "#EF4444", cursor: "pointer", fontWeight: 800 }}>Reject draft</button>
+          <button onClick={() => sendMutation.mutate(selected.id)} disabled={!canApproveAndSend || sendMutation.isPending} style={{ gridColumn: "1 / -1", padding: 12, borderRadius: 9, border: "1px solid rgba(0,174,239,.5)", background: "rgba(0,174,239,.16)", color: "#00AEEF", cursor: "pointer", fontWeight: 900 }}>{sendMutation.isPending ? "Sending..." : "Approve & Send SMS"}</button>
         </div>
-        <div style={{ color: t.text3, fontSize: 11, lineHeight: 1.5, marginTop: 12 }}>{selected.responseStatus === "sent" ? `Sent ${selected.lastFollowUpAt ? new Date(selected.lastFollowUpAt).toLocaleString() : "successfully"}.` : "Only the separate Approve & Send button contacts the customer. Duplicate clicks are blocked by the server."}</div>
+        <div style={{ color: t.text3, fontSize: 11, lineHeight: 1.5, marginTop: 12 }}>{selected.responseStatus === "sent" ? `Sent ${selected.lastFollowUpAt ? new Date(selected.lastFollowUpAt).toLocaleString() : "successfully"}.` : "Approve & Send is the only customer-contact action. The server blocks duplicate clicks."}</div>
       </aside>}
     </div>
   </div></AppShell>;

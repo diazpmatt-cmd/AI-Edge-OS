@@ -10,6 +10,7 @@ const DELIVERY_EVENTS = new Set([
   "message.delivery_failed",
   "message.failed",
 ]);
+const FOLLOW_UP_SUPPRESSED_STATUSES = new Set(["booked", "completed", "won", "lost", "opted_out"]);
 
 export type LeadDeliveryEvent = {
   eventType: string;
@@ -82,10 +83,12 @@ export async function correlateInboundReply(input: {
 }
 
 export function needsFollowUp(lead: {
+  status?: string;
   responseStatus: string;
   lastFollowUpAt: Date | null;
   outcome: string | null;
 }, now = new Date(), delayHours = 24): boolean {
+  if (lead.status && FOLLOW_UP_SUPPRESSED_STATUSES.has(lead.status)) return false;
   if (lead.responseStatus !== "sent" || !lead.lastFollowUpAt) return false;
   if (lead.outcome?.startsWith("sms_replied") || lead.outcome === "sms_opted_out") return false;
   return now.getTime() - lead.lastFollowUpAt.getTime() >= delayHours * 60 * 60 * 1000;

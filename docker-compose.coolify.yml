@@ -73,7 +73,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -96,7 +96,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -128,7 +128,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -164,7 +164,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: "on-failure:3"
     depends_on:
       api:
         condition: service_healthy

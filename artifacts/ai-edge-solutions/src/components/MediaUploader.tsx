@@ -10,6 +10,7 @@ import {
 } from "@/lib/media-config";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const DIRECT_UPLOAD_TIMEOUT_MS = 2 * 60_000;
 
 export interface MediaAttachment {
   objectPath: string;
@@ -120,27 +121,58 @@ export function MediaUploader({
       throw new Error(metaData.error || "Could not prepare the media upload.");
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", metaData.uploadURL!);
-      xhr.setRequestHeader("Content-Type", file.type);
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          setProgress(Math.max(1, Math.round((event.loaded / event.total) * 100)));
+    const sameOriginFallback = metaData.uploadURL.startsWith("/api/storage/uploads/direct");
+
+    if (sameOriginFallback) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), DIRECT_UPLOAD_TIMEOUT_MS);
+      setProgress(24);
+
+      try {
+        const uploadRes = await fetch(metaData.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          credentials: "include",
+          body: file,
+          signal: controller.signal,
+        });
+
+        if (!uploadRes.ok) {
+          const payload = await uploadRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(payload.error || `Media upload failed (${uploadRes.status}).`);
         }
+        setProgress(100);
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          throw new Error("The media upload timed out. Please retry.");
+        }
+        throw cause;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", metaData.uploadURL!);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            setProgress(Math.max(1, Math.round((event.loaded / event.total) * 100)));
+          }
+        });
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setProgress(100);
+            resolve();
+          } else {
+            reject(new Error(`Media upload failed (${xhr.status}).`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("The media upload could not reach storage."));
+        xhr.onabort = () => reject(new Error("The media upload was cancelled."));
+        xhr.send(file);
       });
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setProgress(100);
-          resolve();
-        } else {
-          reject(new Error(`Media upload failed (${xhr.status}).`));
-        }
-      };
-      xhr.onerror = () => reject(new Error("The media upload could not reach storage."));
-      xhr.onabort = () => reject(new Error("The media upload was cancelled."));
-      xhr.send(file);
-    });
+    }
 
     return metaData.objectPath;
   }, []);

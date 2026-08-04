@@ -219,3 +219,4 @@ services:
 
 volumes:
   media_uploads:
+    name: ai-edge-os-media-uploads

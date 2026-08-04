@@ -1,7 +1,35 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { correlateInboundReply, isDeliveryEvent, normalizeDeliveryStatus, recordLeadDelivery } from "../services/lead-delivery";
+import { isTelnyxVerificationRequired, verifyTelnyxWebhook } from "../services/telnyx-webhook-security";
 
 const router = Router();
+
+function verifyTelnyxRequest(req: Request, res: Response, next: NextFunction) {
+  if (!isTelnyxVerificationRequired()) {
+    next();
+    return;
+  }
+
+  const signature = req.get("telnyx-signature-ed25519") ?? undefined;
+  const timestamp = req.get("telnyx-timestamp") ?? undefined;
+  const payload = JSON.stringify(req.body ?? {});
+  const valid = verifyTelnyxWebhook({
+    payload,
+    signature,
+    timestamp,
+    publicKey: process.env.TELNYX_PUBLIC_KEY,
+  });
+
+  if (!valid) {
+    console.warn("[TELNYX] Rejected webhook with invalid or stale signature");
+    res.status(403).json({ error: "invalid_webhook_signature" });
+    return;
+  }
+
+  next();
+}
+
+router.use(["/telnyx/webhook", "/telnyx/sms"], verifyTelnyxRequest);
 
 router.post("/telnyx/webhook", async (req, _res, next) => {
   try {

@@ -1,6 +1,7 @@
-import { Router, raw, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { getAuth } from "@clerk/express";
-import { Readable } from "stream";
+import { Readable, Transform } from "stream";
+import { pipeline } from "stream/promises";
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import {
   ObjectStorageConfigurationError,
@@ -14,6 +15,7 @@ import { validateUploadRequest, isBlockedExtension } from "../lib/media-config";
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 const DIRECT_UPLOAD_TTL_MS = 15 * 60_000;
+const DIRECT_UPLOAD_TIMEOUT_MS = 2 * 60_000;
 const MAX_DIRECT_UPLOAD_BYTES = 110 * 1024 * 1024;
 
 function directUploadSecret(): string {
@@ -63,68 +65,99 @@ function buildDirectUploadFallback(contentType: string) {
   };
 }
 
-router.put(
-  "/storage/uploads/direct",
-  raw({ type: "*/*", limit: MAX_DIRECT_UPLOAD_BYTES }),
-  async (req: Request, res: Response) => {
-    const objectPath = typeof req.query.objectPath === "string" ? req.query.objectPath : "";
-    const contentType = typeof req.query.contentType === "string" ? req.query.contentType : "";
-    const signature = typeof req.query.signature === "string" ? req.query.signature : "";
-    const expiresAt = Number(req.query.expiresAt);
+router.put("/storage/uploads/direct", async (req: Request, res: Response) => {
+  const objectPath = typeof req.query.objectPath === "string" ? req.query.objectPath : "";
+  const contentType = typeof req.query.contentType === "string" ? req.query.contentType : "";
+  const signature = typeof req.query.signature === "string" ? req.query.signature : "";
+  const expiresAt = Number(req.query.expiresAt);
 
-    if (!objectPath || !contentType || !signature || !Number.isFinite(expiresAt)) {
-      res.status(400).json({ error: "Invalid direct upload request." });
-      return;
-    }
-    if (Date.now() > expiresAt) {
-      res.status(410).json({ error: "Direct upload request expired." });
-      return;
-    }
+  if (!objectPath || !contentType || !signature || !Number.isFinite(expiresAt)) {
+    res.status(400).json({ error: "Invalid direct upload request." });
+    return;
+  }
+  if (Date.now() > expiresAt) {
+    res.status(410).json({ error: "Direct upload request expired." });
+    return;
+  }
 
-    let expectedSignature: string;
-    try {
-      expectedSignature = directUploadSignature(objectPath, expiresAt, contentType);
-    } catch (error) {
-      console.error("[storage/direct-upload] configuration failure", {
-        reason: safeStorageFailureReason(error),
-      });
-      res.status(503).json({ error: "Durable media storage is not configured." });
-      return;
-    }
+  let expectedSignature: string;
+  try {
+    expectedSignature = directUploadSignature(objectPath, expiresAt, contentType);
+  } catch (error) {
+    console.error("[storage/direct-upload] configuration failure", {
+      reason: safeStorageFailureReason(error),
+    });
+    res.status(503).json({ error: "Durable media storage is not configured." });
+    return;
+  }
 
-    if (!safeSignatureEquals(signature, expectedSignature)) {
-      res.status(403).json({ error: "Invalid direct upload signature." });
-      return;
-    }
+  if (!safeSignatureEquals(signature, expectedSignature)) {
+    res.status(403).json({ error: "Invalid direct upload signature." });
+    return;
+  }
 
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+  const requestContentType = req.get("content-type")?.split(";")[0]?.trim() || "";
+  if (requestContentType !== contentType) {
+    res.status(409).json({ error: "Upload content type does not match the authorized request." });
+    return;
+  }
+
+  const contentLength = Number(req.get("content-length"));
+  if (Number.isFinite(contentLength) && (contentLength <= 0 || contentLength > MAX_DIRECT_UPLOAD_BYTES)) {
+    res.status(413).json({ error: "Upload size is invalid or exceeds the limit." });
+    return;
+  }
+
+  let uploadedBytes = 0;
+  const limiter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      uploadedBytes += chunk.length;
+      if (uploadedBytes > MAX_DIRECT_UPLOAD_BYTES) {
+        callback(new Error("Direct upload exceeds the maximum allowed size."));
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const { bucketName, objectName } = privateObjectLocation(objectPath);
+    const destination = objectStorageClient.bucket(bucketName).file(objectName).createWriteStream({
+      metadata: { contentType },
+      resumable: false,
+      validation: "crc32c",
+    });
+
+    timeout = setTimeout(() => {
+      const error = new Error("Direct upload timed out.");
+      req.destroy(error);
+      limiter.destroy(error);
+      destination.destroy(error);
+    }, DIRECT_UPLOAD_TIMEOUT_MS);
+
+    await pipeline(req, limiter, destination);
+    if (uploadedBytes === 0) {
       res.status(400).json({ error: "Upload body is empty." });
       return;
     }
-
-    const requestContentType = req.get("content-type")?.split(";")[0]?.trim() || "";
-    if (requestContentType !== contentType) {
-      res.status(409).json({ error: "Upload content type does not match the authorized request." });
-      return;
+    res.status(204).end();
+  } catch (error) {
+    console.error("[storage/direct-upload] durable upload failed", {
+      provider: process.env.OBJECT_STORAGE_PROVIDER || "replit",
+      reason: safeStorageFailureReason(error),
+      uploadedBytes,
+    });
+    if (!res.headersSent && !res.writableEnded) {
+      const message = error instanceof Error && error.message.includes("timed out")
+        ? "The durable media upload timed out. Please try again."
+        : "The durable media upload could not be completed.";
+      res.status(502).json({ error: message });
     }
-
-    try {
-      const { bucketName, objectName } = privateObjectLocation(objectPath);
-      await objectStorageClient.bucket(bucketName).file(objectName).save(req.body, {
-        contentType,
-        resumable: false,
-        validation: "crc32c",
-      });
-      res.status(204).end();
-    } catch (error) {
-      console.error("[storage/direct-upload] durable upload failed", {
-        provider: process.env.OBJECT_STORAGE_PROVIDER || "replit",
-        reason: safeStorageFailureReason(error),
-      });
-      res.status(502).json({ error: "The durable media upload could not be completed." });
-    }
-  },
-);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+});
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   const { userId } = getAuth(req);

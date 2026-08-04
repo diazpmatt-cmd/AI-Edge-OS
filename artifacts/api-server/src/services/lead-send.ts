@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { leadsTable, type Lead } from "@workspace/db/schema";
 
@@ -7,7 +7,7 @@ export type LeadSmsSender = {
 };
 
 export type LeadSendRepository = {
-  claimApproved(leadId: string): Promise<Lead | null>;
+  claimReviewed(leadId: string): Promise<Lead | null>;
   findById(leadId: string): Promise<Lead | null>;
   markSent(leadId: string, messageId: string | null, sentAt: Date): Promise<Lead | null>;
   releaseAfterFailure(leadId: string, error: string): Promise<Lead | null>;
@@ -16,7 +16,7 @@ export type LeadSendRepository = {
 export type LeadSendResult =
   | { status: "sent"; lead: Lead; messageId: string | null }
   | { status: "not_found"; error: "lead_not_found" }
-  | { status: "invalid"; error: "draft_not_approved" | "missing_phone" | "missing_draft" | "already_sent" | "send_in_progress" }
+  | { status: "invalid"; error: "draft_not_ready" | "missing_phone" | "missing_draft" | "already_sent" | "send_in_progress" }
   | { status: "failed"; error: "provider_failure"; detail: string; lead: Lead | null };
 
 export function createTelnyxLeadSmsSender(fetchFn: typeof fetch = fetch): LeadSmsSender {
@@ -50,11 +50,14 @@ export function createTelnyxLeadSmsSender(fetchFn: typeof fetch = fetch): LeadSm
 
 export function createDrizzleLeadSendRepository(): LeadSendRepository {
   return {
-    async claimApproved(leadId) {
+    async claimReviewed(leadId) {
       const [lead] = await db
         .update(leadsTable)
         .set({ responseStatus: "sending", updatedAt: new Date() })
-        .where(and(eq(leadsTable.id, leadId), eq(leadsTable.responseStatus, "approved")))
+        .where(and(
+          eq(leadsTable.id, leadId),
+          inArray(leadsTable.responseStatus, ["ready_for_review", "approved"]),
+        ))
         .returning();
       return lead ?? null;
     },
@@ -80,7 +83,7 @@ export function createDrizzleLeadSendRepository(): LeadSendRepository {
       const safeError = error.slice(0, 300);
       const [lead] = await db
         .update(leadsTable)
-        .set({ responseStatus: "approved", outcome: `sms_failed:${safeError}`, updatedAt: new Date() })
+        .set({ responseStatus: "ready_for_review", outcome: `sms_failed:${safeError}`, updatedAt: new Date() })
         .where(and(eq(leadsTable.id, leadId), eq(leadsTable.responseStatus, "sending")))
         .returning();
       return lead ?? null;
@@ -95,14 +98,14 @@ export class LeadSendService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  async sendApprovedLead(leadId: string): Promise<LeadSendResult> {
-    const claimed = await this.repository.claimApproved(leadId);
+  async approveAndSendLead(leadId: string): Promise<LeadSendResult> {
+    const claimed = await this.repository.claimReviewed(leadId);
     if (!claimed) {
       const existing = await this.repository.findById(leadId);
       if (!existing) return { status: "not_found", error: "lead_not_found" };
       if (existing.responseStatus === "sent") return { status: "invalid", error: "already_sent" };
       if (existing.responseStatus === "sending") return { status: "invalid", error: "send_in_progress" };
-      return { status: "invalid", error: "draft_not_approved" };
+      return { status: "invalid", error: "draft_not_ready" };
     }
 
     if (!claimed.phone.trim()) {
@@ -129,4 +132,4 @@ export class LeadSendService {
 }
 
 export const sendApprovedLead = (leadId: string) =>
-  new LeadSendService(createDrizzleLeadSendRepository(), createTelnyxLeadSmsSender()).sendApprovedLead(leadId);
+  new LeadSendService(createDrizzleLeadSendRepository(), createTelnyxLeadSmsSender()).approveAndSendLead(leadId);

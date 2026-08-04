@@ -245,7 +245,8 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 });
 
 router.get("/storage/objects/*objectPath", async (req: Request, res: Response) => {
-  const objectPath = "/" + ((req.params as Record<string, string>)["objectPath"] ?? "");
+  const rawObjectPath = (req.params as Record<string, string | string[]>)["objectPath"];
+  const objectPath = "/" + (Array.isArray(rawObjectPath) ? rawObjectPath.join("/") : (rawObjectPath ?? ""));
 
   try {
     const { dataPath, metadataPath } = localObjectPaths(objectPath);

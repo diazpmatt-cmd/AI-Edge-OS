@@ -7,14 +7,14 @@ import type { SocialProvider } from "@/lib/social-providers";
 //
 // COLOR RULES — Canonical Status Color System
 // ─────────────────────────────────────────────
-// Every platform card, chip, badge, border, and background must derive its
-// color from operational STATUS only — never from platform brand colors.
+// Platform selection and operational readiness are separate signals:
 //
-// SELECTED       Blue    (#00AEEF) — currently selected by the user
-// READY          Green   (#22C55E) — connected + publishing works
-// WARNING        Yellow  (#F59E0B) — demo, pending approval, or needs attention
-// BLOCKED        Red     (#EF4444) — disconnected, failed, or unavailable
-// COMING SOON    Gray    (#94A3B8) — disabled / roadmap / not yet released
+// UNSELECTED     White / neutral — available but not chosen for this post
+// SELECTED       Green (#22C55E) — chosen for this post
+// READY CHIP     Green (#22C55E) — connected + publishing works
+// WARNING CHIP   Yellow (#F59E0B) — demo, pending approval, or needs attention
+// BLOCKED CHIP   Red (#EF4444) — disconnected, failed, or unavailable
+// COMING SOON    Gray (#94A3B8) — disabled / roadmap / not yet released
 
 // ── Canonical Status Color Map ────────────────────────────────────────────────
 // Import this in any page that needs to derive card/border/badge colors.
@@ -85,9 +85,10 @@ export function PlatformStateChip({ state, showConnectLink = false, size = "xs" 
   const label = STATE_LABEL[state];
   const fs = size === "xs" ? 9 : 10.5;
 
-  // The Publishing Center still applies platform brand colors inline. Mark the
-  // shared parent with the canonical state and current selection so global CSS
-  // can safely override those legacy colors without rewriting the large page.
+  // Mark the shared parent with readiness and selection state. The Publishing
+  // Center's selected inline background is green; neutral buttons use white.
+  // Comparing the exact selected token avoids treating every neutral button as
+  // selected when its opacity changes.
   useLayoutEffect(() => {
     const parent = chipRef.current?.parentElement;
     if (!parent) return;
@@ -100,9 +101,9 @@ export function PlatformStateChip({ state, showConnectLink = false, size = "xs" 
       return;
     }
 
-    const background = button.style.background.replace(/\s/g, "");
-    const isNeutral = background === "rgba(255,255,255,0.04)";
-    parent.dataset.platformSelected = String(!isNeutral);
+    const background = button.style.background.replace(/\s/g, "").toLowerCase();
+    const isSelected = background === "rgba(34,197,94,0.18)";
+    parent.dataset.platformSelected = String(isSelected);
   });
 
   return (

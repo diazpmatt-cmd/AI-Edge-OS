@@ -6,6 +6,19 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Content Autopilot — Automatic Platform-Sized Campaign Images
+
+#### Added
+
+- Generate campaign imagery automatically when an image-based platform is selected, with separate landscape Facebook/Google and square Instagram assets.
+- Preview each platform asset, edit its shared creative direction, regenerate the set, or replace it with a manual upload before saving drafts.
+- Save paired Facebook and Instagram drafts with one Meta campaign action while retaining independent captions, media, publishing, and failure status.
+
+#### Safety
+
+- Block draft saving until required campaign images finish generating or the user supplies a replacement image.
+- Replaced unsupported guaranteed, certified-clean, bed-bug-free, and purported customer-result language in the treatment-process campaign with factual service language and explicitly illustrative media direction.
+
 ### Content Autopilot V2 — Platform-Specific Campaign Lanes
 
 #### Changed

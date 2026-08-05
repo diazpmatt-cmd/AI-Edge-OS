@@ -4,6 +4,14 @@ Last updated: 2026-08-05
 
 ---
 
+## Content Autopilot V2 Media Automation
+
+- [x] Connect approval-safe continuous weekly generation to the Content Autopilot control surface.
+- [x] Generate and attach one reusable square image to each autonomous social/GBP draft when Automatic Media is explicitly enabled.
+- [ ] Connect a production video renderer for YouTube MP4 generation. Scripts, metadata, upload validation, and thumbnail direction exist; no public OpenAI video-rendering API is currently wired.
+
+---
+
 ## Development Agent Bridge Status
 
 ### DAB-1 — GitHub-Backed Development Task Contract (implemented and verified)

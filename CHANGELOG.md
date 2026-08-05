@@ -6,6 +6,15 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Content Autopilot — Approval-Safe Autonomous Media
+
+- Connected the Continuous Generation control to the existing tenant-safe weekly scheduler.
+- Added a persistent Automatic Media setting, disabled by default for every tenant.
+- Added scheduler-authenticated image generation that verifies the owning settings row, tenant, draft, and explicit media opt-in.
+- Autonomous weekly drafts receive one reusable 1024×1024 image for Facebook, Instagram, and Google Business while remaining in the approval queue.
+- Isolated media failures per draft so they never discard the generated text campaign.
+- Kept Automatic Publishing locked; generated drafts cannot bypass the existing approval boundary.
+
 ### Roadmap Foundations — Honest Readiness and Governed Actions
 
 #### Added

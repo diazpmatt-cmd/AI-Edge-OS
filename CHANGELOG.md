@@ -6,6 +6,21 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Roadmap Foundations — Honest Readiness and Governed Actions
+
+#### Added
+
+- Action-specific platform readiness, canonical media dimensions, assisted-channel workflows, and evidence-based onboarding states.
+- Shared content-claims and governed business-action policies requiring bounded previews and matching human approval.
+
+#### Changed
+
+- Replaced onboarding's fabricated deployment and AI-visibility results with a validated readiness handoff that performs no external activation.
+
+#### Safety
+
+- Nextdoor, Yelp, and Thumbtack remain manual-assisted channels; provisioning and business actions remain inactive until independently approved and evidenced.
+
 ### Content Autopilot — Automatic Platform-Sized Campaign Images
 
 #### Added

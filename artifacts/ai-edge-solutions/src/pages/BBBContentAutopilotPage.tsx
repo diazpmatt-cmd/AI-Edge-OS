@@ -111,6 +111,35 @@ interface ActivityEntry {
   status:   PlatformStatus;
 }
 
+type LaneVisualState = "idle" | "ready" | "go" | "warning" | "error";
+
+interface AutopilotLane {
+  id: string;
+  icon: string;
+  title: string;
+  platforms: string;
+  purpose: string;
+  mode: "automatic" | "assisted" | "future";
+  providerIds: SocialProviderId[];
+}
+
+const LANE_STATE: Record<LaneVisualState, { label: string; color: string; bg: string; border: string }> = {
+  idle:    { label: "Idle / prepared", color: "#38BDF8", bg: "rgba(56,189,248,0.09)", border: "rgba(56,189,248,0.35)" },
+  ready:   { label: "Ready",           color: "#F8FAFC", bg: "rgba(248,250,252,0.08)", border: "rgba(248,250,252,0.28)" },
+  go:      { label: "Go",              color: "#22C55E", bg: "rgba(34,197,94,0.09)", border: "rgba(34,197,94,0.35)" },
+  warning: { label: "Needs attention", color: "#FBBF24", bg: "rgba(251,191,36,0.09)", border: "rgba(251,191,36,0.35)" },
+  error:   { label: "Failed",          color: "#EF4444", bg: "rgba(239,68,68,0.09)", border: "rgba(239,68,68,0.35)" },
+};
+
+const AUTOPILOT_LANES: AutopilotLane[] = [
+  { id: "meta-social", icon: "◉", title: "Social Feed", platforms: "Facebook + Instagram", purpose: "Shared campaign idea with platform-sized captions, hashtags, and image treatment.", mode: "automatic", providerIds: ["facebook", "instagram"] },
+  { id: "google-local", icon: "G", title: "Local Search", platforms: "Google Business Profile", purpose: "Short service-area copy only. The image carries service details and the Call Now offer.", mode: "automatic", providerIds: ["google_business"] },
+  { id: "youtube", icon: "▶", title: "Long-Form Video", platforms: "YouTube", purpose: "Independent video title, description, local SEO, thumbnail direction, and timestamps.", mode: "automatic", providerIds: ["youtube"] },
+  { id: "tiktok", icon: "♪", title: "Short-Form Video", platforms: "TikTok", purpose: "Independent hook, short caption, vertical-video direction, and compact hashtag set.", mode: "future", providerIds: ["tiktok"] },
+  { id: "nextdoor", icon: "⌂", title: "Neighborhood", platforms: "Nextdoor", purpose: "Neighbor-first local update prepared for Publish API approval or assisted posting.", mode: "assisted", providerIds: ["nextdoor"] },
+  { id: "reputation", icon: "★", title: "Lead Directories", platforms: "Yelp + Thumbtack", purpose: "Platform-ready copy and media package. Assisted posting until approved APIs are available.", mode: "future", providerIds: [] },
+];
+
 // ── 6 rotating BB&B content templates (no termite content) ───────────────────
 const TEMPLATES: ContentTemplate[] = [
   {
@@ -120,7 +149,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "🚨 Early bed bug signs:\n• Small bites in a line or cluster\n• Rust-colored spots on sheets\n• Musty odor near the bed\n\nDon't wait — they spread fast. Serving Baldwin County, AL 🐛\n\n#BedBugs #BaldwinCountyAL #PestControlAL #HomePestControl #GulfShores #Foley #OrangeBeach",
     gbp:
-      "Noticing mysterious bites or spots on your sheets? Bed Bugs & Beyond offers same-week inspections across all of Baldwin County. Call or message us today for a free phone consultation — fast, discreet, and professional.",
+      "Bed Bugs & Beyond proudly serves Baldwin County, including Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, and Spanish Fort.",
     youtube:
       "🐛 Early Warning Signs of Bed Bugs — What to Look For | Bed Bugs & Beyond\n\nAre you waking up with mysterious bites? Noticing tiny rust-colored spots on your sheets? In this video we walk you through the exact warning signs of a bed bug infestation — and what to do the moment you spot them.\n\n🔍 What we cover:\n00:00 What bed bug bites look like\n00:45 Rust-colored stains on sheets & mattresses\n01:20 The musty odor sign most people miss\n02:00 When to call a professional\n\n📍 Serving all of Baldwin County, AL — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, Spanish Fort\n📞 Free phone consultation — call or message us today!\n\n#BedBugs #EarlyWarningSigns #BaldwinCounty #PestControl #BedBugInspection",
     tiktok:
@@ -141,7 +170,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "Before: sleepless nights 😓\nAfter: peace of mind ✅\n\nBed Bugs & Beyond — trusted pest control across Baldwin County, AL.\nFast. Discreet. Guaranteed.\n\n#BedBugFree #BaldwinCounty #PestControl #BeforeAndAfter #GulfShoresAL #FoleyAL",
     gbp:
-      "Recent treatment success in Gulf Shores, AL. Our professional bed bug treatment eliminates infestations at the source — no shortcuts. Serving all of Baldwin County. Fast response and thorough results.",
+      "Bed Bugs & Beyond proudly serves Gulf Shores, Orange Beach, and communities throughout Baldwin County.",
     youtube:
       "✅ Before & After Bed Bug Treatment — Real Results | Bed Bugs & Beyond Baldwin County\n\nWatch what our professional bed bug treatment process actually looks like — from the initial inspection to a fully treated, certified-clean home. No guesswork, no shortcuts.\n\n🏠 This treatment was completed in Gulf Shores, AL.\n\n🔍 What we cover:\n00:00 What the home looked like before treatment\n01:10 Our inspection and assessment process\n02:30 Treatment walkthrough\n04:00 Post-treatment certification\n\n📍 Serving all of Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne\n📞 Book your inspection today!\n\n#BedBugTreatment #BeforeAndAfter #BaldwinCounty #PestControl #BedBugFree",
     tiktok:
@@ -162,7 +191,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "Summer travel = bed bug risk 🧳\n\n3 quick protection tips:\n1. Inspect before sleeping\n2. Luggage on racks, not floors\n3. Wash everything on high heat 🔥\n\nBed Bugs & Beyond — Baldwin County, AL 🐛\n\n#TravelTips #BedBugs #BaldwinCountyAL #PestPrevention #SummerTravel",
     gbp:
-      "Traveling this summer? Protect your Baldwin County home from bed bugs with simple prevention habits. Bed Bugs & Beyond offers fast inspections for returning travelers. Call for same-week availability.",
+      "Bed Bugs & Beyond proudly serves families and businesses throughout Baldwin County, Alabama.",
     youtube:
       "🧳 How to Avoid Bringing Bed Bugs Home From Your Summer Vacation | Bed Bugs & Beyond\n\nEvery year, Baldwin County residents unknowingly bring bed bugs home from hotels, vacation rentals, and road trips. In this video, we show you exactly how to protect yourself — and what to do if you think you've already been exposed.\n\n🔍 What we cover:\n00:00 How bed bugs hitchhike in luggage\n01:00 Hotel room inspection checklist\n02:15 Where to store your luggage safely\n03:00 The HIGH HEAT laundry method\n04:20 When to call a professional\n\n📍 Serving all of Baldwin County, AL\n📞 Just returned from a trip and concerned? Call us for a same-week inspection!\n\n#TravelTips #BedBugs #SummerTravel #BaldwinCounty #PestPrevention",
     tiktok:
@@ -183,7 +212,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "Gulf Shores & Orange Beach — we've got you covered 🌊🐛\n\nSpecializing in:\n✅ Vacation rental treatment\n✅ Single-family homes\n✅ Discreet, fast service\n\nBed Bugs & Beyond — Baldwin County, AL\n\n#GulfShores #OrangeBeachAL #VacationRental #BedBugTreatment #BaldwinCountyAL",
     gbp:
-      "Serving Gulf Shores and Orange Beach property owners and vacation rental hosts. Fast response, discreet treatment, and guaranteed results. One call covers your whole property. Contact Bed Bugs & Beyond today.",
+      "Bed Bugs & Beyond proudly serves Gulf Shores, Orange Beach, Foley, and all of Baldwin County.",
     youtube:
       "🌊 Gulf Shores & Orange Beach Bed Bug Treatment — Bed Bugs & Beyond\n\nBed bug season hits harder on the Gulf Coast. With thousands of vacation rental turnovers every week, the risk for homeowners and property managers in Gulf Shores and Orange Beach is real — and it's growing.\n\nIn this video, we cover why the Gulf Shores area sees elevated bed bug activity, and how Bed Bugs & Beyond protects both homeowners and rental properties fast.\n\n🔍 What we cover:\n00:00 Why coastal vacation rentals are higher risk\n01:30 What our treatment process looks like for rentals\n03:00 Turnaround times and availability for Gulf Shores\n04:15 How to book a same-day inspection\n\n📍 Bed Bugs & Beyond — Baldwin County, AL\n📞 Call for vacation rental inspection pricing!\n\n#GulfShores #OrangeBeach #VacationRental #BedBugs #BaldwinCounty",
     tiktok:
@@ -204,7 +233,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "⭐⭐⭐⭐⭐ Another 5-star review!\n\n\"Professional, thorough, and fast.\"\n\nThank you Baldwin County! 🙏\nBed Bugs & Beyond — your trusted local pest control.\n\n#5Stars #BaldwinCountyAL #BedBugsAL #CustomerLove #PestControl #LocalBusiness",
     gbp:
-      "Thank you to our latest 5-star reviewer! Bed Bugs & Beyond is proud to serve Baldwin County with professional, thorough pest control. Browse our Google reviews and book your inspection today.",
+      "Bed Bugs & Beyond is proud to serve homeowners and businesses across Baldwin County, Alabama.",
     youtube:
       "⭐ Why Baldwin County Homeowners Trust Bed Bugs & Beyond — Real Reviews\n\nDon't take our word for it. In this video, we share real customer feedback from homeowners and property managers across Baldwin County who trusted Bed Bugs & Beyond to solve their bed bug problem — fast.\n\n🔍 What you'll hear:\n00:00 Introduction — why trust matters in pest control\n01:00 Customer story: Gulf Shores homeowner\n02:30 Customer story: Foley vacation rental host\n04:00 Customer story: Fairhope family\n05:30 How to book your inspection\n\n📍 Serving all of Baldwin County, AL\n📞 Hundreds of satisfied customers — let's add your name to the list!\n\n#CustomerReviews #BaldwinCounty #BedBugs #PestControl #TrustedLocal",
     tiktok:
@@ -225,7 +254,7 @@ const TEMPLATES: ContentTemplate[] = [
     instagram:
       "☀️ Summer = bed bug season in Baldwin County\n\nMore travel → more risk 🐛\n\nBed Bugs & Beyond is ready:\n✅ Same-week inspections\n✅ All Baldwin County areas\n✅ Fast and discreet\n\n#SummerPests #BaldwinCountyAL #BedBugs #GulfShores #Foley #PestControl",
     gbp:
-      "Summer is here — and so is bed bug season in Baldwin County. Bed Bugs & Beyond offers fast inspections and professional treatment from Foley to Gulf Shores. Call today for a same-week appointment.",
+      "Bed Bugs & Beyond proudly serves Baldwin County, including Foley, Fairhope, Daphne, Gulf Shores, and Orange Beach.",
     youtube:
       "☀️ Summer Bed Bug Season in Baldwin County — What You Need to Know | Bed Bugs & Beyond\n\nSummer is the busiest season for bed bug calls in Baldwin County — and it's not a coincidence. More travel, more vacation rentals, more risk. In this video, we explain exactly why summer spikes bed bug activity and how to protect your home right now.\n\n🔍 What we cover:\n00:00 Why summer is peak bed bug season\n01:15 High-risk activities during summer (travel, guests, rentals)\n02:45 What to do if you think you're exposed\n04:00 Same-week inspection availability — Baldwin County, AL\n\n📍 Serving all of Baldwin County — Foley, Gulf Shores, Fairhope, Daphne, Orange Beach, Spanish Fort\n📞 Don't wait — summer books fast. Call today!\n\n#SummerPests #BedBugs #BaldwinCounty #PestSeason #PestControl",
     tiktok:
@@ -268,9 +297,9 @@ const CONTENT_PROFILES: Record<SocialProviderId, ContentProfile> = {
     hashtagCount: "5–15", note: "Before/after photos perform best. Post Stories daily for reach.",
   },
   google_business: {
-    mediaType: "image", maxLength: "1,500 chars", bestFormat: "Photo + update post",
-    frequency: "1–2x/week", ctaTip: "Include service-area cities in every post",
-    hashtagCount: "0–2", note: "Add a photo to every post. Use keywords like 'bed bug treatment Baldwin County'.",
+    mediaType: "image", maxLength: "Short service-area copy", bestFormat: "Photo + local update",
+    frequency: "1–2x/week", ctaTip: "Use city and county service-area language only",
+    hashtagCount: "0", note: "Keep pest-specific claims and infestation language in the image, not the GBP caption.",
   },
   youtube: {
     mediaType: "video", maxLength: "4,000 chars", bestFormat: "Video + description",
@@ -549,6 +578,16 @@ export default function BBBContentAutopilotPage() {
   const activeProvider = SOCIAL_PROVIDERS.find(p => p.id === activeTab) ?? SOCIAL_PROVIDERS[0];
   const allQueued      = selectedQueueable.length > 0 && selectedQueueable.every(p => justQueued.includes(p.id));
 
+  function laneState(lane: AutopilotLane): LaneVisualState {
+    if (lane.mode !== "automatic") return "idle";
+    if (lane.providerIds.some(id => platformStatus[id] === "failed")) return "error";
+    if (lane.providerIds.some(id => platformStatus[id] === "published-warning")) return "warning";
+    const selected = lane.providerIds.some(id => selectedPlatforms.has(id));
+    if (!selected) return "idle";
+    if (generated || lane.providerIds.some(id => (platformStatus[id] ?? "not-queued") !== "not-queued")) return "go";
+    return "ready";
+  }
+
   // ── Pre-flight validation for confirmation dialog ──────────────────────────
   function getPlatformWarnings(): Array<{ platform: string; icon: string; label: string; warning: string }> {
     const warnings: Array<{ platform: string; icon: string; label: string; warning: string }> = [];
@@ -593,10 +632,10 @@ export default function BBBContentAutopilotPage() {
         }}>⚡</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 21, fontWeight: 800, color: B.white, letterSpacing: "-0.3px" }}>
-            Content Autopilot V1
+            Content Autopilot V2
           </div>
           <div style={{ fontSize: 12, color: B.dim, marginTop: 3 }}>
-            Bed Bugs &amp; Beyond · Baldwin County, AL — Generate &amp; queue posts across all connected platforms in one click
+            Bed Bugs &amp; Beyond · One campaign, purpose-built content for every platform
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -621,6 +660,96 @@ export default function BBBContentAutopilotPage() {
 
       {/* ── Body ── */}
       <div style={{ padding: "28px 36px", maxWidth: 1100, margin: "0 auto" }}>
+
+        {/* ── V2 operating model ── */}
+        <div style={{
+          background: `linear-gradient(135deg, rgba(0,119,182,0.16), ${B.panel} 58%)`,
+          border: "1px solid rgba(56,189,248,0.28)", borderRadius: 18,
+          padding: "24px 26px", marginBottom: 20,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap" as const }}>
+            <div style={{ maxWidth: 650 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: B.sky, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                Continuous Approval Autopilot
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: B.white, marginTop: 7, letterSpacing: "-0.45px" }}>
+                A rolling campaign, separated by platform
+              </div>
+              <div style={{ fontSize: 12, color: B.silver, lineHeight: 1.65, marginTop: 7 }}>
+                Autopilot keeps a 2–4 week calendar supplied with fresh content. Every destination receives its own caption, media direction, approval, schedule, and delivery status.
+              </div>
+            </div>
+            <div style={{
+              minWidth: 235, background: LANE_STATE.ready.bg, border: `1px solid ${LANE_STATE.ready.border}`,
+              borderRadius: 12, padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: LANE_STATE.ready.color, letterSpacing: "1px", textTransform: "uppercase" }}>
+                ● Ready for approval mode
+              </div>
+              <div style={{ fontSize: 11, color: B.dim, marginTop: 5, lineHeight: 1.5 }}>
+                Generate continuously, hold every platform version for human approval, then publish independently.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginTop: 18 }}>
+            {(["idle", "ready", "go", "warning", "error"] as LaneVisualState[]).map(state => {
+              const meta = LANE_STATE[state];
+              return (
+                <span key={state} style={{
+                  fontSize: 9, fontWeight: 800, color: meta.color, background: meta.bg,
+                  border: `1px solid ${meta.border}`, borderRadius: 999, padding: "4px 9px",
+                  letterSpacing: "0.45px", textTransform: "uppercase",
+                }}>{meta.label}</span>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Platform-specific campaign lanes ── */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 12, marginBottom: 12, flexWrap: "wrap" as const }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: B.blue, letterSpacing: "1.5px", textTransform: "uppercase" }}>Campaign Channels</div>
+              <div style={{ fontSize: 12, color: B.dim, marginTop: 4 }}>Each lane is isolated so one rejection never blocks the rest of the campaign.</div>
+            </div>
+            <div style={{ fontSize: 10, color: B.dim }}>Future channels stay blue until their integration is activated.</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 12 }}>
+            {AUTOPILOT_LANES.map(lane => {
+              const state = laneState(lane);
+              const meta = LANE_STATE[state];
+              return (
+                <div key={lane.id} style={{
+                  background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 14,
+                  padding: "16px 17px", minHeight: 142, display: "flex", flexDirection: "column", gap: 10,
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{
+                        width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center",
+                        background: "rgba(3,6,18,0.55)", border: `1px solid ${meta.border}`,
+                        color: meta.color, fontSize: 15, fontWeight: 900,
+                      }}>{lane.icon}</div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 850, color: B.white }}>{lane.title}</div>
+                        <div style={{ fontSize: 10, color: meta.color, fontWeight: 700, marginTop: 2 }}>{lane.platforms}</div>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 8.5, fontWeight: 850, color: meta.color, background: "rgba(3,6,18,0.45)",
+                      border: `1px solid ${meta.border}`, borderRadius: 999, padding: "3px 7px", textTransform: "uppercase",
+                    }}>{meta.label}</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: B.silver, lineHeight: 1.5 }}>{lane.purpose}</div>
+                  <div style={{ marginTop: "auto", fontSize: 9, color: B.dim, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                    {lane.mode === "automatic" ? "Direct publishing lane" : lane.mode === "assisted" ? "Assisted now · API-ready later" : "Prepared for future activation"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* ── Service Status Registry Panel ── */}
         <div style={{
@@ -741,15 +870,15 @@ export default function BBBContentAutopilotPage() {
         }}>
           <div>
             <div style={{ fontSize: 9, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>
-              ⚡ Weekly Content Plan
+              ⚡ Campaign Workbench
             </div>
             <div style={{ fontSize: 22, fontWeight: 900, color: B.white, letterSpacing: "-0.5px", marginBottom: 8 }}>
-              {generated ? generated.topic : "Ready to generate this week's content"}
+              {generated ? generated.topic : "Ready to generate the next campaign"}
             </div>
             <div style={{ fontSize: 13, color: B.silver, maxWidth: 520 }}>
               {generated
-                ? "Captions for all connected platforms — ready to copy or queue."
-                : "One click builds weekly content from the template library: platform-specific captions, an image idea, and a call-to-action for each selected channel."}
+                ? "Independent platform versions are ready to review, edit, and queue."
+                : "One campaign idea becomes separate social, Google, and video content—each with its own rules and approval status."}
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
@@ -781,7 +910,7 @@ export default function BBBContentAutopilotPage() {
               }}
             >
               <span style={{ fontSize: 20 }}>⚡</span>
-              {generated ? "Generate Next Week →" : "Generate Weekly Content"}
+              {generated ? "Generate Next Campaign →" : "Generate Campaign"}
               <span style={{
                 fontSize: 10, fontWeight: 700,
                 background: "rgba(0,0,0,0.2)",
@@ -1314,7 +1443,7 @@ export default function BBBContentAutopilotPage() {
               No content generated yet
             </div>
             <div style={{ fontSize: 13, color: B.dim, maxWidth: 400, margin: "0 auto" }}>
-              Click "Generate Weekly Content" above to create this week's Facebook, Instagram, and Google Business Profile posts for Bed Bugs &amp; Beyond.
+              Click "Generate Campaign" above to create independent Facebook, Instagram, Google Business Profile, and YouTube drafts for Bed Bugs &amp; Beyond.
             </div>
           </div>
         )}
@@ -1471,7 +1600,7 @@ export default function BBBContentAutopilotPage() {
           </div>
         )}
 
-        {/* ── Phase 8: First Proposed July Weekly Plan ── */}
+        {/* ── Rolling seven-day campaign example ── */}
         <div style={{
           background: B.panel, border: `1px solid rgba(242,108,33,0.25)`,
           borderRadius: 18, padding: "24px 28px", marginBottom: 16,
@@ -1479,10 +1608,10 @@ export default function BBBContentAutopilotPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap" as const, gap: 10 }}>
             <div>
               <div style={{ fontSize: 9, fontWeight: 800, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 6 }}>
-                📋 First Proposed Weekly Plan
+                📋 Rolling Campaign Preview
               </div>
               <div style={{ fontSize: 18, fontWeight: 900, color: B.white, letterSpacing: "-0.3px" }}>
-                Week of July 14–20, 2026
+                Next 7-Day Content Cycle
               </div>
               <div style={{ fontSize: 12, color: B.dim, marginTop: 4 }}>
                 7 posts · 60% revenue · 25% education · 15% trust · Baldwin County, AL
@@ -1504,13 +1633,13 @@ export default function BBBContentAutopilotPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { day: "Mon 7/14", service: "Bed Bug Treatment", goal: "call_generation", audience: "Homeowners", bucket: "revenue" as const, area: "Foley, AL", angle: "promotional", note: "Summer spike — peak bed bug season for vacation rentals." },
-              { day: "Tue 7/15", service: "Vacation Rental Inspection", goal: "inspection_booking", audience: "Vacation Rental Owners", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "seasonal", note: "Book before high-traffic holiday weeks fill up." },
-              { day: "Wed 7/16", service: "Cockroach Control", goal: "homeowner_education", audience: "Homeowners", bucket: "education" as const, area: "Daphne, AL", angle: "educational", note: "Summer heat drives cockroaches indoors — awareness content." },
-              { day: "Thu 7/17", service: "Bed Bug Inspection", goal: "inspection_booking", audience: "Airbnb Hosts", bucket: "revenue" as const, area: "Orange Beach, AL", angle: "warning", note: "Airbnb hosts lose ratings from unreported infestations." },
-              { day: "Fri 7/18", service: "Ant & Spider Prevention", goal: "seasonal_alert", audience: "Homeowners", bucket: "education" as const, area: "Fairhope, AL", angle: "prevention", note: "Mid-summer prevention tip before rainy season push." },
-              { day: "Sat 7/19", service: "Commercial Pest Control", goal: "commercial_outreach", audience: "Restaurants", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "promotional", note: "Health inspection season — commercial kitchens need annual service." },
-              { day: "Sun 7/20", service: "Community Trust / Reviews", goal: "local_visibility", audience: "Homeowners", bucket: "trust" as const, area: "Baldwin County, AL", angle: "testimonial", note: "Sunday engagement — ask for reviews + reinforce local brand." },
+              { day: "Monday", service: "Bed Bug Treatment", goal: "call_generation", audience: "Homeowners", bucket: "revenue" as const, area: "Foley, AL", angle: "promotional", note: "Summer spike — peak bed bug season for vacation rentals." },
+              { day: "Tuesday", service: "Vacation Rental Inspection", goal: "inspection_booking", audience: "Vacation Rental Owners", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "seasonal", note: "Book before high-traffic holiday weeks fill up." },
+              { day: "Wednesday", service: "Cockroach Control", goal: "homeowner_education", audience: "Homeowners", bucket: "education" as const, area: "Daphne, AL", angle: "educational", note: "Summer heat drives cockroaches indoors — awareness content." },
+              { day: "Thursday", service: "Bed Bug Inspection", goal: "inspection_booking", audience: "Airbnb Hosts", bucket: "revenue" as const, area: "Orange Beach, AL", angle: "warning", note: "Airbnb hosts lose ratings from unreported infestations." },
+              { day: "Friday", service: "Ant & Spider Prevention", goal: "seasonal_alert", audience: "Homeowners", bucket: "education" as const, area: "Fairhope, AL", angle: "prevention", note: "Mid-summer prevention tip before rainy season push." },
+              { day: "Saturday", service: "Commercial Pest Control", goal: "commercial_outreach", audience: "Restaurants", bucket: "revenue" as const, area: "Gulf Shores, AL", angle: "promotional", note: "Health inspection season — commercial kitchens need annual service." },
+              { day: "Sunday", service: "Community Trust / Reviews", goal: "local_visibility", audience: "Homeowners", bucket: "trust" as const, area: "Baldwin County, AL", angle: "testimonial", note: "Sunday engagement — ask for reviews + reinforce local brand." },
             ].map((slot, i) => {
               const bucketColors = {
                 revenue:   { color: B.emerald, bg: "rgba(16,185,129,0.06)", border: "rgba(16,185,129,0.15)", badge: "rgba(16,185,129,0.12)" },
@@ -1559,9 +1688,8 @@ export default function BBBContentAutopilotPage() {
           }}>
             <span>⚠️</span>
             <span>
-              <strong>Approval Required (Pilot):</strong> Click "Generate Weekly Content" above to create this plan as real drafts.
-              Each post will appear in the approval queue before anything is scheduled or published.
-              Autopilot autonomous scheduling is <strong>off</strong> until you enable it.
+              <strong>Approval Autopilot:</strong> Click "Generate Campaign" to create the next platform-specific drafts.
+              Each version remains in the approval queue before scheduling or publishing. The rolling scheduler stays off until explicitly activated.
             </span>
           </div>
         </div>

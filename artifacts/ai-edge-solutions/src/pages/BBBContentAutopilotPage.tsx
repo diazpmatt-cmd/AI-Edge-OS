@@ -385,6 +385,20 @@ function nowTs(): string {
   return new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
+function imageGenerationErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Automatic image generation failed. Please retry.";
+  const apiBody = error.message.replace(/^API\s+\d+:\s*/, "");
+  try {
+    const parsed = JSON.parse(apiBody) as { message?: string; error?: string; retryAfter?: number };
+    if (parsed.error === "rate_limit_exceeded") {
+      return "The hourly image limit has been reached. Please try again after the current one-hour window resets.";
+    }
+    return parsed.message || parsed.error?.replace(/_/g, " ") || "Automatic image generation failed. Please retry.";
+  } catch {
+    return apiBody || "Automatic image generation failed. Please retry.";
+  }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function BBBContentAutopilotPage() {
   const [templateIdx,     setTemplateIdx]     = useState<number | null>(null);
@@ -648,6 +662,9 @@ export default function BBBContentAutopilotPage() {
     setActiveTab(firstSelected?.id ?? "facebook");
     setJustQueued([]);
     setPlatformStatus({ ...INITIAL_STATUS });
+    window.setTimeout(() => {
+      document.getElementById("campaign-media")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
   }
 
   function queuePost(platform: SocialProviderId) {
@@ -1229,7 +1246,7 @@ export default function BBBContentAutopilotPage() {
         </div>
 
         {/* ── Campaign Media ── */}
-        {generated && <div style={{
+        {generated && <div id="campaign-media" style={{
           background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
           padding: "18px 24px", marginBottom: 16,
         }}>
@@ -1259,12 +1276,12 @@ export default function BBBContentAutopilotPage() {
           )}
           {generateCampaignImage.isPending && (
             <div role="status" style={{ padding: 18, marginBottom: 12, borderRadius: 10, background: "rgba(0,174,239,0.07)", color: B.sky, fontSize: 12 }}>
-              Creating and attaching your campaign image… this can take about 30 seconds.
+              Creating and attaching your campaign image… landscape artwork can take up to two minutes.
             </div>
           )}
           {generateCampaignImage.isError && (
             <div role="alert" style={{ padding: 12, marginBottom: 12, borderRadius: 10, background: "rgba(239,68,68,0.08)", color: B.red, fontSize: 12 }}>
-              Automatic image generation failed. You can retry or upload your own image below.
+              <strong>Automatic image generation failed.</strong> {imageGenerationErrorMessage(generateCampaignImage.error)} You can retry; uploading your own image remains optional.
             </div>
           )}
           {Object.keys(generatedMedia).length > 0 && !mediaAttachment && (

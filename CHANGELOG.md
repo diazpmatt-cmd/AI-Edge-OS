@@ -6,6 +6,21 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Content Autopilot V2 — Platform-Specific Campaign Lanes
+
+#### Changed
+
+- Reframed the BB&B Autopilot around a rolling approval campaign instead of a single caption sent to every destination.
+- Added independent visual lanes for Facebook + Instagram, Google Business Profile, YouTube, TikTok, Nextdoor, and future Yelp + Thumbtack assisted workflows.
+- Added the canonical interface state language: blue idle/prepared, white ready, green go, yellow attention, and red failure.
+- Replaced the fixed July weekly-plan language with a reusable rolling seven-day campaign preview.
+- Restricted every generated Google Business Profile caption to short Baldwin County service-area language; pest-specific detail remains in the image and other platform variants.
+
+#### Safety
+
+- Existing media upload, draft creation, approval, publishing, and delivery-status behavior remains unchanged.
+- Nextdoor, Yelp, and Thumbtack are presented as prepared assisted/future lanes; no provider connection or automatic publishing was enabled.
+
 ### Publishing Center — Instagram Public Media Readiness
 
 #### Fixed

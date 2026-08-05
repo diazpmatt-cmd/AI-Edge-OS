@@ -1605,7 +1605,9 @@ export function isProhibitedImagePrompt(prompt: string): boolean {
   return PROHIBITED_IMAGE_PROMPT_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-const IMAGE_GENERATION_TIMEOUT_MS  = 30_000;
+// Landscape image generation regularly exceeds 30 seconds under provider load.
+// Keep this below the frontend/proxy ceiling while allowing a realistic render.
+const IMAGE_GENERATION_TIMEOUT_MS  = 120_000;
 const IMAGE_RESPONSE_MAX_BYTES      = 12 * 1024 * 1024;
 const IMAGE_BUFFER_MAX_BYTES        = 8  * 1024 * 1024;
 const PROMPT_MAX_LENGTH             = 500;
@@ -1938,7 +1940,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     clearTimeout(timeoutId);
     if (fetchErr?.name === "AbortError") {
       await markFailed("provider_timeout");
-      res.status(504).json({ error: "Image generation timed out" });
+      res.status(504).json({ error: "image_generation_timeout", message: "The image provider did not finish within two minutes. Please retry." });
     } else {
       await markFailed(`provider_error:${fetchErr?.message ?? "unknown"}`);
       res.status(502).json({ error: "Image generation failed" });

@@ -450,6 +450,8 @@ export * from "./ai-visibility-read-model-types";
 export * from "./ai-visibility-prioritizer";
 export * from "./ai-visibility-read-model-adapters";
 export * from "./ai-visibility-read-model";
+export * from "./content-claims-policy";
+export * from "./business-action-gateway";
 export * from "./ai-visibility-fixtures";
 
 // Phase C9R-4: real AI query provider + mention/citation detection

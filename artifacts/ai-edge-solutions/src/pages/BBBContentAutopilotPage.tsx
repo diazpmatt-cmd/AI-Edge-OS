@@ -414,7 +414,7 @@ export default function BBBContentAutopilotPage() {
   });
 
   const generateCampaignImage = useMutation({
-    mutationFn: async ({ template, requestKey }: { template: ContentTemplate; requestKey: string }) => {
+    mutationFn: async ({ template, requestKey, creativePrompt }: { template: ContentTemplate; requestKey: string; creativePrompt: string }) => {
       const selectedImages = selectedQueueable.filter(platform => CONTENT_PROFILES[platform.id].mediaType === "image");
       const imageTargets = [
         ...(selectedImages.some(platform => platform.id === "instagram")
@@ -432,7 +432,7 @@ export default function BBBContentAutopilotPage() {
         const result = await authFetch<{ generationId: string; storageKey: string }>("/auto-content/generate-image", {
           method: "POST",
           body: JSON.stringify({
-            prompt: `${imagePrompt.trim() || template.imageIdea}. Compose specifically for ${formatLabel}.`,
+            prompt: `${creativePrompt.trim() || template.imageIdea}. Compose specifically for ${formatLabel}.`,
             size,
             idempotencyKey: `${requestKey}-${size}`,
           }),
@@ -531,11 +531,15 @@ export default function BBBContentAutopilotPage() {
     ? { color: B.gold,   bg: "rgba(251,191,36,0.08)",  border: "rgba(251,191,36,0.3)",  icon: "🟡", text: "Drafts saved — click Send to publish"   }
     : { color: B.dim,    bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.2)", icon: "⚪", text: "No posts queued yet"                     };
 
-  function generateImageFor(template: ContentTemplate) {
+  function generateImageFor(template: ContentTemplate, creativePrompt = template.imageIdea) {
     setGeneratedMedia({});
     setMediaAttachment(null);
-    setImagePrompt(template.imageIdea);
-    generateCampaignImage.mutate({ template, requestKey: `autopilot-${Date.now()}-${uid()}` });
+    setImagePrompt(creativePrompt);
+    generateCampaignImage.mutate({
+      template,
+      creativePrompt,
+      requestKey: `autopilot-${Date.now()}-${uid()}`,
+    });
   }
 
   function handleGenerate() {
@@ -1015,7 +1019,7 @@ export default function BBBContentAutopilotPage() {
               />
               <button
                 type="button"
-                onClick={() => generateImageFor(generated)}
+                onClick={() => generateImageFor(generated, imagePrompt)}
                 disabled={generateCampaignImage.isPending}
                 style={{ background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", borderRadius: 9, padding: "9px 14px", color: B.sky, fontWeight: 800, cursor: generateCampaignImage.isPending ? "wait" : "pointer" }}
               >

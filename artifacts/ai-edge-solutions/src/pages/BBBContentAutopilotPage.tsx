@@ -781,6 +781,63 @@ export default function BBBContentAutopilotPage() {
     return selectedQueueable.filter(p => !blockedPlatforms.has(p.id)).length;
   }
 
+  const platformSelectionCards = (
+    <section aria-labelledby="platform-selection-title" style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+        <div>
+          <div id="platform-selection-title" style={{ color: B.white, fontSize: 15, fontWeight: 900 }}>Choose campaign platforms</div>
+          <div style={{ color: B.dim, fontSize: 10, marginTop: 3 }}>Click the large cards. Blue checkmark means selected; green Ready means the account is available.</div>
+        </div>
+        <button type="button" onClick={deselectAll} style={{ background: "transparent", border: `1px solid ${B.border}`, borderRadius: 7, padding: "6px 10px", color: B.silver, fontSize: 9, fontWeight: 800, cursor: "pointer" }}>Clear selection</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+        {QUEUEABLE_PROVIDERS.map(p => {
+          const prof = CONTENT_PROFILES[p.id];
+          const tips = [prof.note, prof.ctaTip, `${prof.frequency} recommended`, `${prof.hashtagCount} hashtags`];
+          const selected = selectedPlatforms.has(p.id);
+          const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
+          return (
+            <div
+              key={p.id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected}
+              onClick={() => togglePlatform(p.id)}
+              onKeyDown={event => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  togglePlatform(p.id);
+                }
+              }}
+              style={{
+                background: selected ? "rgba(0,174,239,0.07)" : B.panel,
+                border: `2px solid ${selected ? B.blue : "rgba(255,255,255,0.07)"}`,
+                borderRadius: 14, padding: "16px 18px", opacity: selected ? 1 : 0.62,
+                cursor: "pointer", transition: "all 0.15s",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+                <span style={{ width: 19, height: 19, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center", background: selected ? B.blue : "transparent", border: `1.5px solid ${selected ? B.blue : "#475569"}`, color: B.navy, fontSize: 11, fontWeight: 900 }}>{selected ? "✓" : ""}</span>
+                <span style={{ fontSize: 12 }}>{p.icon}</span>
+                <span style={{ flex: 1, fontSize: 10, fontWeight: 800, color: selected ? B.white : B.silver, letterSpacing: "1.5px", textTransform: "uppercase" }}>{p.shortLabel}</span>
+                <PlatformStateChip state={uiState} />
+              </div>
+              <div style={{ fontSize: 9, color: selected ? B.sky : B.dim, fontWeight: 800, marginBottom: 9 }}>{selected ? "Selected — click to remove" : "Not selected — click to include"}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: B.dim, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
+                <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: B.dim, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.maxLength}</span>
+                <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: B.dim, borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.bestFormat}</span>
+              </div>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                {tips.map((tip, index) => <li key={index} style={{ fontSize: 10, color: B.dim }}>• {tip}</li>)}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+
   return (
     <div style={{ minHeight: "100vh", background: B.navy, color: B.white, fontFamily: "'Inter', system-ui, sans-serif" }}>
 
@@ -853,7 +910,7 @@ export default function BBBContentAutopilotPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 18 }}>
             {[
               { title: "Continuous Generation", detail: "Keeps a weekly approval queue supplied", active: continuousGenerationEnabled, status: continuousGenerationEnabled ? "On" : "Off", disabled: false },
-              { title: "Automatic Media", detail: "Platform-sized images now · YouTube video pipeline next", active: autoMediaEnabled, status: autoMediaEnabled ? "On" : "Off", disabled: false },
+              { title: "Automatic Media", detail: "Platform-sized images + narrated YouTube MP4", active: autoMediaEnabled, status: autoMediaEnabled ? "On" : "Off", disabled: false },
               { title: "Automatic Publishing", detail: "Approval remains required for safety", active: false, status: "Off", disabled: true },
             ].map(control => (
               <div key={control.title} style={{ background: "rgba(3,6,18,0.48)", border: `1px solid ${control.active ? "rgba(34,197,94,0.38)" : "rgba(56,189,248,0.2)"}`, borderRadius: 12, padding: "14px 15px" }}>
@@ -897,6 +954,8 @@ export default function BBBContentAutopilotPage() {
             Continuous generation creates weekly drafts only. Automatic publishing stays locked so every platform version still requires your approval.
           </div>
         </section>
+
+        {platformSelectionCards}
 
         {/* ── V2 operating model ── */}
         {showCampaignHelp && <>
@@ -2019,45 +2078,6 @@ export default function BBBContentAutopilotPage() {
               Each version remains in the approval queue before scheduling or publishing. The rolling scheduler stays off until explicitly activated.
             </span>
           </div>
-        </div>
-
-        {/* ── Platform posting tips — sourced from CONTENT_PROFILES registry ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-          {QUEUEABLE_PROVIDERS.map(p => {
-            const prof = CONTENT_PROFILES[p.id];
-            const tips = [prof.note, prof.ctaTip, `${prof.frequency} recommended`, `${prof.hashtagCount} hashtags`];
-            const isSelected = selectedPlatforms.has(p.id);
-            const uiState = resolvePlatformUIState(p, connectedProviders.has(p.id));
-            return (
-              <div key={p.id} style={{
-                background: isSelected ? "rgba(0,174,239,0.05)" : B.panel,
-                border: `1.5px solid ${isSelected ? "rgba(0,174,239,0.3)" : "rgba(255,255,255,0.07)"}`,
-                borderRadius: 14, padding: "16px 18px",
-                opacity: isSelected ? 1 : 0.6,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12 }}>{p.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: "#94A3B8", letterSpacing: "1.5px", textTransform: "uppercase" as const }}>
-                    {p.shortLabel}
-                  </span>
-                  <PlatformStateChip state={uiState} />
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{MEDIA_ICON[prof.mediaType]} {prof.mediaType}</span>
-                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.maxLength}</span>
-                  <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "#64748B", borderRadius: 5, padding: "2px 7px", fontWeight: 700 }}>{prof.bestFormat}</span>
-                </div>
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {tips.map((tip, i) => (
-                    <li key={i} style={{ fontSize: 10, color: B.dim, display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span style={{ color: "#475569", flexShrink: 0, fontSize: 8 }}>●</span>
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
         </div>
 
         {/* ── Publish Results Banner ── */}

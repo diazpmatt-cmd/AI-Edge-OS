@@ -164,24 +164,24 @@ const TEMPLATES: ContentTemplate[] = [
     cta:       "Call now for a free phone consultation",
   },
   {
-    topic: "Before & After Treatment",
+    topic: "Professional Treatment Process",
     facebook:
-      "✅ Another Baldwin County home — bed bug free!\n\nOur treatment process is thorough, discreet, and effective. We serve Foley, Gulf Shores, Orange Beach, Fairhope, Daphne, and all of Baldwin County.\n\nIf you're dealing with bed bugs, you don't have to fight it alone. 📞\n\n#BedBugTreatment #BaldwinCountyAL #PestControl #GulfShores",
+      "Dealing with bed bugs can disrupt your sleep and your peace of mind. Bed Bugs & Beyond provides professional, discreet treatment throughout Baldwin County, including Foley, Gulf Shores, Orange Beach, Fairhope, and Daphne.\n\nYou don't have to handle it alone. Call to discuss the next step. 📞\n\n#BedBugTreatment #BaldwinCountyAL #PestControl #GulfShores",
     instagram:
-      "Before: sleepless nights 😓\nAfter: peace of mind ✅\n\nBed Bugs & Beyond — trusted pest control across Baldwin County, AL.\nFast. Discreet. Guaranteed.\n\n#BedBugFree #BaldwinCounty #PestControl #BeforeAndAfter #GulfShoresAL #FoleyAL",
+      "Bed bug concerns can mean sleepless nights. 😓\nProfessional help can bring a clearer path forward. ✅\n\nBed Bugs & Beyond provides discreet pest control throughout Baldwin County, AL.\n\n#BedBugTreatment #BaldwinCounty #PestControl #GulfShoresAL #FoleyAL",
     gbp:
       "Bed Bugs & Beyond proudly serves Gulf Shores, Orange Beach, and communities throughout Baldwin County.",
     youtube:
-      "✅ Before & After Bed Bug Treatment — Real Results | Bed Bugs & Beyond Baldwin County\n\nWatch what our professional bed bug treatment process actually looks like — from the initial inspection to a fully treated, certified-clean home. No guesswork, no shortcuts.\n\n🏠 This treatment was completed in Gulf Shores, AL.\n\n🔍 What we cover:\n00:00 What the home looked like before treatment\n01:10 Our inspection and assessment process\n02:30 Treatment walkthrough\n04:00 Post-treatment certification\n\n📍 Serving all of Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, Daphne\n📞 Book your inspection today!\n\n#BedBugTreatment #BeforeAndAfter #BaldwinCounty #PestControl #BedBugFree",
+      "Professional Bed Bug Treatment Process | Bed Bugs & Beyond Baldwin County\n\nLearn what to expect when you contact Bed Bugs & Beyond, from the initial conversation and inspection through the recommended treatment process.\n\n🔍 What we cover:\n00:00 Common warning signs\n01:10 Inspection and assessment\n02:30 Treatment planning\n04:00 Follow-up guidance\n\n📍 Serving Baldwin County — Foley, Gulf Shores, Orange Beach, Fairhope, and Daphne\n📞 Book your inspection today!\n\n#BedBugTreatment #BaldwinCounty #PestControl #BedBugInspection",
     tiktok:
-      "Before 😩 vs After ✅ — bed bug treatment transformation!\n\nSleepless nights → full nights of rest 😴\nInfested home → certified clean 🏠\n\nBed Bugs & Beyond | Baldwin County, AL 🐛\nFast. Discreet. Guaranteed.\n\n#BedBugFree #BeforeAndAfter #PestControl #BaldwinCounty #HomeTransformation #FYP",
+      "What happens after you spot signs of bed bugs? 🐛\n\n1️⃣ Talk with a professional\n2️⃣ Schedule an inspection\n3️⃣ Get a treatment plan for your situation\n\nBed Bugs & Beyond | Baldwin County, AL\n\n#BedBugTreatment #PestControl #BaldwinCounty #BedBugInspection #FYP",
     linkedin:
       "Property manager or vacation rental host in Baldwin County? Here's what a single untreated bed bug report can cost:\n\n• Immediate negative reviews\n• Emergency rebook cancellations\n• Potential liability exposure\n\nBed Bugs & Beyond delivers fast, discreet treatment with before/after documentation for your records. We work with short-term rental properties, hotels, and residential managers across the Gulf Coast.\n\nReady to protect your property and your reviews? Let's talk.\n\n#VacationRental #PropertyManagement #BedBugTreatment #GulfCoast #BaldwinCountyAL",
     pinterest:
-      "✅ Real Before & After Bed Bug Treatment Results | Bed Bugs & Beyond, Baldwin County AL — Professional bed bug elimination: from infestation to certified clean. Serving Foley, Gulf Shores, Orange Beach & all of Baldwin County. Fast, discreet, guaranteed results. Book your inspection today! #BedBugTreatment #BeforeAndAfter #PestControl #HomeCare #BaldwinCounty",
+      "Professional Bed Bug Treatment Process | Bed Bugs & Beyond, Baldwin County AL — Learn what to expect from inspection through a treatment plan. Serving Foley, Gulf Shores, Orange Beach, and Baldwin County. Book your inspection today. #BedBugTreatment #PestControl #HomeCare #BaldwinCounty",
     nextdoor:
-      "Neighbors — we just completed another successful bed bug treatment right here in Baldwin County! 🎉\n\nIf you or anyone you know is dealing with bed bugs, we offer fast, discreet service with guaranteed results. No judgment, no drama — just professional pest control.\n\nBed Bugs & Beyond serves all of Baldwin County including our local neighborhoods. Same-week appointments available.\n\nFeel free to message me directly or call for a free consultation! 📞",
-    imageIdea: "Side-by-side before/after: messy infested bedroom vs. clean treated room, BB&B logo centered below",
+      "Neighbors — if you or someone you know is concerned about bed bugs, professional help is available without judgment.\n\nBed Bugs & Beyond provides discreet pest control throughout Baldwin County. We'll discuss what you're seeing and help determine an appropriate next step.\n\nFeel free to message directly or call for a consultation. 📞",
+    imageIdea: "Clearly illustrated, non-photorealistic split-panel educational graphic showing a worried homeowner before calling a pest professional and a calm, tidy bedroom after receiving a professional treatment plan; label it as an illustrative service process, use navy and orange brand colors, no claims of guaranteed results, no fake customer testimonial, no logo recreation, no phone number or small text",
     cta:       "Book your inspection today",
   },
   {
@@ -389,6 +389,8 @@ export default function BBBContentAutopilotPage() {
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
   const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
+  const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string }>>>({});
+  const [imagePrompt, setImagePrompt] = useState("");
 
   // V6: Production publishing workflow state
   const [showPublishDialog, setShowPublishDialog] = useState(false);
@@ -409,6 +411,50 @@ export default function BBBContentAutopilotPage() {
   const createDraft = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       authFetch<{ id: string }>("/social-posts", { method: "POST", body: JSON.stringify(data) }),
+  });
+
+  const generateCampaignImage = useMutation({
+    mutationFn: async ({ template, requestKey }: { template: ContentTemplate; requestKey: string }) => {
+      const selectedImages = selectedQueueable.filter(platform => CONTENT_PROFILES[platform.id].mediaType === "image");
+      const imageTargets = [
+        ...(selectedImages.some(platform => platform.id === "instagram")
+          ? [{ platforms: ["instagram"] as SocialProviderId[], size: "1024x1024" }]
+          : []),
+        ...(selectedImages.some(platform => platform.id !== "instagram")
+          ? [{ platforms: selectedImages.filter(platform => platform.id !== "instagram").map(platform => platform.id), size: "1536x1024" }]
+          : []),
+      ];
+
+      const generatedTargets = await Promise.all(imageTargets.map(async ({ platforms, size }) => {
+        const formatLabel = platforms.includes("instagram")
+          ? "an Instagram square feed post"
+          : "a landscape Facebook and Google Business feed post";
+        const result = await authFetch<{ generationId: string; storageKey: string }>("/auto-content/generate-image", {
+          method: "POST",
+          body: JSON.stringify({
+            prompt: `${imagePrompt.trim() || template.imageIdea}. Compose specifically for ${formatLabel}.`,
+            size,
+            idempotencyKey: `${requestKey}-${size}`,
+          }),
+        });
+        const preview = await authFetch<{ signedUrl: string }>(`/auto-content/generate-image/${result.generationId}/signed-url`);
+        return { platforms, size, ...result, signedUrl: preview.signedUrl };
+      }));
+      return generatedTargets.flatMap(target => target.platforms.map(platform => ({ ...target, platform })));
+    },
+    onSuccess: (results) => {
+      setGeneratedMedia(Object.fromEntries(results.map(({ platform, size, generationId, signedUrl }) => [platform, {
+        size,
+        previewUrl: signedUrl,
+        attachment: {
+          objectPath: `/objects/generated-images/${generationId}.png`,
+          kind: "image" as const,
+          mimeType: "image/png",
+          filename: `${platform}-campaign-${generationId}.png`,
+          byteSize: 0,
+        },
+      }])));
+    },
   });
 
   // V6: bulk publish mutation (Send / Publish Selected)
@@ -485,9 +531,21 @@ export default function BBBContentAutopilotPage() {
     ? { color: B.gold,   bg: "rgba(251,191,36,0.08)",  border: "rgba(251,191,36,0.3)",  icon: "🟡", text: "Drafts saved — click Send to publish"   }
     : { color: B.dim,    bg: "rgba(100,116,139,0.06)", border: "rgba(100,116,139,0.2)", icon: "⚪", text: "No posts queued yet"                     };
 
+  function generateImageFor(template: ContentTemplate) {
+    setGeneratedMedia({});
+    setMediaAttachment(null);
+    setImagePrompt(template.imageIdea);
+    generateCampaignImage.mutate({ template, requestKey: `autopilot-${Date.now()}-${uid()}` });
+  }
+
   function handleGenerate() {
     if (selectedQueueable.length === 0) return; // nothing to generate
-    setTemplateIdx(prev => prev === null ? 0 : (prev + 1) % TEMPLATES.length);
+    const nextIdx = templateIdx === null ? 0 : (templateIdx + 1) % TEMPLATES.length;
+    const nextTemplate = TEMPLATES[nextIdx];
+    setTemplateIdx(nextIdx);
+    if (selectedQueueable.some(p => CONTENT_PROFILES[p.id].mediaType === "image")) {
+      generateImageFor(nextTemplate);
+    }
     // Default active tab to the first selected platform
     const firstSelected = QUEUEABLE_PROVIDERS.find(p => selectedPlatforms.has(p.id));
     setActiveTab(firstSelected?.id ?? "facebook");
@@ -520,15 +578,16 @@ export default function BBBContentAutopilotPage() {
 
     // Save to backend as draft. Backend expects "google", not "google_business".
     const platformKey = platform === "google_business" ? "google" : platform;
+    const platformMedia = mediaAttachment ?? generatedMedia[platform]?.attachment ?? null;
     createDraft.mutate({
       caption:         captionFor(generated, "instagram"),
       captionFacebook: captionFor(generated, "facebook"),
       captionGoogle:   captionFor(generated, "google_business"),
       platforms:       [platformKey],
       status:          "draft",
-      ...(mediaAttachment?.kind === "image" && { imageUrl: mediaAttachment.objectPath }),
-      ...(mediaAttachment?.kind === "video" && { videoUrl: mediaAttachment.objectPath }),
-      ...(mediaAttachment?.kind === "audio" && { audioUrl: mediaAttachment.objectPath }),
+      ...(platformMedia?.kind === "image" && { imageUrl: platformMedia.objectPath }),
+      ...(platformMedia?.kind === "video" && { videoUrl: platformMedia.objectPath }),
+      ...(platformMedia?.kind === "audio" && { audioUrl: platformMedia.objectPath }),
     }, {
       onSuccess: (row) => {
         setDraftsSaved(prev => new Set([...prev, post.id]));
@@ -577,6 +636,12 @@ export default function BBBContentAutopilotPage() {
   const isInfoTab      = !QUEUEABLE_PROVIDERS.some(p => p.id === activeTab);
   const activeProvider = SOCIAL_PROVIDERS.find(p => p.id === activeTab) ?? SOCIAL_PROVIDERS[0];
   const allQueued      = selectedQueueable.length > 0 && selectedQueueable.every(p => justQueued.includes(p.id));
+  const selectedImagePlatforms = selectedQueueable.filter(p => CONTENT_PROFILES[p.id].mediaType === "image");
+  const campaignImagesReady = mediaAttachment?.kind === "image"
+    || selectedImagePlatforms.every(p => Boolean(generatedMedia[p.id]));
+  const metaPairOnly = selectedQueueable.length === 2
+    && selectedPlatforms.has("facebook")
+    && selectedPlatforms.has("instagram");
 
   function laneState(lane: AutopilotLane): LaneVisualState {
     if (lane.mode !== "automatic") return "idle";
@@ -929,17 +994,58 @@ export default function BBBContentAutopilotPage() {
           </div>
         </div>
 
-        {/* ── Media Attachment (optional) ── */}
+        {/* ── Campaign Media ── */}
         <div style={{
           background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
           padding: "18px 24px", marginBottom: 16,
         }}>
           <div style={{ fontSize: 9, fontWeight: 800, color: B.blue, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10 }}>
-            📎 Media Attachment (optional)
+            🎨 Campaign Image
           </div>
           <div style={{ fontSize: 11, color: B.dim, marginBottom: 12 }}>
-            Attach an image, video (MP4), or audio (MP3) to include with every draft queued below. Leave empty for text-only posts.
+            Facebook and Instagram receive the same automatically generated campaign image. Review it before saving either draft.
           </div>
+          {generated && (
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(240px, 1fr) auto", gap: 10, marginBottom: 12 }}>
+              <input
+                value={imagePrompt}
+                onChange={event => setImagePrompt(event.target.value)}
+                aria-label="Campaign image direction"
+                style={{ background: B.panel2, border: `1px solid ${B.border}`, borderRadius: 9, padding: "10px 12px", color: B.white, fontSize: 12 }}
+              />
+              <button
+                type="button"
+                onClick={() => generateImageFor(generated)}
+                disabled={generateCampaignImage.isPending}
+                style={{ background: "rgba(0,174,239,0.12)", border: "1px solid rgba(0,174,239,0.35)", borderRadius: 9, padding: "9px 14px", color: B.sky, fontWeight: 800, cursor: generateCampaignImage.isPending ? "wait" : "pointer" }}
+              >
+                {generateCampaignImage.isPending ? "Generating…" : "Regenerate image"}
+              </button>
+            </div>
+          )}
+          {generateCampaignImage.isPending && (
+            <div role="status" style={{ padding: 18, marginBottom: 12, borderRadius: 10, background: "rgba(0,174,239,0.07)", color: B.sky, fontSize: 12 }}>
+              Creating and attaching your campaign image… this can take about 30 seconds.
+            </div>
+          )}
+          {generateCampaignImage.isError && (
+            <div role="alert" style={{ padding: 12, marginBottom: 12, borderRadius: 10, background: "rgba(239,68,68,0.08)", color: B.red, fontSize: 12 }}>
+              Automatic image generation failed. You can retry or upload your own image below.
+            </div>
+          )}
+          {Object.keys(generatedMedia).length > 0 && !mediaAttachment && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+              {Object.entries(generatedMedia).map(([platform, media]) => media && (
+                <div key={platform} style={{ width: platform === "instagram" ? 240 : 320, maxWidth: "100%" }}>
+                  <div style={{ color: B.silver, fontSize: 10, fontWeight: 800, marginBottom: 6, textTransform: "uppercase" }}>
+                    {platform.replace("_", " ")} · {media.size}
+                  </div>
+                  <img src={media.previewUrl} alt={`${platform} generated campaign preview`} style={{ display: "block", width: "100%", aspectRatio: platform === "instagram" ? "1" : "3 / 2", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: B.dim, marginBottom: 8 }}>Replace with your own file if needed:</div>
           <MediaUploader value={mediaAttachment} onChange={setMediaAttachment} />
         </div>
 
@@ -1330,7 +1436,7 @@ export default function BBBContentAutopilotPage() {
                   {/* ── Step 1: Save Drafts ── */}
                   <button
                     onClick={queueAll}
-                    disabled={allQueued || selectedQueueable.length === 0}
+                    disabled={allQueued || selectedQueueable.length === 0 || generateCampaignImage.isPending || !campaignImagesReady}
                     style={{
                       marginTop: 4,
                       background: allQueued
@@ -1347,9 +1453,15 @@ export default function BBBContentAutopilotPage() {
                   >
                     {selectedQueueable.length === 0
                       ? "❌ No Platforms Selected"
+                      : generateCampaignImage.isPending
+                        ? "🎨 Creating Facebook + Instagram Images…"
+                      : !campaignImagesReady
+                        ? "⚠ Generate Campaign Images First"
                       : allQueued
                         ? `✓ ${selectedQueueable.length} Drafts Saved to Publishing Center`
-                        : `📋 Step 1: Save ${selectedQueueable.length} Platform Draft${selectedQueueable.length !== 1 ? "s" : ""}`}
+                        : metaPairOnly
+                          ? "📋 Step 1: Save Facebook + Instagram Together"
+                          : `📋 Step 1: Save ${selectedQueueable.length} Platform Draft${selectedQueueable.length !== 1 ? "s" : ""}`}
                   </button>
 
                   {/* ── Time Slot Selector ── */}

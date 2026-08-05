@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-07-24
+Last updated: 2026-08-05
 
 ---
 
@@ -216,15 +216,15 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 
 ---
 
-## Current State (v1 Pilot — July 2026)
+## Current State (Content Autopilot V2 — August 2026)
 
 ### Active Platforms (BB&B Pilot v1)
 
 | Platform            | Connected                                         | Content Ready                              | Image Ready       | Queue Ready                | Direct Publish                          | Next Step                                                                |
 | ------------------- | ------------------------------------------------- | ------------------------------------------ | ----------------- | -------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
-| **Facebook**        | ✅ Matthew Diaz                                   | ✅ Template-based                          | ❌ Not integrated | ✅                         | ✅ Graph API                            | Integrate image upload                                                   |
-| **Instagram**       | ✅ Matthew Diaz                                   | ✅ Template-based                          | ❌ Not integrated | ✅                         | ✅ via FB Page                          | Requires public image URL                                                |
-| **Google Business** | ✅ diaz.p.matt@gmail.com                          | ✅ Local copy + template                   | ❌ Not integrated | ✅                         | ⚠️ BLOCKED — GCP API access unconfirmed | Verify APIs enabled in GCP Console (project 474786012895)                |
+| **Facebook**        | ✅ Matthew Diaz                                   | ✅ Platform-specific                       | 🟡 Feature branch | ✅                         | ✅ Graph API                            | Accept and deploy automatic landscape campaign image                     |
+| **Instagram**       | ✅ Matthew Diaz                                   | ✅ Platform-specific                       | 🟡 Feature branch | ✅                         | ✅ via FB Page                          | Accept and deploy automatic square campaign image                        |
+| **Google Business** | ✅ diaz.p.matt@gmail.com                          | ✅ Conservative service-area copy          | 🟡 Feature branch | ✅                         | ✅ API delivery verified               | Validate conservative copy acceptance with generated landscape image     |
 | **YouTube**         | ✅ BedBugsand_Beyond (`UCGCZ49VYvCIff8rM-VU2eqA`) | ✅ Title + description + 13 tags + privacy | ❌                | ✅ Draft `34b0a41b` staged | ⏸ AWAITING MP4 — Phase 2 stop           | Matthew must attach real MP4 to draft `34b0a41b`; upload will be private |
 
 ### Deferred Platforms (Not in v1 Pilot)
@@ -260,13 +260,16 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 
 **Goal:** Each queued post includes a platform-optimized image.
 
-- [ ] Add `aspectRatio`, `minWidth`, `minHeight` fields to `ContentProfile`
-- [ ] Integrate image generation API (DALL-E or Replicate) at queue time
-- [ ] Platform-specific ratios: Facebook 1.91:1, Instagram 1:1, Google 4:3
-- [ ] Image stored in object storage, URL embedded in draft
-- [ ] Publishing Center shows image preview before publish
-- [ ] Instagram publish uses generated image URL (required for API)
-- [ ] Facebook publish supports image attachment
+- [x] Integrate the existing OpenAI image-generation route into Generate Campaign *(feature branch; pending PR/deployment)*
+- [x] Generate separate landscape Facebook/Google and square Instagram compositions *(feature branch; pending PR/deployment)*
+- [x] Store generated images in durable object storage and embed the correct asset in each draft *(feature branch; pending PR/deployment)*
+- [x] Preview generated images before draft creation; support regeneration and manual replacement *(feature branch; pending PR/deployment)*
+- [x] Save paired Facebook + Instagram drafts with one Meta campaign action while preserving independent delivery state *(feature branch; pending PR/deployment)*
+- [x] Instagram publish uses a durable public image URL (required for API)
+- [x] Facebook publish supports durable image attachment
+- [ ] Add YouTube thumbnail generation with independent thumbnail approval
+- [ ] Add vertical 9:16 creative generation for TikTok/Reels after video publishing is authorized
+- [ ] Add platform-ready image packages for assisted Nextdoor, Yelp, and Thumbtack workflows
 - [ ] TikTok pilot readiness (pending platform approval resolution)
 
 ---
@@ -299,41 +302,37 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 
 - **Connected**: ✅ Matthew Diaz account, Facebook Page linked
 - **Content ready**: ✅ Template-based captions (400–500 chars, photo + text)
-- **Image ready**: ❌ No image generation yet (manual attach)
+- **Image ready**: 🟡 Automatic landscape generation implemented on feature branch; pending PR/deployment
 - **Video ready**: ❌ Not implemented
 - **Queue ready**: ✅ Drafts created in Publishing Center
 - **Direct publish**: ✅ Graph API handler (`/v19.0/{pageId}/photos`, `/feed`)
 - **Analytics**: ❌ Not yet
-- **Blocker**: Image generation for visual posts
-- **Manual action**: Attach image in Publishing Center before publish
+- **Blocker**: Feature branch must reach production and pass authenticated visual acceptance
+- **Manual action**: Review the generated image before saving the paired Meta drafts
 
 ### Instagram
 
 - **Connected**: ✅ Matthew Diaz, linked via Facebook Business
 - **Content ready**: ✅ Template-based captions (125–220 chars)
-- **Image ready**: ❌ Requires public image URL (no generation yet)
+- **Image ready**: 🟡 Automatic square generation implemented on feature branch; pending PR/deployment
 - **Video/Reels**: ❌ Not implemented
 - **Queue ready**: ✅
 - **Direct publish**: ✅ Two-step: create container → publish
 - **Analytics**: ❌ Not yet
-- **Blocker**: Requires a public image URL — cannot publish text-only to Instagram
-- **Manual action**: Supply image URL in Publishing Center
+- **Blocker**: Feature branch must reach production and pass authenticated visual acceptance
+- **Manual action**: Review the square image before saving the paired Meta drafts
 
 ### Google Business Profile
 
 - **Connected**: ✅ diaz.p.matt@gmail.com, Baldwin County location
 - **Content ready**: ✅ Local-targeted captions (Foley, Gulf Shores, Orange Beach, Fairhope)
-- **Image ready**: ❌ No generation yet
+- **Image ready**: 🟡 Shared landscape generation implemented on feature branch; pending PR/deployment
 - **Video**: ❌ Not implemented
 - **Queue ready**: ✅
-- **Direct publish**: ⚠️ **BLOCKED** — GBP Posts API returns 429 on every attempt
+- **Direct publish**: ✅ Delivery reached Google Business Profile; platform policy acceptance still requires conservative content
 - **Analytics**: ❌ Not yet
-- **Blocker**: Google Business Profile API returning 429 (Account Management + Business
-  Information APIs). Root cause unconfirmed: "Requests per minute" message received on
-  first-ever request, persisting 7+ min across retries — inconsistent with transient
-  rate limit. Likely: API not enabled or project quota = 0 in GCP Console.
-  **Matthew must verify in console.cloud.google.com → project 474786012895.**
-- **Manual action**: Check GCP Console before any retry
+- **Blocker**: Detailed pest/problem copy was delivered but rejected by Google policy review
+- **Manual action**: Publish only after the short service-area preview and image both pass review without rejection
 
 ### YouTube
 
@@ -366,38 +365,34 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 ### Facebook
 
 - [ ] Navigate to `/admin/bbb-autopilot`
-- [ ] Select Facebook only
-- [ ] Generate weekly content (template-based)
-- [ ] Queue Facebook post
+- [ ] Select Facebook + Instagram as one Meta campaign
+- [ ] Generate the campaign and wait for landscape + square images
+- [ ] Review both captions and both image compositions
+- [ ] Save Facebook + Instagram drafts together
 - [ ] Navigate to Publishing Center (`/admin/social-publishing`)
-- [ ] Attach or skip image
-- [ ] Click Publish
+- [ ] Confirm each draft retained its correct platform image
+- [ ] Approve and publish the paired Meta campaign
 - [ ] Confirm live post on Facebook Page
 - [ ] Confirm success status stored in Publishing Center
 
 ### Instagram
 
-- [ ] Select Instagram only in Content Autopilot
-- [ ] Generate and queue Instagram post
-- [ ] Navigate to Publishing Center
-- [ ] Attach a public image URL (required — Instagram API cannot publish without image)
-- [ ] Click Publish
+- [ ] Confirm the paired Meta workflow produced a distinct Instagram caption and square image
+- [ ] Confirm its durable image preview loads without 404
+- [ ] Approve and publish from the same Meta campaign review
 - [ ] Confirm live post on Instagram Business account
 - [ ] Confirm success status stored
 
 ### Google Business Profile
 
-- [ ] **Matthew: verify GCP Console** — project 474786012895 → APIs & Services → confirm
-      "My Business Account Management API" and "My Business Business Information API" are
-      enabled with non-zero quotas (or request access if not visible)
 - [ ] Confirm token still valid at `/auth/google-business` (re-authorize if expired)
 - [ ] Select Google Business only in Content Autopilot
-- [ ] Generate and queue GBP post (local copy: Foley/Gulf Shores/Orange Beach)
+- [ ] Generate and review short service-area copy plus the independent landscape image
 - [ ] Navigate to Publishing Center
 - [ ] Select CTA (Call Now recommended)
-- [ ] Click Publish — system will discover + cache location on first success
+- [ ] Click Publish only after the preview loads without 404
 - [ ] Confirm live post on Google Business listing
-- [ ] Confirm success status stored (first `verifiedByApi: true` cache entry)
+- [ ] Confirm Google accepts the post and success status is stored
 
 ### YouTube
 

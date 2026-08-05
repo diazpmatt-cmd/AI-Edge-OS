@@ -17,6 +17,10 @@ RUN pnpm deploy --filter @workspace/api-server --prod --legacy /deploy
 FROM node:24-slim AS runner
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /deploy/node_modules ./node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /app/artifacts/ai-edge-solutions/dist/public ./artifacts/ai-edge-solutions/dist/public

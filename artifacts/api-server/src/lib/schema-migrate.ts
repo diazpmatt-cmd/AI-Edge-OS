@@ -275,6 +275,31 @@ export async function migrateSchema(): Promise<void> {
   `);
   await pool.query(`ALTER TABLE auto_content_settings ADD COLUMN IF NOT EXISTS auto_media_enabled TEXT DEFAULT 'false'`);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_video_generations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id UUID NOT NULL,
+      user_id TEXT NOT NULL,
+      post_id UUID NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'native_ffmpeg',
+      voice_model TEXT NOT NULL DEFAULT 'gpt-4o-mini-tts',
+      format TEXT NOT NULL DEFAULT 'youtube_16_9',
+      narration TEXT NOT NULL,
+      source_images JSONB NOT NULL DEFAULT '[]'::jsonb,
+      status TEXT NOT NULL DEFAULT 'pending',
+      storage_key TEXT,
+      duration_seconds INTEGER,
+      failure_reason TEXT,
+      idempotency_key TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (client_id, idempotency_key)
+    );
+    CREATE INDEX IF NOT EXISTS content_video_generations_post_idx
+      ON content_video_generations(post_id, created_at DESC);
+  `);
+
   // Canonical clients must exist before the local-presence repair below. On a
   // fresh database app.ts has not yet imported the dedicated client resolver,
   // so its bounded backfill remains separate from this base-table bootstrap.

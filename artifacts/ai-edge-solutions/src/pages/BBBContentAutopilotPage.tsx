@@ -397,6 +397,7 @@ export default function BBBContentAutopilotPage() {
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
   const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
   const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string }>>>({});
+  const [videoRenderError, setVideoRenderError] = useState<string | null>(null);
   const [imagePrompt, setImagePrompt] = useState("");
   const [showCampaignHelp, setShowCampaignHelp] = useState(false);
   const [autoMediaEnabled, setAutoMediaEnabled] = useState(true);
@@ -460,7 +461,12 @@ export default function BBBContentAutopilotPage() {
 
   const generateCampaignImage = useMutation({
     mutationFn: async ({ template, requestKey, creativePrompt }: { template: ContentTemplate; requestKey: string; creativePrompt: string }) => {
-      const selectedImages = selectedQueueable.filter(platform => CONTENT_PROFILES[platform.id].mediaType === "image");
+      // YouTube also needs a source still. The native renderer crops this
+      // landscape artwork to 16:9 before adding narration, motion, captions,
+      // branding, and the CTA.
+      const selectedImages = selectedQueueable.filter(platform =>
+        CONTENT_PROFILES[platform.id].mediaType === "image" || platform.id === "youtube",
+      );
       const imageTargets = [
         ...(selectedImages.some(platform => platform.id === "instagram")
           ? [{ platforms: ["instagram"] as SocialProviderId[], size: "1024x1024" }]
@@ -473,7 +479,9 @@ export default function BBBContentAutopilotPage() {
       const generatedTargets = await Promise.all(imageTargets.map(async ({ platforms, size }) => {
         const formatLabel = platforms.includes("instagram")
           ? "an Instagram square feed post"
-          : "a landscape Facebook and Google Business feed post";
+          : platforms.includes("youtube")
+            ? "a landscape YouTube video scene with generous safe areas for captions and branding"
+            : "a landscape Facebook and Google Business feed post";
         const result = await authFetch<{ generationId: string; storageKey: string }>("/auto-content/generate-image", {
           method: "POST",
           body: JSON.stringify({
@@ -499,6 +507,40 @@ export default function BBBContentAutopilotPage() {
           byteSize: 0,
         },
       }])));
+    },
+  });
+
+  const generateCampaignVideo = useMutation({
+    mutationFn: async (postId: string) => {
+      const rendered = await authFetch<{ generationId: string; videoPath: string; durationSeconds: number }>("/auto-content/generate-video", {
+        method: "POST",
+        body: JSON.stringify({ postId }),
+      });
+      const preview = await authFetch<{ signedUrl: string }>(`/auto-content/generate-video/${rendered.generationId}/signed-url`);
+      return { ...rendered, signedUrl: preview.signedUrl };
+    },
+    onMutate: () => setVideoRenderError(null),
+    onSuccess: ({ generationId, videoPath, signedUrl }) => {
+      setGeneratedMedia(previous => ({
+        ...previous,
+        youtube: {
+          size: "1280x720 MP4",
+          previewUrl: signedUrl,
+          attachment: {
+            objectPath: videoPath,
+            kind: "video",
+            mimeType: "video/mp4",
+            filename: `youtube-campaign-${generationId}.mp4`,
+            byteSize: 0,
+          },
+        },
+      }));
+      setActivityLog(previous => [{
+        id: uid(), ts: nowTs(), platform: "youtube", action: "Native narrated video rendered — awaiting approval", status: "draft-saved",
+      }, ...previous]);
+    },
+    onError: (error) => {
+      setVideoRenderError(error instanceof Error ? error.message : "Native video rendering failed. The YouTube draft and source image were preserved.");
     },
   });
 
@@ -598,7 +640,7 @@ export default function BBBContentAutopilotPage() {
     const nextIdx = templateIdx === null ? 0 : (templateIdx + 1) % TEMPLATES.length;
     const nextTemplate = TEMPLATES[nextIdx];
     setTemplateIdx(nextIdx);
-    if (autoMediaEnabled && selectedQueueable.some(p => CONTENT_PROFILES[p.id].mediaType === "image")) {
+    if (autoMediaEnabled && selectedQueueable.some(p => CONTENT_PROFILES[p.id].mediaType === "image" || p.id === "youtube")) {
       generateImageFor(nextTemplate);
     }
     // Default active tab to the first selected platform
@@ -635,9 +677,13 @@ export default function BBBContentAutopilotPage() {
     const platformKey = platform === "google_business" ? "google" : platform;
     const platformMedia = mediaAttachment ?? generatedMedia[platform]?.attachment ?? null;
     createDraft.mutate({
-      caption:         captionFor(generated, "instagram"),
+      caption:         captionFor(generated, platform),
       captionFacebook: captionFor(generated, "facebook"),
       captionGoogle:   captionFor(generated, "google_business"),
+      youtubeTitle:    platform === "youtube" ? `${generated.topic} | Bed Bugs & Beyond` : undefined,
+      youtubePrivacy:  platform === "youtube" ? "private" : undefined,
+      ctaType:         "call",
+      ctaValue:        generated.cta,
       platforms:       [platformKey],
       status:          "draft",
       ...(platformMedia?.kind === "image" && { imageUrl: platformMedia.objectPath }),
@@ -648,6 +694,9 @@ export default function BBBContentAutopilotPage() {
         setDraftsSaved(prev => new Set([...prev, post.id]));
         // Capture the UUID for later use in bulk-publish
         setSavedDraftIds(prev => new Map([...prev, [platform, row.id]]));
+        if (platform === "youtube" && autoMediaEnabled) {
+          generateCampaignVideo.mutate(row.id);
+        }
       },
     });
   }
@@ -691,7 +740,7 @@ export default function BBBContentAutopilotPage() {
   const isInfoTab      = !QUEUEABLE_PROVIDERS.some(p => p.id === activeTab);
   const activeProvider = SOCIAL_PROVIDERS.find(p => p.id === activeTab) ?? SOCIAL_PROVIDERS[0];
   const allQueued      = selectedQueueable.length > 0 && selectedQueueable.every(p => justQueued.includes(p.id));
-  const selectedImagePlatforms = selectedQueueable.filter(p => CONTENT_PROFILES[p.id].mediaType === "image");
+  const selectedImagePlatforms = selectedQueueable.filter(p => CONTENT_PROFILES[p.id].mediaType === "image" || p.id === "youtube");
   const campaignImagesReady = mediaAttachment?.kind === "image"
     || selectedImagePlatforms.every(p => Boolean(generatedMedia[p.id]));
   const metaPairOnly = selectedQueueable.length === 2
@@ -715,7 +764,9 @@ export default function BBBContentAutopilotPage() {
       const platformKey = p.id === "google_business" ? "google_business" : p.id;
       if (!connectedProviders.has(platformKey)) {
         warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Not connected — link account in Connected Accounts" });
-      } else if ((p.id === "youtube" || p.id === "tiktok") && !mediaAttachment?.kind?.includes("video")) {
+      } else if ((p.id === "youtube" || p.id === "tiktok")
+        && mediaAttachment?.kind !== "video"
+        && generatedMedia[p.id]?.attachment.kind !== "video") {
         warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Requires video content to publish" });
       } else if (p.id === "instagram" && mediaAttachment?.kind === "audio") {
         warnings.push({ platform: p.id, icon: p.icon, label: p.label, warning: "Instagram requires an image (audio only won't work)" });
@@ -1127,7 +1178,7 @@ export default function BBBContentAutopilotPage() {
             🎨 Campaign Image
           </div>
           <div style={{ fontSize: 11, color: B.dim, marginBottom: 12 }}>
-            Facebook and Instagram receive the same automatically generated campaign image. Review it before saving either draft.
+            Each selected image platform receives correctly sized artwork. YouTube receives a landscape source scene that is automatically turned into a narrated 16:9 MP4 after its draft is saved.
           </div>
           {generated && (
             <div style={{ display: "grid", gridTemplateColumns: "minmax(240px, 1fr) auto", gap: 10, marginBottom: 12 }}>
@@ -1164,9 +1215,33 @@ export default function BBBContentAutopilotPage() {
                   <div style={{ color: B.silver, fontSize: 10, fontWeight: 800, marginBottom: 6, textTransform: "uppercase" }}>
                     {platform.replace("_", " ")} · {media.size}
                   </div>
-                  <img src={media.previewUrl} alt={`${platform} generated campaign preview`} style={{ display: "block", width: "100%", aspectRatio: platform === "instagram" ? "1" : "3 / 2", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
+                  {media.attachment.kind === "video" ? (
+                    <video src={media.previewUrl} controls preload="metadata" aria-label={`${platform} generated video preview`} style={{ display: "block", width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
+                  ) : (
+                    <img src={media.previewUrl} alt={`${platform} generated campaign preview`} style={{ display: "block", width: "100%", aspectRatio: platform === "instagram" ? "1" : "3 / 2", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
+                  )}
                 </div>
               ))}
+            </div>
+          )}
+          {generateCampaignVideo.isPending && (
+            <div role="status" style={{ padding: 14, marginBottom: 12, borderRadius: 10, background: "rgba(167,139,250,0.08)", color: B.purple, fontSize: 12 }}>
+              Rendering the YouTube MP4 with narration, gentle image motion, captions, branding, and CTA… The draft will remain held for approval.
+            </div>
+          )}
+          {videoRenderError && (
+            <div role="alert" style={{ padding: 12, marginBottom: 12, borderRadius: 10, background: "rgba(239,68,68,0.08)", color: B.red, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <span>{videoRenderError}</span>
+              {savedDraftIds.get("youtube") && (
+                <button
+                  type="button"
+                  onClick={() => generateCampaignVideo.mutate(savedDraftIds.get("youtube")!)}
+                  disabled={generateCampaignVideo.isPending}
+                  style={{ flexShrink: 0, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 8, padding: "7px 11px", color: B.white, fontWeight: 800, cursor: "pointer" }}
+                >
+                  Retry video
+                </button>
+              )}
             </div>
           )}
           <div style={{ fontSize: 10, color: B.dim, marginBottom: 8 }}>Replace with your own file if needed:</div>
@@ -1636,7 +1711,7 @@ export default function BBBContentAutopilotPage() {
                       if (!hasDraftsToPublish) return;
                       setShowPublishDialog(true);
                     }}
-                    disabled={!hasDraftsToPublish || publishInProgress}
+                    disabled={!hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending}
                     style={{
                       marginTop: 4,
                       background: !hasDraftsToPublish
@@ -1648,7 +1723,7 @@ export default function BBBContentAutopilotPage() {
                       borderRadius: 10, padding: "13px 14px",
                       fontSize: 13, fontWeight: 900,
                       color: !hasDraftsToPublish ? B.dim : B.white,
-                      cursor: !hasDraftsToPublish || publishInProgress ? "not-allowed" : "pointer",
+                      cursor: !hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending ? "not-allowed" : "pointer",
                       transition: "all 0.2s",
                       letterSpacing: "-0.2px",
                       boxShadow: hasDraftsToPublish && !publishInProgress ? "0 4px 20px rgba(0,174,239,0.25)" : "none",
@@ -1664,7 +1739,9 @@ export default function BBBContentAutopilotPage() {
                       (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(0,174,239,0.25)";
                     }}
                   >
-                    {publishInProgress
+                    {generateCampaignVideo.isPending
+                      ? "🎬 Rendering YouTube Video…"
+                      : publishInProgress
                       ? "⏳ Publishing to live accounts..."
                       : !hasDraftsToPublish
                       ? "📋 Save drafts first (Step 1)"

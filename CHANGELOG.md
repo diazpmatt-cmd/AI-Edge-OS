@@ -18,6 +18,7 @@ All notable changes to the AI Edge Solutions platform.
 
 - Block draft saving until required campaign images finish generating or the user supplies a replacement image.
 - Replaced unsupported guaranteed, certified-clean, bed-bug-free, and purported customer-result language in the treatment-process campaign with factual service language and explicitly illustrative media direction.
+- Bound each image-generation request to its campaign's prompt directly so generating the next campaign cannot reuse a previous campaign's creative direction during asynchronous state updates.
 
 ### Content Autopilot V2 — Platform-Specific Campaign Lanes
 

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { leadsTable, type Lead } from "@workspace/db/schema";
 
 export type LeadIntakeInput = {
+  clientId?: string | null;
   clientName: string;
   source: string;
   phone?: string | null;
@@ -17,6 +18,7 @@ export type LeadIntakeInput = {
 };
 
 export type NormalizedLeadIntake = {
+  clientId: string | null;
   clientName: string;
   source: string;
   phone: string;
@@ -71,6 +73,7 @@ function normalizeReceivedAt(value: Date | string | null | undefined): Date {
 
 export function normalizeLeadIntake(input: LeadIntakeInput): NormalizedLeadIntake {
   return {
+    clientId: optionalText(input.clientId),
     clientName: requiredText(input.clientName, "clientName"),
     source: requiredText(input.source, "source"),
     phone: optionalText(input.phone) ?? "",
@@ -98,6 +101,7 @@ export function createDrizzleLeadIntakeStore(database: typeof db = db): LeadInta
       return database.transaction(async (tx) => {
         if (input.sourceMessageId) {
           const duplicateKey = JSON.stringify([
+            input.clientId,
             input.clientName,
             input.source,
             input.sourceMessageId,
@@ -111,6 +115,7 @@ export function createDrizzleLeadIntakeStore(database: typeof db = db): LeadInta
             .select()
             .from(leadsTable)
             .where(and(
+              ...(input.clientId ? [eq(leadsTable.clientId, input.clientId)] : []),
               eq(leadsTable.clientName, input.clientName),
               eq(leadsTable.source, input.source),
               eq(leadsTable.sourceMessageId, input.sourceMessageId),

@@ -391,6 +391,8 @@ export default function BBBContentAutopilotPage() {
   const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
   const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string }>>>({});
   const [imagePrompt, setImagePrompt] = useState("");
+  const [showCampaignHelp, setShowCampaignHelp] = useState(false);
+  const [autoMediaEnabled, setAutoMediaEnabled] = useState(true);
 
   // V6: Production publishing workflow state
   const [showPublishDialog, setShowPublishDialog] = useState(false);
@@ -522,6 +524,12 @@ export default function BBBContentAutopilotPage() {
   const allDraftSaved = selectedQueueable.length > 0 && selectedQueueable.every(p => (platformStatus[p.id] ?? "not-queued") !== "not-queued");
   const noneQueued    = selectedQueueable.every(p => platformStatus[p.id] === "not-queued");
   const hasDraftsToPublish = [...savedDraftIds.values()].length > 0;
+  const campaignProgress = {
+    drafts: selectedQueueable.filter(p => ["draft-saved", "approved", "publishing"].includes(platformStatus[p.id] ?? "not-queued")).length,
+    published: selectedQueueable.filter(p => ["success", "published-warning"].includes(platformStatus[p.id] ?? "not-queued")).length,
+    attention: selectedQueueable.filter(p => platformStatus[p.id] === "failed").length,
+    media: Object.keys(generatedMedia).length + (mediaAttachment ? 1 : 0),
+  };
 
   const banner = anyFailed && !anySuccess
     ? { color: B.red,    bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.3)",   icon: "🔴", text: "Some platforms failed — retry below"    }
@@ -547,7 +555,7 @@ export default function BBBContentAutopilotPage() {
     const nextIdx = templateIdx === null ? 0 : (templateIdx + 1) % TEMPLATES.length;
     const nextTemplate = TEMPLATES[nextIdx];
     setTemplateIdx(nextIdx);
-    if (selectedQueueable.some(p => CONTENT_PROFILES[p.id].mediaType === "image")) {
+    if (autoMediaEnabled && selectedQueueable.some(p => CONTENT_PROFILES[p.id].mediaType === "image")) {
       generateImageFor(nextTemplate);
     }
     // Default active tab to the first selected platform
@@ -730,7 +738,71 @@ export default function BBBContentAutopilotPage() {
       {/* ── Body ── */}
       <div style={{ padding: "28px 36px", maxWidth: 1100, margin: "0 auto" }}>
 
+        {/* ── Autopilot command center ── */}
+        <section aria-labelledby="autopilot-controls-title" style={{
+          background: `linear-gradient(135deg, ${B.bbbDark} 0%, #0A1E35 62%, ${B.panel} 100%)`,
+          border: "1px solid rgba(242,108,33,0.34)", borderRadius: 18,
+          padding: "24px 26px", marginBottom: 18,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 850, color: B.bbbOrange, letterSpacing: "1.5px", textTransform: "uppercase" }}>Autopilot Controls</div>
+              <h2 id="autopilot-controls-title" style={{ margin: "6px 0 0", fontSize: 23, color: B.white, letterSpacing: "-0.45px" }}>Create, review, and keep campaigns moving</h2>
+              <div style={{ marginTop: 6, color: B.silver, fontSize: 12 }}>The working controls are up front. Rules and channel details are available only when you need them.</div>
+            </div>
+            <button type="button" onClick={() => setShowCampaignHelp(value => !value)} aria-expanded={showCampaignHelp} style={{
+              background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.35)", color: B.sky,
+              borderRadius: 10, padding: "10px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer",
+            }}>{showCampaignHelp ? "Hide campaign information" : "Campaign information & help"}</button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 18 }}>
+            {[
+              { title: "Continuous Generation", detail: "Rolling calendar foundation ready", active: false, status: "Prepared", disabled: true },
+              { title: "Automatic Media", detail: "Platform-sized images now · YouTube video pipeline next", active: autoMediaEnabled, status: autoMediaEnabled ? "On" : "Off", disabled: false },
+              { title: "Automatic Publishing", detail: "Approval remains required for safety", active: false, status: "Off", disabled: true },
+            ].map(control => (
+              <div key={control.title} style={{ background: "rgba(3,6,18,0.48)", border: `1px solid ${control.active ? "rgba(34,197,94,0.38)" : "rgba(56,189,248,0.2)"}`, borderRadius: 12, padding: "14px 15px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ color: B.white, fontSize: 13, fontWeight: 850 }}>{control.title}</div>
+                  <button
+                    type="button"
+                    disabled={control.disabled}
+                    onClick={() => control.title === "Automatic Media" && setAutoMediaEnabled(value => !value)}
+                    aria-label={`${control.title}: ${control.status}`}
+                    style={{
+                      minWidth: 62, borderRadius: 999, padding: "5px 10px", fontSize: 9, fontWeight: 900,
+                      border: `1px solid ${control.active ? "rgba(34,197,94,0.5)" : "rgba(56,189,248,0.3)"}`,
+                      background: control.active ? "rgba(34,197,94,0.16)" : "rgba(56,189,248,0.08)",
+                      color: control.active ? B.green : B.sky, cursor: control.disabled ? "not-allowed" : "pointer", opacity: control.disabled ? 0.75 : 1,
+                    }}
+                  >{control.status}</button>
+                </div>
+                <div style={{ color: B.dim, fontSize: 10.5, marginTop: 6, lineHeight: 1.45 }}>{control.detail}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
+            <button type="button" onClick={handleGenerate} disabled={selectedQueueable.length === 0} style={{
+              flex: "1 1 260px", minHeight: 58, borderRadius: 12, padding: "13px 20px", cursor: selectedQueueable.length ? "pointer" : "not-allowed",
+              background: selectedQueueable.length ? "linear-gradient(135deg, #F26C21, #C94E0A)" : "rgba(100,116,139,0.12)",
+              border: selectedQueueable.length ? "1px solid rgba(255,170,100,0.65)" : `1px solid ${B.border}`, color: selectedQueueable.length ? "white" : B.dim,
+              fontSize: 15, fontWeight: 900,
+            }}>⚡ {generated ? "Create Next Campaign" : "Create Campaign"}</button>
+            <button type="button" disabled={!generated} onClick={() => document.getElementById("campaign-drafts")?.scrollIntoView({ behavior: "smooth" })} style={{
+              flex: "1 1 180px", minHeight: 58, borderRadius: 12, padding: "13px 18px", cursor: generated ? "pointer" : "not-allowed",
+              background: generated ? "rgba(0,174,239,0.13)" : "rgba(100,116,139,0.08)", border: `1px solid ${generated ? "rgba(0,174,239,0.4)" : B.border}`,
+              color: generated ? B.sky : B.dim, fontSize: 14, fontWeight: 850,
+            }}>Review Current Drafts</button>
+          </div>
+          <div style={{ marginTop: 10, color: B.dim, fontSize: 10.5, lineHeight: 1.5 }}>
+            Continuous generation and automatic publishing stay visibly locked until their scheduler and approval safeguards are connected.
+          </div>
+        </section>
+
         {/* ── V2 operating model ── */}
+        {showCampaignHelp && <>
         <div style={{
           background: `linear-gradient(135deg, rgba(0,119,182,0.16), ${B.panel} 58%)`,
           border: "1px solid rgba(56,189,248,0.28)", borderRadius: 18,
@@ -929,12 +1001,14 @@ export default function BBBContentAutopilotPage() {
           </div>
         </div>
 
+        </>}
+
         {/* ── Generate card ── */}
         <div style={{
           background: `linear-gradient(135deg, ${B.bbbDark} 0%, #0A1E35 60%, ${B.panel} 100%)`,
           border: `1px solid rgba(242,108,33,0.3)`, borderRadius: 18,
           padding: "28px 32px", marginBottom: 16,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "none", alignItems: "center", justifyContent: "space-between",
           flexWrap: "wrap" as const, gap: 20,
         }}>
           <div>
@@ -999,7 +1073,7 @@ export default function BBBContentAutopilotPage() {
         </div>
 
         {/* ── Campaign Media ── */}
-        <div style={{
+        {generated && <div style={{
           background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
           padding: "18px 24px", marginBottom: 16,
         }}>
@@ -1051,10 +1125,10 @@ export default function BBBContentAutopilotPage() {
           )}
           <div style={{ fontSize: 10, color: B.dim, marginBottom: 8 }}>Replace with your own file if needed:</div>
           <MediaUploader value={mediaAttachment} onChange={setMediaAttachment} />
-        </div>
+        </div>}
 
         {/* ── Publishing Status Bar ── */}
-        <div style={{
+        {!noneQueued && <div style={{
           background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16,
           padding: "16px 20px", marginBottom: 20,
           display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" as const,
@@ -1075,8 +1149,22 @@ export default function BBBContentAutopilotPage() {
             </div>
           </div>
 
+          <div aria-label="Campaign progress" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              ["Drafts", campaignProgress.drafts, B.sky],
+              ["Media ready", campaignProgress.media, B.purple],
+              ["Published", campaignProgress.published, B.green],
+              ["Needs attention", campaignProgress.attention, campaignProgress.attention ? B.gold : B.dim],
+            ].map(([label, count, color]) => (
+              <div key={String(label)} style={{ minWidth: 92, padding: "8px 11px", borderRadius: 10, background: "rgba(255,255,255,0.025)", border: `1px solid ${String(color)}35` }}>
+                <div style={{ color: String(color), fontSize: 16, fontWeight: 900 }}>{String(count)}</div>
+                <div style={{ color: B.dim, fontSize: 9, marginTop: 2, fontWeight: 750 }}>{String(label)}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Platform status — all providers from registry */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+          <div style={{ display: "none", gap: 8, flexWrap: "wrap" as const }}>
             {SOCIAL_PROVIDERS.map(p => {
               const isQueueable = QUEUEABLE_PROVIDERS.some(q => q.id === p.id);
               if (isQueueable) {
@@ -1129,11 +1217,11 @@ export default function BBBContentAutopilotPage() {
               }
             })}
           </div>
-        </div>
+        </div>}
 
         {/* ── Generated content ── */}
         {generated && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+          <div id="campaign-drafts" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20, scrollMarginTop: 20 }}>
 
             {/* ── Platform captions ── */}
             <div style={{ background: B.panel, border: `1px solid ${B.border}`, borderRadius: 16, padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>

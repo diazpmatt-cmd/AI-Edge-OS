@@ -6,7 +6,31 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Roadmap Foundations — Honest Readiness and Governed Actions
+
+#### Added
+
+- Action-specific platform readiness, canonical media dimensions, assisted-channel workflows, and evidence-based onboarding states.
+- Shared content-claims and governed business-action policies requiring bounded previews and matching human approval.
+- Tenant-owned communication endpoints and customer-journey identity foundations for calls, SMS, leads, and future attribution.
+
+#### Changed
+
+- Replaced onboarding's fabricated deployment and AI-visibility results with a validated readiness handoff that performs no external activation.
+- Resolved Telnyx production events by verified destination, scoped call/SMS/lead writes by client, removed cross-tenant business defaults, and disabled simulation routes in production.
+
+#### Safety
+
+- Nextdoor, Yelp, and Thumbtack remain manual-assisted channels; provisioning and business actions remain inactive until independently approved and evidenced.
+
 ### Content Autopilot — Automatic Platform-Sized Campaign Images
+
+#### Interface
+
+- Moved the working Autopilot controls to the top of the page with large Create Campaign and Review Drafts actions.
+- Added three clear operating controls for continuous generation, automatic images, and automatic publishing; unavailable autonomous modes remain visibly prepared/off instead of pretending to be active.
+- Moved channel guidance, status colors, service rules, campaign mix, and approval rules into a collapsible Campaign Information & Help section.
+- Removed the empty per-platform queue tiles from the idle view and replaced active queue detail with a compact campaign-progress summary.
 
 #### Added
 

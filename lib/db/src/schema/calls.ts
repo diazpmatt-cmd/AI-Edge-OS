@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const callsTable = pgTable("calls", {
   id:            uuid("id").primaryKey().defaultRandom(),
+  clientId:      uuid("client_id"),
   callSid:       text("call_sid"),
   callerNumber:  text("caller_number").notNull().default(""),
   calledNumber:  text("called_number").notNull().default(""),

@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const leadsTable = pgTable("leads", {
   id:           uuid("id").primaryKey().defaultRandom(),
+  clientId:     uuid("client_id"),
   clientName:   text("client_name").notNull().default(""),
   source:       text("source").notNull().default("telnyx"),
   phone:        text("phone").notNull().default(""),

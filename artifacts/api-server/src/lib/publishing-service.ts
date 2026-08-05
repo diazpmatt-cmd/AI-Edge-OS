@@ -38,6 +38,7 @@ import { socialPostsTable, socialConnectionsTable } from "@workspace/db/schema";
 import { platformDeliveriesTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import type { PlatformDelivery } from "@workspace/db/schema";
+import { evaluateContentClaims } from "@workspace/db";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -324,6 +325,18 @@ export class PublishingService {
     const platforms: string[] = JSON.parse(post.platforms || "[]");
     if (platforms.length === 0) {
       return this.errorResult(postId, "No platforms selected on this post");
+    }
+
+    // Claims are rechecked at the final delivery boundary so stale, edited,
+    // imported, or scheduler-selected content cannot bypass generation-time checks.
+    const claimsDecision = evaluateContentClaims([
+      post.caption,
+      post.captionFacebook,
+      post.captionGoogle,
+      post.youtubeTitle,
+    ].filter(Boolean).join("\n"));
+    if (!claimsDecision.allowed) {
+      return this.errorResult(postId, `Content blocked by claims policy: ${claimsDecision.violations.join(", ")}`);
     }
 
     // ── Step 4: Check post isn't already published/publishing (idempotency) ──

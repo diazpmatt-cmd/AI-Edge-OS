@@ -218,6 +218,17 @@ Remaining external blocker: Google Business Profile Posts API returns 429 on eve
 
 ## Current State (Content Autopilot V2 — August 2026)
 
+### Recovered roadmap foundations
+
+- [x] Platform readiness is modeled per action rather than as one generic flag.
+- [x] Facebook, Instagram, Google Business Profile, YouTube, and TikTok have canonical media requirements.
+- [x] Content claims and business actions have fail-closed policy foundations.
+- [x] Nextdoor, Yelp, and Thumbtack have manual-assisted workflow foundations without direct-publishing claims.
+- [x] Onboarding validates readiness and no longer manufactures deployment or AI-visibility results.
+- [x] Communication endpoints canonically own phone destinations; Telnyx call, SMS, voicemail, and missed-call records are tenant-scoped.
+- [x] Customer-journey identity helpers and event storage support future cross-channel attribution without name-only matching.
+- [ ] Provider activation, credentials, autonomous scheduling, migrations, and deployment remain separate operational work.
+
 ### Active Platforms (BB&B Pilot v1)
 
 | Platform            | Connected                                         | Content Ready                              | Image Ready       | Queue Ready                | Direct Publish                          | Next Step                                                                |

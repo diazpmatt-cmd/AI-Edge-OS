@@ -83,6 +83,13 @@ interface ContentTemplate {
 
 type MediaType = "image" | "video" | "carousel" | "text" | "pin" | "article";
 
+type AutopilotAutomationSettings = {
+  autopilotEnabled: boolean;
+  autoMediaEnabled: boolean;
+  enginePaused: boolean;
+  nextGenerationAt: string | null;
+};
+
 interface ContentProfile {
   mediaType:    MediaType;
   maxLength:    string;
@@ -410,6 +417,42 @@ export default function BBBContentAutopilotPage() {
 
   // V2: real backend draft creation
   const authFetch   = useApiFetch();
+  const automationSettings = useQuery<AutopilotAutomationSettings>({
+    queryKey: ["auto-content", "settings", "automation"],
+    queryFn: () => authFetch<AutopilotAutomationSettings>("/auto-content/settings"),
+    staleTime: 30_000,
+  });
+  const updateAutomation = useMutation({
+    mutationFn: (patch: Record<string, boolean>) =>
+      authFetch<{ ok: boolean }>("/auto-content/settings", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () => automationSettings.refetch(),
+  });
+
+  useEffect(() => {
+    if (automationSettings.data) {
+      setAutoMediaEnabled(automationSettings.data.autoMediaEnabled);
+    }
+  }, [automationSettings.data]);
+
+  const continuousGenerationEnabled = automationSettings.data?.autopilotEnabled === true
+    && automationSettings.data?.enginePaused !== true;
+
+  function toggleContinuousGeneration() {
+    updateAutomation.mutate({
+      autopilotEnabled: !continuousGenerationEnabled,
+      ...(!continuousGenerationEnabled ? { enginePaused: false } : {}),
+    });
+  }
+
+  function toggleAutomaticMedia() {
+    const next = !autoMediaEnabled;
+    setAutoMediaEnabled(next);
+    updateAutomation.mutate({ autoMediaEnabled: next });
+  }
+
   const createDraft = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       authFetch<{ id: string }>("/social-posts", { method: "POST", body: JSON.stringify(data) }),
@@ -758,7 +801,7 @@ export default function BBBContentAutopilotPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 18 }}>
             {[
-              { title: "Continuous Generation", detail: "Rolling calendar foundation ready", active: false, status: "Prepared", disabled: true },
+              { title: "Continuous Generation", detail: "Keeps a weekly approval queue supplied", active: continuousGenerationEnabled, status: continuousGenerationEnabled ? "On" : "Off", disabled: false },
               { title: "Automatic Media", detail: "Platform-sized images now · YouTube video pipeline next", active: autoMediaEnabled, status: autoMediaEnabled ? "On" : "Off", disabled: false },
               { title: "Automatic Publishing", detail: "Approval remains required for safety", active: false, status: "Off", disabled: true },
             ].map(control => (
@@ -768,7 +811,10 @@ export default function BBBContentAutopilotPage() {
                   <button
                     type="button"
                     disabled={control.disabled}
-                    onClick={() => control.title === "Automatic Media" && setAutoMediaEnabled(value => !value)}
+                    onClick={() => {
+                      if (control.title === "Continuous Generation") toggleContinuousGeneration();
+                      if (control.title === "Automatic Media") toggleAutomaticMedia();
+                    }}
                     aria-label={`${control.title}: ${control.status}`}
                     style={{
                       minWidth: 62, borderRadius: 999, padding: "5px 10px", fontSize: 9, fontWeight: 900,
@@ -797,7 +843,7 @@ export default function BBBContentAutopilotPage() {
             }}>Review Current Drafts</button>
           </div>
           <div style={{ marginTop: 10, color: B.dim, fontSize: 10.5, lineHeight: 1.5 }}>
-            Continuous generation and automatic publishing stay visibly locked until their scheduler and approval safeguards are connected.
+            Continuous generation creates weekly drafts only. Automatic publishing stays locked so every platform version still requires your approval.
           </div>
         </section>
 

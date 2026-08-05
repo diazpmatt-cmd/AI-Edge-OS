@@ -273,6 +273,7 @@ export async function migrateSchema(): Promise<void> {
       updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE auto_content_settings ADD COLUMN IF NOT EXISTS auto_media_enabled TEXT DEFAULT 'false'`);
 
   // Canonical clients must exist before the local-presence repair below. On a
   // fresh database app.ts has not yet imported the dedicated client resolver,

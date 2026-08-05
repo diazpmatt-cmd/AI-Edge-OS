@@ -332,6 +332,43 @@ async function runAutonomousContentGeneration(): Promise<SchedulerCycleSummary> 
       if (res.ok) {
         const created = typeof body.created === "number" ? body.created : 0;
         logger.info({ ...runCtx, created }, "[autopilot] tenant run completed");
+
+        // Optional autonomous media pass. One square image is attached to each
+        // generated draft and can be reused by Facebook, Instagram, and GBP.
+        // Failures are isolated per post and never discard the text campaign.
+        if (settings.autoMediaEnabled === "true" && Array.isArray(body.posts)) {
+          for (const candidate of body.posts as Array<Record<string, unknown>>) {
+            const postId = typeof candidate.id === "string" ? candidate.id : null;
+            const prompt = typeof candidate.imagePrompt === "string" ? candidate.imagePrompt : null;
+            if (!postId || !prompt) continue;
+            try {
+              const mediaRes = await fetch(`${base}/api/auto-content/generate-image`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-scheduler-secret": SCHEDULER_SECRET,
+                  "x-scheduler-settings-id": settings.id,
+                },
+                body: JSON.stringify({
+                  postId,
+                  prompt,
+                  size: "1024x1024",
+                  idempotencyKey: `${weeklyPlanId}-${postId}-square`,
+                }),
+              });
+              if (!mediaRes.ok) {
+                const mediaBody = await mediaRes.json().catch(() => ({}));
+                logger.warn({ ...runCtx, postId, httpStatus: mediaRes.status, body: mediaBody }, "[autopilot] media generation failed");
+              } else {
+                logger.info({ ...runCtx, postId }, "[autopilot] media attached");
+              }
+            } catch (mediaError: unknown) {
+              const mediaMessage = mediaError instanceof Error ? mediaError.message : String(mediaError);
+              logger.warn({ ...runCtx, postId, err: mediaMessage }, "[autopilot] media request error");
+            }
+          }
+        }
+
         summary.clientsSucceeded++;
         summary.postsCreated += created;
         const nextAt = calculateNextGenerationAt(settings, now, client.timezone);

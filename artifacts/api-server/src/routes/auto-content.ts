@@ -187,7 +187,10 @@ router.get("/auto-content/settings", async (req, res) => {
       toneStyle:           ctx.toneStyle,
       postAngles:          ctx.postAngles,
       autoGenerateEnabled: true,
+      autopilotEnabled:    false,
+      autoMediaEnabled:    false,
       enginePaused:        false,
+      nextGenerationAt:    null,
       usedCombos:          [],
       lastGeneratedAt:     null,
     });
@@ -217,7 +220,10 @@ router.get("/auto-content/settings", async (req, res) => {
     toneStyle:           parseJson<string[]>(row.toneStyle, DEFAULT_TONE),
     postAngles:          parseJson<string[]>(row.postAngles, DEFAULT_ANGLES),
     autoGenerateEnabled: row.autoGenerateEnabled !== "false",
+    autopilotEnabled:    row.autopilotEnabled === "true",
+    autoMediaEnabled:    row.autoMediaEnabled === "true",
     enginePaused:        row.enginePaused === "true",
+    nextGenerationAt:    row.nextGenerationAt?.toISOString() ?? null,
     usedCombos:          parseJson<string[]>(row.usedCombos, []),
     lastGeneratedAt:     row.lastGeneratedAt?.toISOString() ?? null,
   });
@@ -252,7 +258,7 @@ router.put("/auto-content/settings", async (req, res) => {
   const {
     serviceAreas, topics, frequency, postingTimes, platforms,
     approvalMode, ctaText, ctaPreference, toneStyle, postAngles,
-    autoGenerateEnabled, enginePaused, usedCombos,
+    autoGenerateEnabled, autopilotEnabled, autoMediaEnabled, enginePaused, usedCombos,
   } = req.body;
 
   // Validate and normalize topics when provided in the request body.
@@ -319,7 +325,27 @@ router.put("/auto-content/settings", async (req, res) => {
         : parseJson<string[]>(existingRow?.postAngles, DEFAULT_ANGLES),
     ),
     autoGenerateEnabled: String(autoGenerateEnabled !== false),
-    enginePaused:        String(enginePaused === true),
+    autopilotEnabled: String(
+      typeof autopilotEnabled === "boolean"
+        ? autopilotEnabled
+        : existingRow?.autopilotEnabled === "true",
+    ),
+    autoMediaEnabled: String(
+      typeof autoMediaEnabled === "boolean"
+        ? autoMediaEnabled
+        : existingRow?.autoMediaEnabled === "true",
+    ),
+    enginePaused: String(
+      autopilotEnabled === true
+        ? false
+        : typeof enginePaused === "boolean"
+          ? enginePaused
+          : existingRow?.enginePaused === "true",
+    ),
+    nextGenerationAt:
+      autopilotEnabled === true && !existingRow?.nextGenerationAt
+        ? new Date()
+        : existingRow?.nextGenerationAt ?? null,
     usedCombos: JSON.stringify(
       Array.isArray(usedCombos) ? usedCombos
         : parseJson<string[]>(existingRow?.usedCombos, []),
@@ -343,7 +369,10 @@ router.put("/auto-content/settings", async (req, res) => {
         toneStyle:           values.toneStyle,
         postAngles:          values.postAngles,
         autoGenerateEnabled: values.autoGenerateEnabled,
+        autopilotEnabled:    values.autopilotEnabled,
+        autoMediaEnabled:    values.autoMediaEnabled,
         enginePaused:        values.enginePaused,
+        nextGenerationAt:    values.nextGenerationAt,
         usedCombos:          values.usedCombos,
         updatedAt:           new Date(),
       },
@@ -1634,8 +1663,31 @@ function makeObjectPath(bucketPrefix: string, imageId: string): string {
 //   [S14] DB commit
 
 router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
-  // [S1] Authentication
-  const { userId } = getAuth(req);
+  // [S1] Authentication — Clerk for interactive generation, or the same
+  // DB-verified scheduler settings boundary used by autonomous text generation.
+  const isSchedulerCall = isValidSchedulerSecret(req.headers["x-scheduler-secret"]);
+  const { userId: clerkUserId } = getAuth(req);
+  let userId: string | null = clerkUserId ?? null;
+  if (!userId && isSchedulerCall) {
+    const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
+    if (!settingsId) {
+      res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
+      return;
+    }
+    const [settingsRow] = await db
+      .select({
+        userId: autoContentSettingsTable.userId,
+        autopilotEnabled: autoContentSettingsTable.autopilotEnabled,
+        autoMediaEnabled: autoContentSettingsTable.autoMediaEnabled,
+      })
+      .from(autoContentSettingsTable)
+      .where(eq(autoContentSettingsTable.id, settingsId));
+    if (!settingsRow || settingsRow.autopilotEnabled !== "true" || settingsRow.autoMediaEnabled !== "true") {
+      res.status(403).json({ error: "Forbidden: autonomous media is not enabled" });
+      return;
+    }
+    userId = settingsRow.userId;
+  }
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   // [T1] Tenant resolution — every call must resolve to a known active client
@@ -1974,6 +2026,24 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     console.error("[auto-content/generate-image] DB update error:", dbErr?.message);
     res.status(500).json({ error: "Failed to record image generation" });
     return;
+  }
+
+  // Autonomous generations are immediately attached to their owning draft.
+  // The object path stays private; publishing adapters resolve it through the
+  // existing authenticated/public media URL boundary when delivery is approved.
+  if (postId) {
+    const mediaPath = `/objects/generated-images/${imageId}.png`;
+    await pool.query(
+      `UPDATE social_posts
+          SET image_data = $1,
+              matched_image_url = $1,
+              matched_image_score = '100',
+              media_filename = $2,
+              media_mime_type = 'image/png',
+              updated_at = NOW()
+        WHERE id = $3 AND user_id = $4`,
+      [mediaPath, `campaign-${imageId}.png`, postId, userId],
+    );
   }
 
   res.json({ ok: true, generationId: imageId, storageKey });

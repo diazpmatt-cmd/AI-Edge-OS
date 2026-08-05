@@ -25,6 +25,7 @@ export const autoContentSettingsTable = pgTable("auto_content_settings", {
   selectedAudiences:   text("selected_audiences"),  // JSON: string[] of audienceIds
   // V5.1: Autonomous scheduler config (default disabled during pilot)
   autopilotEnabled:    text("autopilot_enabled").default("false"), // 'true'|'false' — enables scheduler auto-generation
+  autoMediaEnabled:    text("auto_media_enabled").default("false"), // 'true'|'false' — generates one image for each autonomous draft
   generationDay:       text("generation_day"),      // 'monday'|'tuesday'|... — day of week for weekly run
   generationTime:      text("generation_time"),     // 'HH:MM' wall-clock in America/Chicago
   createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

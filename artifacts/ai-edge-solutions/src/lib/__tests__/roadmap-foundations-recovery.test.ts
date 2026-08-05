@@ -3,6 +3,8 @@ import { resolveActionReadiness } from "../platform-readiness";
 import { getPlatformMediaSpec, validateGeneratedMedia } from "../platform-media-specs";
 import { canTransitionAssistedWorkflow, requiresManualPosting } from "../assisted-channel-workflows";
 import { deriveProvisioningState } from "../onboarding-provisioning";
+import fs from "node:fs";
+import path from "node:path";
 
 describe("roadmap foundations", () => {
   it("keeps approval separate from connection readiness", () => {
@@ -19,5 +21,15 @@ describe("roadmap foundations", () => {
   });
   it("requires provisioning evidence", () => {
     expect(deriveProvisioningState([], ["tenant", "phone"])).toBe("ready_for_provisioning");
+  });
+  it("keeps primary Autopilot controls visible and passive guidance collapsible", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/pages/BBBContentAutopilotPage.tsx"), "utf8");
+    expect(source).toContain("Autopilot Controls");
+    expect(source).toContain("Continuous Generation");
+    expect(source).toContain("Automatic Media");
+    expect(source).toContain("Automatic Publishing");
+    expect(source).toContain("Campaign information & help");
+    expect(source).toContain("{showCampaignHelp && <>");
+    expect(source).toContain("{!noneQueued && <div");
   });
 });

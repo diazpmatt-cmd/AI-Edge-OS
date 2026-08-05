@@ -3,6 +3,9 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { leadsTable, callsTable, smsConversationsTable, aiReceptionistSettingsTable } from "@workspace/db/schema";
 import { intakeLead } from "../services/lead-intake";
+import { resolveCommunicationEndpoint } from "../lib/communication-endpoint-resolver.js";
+import { getAuth } from "@clerk/express";
+import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
 
@@ -10,8 +13,8 @@ const router = Router();
 
 const TEXTBACK_DEDUP_MINUTES = 15;
 
-const TEXT_BACK_MESSAGE =
-  "Hi, this is Bed Bugs & Beyond. Sorry we missed your call.\n\n" +
+const DEFAULT_TEXT_BACK_MESSAGE =
+  "Hi, sorry we missed your call.\n\n" +
   "How can we help you today?\n\n" +
   "Reply:\n" +
   "1 for Quote\n" +
@@ -45,13 +48,13 @@ type ClientSettings = {
 const settingsCache = new Map<string, { data: ClientSettings; expiresAt: number }>();
 
 const DEFAULT_CLIENT_SETTINGS: ClientSettings = {
-  businessName:       "Bed Bugs & Beyond",
-  transferPhone:      process.env.BUSINESS_FORWARD_NUMBER ?? "+12513249090",
+  businessName:       "the business",
+  transferPhone:      "",
   greetingScript:     null,
   callbackMessage:    null,
   voicemailMessage:   null,
-  textRoutingMessage: "Hi! This is Bed Bugs & Beyond. You requested our info via text. Visit us at bedbugsbeyond.com or call (251) 324-9090. Reply with any questions!",
-  customGreetingUrl:  process.env.CUSTOM_BBB_GREETING_URL?.trim() || null,
+  textRoutingMessage: null,
+  customGreetingUrl:  null,
   voiceStyle:         "Polly.Joanna",
   afterHoursMode:     "voicemail",
 };
@@ -126,11 +129,21 @@ function getClientName(): string {
   return process.env.TELNYX_CLIENT_NAME ?? "Bed Bugs & Beyond";
 }
 
+async function resolveTelnyxVoiceEndpoint(body: any) {
+  const directDestination = body?.To ?? body?.to ?? body?.Called ?? "";
+  const direct = await resolveCommunicationEndpoint("telnyx", directDestination);
+  if (direct) return direct;
+  const callSid = body?.CallSid ?? body?.call_sid ?? "";
+  if (!callSid) return null;
+  const [call] = await db.select({ calledNumber: callsTable.calledNumber }).from(callsTable).where(eq(callsTable.callSid, callSid));
+  return resolveCommunicationEndpoint("telnyx", call?.calledNumber);
+}
+
 /**
  * Check if we already sent a text-back to this number within the dedup window.
  * Returns true if a recent send exists (skip sending again).
  */
-async function hasRecentTextBack(phone: string): Promise<boolean> {
+async function hasRecentTextBack(phone: string, clientId?: string): Promise<boolean> {
   const windowMs = TEXTBACK_DEDUP_MINUTES * 60 * 1000;
   const since = new Date(Date.now() - windowMs);
   const rows = await db
@@ -139,6 +152,7 @@ async function hasRecentTextBack(phone: string): Promise<boolean> {
     .where(
       and(
         eq(leadsTable.phone, phone),
+        ...(clientId ? [eq(leadsTable.clientId, clientId)] : []),
         eq(leadsTable.eventType, "telnyx_textback_sent"),
         gte(leadsTable.createdAt, since)
       )
@@ -153,10 +167,12 @@ async function hasRecentTextBack(phone: string): Promise<boolean> {
  * Fails gracefully — never throws.
  */
 async function sendTextBack(
-  to: string
+  to: string,
+  fromNumber = process.env.TELNYX_FROM_NUMBER ?? "+12512863200",
+  text = DEFAULT_TEXT_BACK_MESSAGE,
 ): Promise<{ ok: boolean; messageId?: string; error?: string }> {
   const apiKey = process.env.TELNYX_API_KEY;
-  const from   = process.env.TELNYX_FROM_NUMBER ?? "+12512863200";
+  const from   = fromNumber;
 
   if (!apiKey) {
     const msg = "TELNYX_API_KEY not set — cannot send text-back";
@@ -171,7 +187,7 @@ async function sendTextBack(
         "Content-Type":  "application/json",
         "Authorization": `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ from, to, text: TEXT_BACK_MESSAGE }),
+      body: JSON.stringify({ from, to, text }),
     });
 
     const json: any = await res.json().catch(() => ({}));
@@ -196,13 +212,20 @@ router.post("/telnyx/sms", async (req, res) => {
     const payload = body?.data?.payload ?? body?.payload ?? body;
 
     const from    = payload?.from?.phone_number ?? payload?.from ?? "";
+    const to      = payload?.to?.[0]?.phone_number ?? payload?.to?.phone_number ?? payload?.to ?? "";
     const text    = (payload?.text ?? payload?.body ?? "").trim();
     const msgId   = payload?.id ?? payload?.message_id ?? undefined;
+    const endpoint = await resolveCommunicationEndpoint("telnyx", to);
+    if (!endpoint) {
+      res.status(200).json({ received: true, accepted: false, reason: "endpoint_not_resolved" });
+      return;
+    }
 
     console.log(`[TELNYX] Inbound SMS from ${from || "unknown"}: "${text.slice(0, 80)}"`);
 
     // Write to sms_conversations table
     await db.insert(smsConversationsTable).values({
+      clientId:       endpoint.clientId,
       customerNumber: from,
       direction:      "inbound",
       message:        text,
@@ -224,7 +247,8 @@ router.post("/telnyx/sms", async (req, res) => {
       console.log(`[TELNYX] Customer replied: ${digit} (${label}) from ${from || "unknown"}`);
 
       await db.insert(leadsTable).values({
-        clientName: getClientName(),
+        clientId:   endpoint.clientId,
+        clientName: endpoint.clientName,
         source:     "telnyx_sms_reply",
         phone:      from,
         message:    `Customer replied "${digit}" to text-back → ${label}`,
@@ -238,7 +262,8 @@ router.post("/telnyx/sms", async (req, res) => {
 
     // ── Generic inbound SMS (not a menu reply) ────────────────────────────────
     await intakeLead({
-      clientName: getClientName(),
+      clientId:   endpoint.clientId,
+      clientName: endpoint.clientName,
       source:     "telnyx_sms",
       phone:      from,
       message:    text,
@@ -263,6 +288,9 @@ router.post("/telnyx/webhook", async (req, res) => {
     const body      = req.body as any;
     const eventType = body?.data?.event_type ?? "";
     const payload   = body?.data?.payload ?? {};
+    const destination = payload?.to?.[0]?.phone_number ?? payload?.to?.phone_number ?? payload?.to ?? "";
+    const endpoint = await resolveCommunicationEndpoint("telnyx", destination);
+    if (!endpoint && (eventType === "call.hangup" || eventType === "message.received")) return;
 
     // ── Missed call detection ─────────────────────────────────────────────────
     if (eventType === "call.hangup") {
@@ -275,13 +303,15 @@ router.post("/telnyx/webhook", async (req, res) => {
         (hangupCause === "NORMAL_CLEARING" && Number(duration) < 5);
 
       if (isMissed) {
+        if (!endpoint) return;
         console.log(`[TELNYX] Missed call detected from ${from || "unknown"} — cause: ${hangupCause}`);
 
         const since30m = new Date(Date.now() - 30 * 60 * 1000);
         const durNum   = Number(duration) || null;
 
         await db.insert(leadsTable).values({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "telnyx_missed_call",
           phone:      from,
           message:    `Missed call — hangup cause: ${hangupCause}`,
@@ -295,6 +325,7 @@ router.post("/telnyx/webhook", async (req, res) => {
           .where(
             and(
               eq(callsTable.callerNumber, from),
+              eq(callsTable.clientId, endpoint.clientId),
               eq(callsTable.callType, "incoming"),
               gte(callsTable.createdAt, since30m),
             )
@@ -304,8 +335,9 @@ router.post("/telnyx/webhook", async (req, res) => {
         // If no existing incoming record found, insert a standalone missed record
         if (updated.length === 0) {
           await db.insert(callsTable).values({
+            clientId:     endpoint.clientId,
             callerNumber: from,
-            calledNumber: process.env.TELNYX_FROM_NUMBER ?? "",
+            calledNumber: endpoint.e164Number,
             callType:     "missed",
             durationSecs: durNum,
             outcome:      "missed",
@@ -316,18 +348,21 @@ router.post("/telnyx/webhook", async (req, res) => {
         if (!from) {
           console.warn("[TELNYX] ⚠ Missed call has no caller ID — skipping text-back");
         } else {
-          const alreadySent = await hasRecentTextBack(from);
+          const alreadySent = await hasRecentTextBack(from, endpoint.clientId);
 
           if (alreadySent) {
             console.log(`[TELNYX] Text-back skipped — already sent to ${from} within ${TEXTBACK_DEDUP_MINUTES}m`);
           } else {
-            const result = await sendTextBack(from);
+            const cfg = await getClientSettings(endpoint.clientId);
+            const textBackMessage = cfg.callbackMessage || DEFAULT_TEXT_BACK_MESSAGE;
+            const result = await sendTextBack(from, endpoint.e164Number, textBackMessage);
 
             if (result.ok) {
               console.log(`[TELNYX] Text-back sent to ${from}${result.messageId ? ` (msgId: ${result.messageId})` : ""}`);
               await Promise.all([
                 db.insert(leadsTable).values({
-                  clientName: getClientName(),
+                  clientId:   endpoint.clientId,
+                  clientName: endpoint.clientName,
                   source:     "telnyx_textback",
                   phone:      from,
                   message:    `Text-back sent${result.messageId ? ` — message ID: ${result.messageId}` : ""}`,
@@ -335,9 +370,10 @@ router.post("/telnyx/webhook", async (req, res) => {
                   status:     "contacted",
                 }),
                 db.insert(smsConversationsTable).values({
+                  clientId:       endpoint.clientId,
                   customerNumber: from,
                   direction:      "outbound",
-                  message:        TEXT_BACK_MESSAGE,
+                  message:        textBackMessage,
                   messageId:      result.messageId ?? null,
                   status:         "sent",
                 }),
@@ -345,7 +381,8 @@ router.post("/telnyx/webhook", async (req, res) => {
             } else {
               console.error(`[TELNYX] Text-back failed to ${from} — ${result.error}`);
               await db.insert(leadsTable).values({
-                clientName: getClientName(),
+                clientId:   endpoint.clientId,
+                clientName: endpoint.clientName,
                 source:     "telnyx_textback",
                 phone:      from,
                 message:    `Text-back failed: ${result.error}`,
@@ -360,6 +397,7 @@ router.post("/telnyx/webhook", async (req, res) => {
 
     // ── Inbound message received via webhook ──────────────────────────────────
     if (eventType === "message.received") {
+      if (!endpoint) return;
       const from = payload?.from?.phone_number ?? payload?.from ?? "";
       const text = (payload?.text ?? "").trim();
       const msgId = payload?.id ?? body?.data?.id ?? undefined;
@@ -377,7 +415,8 @@ router.post("/telnyx/webhook", async (req, res) => {
         const { status, label } = replyMap[digit];
         console.log(`[TELNYX] Customer replied: ${digit} (${label}) from ${from || "unknown"}`);
         await db.insert(leadsTable).values({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "telnyx_sms_reply",
           phone:      from,
           message:    `Customer replied "${digit}" to text-back → ${label}`,
@@ -386,7 +425,8 @@ router.post("/telnyx/webhook", async (req, res) => {
         });
       } else {
         await intakeLead({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "telnyx_sms",
           phone:      from,
           message:    text,
@@ -402,8 +442,12 @@ router.post("/telnyx/webhook", async (req, res) => {
 
 // ── Textback stats endpoint ───────────────────────────────────────────────────
 
-router.get("/telnyx/textback-stats", async (_req, res) => {
+router.get("/telnyx/textback-stats", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   try {
+    const resolved = await resolveClientActiveCheck(userId);
+    if (!resolved.ok) { res.status(404).json({ error: "Client not found" }); return; }
     const rows = await db
       .select({
         eventType: leadsTable.eventType,
@@ -411,7 +455,7 @@ router.get("/telnyx/textback-stats", async (_req, res) => {
       })
       .from(leadsTable)
       .where(
-        sql`${leadsTable.eventType} IN (
+        and(eq(leadsTable.clientId, resolved.clientId), sql`(${leadsTable.eventType} IN (
           'telnyx_textback_sent',
           'telnyx_textback_failed',
           'telnyx_sms_reply',
@@ -420,7 +464,7 @@ router.get("/telnyx/textback-stats", async (_req, res) => {
           'quote_request',
           'appointment_request',
           'emergency_request'
-        )`
+        ))`)
       );
 
     let sent = 0, failed = 0, missedCalls = 0;
@@ -459,12 +503,19 @@ router.post("/telnyx/voice", async (req, res) => {
     const from    = body?.From ?? body?.from ?? body?.Caller ?? "";
     const to      = body?.To   ?? body?.to   ?? body?.Called  ?? process.env.TELNYX_FROM_NUMBER ?? "";
     const callSid = body?.CallSid ?? body?.call_sid ?? "";
+    const endpoint = await resolveTelnyxVoiceEndpoint(body);
+    if (!endpoint) {
+      res.set("Content-Type", "text/xml");
+      res.send(texml(`<Say voice="Polly.Joanna">We are unable to route this call. Please contact the business directly.</Say><Hangup/>`));
+      return;
+    }
 
     console.log(`[TELNYX] Incoming call from ${from || "unknown"} to ${to || "unknown"}`);
 
     await Promise.all([
       db.insert(leadsTable).values({
-        clientName: getClientName(),
+        clientId:   endpoint.clientId,
+        clientName: endpoint.clientName,
         source:     "telnyx_voice_call",
         phone:      from,
         message:    "Incoming voice call — awaiting menu selection",
@@ -472,6 +523,7 @@ router.post("/telnyx/voice", async (req, res) => {
         status:     "new",
       }),
       db.insert(callsTable).values({
+        clientId:     endpoint.clientId,
         callSid:      callSid || null,
         callerNumber: from,
         calledNumber: to,
@@ -483,7 +535,7 @@ router.post("/telnyx/voice", async (req, res) => {
     const gatherUrl = `${baseUrl(req)}/api/telnyx/voice/gather`;
 
     // Load settings from DB (5-min cache, falls back to defaults)
-    const cfg = await getClientSettings("default");
+    const cfg = await getClientSettings(endpoint.clientId);
     const defaultGreeting =
       `Hi, thank you for calling ${cfg.businessName}. ` +
       "To speak directly with us, press 1. " +
@@ -520,9 +572,15 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     const from    = body?.From ?? body?.from ?? body?.Caller ?? "";
     const callSid = body?.CallSid ?? body?.call_sid ?? "";
     const since5m = new Date(Date.now() - 5 * 60 * 1000);
+    const endpoint = await resolveTelnyxVoiceEndpoint(body);
+    if (!endpoint) {
+      res.set("Content-Type", "text/xml");
+      res.send(texml(`<Say voice="Polly.Joanna">We are unable to route this selection.</Say><Hangup/>`));
+      return;
+    }
 
     // Load settings (cached)
-    const cfg     = await getClientSettings("default");
+    const cfg     = await getClientSettings(endpoint.clientId);
     const forward = cfg.transferPhone;
 
     console.log(`[TELNYX] Menu selection: "${digit}" from ${from || "unknown"}`);
@@ -530,10 +588,15 @@ router.post("/telnyx/voice/gather", async (req, res) => {
     res.set("Content-Type", "text/xml");
 
     if (digit === "1") {
+      if (!forward) {
+        res.send(texml(`<Say voice="${cfg.voiceStyle}">Live transfer is not configured. Please choose the callback option or contact the business directly.</Say><Hangup/>`));
+        return;
+      }
       console.log(`[TELNYX] Transfer initiated to ${forward}`);
       await Promise.all([
         db.insert(leadsTable).values({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "telnyx_voice_call",
           phone:      from,
           message:    `Caller pressed 1 — live transfer initiated to ${forward}`,
@@ -546,6 +609,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           .where(
             and(
               eq(callsTable.callerNumber, from),
+              eq(callsTable.clientId, endpoint.clientId),
               eq(callsTable.callType, "incoming"),
               gte(callsTable.createdAt, since5m),
               ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
@@ -561,7 +625,8 @@ router.post("/telnyx/voice/gather", async (req, res) => {
       console.log(`[TELNYX] Callback request from ${from || "unknown"}`);
       await Promise.all([
         db.insert(leadsTable).values({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "telnyx_callback_request",
           phone:      from,
           message:    "Caller requested a callback via voice menu (pressed 2)",
@@ -573,6 +638,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           .where(
             and(
               eq(callsTable.callerNumber, from),
+              eq(callsTable.clientId, endpoint.clientId),
               eq(callsTable.callType, "incoming"),
               gte(callsTable.createdAt, since5m),
               ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
@@ -594,6 +660,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
         .where(
           and(
             eq(callsTable.callerNumber, from),
+            eq(callsTable.clientId, endpoint.clientId),
             eq(callsTable.callType, "incoming"),
             gte(callsTable.createdAt, since5m),
             ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
@@ -618,6 +685,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
       void Promise.all([
         // Outbound SMS conversation row
         db.insert(smsConversationsTable).values({
+          clientId:       endpoint.clientId,
           customerNumber: from,
           direction:      "outbound",
           message:        smsText,
@@ -627,7 +695,8 @@ router.post("/telnyx/voice/gather", async (req, res) => {
 
         // Lead row
         db.insert(leadsTable).values({
-          clientName: getClientName(),
+          clientId:   endpoint.clientId,
+          clientName: endpoint.clientName,
           source:     "text_routing",
           phone:      from,
           message:    `Caller pressed 4 — text routing SMS ${smsResult.ok ? "sent" : "failed"}: "${smsText.slice(0, 80)}"`,
@@ -641,6 +710,7 @@ router.post("/telnyx/voice/gather", async (req, res) => {
           .where(
             and(
               eq(callsTable.callerNumber, from),
+              eq(callsTable.clientId, endpoint.clientId),
               eq(callsTable.callType, "incoming"),
               gte(callsTable.createdAt, since5m),
               ...(callSid ? [eq(callsTable.callSid, callSid)] : []),
@@ -685,6 +755,13 @@ router.post("/telnyx/voice/recording", async (req, res) => {
     const from         = body?.From ?? body?.from ?? body?.Caller ?? "";
     const recordingUrl = body?.RecordingUrl ?? body?.recording_url ?? body?.recordingUrl ?? "";
     const duration     = body?.RecordingDuration ?? body?.duration ?? body?.recording_duration ?? "";
+    const endpoint = await resolveTelnyxVoiceEndpoint(body);
+    if (!endpoint) {
+      res.set("Content-Type", "text/xml");
+      res.send(texml(`<Hangup/>`));
+      return;
+    }
+    const cfg = await getClientSettings(endpoint.clientId);
 
     const durLabel = duration ? ` (${duration}s)` : "";
     const durSecs  = duration ? Number(duration) : null;
@@ -693,7 +770,8 @@ router.post("/telnyx/voice/recording", async (req, res) => {
     const since10m = new Date(Date.now() - 10 * 60 * 1000);
     await Promise.all([
       db.insert(leadsTable).values({
-        clientName: getClientName(),
+        clientId:   endpoint.clientId,
+        clientName: endpoint.clientName,
         source:     "telnyx_voicemail",
         phone:      from,
         message:    recordingUrl
@@ -707,16 +785,17 @@ router.post("/telnyx/voice/recording", async (req, res) => {
         .where(
           and(
             eq(callsTable.callerNumber, from),
+            eq(callsTable.clientId, endpoint.clientId),
             eq(callsTable.callType, "voicemail"),
             gte(callsTable.createdAt, since10m),
           )
         ),
     ]);
 
-    if (recordingUrl) {
-      const notifyTo  = process.env.BUSINESS_FORWARD_NUMBER ?? "+12513249090";
+    if (recordingUrl && cfg.transferPhone) {
+      const notifyTo  = cfg.transferPhone;
       const callerFmt = from || "unknown number";
-      const notifyMsg = `📬 New BB&B voicemail from ${callerFmt}${durLabel}.\nListen: ${recordingUrl}`;
+      const notifyMsg = `New ${cfg.businessName} voicemail from ${callerFmt}${durLabel}.\nListen: ${recordingUrl}`;
       const smsResult = await sendSms(notifyTo, notifyMsg);
       if (smsResult.ok) {
         console.log(`[TELNYX] Voicemail SMS alert sent to ${notifyTo} (${smsResult.messageId})`);
@@ -738,6 +817,14 @@ router.post("/telnyx/voice/recording", async (req, res) => {
 });
 
 // ── Test / dev endpoints ──────────────────────────────────────────────────────
+
+router.use(/^\/telnyx\/test-/, (req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+});
 
 router.post("/telnyx/test-sms", async (req, res) => {
   try {

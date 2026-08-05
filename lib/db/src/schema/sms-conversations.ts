@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const smsConversationsTable = pgTable("sms_conversations", {
   id:             uuid("id").primaryKey().defaultRandom(),
+  clientId:       uuid("client_id"),
   customerNumber: text("customer_number").notNull().default(""),
   direction:      text("direction").notNull().default("inbound"),
   message:        text("message").notNull().default(""),

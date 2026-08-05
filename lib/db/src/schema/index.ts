@@ -34,3 +34,5 @@ export * from "./competitors";
 
 // Phase C9R-6: tenant-safe review summaries
 export * from "./tenant-safe-reviews";
+export * from "./communication-endpoints";
+export * from "./customer-journey-events";

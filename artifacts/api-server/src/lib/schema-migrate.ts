@@ -1461,5 +1461,43 @@ export async function migrateSchema(): Promise<void> {
     await pool.query(stmt);
   }
 
+  // Tenant-owned communications and cross-channel journey foundations.
+  await pool.query(`
+    ALTER TABLE leads ADD COLUMN IF NOT EXISTS client_id UUID;
+    ALTER TABLE calls ADD COLUMN IF NOT EXISTS client_id UUID;
+    ALTER TABLE sms_conversations ADD COLUMN IF NOT EXISTS client_id UUID;
+
+    CREATE TABLE IF NOT EXISTS communication_endpoints (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      client_name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      e164_number TEXT NOT NULL,
+      purpose TEXT NOT NULL DEFAULT 'voice_sms',
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (provider, e164_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_journey_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      normalized_phone TEXT,
+      normalized_email TEXT,
+      canonical_record_type TEXT,
+      canonical_record_id TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      occurred_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS customer_journey_client_time_idx
+      ON customer_journey_events(client_id, occurred_at DESC);
+  `);
+
   console.log("[SCHEMA] Core schema migration complete");
 }

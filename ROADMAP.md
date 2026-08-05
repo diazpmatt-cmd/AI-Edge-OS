@@ -8,7 +8,8 @@ Last updated: 2026-08-05
 
 - [x] Connect approval-safe continuous weekly generation to the Content Autopilot control surface.
 - [x] Generate and attach one reusable square image to each autonomous social/GBP draft when Automatic Media is explicitly enabled.
-- [ ] Connect a production video renderer for YouTube MP4 generation. Scripts, metadata, upload validation, and thumbnail direction exist; no public OpenAI video-rendering API is currently wired.
+- [x] Connect a native production video renderer for approval-held YouTube MP4 generation using generated campaign artwork, OpenAI narration, FFmpeg motion/captions/branding, private storage, and in-page preview.
+- [ ] Add a separately controlled YouTube generation cadence after the first live video is reviewed; keep public publishing approval-gated.
 
 ---
 

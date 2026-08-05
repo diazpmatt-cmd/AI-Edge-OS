@@ -26,6 +26,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../lib/client-resolver.js";
 import { objectStorageClient } from "../lib/objectStorage.js";
+import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -2113,6 +2114,160 @@ router.get("/auto-content/generate-image/:id/signed-url", async (req, res): Prom
     console.error("[auto-content/signed-url] error:", signErr?.message);
     res.status(500).json({ error: "Failed to generate signed URL" });
   }
+});
+
+// ── Native slideshow video rendering ────────────────────────────────────────
+// Creates a branded 16:9 MP4 from an existing campaign image plus AI narration.
+// Interactive only for V1: autonomous video cadence remains a separate control.
+router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) {
+    const code = resolved.reason === "not_found" ? 404 : resolved.reason === "inactive" ? 403 : 503;
+    res.status(code).json({ error: "client_resolve_failed", reason: resolved.reason });
+    return;
+  }
+
+  const postId = typeof req.body?.postId === "string" ? req.body.postId : "";
+  if (!postId) { res.status(400).json({ error: "postId is required" }); return; }
+
+  const postResult = await pool.query<{
+    id: string; user_id: string; image_data: string | null; matched_image_url: string | null;
+    caption: string; caption_facebook: string | null; ai_topic: string | null;
+    cta_value: string | null; youtube_title: string | null;
+  }>(
+    `SELECT id, user_id, image_data, matched_image_url, caption, caption_facebook,
+            ai_topic, cta_value, youtube_title
+       FROM social_posts WHERE id = $1 LIMIT 1`,
+    [postId],
+  );
+  const post = postResult.rows[0];
+  if (!post) { res.status(404).json({ error: "Post not found" }); return; }
+  if (post.user_id !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const imagePath = post.image_data ?? post.matched_image_url;
+  if (!imagePath) {
+    res.status(422).json({ error: "campaign_image_required", message: "Generate or attach a campaign image before rendering video." });
+    return;
+  }
+
+  const idempotencyKey = typeof req.body?.idempotencyKey === "string" && req.body.idempotencyKey.trim()
+    ? req.body.idempotencyKey.trim().slice(0, 180)
+    : `${postId}-youtube-v1`;
+  const existing = await pool.query<{ id: string; status: string; storage_key: string | null; duration_seconds: number | null; updated_at: Date }>(
+    `SELECT id, status, storage_key, duration_seconds, updated_at
+       FROM content_video_generations
+      WHERE client_id = $1 AND idempotency_key = $2 LIMIT 1`,
+    [resolved.client.id, idempotencyKey],
+  );
+  if (existing.rows[0]?.status === "completed" && existing.rows[0].storage_key) {
+    res.json({
+      ok: true,
+      generationId: existing.rows[0].id,
+      videoPath: `/objects/${existing.rows[0].storage_key}`,
+      durationSeconds: existing.rows[0].duration_seconds,
+      idempotent: true,
+    });
+    return;
+  }
+  const pendingIsFresh = existing.rows[0]?.status === "pending"
+    && Date.now() - new Date(existing.rows[0].updated_at).getTime() < 5 * 60_000;
+  if (pendingIsFresh) {
+    res.status(202).json({ ok: false, generationId: existing.rows[0].id, status: "pending", idempotent: true });
+    return;
+  }
+
+  const generationId = existing.rows[0]?.id ?? randomUUID();
+  const narration = (post.caption_facebook ?? post.caption).replace(/\s+/g, " ").trim().slice(0, 1_400);
+  const title = (post.youtube_title?.trim() || `${post.ai_topic ?? "Local Pest Control"} | ${resolved.context.clientName}`).slice(0, 100);
+  const cta = (post.cta_value?.trim() || resolved.context.ctaText).slice(0, 160);
+
+  if (existing.rows[0]) {
+    await pool.query(
+      `UPDATE content_video_generations
+          SET status='pending', failure_reason=NULL, narration=$1, source_images=$2, updated_at=NOW()
+        WHERE id=$3`,
+      [narration, JSON.stringify([imagePath]), generationId],
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO content_video_generations
+        (id, client_id, user_id, post_id, narration, source_images, status, idempotency_key)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,'pending',$7)`,
+      [generationId, resolved.client.id, userId, postId, narration, JSON.stringify([imagePath]), idempotencyKey],
+    );
+  }
+
+  try {
+    const rendered = await renderNativeCampaignVideo({
+      generationId,
+      imagePath,
+      narration,
+      title,
+      clientName: resolved.context.clientName,
+      cta,
+      openAiBaseUrl: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      openAiApiKey: resolveOpenAiApiKey(),
+    });
+
+    await pool.query(
+      `UPDATE content_video_generations
+          SET status='completed', storage_key=$1, duration_seconds=$2,
+              completed_at=NOW(), updated_at=NOW()
+        WHERE id=$3`,
+      [rendered.storageKey, rendered.durationSeconds, generationId],
+    );
+    await pool.query(
+      `UPDATE social_posts
+          SET video_url=$1, youtube_title=$2, youtube_privacy='private',
+              media_filename=$3, media_mime_type='video/mp4', media_file_size=$4,
+              updated_at=NOW()
+        WHERE id=$5 AND user_id=$6`,
+      [rendered.videoPath, title, `youtube-${generationId}.mp4`, rendered.byteSize, postId, userId],
+    );
+
+    res.json({ ok: true, generationId, ...rendered });
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : String(error);
+    await pool.query(
+      `UPDATE content_video_generations
+          SET status='failed', failure_reason=$1, completed_at=NOW(), updated_at=NOW()
+        WHERE id=$2`,
+      [reason.slice(0, 500), generationId],
+    ).catch(() => {});
+    console.error("[auto-content/generate-video] render failed:", reason);
+    res.status(502).json({ error: "video_render_failed", message: "The native video could not be rendered. The draft and image were preserved." });
+  }
+});
+
+router.get("/auto-content/generate-video/:id/signed-url", async (req, res): Promise<void> => {
+  const { userId } = getAuth(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const resolved = await resolveClientContentContextFromDb(userId);
+  if (!resolved.found) { res.status(403).json({ error: "client_resolve_failed" }); return; }
+
+  const row = await pool.query<{ client_id: string; status: string; storage_key: string | null }>(
+    `SELECT client_id, status, storage_key FROM content_video_generations WHERE id=$1 LIMIT 1`,
+    [req.params.id],
+  );
+  const video = row.rows[0];
+  if (!video) { res.status(404).json({ error: "Generation not found" }); return; }
+  if (video.client_id !== resolved.client.id) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (video.status !== "completed" || !video.storage_key) {
+    res.status(409).json({ error: "Video not yet available", status: video.status });
+    return;
+  }
+
+  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  if (!privateDir) { res.status(500).json({ error: "Object storage not configured" }); return; }
+  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+  const objectPath = `${bucketPrefix ? `${bucketPrefix}/` : ""}${video.storage_key}`;
+  const [signedUrl] = await objectStorageClient.bucket(bucketName).file(objectPath).getSignedUrl({
+    version: "v4", action: "read", expires: Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000,
+  });
+  res.json({ ok: true, signedUrl, expiresIn: SIGNED_URL_EXPIRY_SECONDS });
 });
 
 export default router;

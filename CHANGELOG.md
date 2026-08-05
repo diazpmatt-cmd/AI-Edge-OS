@@ -6,6 +6,15 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Content Autopilot — Native YouTube Video Rendering
+
+- Added a provider-independent FFmpeg video renderer that turns approved campaign artwork into a 1280×720 H.264/AAC MP4 with OpenAI narration, gentle still-image motion, burned captions, campaign title, and closing call to action.
+- Generate YouTube source artwork with the existing automatic media workflow and start rendering after the YouTube draft is saved.
+- Added private object-storage persistence, tenant-bound generation records, idempotent retries, expiring preview links, visible render progress/errors, and an in-page video preview.
+- Preserve the source image and draft when narration or rendering fails, and recover render jobs left pending by an interrupted process.
+- Hold YouTube as a private draft and disable the publish action while rendering; native video generation never bypasses human approval.
+- Added FFmpeg and DejaVu fonts to the production runtime plus focused renderer, Docker, and approval-boundary tests.
+
 ### Content Autopilot — Approval-Safe Autonomous Media
 
 - Connected the Continuous Generation control to the existing tenant-safe weekly scheduler.

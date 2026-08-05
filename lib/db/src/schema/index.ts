@@ -36,3 +36,4 @@ export * from "./competitors";
 export * from "./tenant-safe-reviews";
 export * from "./communication-endpoints";
 export * from "./customer-journey-events";
+export * from "./content-video-generations";

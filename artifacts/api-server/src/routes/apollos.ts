@@ -1422,6 +1422,13 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
         command,
         plan,
         generationJobs,
+        executionContract: {
+          generation: "immediate",
+          approval: "required_after_complete_package",
+          scheduling: "atomic_after_approval",
+          publishing: "at_approved_schedule",
+          verification: "external_provider_receipt_required",
+        },
       });
       return;
     }
@@ -1434,6 +1441,13 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       command,
       plan,
       generationJobs,
+      executionContract: {
+        generation: "immediate",
+        approval: "required_after_complete_package",
+        scheduling: "atomic_after_approval",
+        publishing: "at_approved_schedule",
+        verification: "external_provider_receipt_required",
+      },
       approval: {
         endpoint: `/api/agent-tasks/${result.task.id}/approve`,
         rejectEndpoint: `/api/agent-tasks/${result.task.id}/reject`,

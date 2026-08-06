@@ -331,6 +331,18 @@ interface GeneratedDraft {
   imagePrompt: string | null;
 }
 
+function chicagoCalendarDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 async function runGenerationJob(
   taskId: string,
   userId: string,
@@ -377,8 +389,10 @@ async function runGenerationJob(
     image_recommendation: string | null;
     platforms: string;
     status: string;
+    scheduled_at: Date;
   }>(
-    `SELECT id, ai_topic, ai_city, image_recommendation, platforms, status
+    `SELECT id, ai_topic, ai_city, image_recommendation, platforms, status,
+            scheduled_at
        FROM social_posts
       WHERE user_id=$1 AND weekly_plan_id=$2
       ORDER BY scheduled_at ASC, created_at ASC`,
@@ -389,7 +403,8 @@ async function runGenerationJob(
       `APOLLOS_WEEKLY_DRAFT_COUNT_MISMATCH:${job.generatorPlatform}:${drafts.rows.length}:${job.count}`,
     );
   }
-  for (const draft of drafts.rows) {
+  for (let index = 0; index < drafts.rows.length; index += 1) {
+    const draft = drafts.rows[index]!;
     let boundPlatforms: unknown;
     try {
       boundPlatforms = JSON.parse(draft.platforms);
@@ -410,6 +425,14 @@ async function runGenerationJob(
     if (draft.status !== "draft") {
       throw new Error(
         `APOLLOS_WEEKLY_DRAFT_STATUS_MISMATCH:${job.generatorPlatform}`,
+      );
+    }
+    if (
+      chicagoCalendarDate(new Date(draft.scheduled_at)) !==
+      job.scheduleDates[index]
+    ) {
+      throw new Error(
+        `APOLLOS_WEEKLY_DRAFT_SCHEDULE_MISMATCH:${job.generatorPlatform}`,
       );
     }
   }
@@ -605,8 +628,9 @@ async function verifyCompletedCheckpointOutputs(
     id: string;
     platforms: string;
     status: string;
+    scheduled_at: Date;
   }>(
-    `SELECT id, platforms, status
+    `SELECT id, platforms, status, scheduled_at
        FROM social_posts
       WHERE user_id=$1 AND weekly_plan_id=$2
       ORDER BY scheduled_at ASC, created_at ASC`,
@@ -617,7 +641,8 @@ async function verifyCompletedCheckpointOutputs(
       `APOLLOS_WEEKLY_RESUME_DRAFT_COUNT_MISMATCH:${job.generatorPlatform}`,
     );
   }
-  for (const row of result.rows) {
+  for (let index = 0; index < result.rows.length; index += 1) {
+    const row = result.rows[index]!;
     let platforms: unknown;
     try {
       platforms = JSON.parse(row.platforms);
@@ -630,7 +655,9 @@ async function verifyCompletedCheckpointOutputs(
       row.status !== "draft" ||
       !Array.isArray(platforms) ||
       platforms.length !== 1 ||
-      platforms[0] !== job.generatorPlatform
+      platforms[0] !== job.generatorPlatform ||
+      chicagoCalendarDate(new Date(row.scheduled_at)) !==
+        job.scheduleDates[index]
     ) {
       throw new Error(
         `APOLLOS_WEEKLY_RESUME_DRAFT_BINDING_MISMATCH:${job.generatorPlatform}`,

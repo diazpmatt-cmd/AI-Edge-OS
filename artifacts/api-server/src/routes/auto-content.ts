@@ -2378,7 +2378,7 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
 
   const idempotencyKey = typeof req.body?.idempotencyKey === "string" && req.body.idempotencyKey.trim()
     ? req.body.idempotencyKey.trim().slice(0, 180)
-    : `${postId}-youtube-v1`;
+    : `${postId}-youtube-v2`;
   const existing = await pool.query<{ id: string; status: string; storage_key: string | null; duration_seconds: number | null; updated_at: Date }>(
     `SELECT id, status, storage_key, duration_seconds, updated_at
        FROM content_video_generations

@@ -31,6 +31,20 @@ export interface ApollosRepairAdapterRegistry {
   readonly decisions: readonly ApollosRepairAdapterDecision[];
 }
 
+export type ApollosRepairAdapterState = "ready" | "disabled" | "blocked";
+
+export interface ApollosRepairAdapterStatus {
+  readonly stepKey: string;
+  readonly effect: ApollosRepairEffect;
+  readonly state: ApollosRepairAdapterState;
+  readonly reasonCode: string;
+  readonly requiresApproval: boolean;
+  readonly handlerRegistered: boolean;
+  readonly maxDurationMs: number;
+  readonly enableEnvironmentVariable: string | null;
+  readonly killSwitchEnvironmentVariable: string;
+}
+
 const policy = (
   stepKey: string,
   effect: ApollosRepairEffect,
@@ -195,6 +209,47 @@ async function runWithTimeout(
     if (timer) clearTimeout(timer);
     context.signal.removeEventListener("abort", abort);
   }
+}
+
+export function buildApollosRepairAdapterStatus(
+  env: NodeJS.ProcessEnv,
+  registeredHandlerKeys: readonly string[],
+): readonly ApollosRepairAdapterStatus[] {
+  const handlers = new Set(registeredHandlerKeys);
+  return Object.freeze(
+    APOLLOS_REPAIR_ADAPTER_POLICIES.map((adapterPolicy) => {
+      const handlerRegistered = handlers.has(adapterPolicy.stepKey);
+      const killSwitchActive =
+        env[adapterPolicy.killSwitchEnvironmentVariable] === "true";
+      const adapterEnabled = enabled(adapterPolicy, env);
+      const state: ApollosRepairAdapterState = killSwitchActive
+        ? "blocked"
+        : !adapterEnabled
+          ? "disabled"
+          : !handlerRegistered
+            ? "blocked"
+            : "ready";
+      const reasonCode = killSwitchActive
+        ? "APOLLOS_REPAIR_ADAPTER_KILL_SWITCH"
+        : !adapterEnabled
+          ? "APOLLOS_REPAIR_ADAPTER_DISABLED"
+          : !handlerRegistered
+            ? "APOLLOS_REPAIR_ADAPTER_HANDLER_MISSING"
+            : "APOLLOS_REPAIR_ADAPTER_READY";
+      return Object.freeze({
+        stepKey: adapterPolicy.stepKey,
+        effect: adapterPolicy.effect,
+        state,
+        reasonCode,
+        requiresApproval: adapterPolicy.requiresApproval,
+        handlerRegistered,
+        maxDurationMs: adapterPolicy.maxDurationMs,
+        enableEnvironmentVariable: adapterPolicy.enableEnvironmentVariable,
+        killSwitchEnvironmentVariable:
+          adapterPolicy.killSwitchEnvironmentVariable,
+      });
+    }),
+  );
 }
 
 export function buildApollosRepairAdapterRegistry(input: {

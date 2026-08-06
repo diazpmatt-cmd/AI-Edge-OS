@@ -1288,6 +1288,13 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
 
   const command =
     typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  if (command.length > 1_000) {
+    res.status(413).json({
+      error: "APOLLOS_WEEKLY_COMMAND_TOO_LARGE",
+      maxCharacters: 1_000,
+    });
+    return;
+  }
   const commandRoute = routeApollosCommand(command);
   if (
     commandRoute.reasonCode ===
@@ -1326,6 +1333,27 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
     typeof req.body?.startDate === "string"
       ? req.body.startDate
       : nextMondayDate();
+  const startTime = Date.parse(`${startDate}T00:00:00.000Z`);
+  const today = new Date();
+  const todayTime = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate(),
+  );
+  const latestTime = todayTime + 180 * 24 * 60 * 60 * 1000;
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+    Number.isNaN(startTime) ||
+    startTime < todayTime ||
+    startTime > latestTime
+  ) {
+    res.status(422).json({
+      error: "APOLLOS_WEEKLY_START_DATE_OUT_OF_RANGE",
+      earliestStartDate: new Date(todayTime).toISOString().slice(0, 10),
+      latestStartDate: new Date(latestTime).toISOString().slice(0, 10),
+    });
+    return;
+  }
 
   try {
     const plan = buildWeeklyCampaignPlan({

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveApollosUpstreamProbeTarget } from "../lib/apollos-upstream-probe";
 
 describe("resolveApollosUpstreamProbeTarget", () => {
@@ -44,5 +44,55 @@ describe("resolveApollosUpstreamProbeTarget", () => {
       APOLLOS_REPAIR_UPSTREAM_ALLOWED_ORIGINS:
         "https://status.example.com",
     })).toBeNull();
+  });
+});
+
+describe("runApollosUpstreamHealthProbe", () => {
+  const env = {
+    APOLLOS_REPAIR_UPSTREAM_HEALTH_URL: "https://status.example.com/health",
+    APOLLOS_REPAIR_UPSTREAM_ALLOWED_ORIGINS: "https://status.example.com",
+  };
+
+  it("records a successful allowlisted probe without reading the body", async () => {
+    const body = vi.fn();
+    const fetcher = vi.fn(async () => ({
+      status: 200,
+      json: body,
+    })) as unknown as typeof fetch;
+    const { runApollosUpstreamHealthProbe } =
+      await import("../lib/apollos-upstream-probe");
+    const result = await runApollosUpstreamHealthProbe(
+      env,
+      new AbortController().signal,
+      fetcher,
+    );
+    expect(result.verified).toBe(true);
+    expect(result.evidence).toMatchObject({
+      configured: true,
+      hostname: "status.example.com",
+      status: 200,
+      redirected: false,
+    });
+    expect(body).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://status.example.com/health",
+      expect.objectContaining({ redirect: "manual", method: "GET" }),
+    );
+  });
+
+  it("does not follow or verify redirects", async () => {
+    const fetcher = vi.fn(async () => ({
+      status: 302,
+      headers: new Headers({ Location: "http://169.254.169.254/" }),
+    })) as unknown as typeof fetch;
+    const { runApollosUpstreamHealthProbe } =
+      await import("../lib/apollos-upstream-probe");
+    const result = await runApollosUpstreamHealthProbe(
+      env,
+      new AbortController().signal,
+      fetcher,
+    );
+    expect(result.verified).toBe(false);
+    expect(result.evidence.redirected).toBe(true);
   });
 });

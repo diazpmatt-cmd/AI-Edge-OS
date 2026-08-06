@@ -3,6 +3,7 @@ import { pool } from "@workspace/db";
 import { logger } from "./lib/logger.js";
 import { diagnoseApollosTask } from "./lib/apollos-diagnostics.js";
 import { buildApollosRepairPlan, type ApollosRepairPlan } from "./lib/apollos-repair-planner.js";
+import { runApollosUpstreamHealthProbe } from "./lib/apollos-upstream-probe.js";
 import { runApollosRepairPlan, type ApollosRepairAction } from "./lib/apollos-repair-runner.js";
 import type { ApollosRepairStepReceipt } from "./lib/apollos-repair-execution.js";
 import { readApollosRepairWorkerConfig } from "./lib/apollos-repair-worker-config.js";
@@ -364,6 +365,13 @@ function inspectionActions(
       },
     };
   };
+  const probeUpstream: ApollosRepairAction = async ({ stepKey, signal }) => {
+    const result = await runApollosUpstreamHealthProbe(process.env, signal);
+    return {
+      verified: result.verified,
+      evidence: { stepKey, ...result.evidence },
+    };
+  };
   const earliestFailure: ApollosRepairAction = async ({ stepKey }) => {
     const source = await readSource(sourceTaskId, userId);
     const failed = source.steps.find((item) => item.failure_code);
@@ -388,6 +396,7 @@ function inspectionActions(
     "collect-causal-evidence": earliestFailure,
     "inspect-lease-owner": inspectLease,
     "recover-expired-lease": recoverExpiredLease,
+    "probe-upstream-health": probeUpstream,
   });
 }
 

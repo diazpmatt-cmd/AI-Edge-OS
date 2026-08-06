@@ -413,6 +413,7 @@ export default function BBBContentAutopilotPage() {
   const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string; durationSeconds?: number }>>>({});
   const [videoRenderError, setVideoRenderError] = useState<string | null>(null);
   const [videoPreviewApproved, setVideoPreviewApproved] = useState(false);
+  const [videoPreviewRejected, setVideoPreviewRejected] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const [showCampaignHelp, setShowCampaignHelp] = useState(false);
   const [autoMediaEnabled, setAutoMediaEnabled] = useState(true);
@@ -526,10 +527,13 @@ export default function BBBContentAutopilotPage() {
   });
 
   const generateCampaignVideo = useMutation({
-    mutationFn: async (postId: string) => {
+    mutationFn: async ({ postId, force = false }: { postId: string; force?: boolean }) => {
       const rendered = await authFetch<{ generationId: string; videoPath: string; durationSeconds: number }>("/auto-content/generate-video", {
         method: "POST",
-        body: JSON.stringify({ postId }),
+        body: JSON.stringify({
+          postId,
+          ...(force && { idempotencyKey: `${postId}-youtube-revision-${Date.now()}` }),
+        }),
       });
       const preview = await authFetch<{ signedUrl: string }>(`/auto-content/generate-video/${rendered.generationId}/signed-url`);
       return { ...rendered, signedUrl: preview.signedUrl };
@@ -537,6 +541,7 @@ export default function BBBContentAutopilotPage() {
     onMutate: () => {
       setVideoRenderError(null);
       setVideoPreviewApproved(false);
+      setVideoPreviewRejected(false);
     },
     onSuccess: ({ generationId, videoPath, signedUrl, durationSeconds }) => {
       setGeneratedMedia(previous => ({
@@ -554,6 +559,7 @@ export default function BBBContentAutopilotPage() {
           },
         },
       }));
+      setVideoPreviewRejected(false);
       setActivityLog(previous => [{
         id: uid(), ts: nowTs(), platform: "youtube", action: "Native narrated video rendered — awaiting approval", status: "draft-saved",
       }, ...previous]);
@@ -717,7 +723,7 @@ export default function BBBContentAutopilotPage() {
         // Capture the UUID for later use in bulk-publish
         setSavedDraftIds(prev => new Map([...prev, [platform, row.id]]));
         if (platform === "youtube" && autoMediaEnabled) {
-          generateCampaignVideo.mutate(row.id);
+          generateCampaignVideo.mutate({ postId: row.id });
         }
       },
     });
@@ -1308,13 +1314,41 @@ export default function BBBContentAutopilotPage() {
                           <span>• Captions</span>
                           <span>• Official BB&B branding</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setVideoPreviewApproved(value => !value)}
-                          style={{ width: "100%", borderRadius: 8, padding: "9px 12px", fontWeight: 900, cursor: "pointer", color: videoPreviewApproved ? B.green : B.white, background: videoPreviewApproved ? "rgba(34,197,94,0.1)" : "rgba(167,139,250,0.15)", border: `1px solid ${videoPreviewApproved ? "rgba(34,197,94,0.45)" : "rgba(167,139,250,0.45)"}` }}
-                        >
-                          {videoPreviewApproved ? "✓ Video preview approved" : "Approve this video preview"}
-                        </button>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVideoPreviewApproved(true);
+                              setVideoPreviewRejected(false);
+                            }}
+                            style={{ borderRadius: 8, padding: "9px 12px", fontWeight: 900, cursor: "pointer", color: videoPreviewApproved ? B.green : B.white, background: videoPreviewApproved ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.15)", border: `1px solid ${videoPreviewApproved ? "rgba(34,197,94,0.6)" : "rgba(34,197,94,0.35)"}` }}
+                          >
+                            {videoPreviewApproved ? "✓ Video approved" : "Approve video"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVideoPreviewApproved(false);
+                              setVideoPreviewRejected(true);
+                            }}
+                            style={{ borderRadius: 8, padding: "9px 12px", fontWeight: 900, cursor: "pointer", color: videoPreviewRejected ? B.red : B.white, background: videoPreviewRejected ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.08)", border: `1px solid ${videoPreviewRejected ? "rgba(239,68,68,0.6)" : "rgba(239,68,68,0.3)"}` }}
+                          >
+                            {videoPreviewRejected ? "✕ Video rejected" : "Reject video"}
+                          </button>
+                        </div>
+                        {videoPreviewRejected && savedDraftIds.get("youtube") && (
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ color: B.red, fontSize: 10, marginBottom: 7 }}>Publishing is locked. Regenerate a revised video, preview it, then approve it.</div>
+                            <button
+                              type="button"
+                              onClick={() => generateCampaignVideo.mutate({ postId: savedDraftIds.get("youtube")!, force: true })}
+                              disabled={generateCampaignVideo.isPending}
+                              style={{ width: "100%", borderRadius: 8, padding: "9px 12px", fontWeight: 900, cursor: "pointer", color: B.purple, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.4)" }}
+                            >
+                              Regenerate revised video
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1340,7 +1374,7 @@ export default function BBBContentAutopilotPage() {
               {savedDraftIds.get("youtube") && (
                 <button
                   type="button"
-                  onClick={() => generateCampaignVideo.mutate(savedDraftIds.get("youtube")!)}
+                  onClick={() => generateCampaignVideo.mutate({ postId: savedDraftIds.get("youtube")!, force: true })}
                   disabled={generateCampaignVideo.isPending}
                   style={{ flexShrink: 0, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 8, padding: "7px 11px", color: B.white, fontWeight: 800, cursor: "pointer" }}
                 >

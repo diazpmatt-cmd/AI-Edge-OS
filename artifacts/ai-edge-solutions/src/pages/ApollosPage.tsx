@@ -55,6 +55,24 @@ interface RepairPlanSummary {
   }[];
 }
 
+interface WeeklyPackageStatus {
+  expectedDeliveries: number;
+  generatedDeliveries: number;
+  readyChannels: number;
+  totalChannels: number;
+  packageReady: boolean;
+  channels: {
+    platform: string;
+    expected: number;
+    generated: number;
+    mediaReady: number;
+    pendingReview: number;
+    scheduled: number;
+    rejected: number;
+    ready: boolean;
+  }[];
+}
+
 interface WeeklyApproval {
   taskId: string;
   startDate: string;
@@ -80,6 +98,7 @@ interface WeeklyApproval {
     verification: string[];
   } | null;
   repairPlan?: RepairPlanSummary | null;
+  packageStatus?: WeeklyPackageStatus | null;
 }
 
 interface Message {
@@ -497,6 +516,34 @@ function Bubble({
                     "✕ Weekly package rejected. Its drafts remain unpublished."}
                 </div>
               )}
+              {msg.weeklyApproval.packageStatus && (
+                <details style={{
+                  marginTop: 8, padding: 9, borderRadius: 7,
+                  background: "rgba(0,174,239,.06)",
+                  border: "1px solid rgba(0,174,239,.18)",
+                  color: B.silver, fontSize: 10,
+                }}>
+                  <summary style={{ cursor: "pointer", color: B.blue, fontWeight: 900 }}>
+                    🔎 Under the Hood · {msg.weeklyApproval.packageStatus.readyChannels}/{msg.weeklyApproval.packageStatus.totalChannels} channels ready · {msg.weeklyApproval.packageStatus.generatedDeliveries}/{msg.weeklyApproval.packageStatus.expectedDeliveries} deliveries
+                  </summary>
+                  <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+                    {msg.weeklyApproval.packageStatus.channels.map((channel) => (
+                      <div key={channel.platform} style={{
+                        display: "flex", justifyContent: "space-between", gap: 8,
+                        padding: "5px 7px", borderRadius: 5,
+                        background: channel.ready ? "rgba(34,197,94,.06)" : "rgba(251,191,36,.06)",
+                      }}>
+                        <strong style={{ textTransform: "capitalize" }}>{channel.platform}</strong>
+                        <span style={{ color: channel.ready ? B.green : B.gold }}>
+                          {channel.generated}/{channel.expected} drafts · {channel.mediaReady}/{channel.expected} media
+                          {channel.scheduled ? ` · ${channel.scheduled} scheduled` : ""}
+                          {channel.rejected ? ` · ${channel.rejected} rejected` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               {msg.weeklyApproval.status === "failed" && (
                 <div style={{ marginTop: 8, padding: 10, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
                   <strong style={{ color: "#F87171" }}>
@@ -768,7 +815,12 @@ export default function ApollosPage() {
       const results = await Promise.all(
         active.map(async (message) => {
           try {
-            const task = await apiFetch(`/agent-tasks/${message.weeklyApproval!.taskId}`) as {
+            const [task, packageStatus] = await Promise.all([
+              apiFetch(`/agent-tasks/${message.weeklyApproval!.taskId}`),
+              apiFetch(
+                `/agent-tasks/${message.weeklyApproval!.taskId}/weekly-package-status`,
+              ).catch(() => null),
+            ]) as [{
               status?: string;
               failureCode?: string | null;
               decisionNote?: string | null;
@@ -790,7 +842,7 @@ export default function ApollosPage() {
                 verification: string[];
               } | null;
               repairPlan?: RepairPlanSummary | null;
-            };
+            }, WeeklyPackageStatus | null];
             return {
               messageId: message.id,
               status: task.status,
@@ -801,6 +853,7 @@ export default function ApollosPage() {
               currentStep: task.progress?.currentStep ?? null,
               diagnosis: task.diagnosis ?? null,
               repairPlan: task.repairPlan ?? null,
+              packageStatus,
             };
           } catch {
             return {
@@ -813,6 +866,7 @@ export default function ApollosPage() {
               currentStep: undefined,
               diagnosis: null,
               repairPlan: null,
+              packageStatus: null,
             };
           }
         }),
@@ -830,7 +884,9 @@ export default function ApollosPage() {
             result?.totalSteps === message.weeklyApproval.totalSteps &&
             result?.currentStep === message.weeklyApproval.currentStep &&
             result?.diagnosis?.diagnosisId === message.weeklyApproval.diagnosis?.diagnosisId &&
-            result?.repairPlan?.planId === message.weeklyApproval.repairPlan?.planId
+            result?.repairPlan?.planId === message.weeklyApproval.repairPlan?.planId &&
+            result?.packageStatus?.generatedDeliveries === message.weeklyApproval.packageStatus?.generatedDeliveries &&
+            result?.packageStatus?.readyChannels === message.weeklyApproval.packageStatus?.readyChannels
           ) {
             return message;
           }
@@ -846,6 +902,7 @@ export default function ApollosPage() {
               currentStep: result?.currentStep,
               diagnosis: result?.diagnosis ?? null,
               repairPlan: result?.repairPlan ?? null,
+              packageStatus: result?.packageStatus ?? null,
             },
           };
         }),

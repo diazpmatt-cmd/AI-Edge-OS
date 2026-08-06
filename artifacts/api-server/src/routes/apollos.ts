@@ -1341,7 +1341,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
         userId,
         taskType: "weekly_campaign",
         payload: JSON.stringify({ batchKey, command, plan, generationJobs }),
-        status: "pending_review",
+        status: "generation_queued",
         decision: evaluation.decision,
         resolution: null,
         decisionBy: null,
@@ -1354,7 +1354,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
 
     res.status(201).json({
       status: "planned",
-      executionStatus: "awaiting_batch_approval",
+      executionStatus: "generating_drafts",
       duplicate: false,
       taskId: task.id,
       command,
@@ -1366,7 +1366,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
         ruleId: evaluation.ruleId,
       },
       nextAction:
-        "Review and approve this weekly batch. Draft and media execution remains blocked until approval.",
+        "Apollos is generating the platform-specific drafts and media. One approval will be requested after the complete weekly package is ready.",
     });
   } catch (error) {
     const code =

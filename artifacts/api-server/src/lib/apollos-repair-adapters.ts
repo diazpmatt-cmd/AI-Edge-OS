@@ -75,6 +75,7 @@ export const APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS = Object.freeze([
   "collect-causal-evidence",
   "inspect-lease-owner",
   "recover-expired-lease",
+  "probe-upstream-health",
 ] as const);
 
 export function assertApollosRepairHandlerContract(

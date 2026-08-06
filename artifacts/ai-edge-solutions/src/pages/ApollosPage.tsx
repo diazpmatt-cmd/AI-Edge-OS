@@ -25,7 +25,7 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type WeeklyApprovalStatus = "pending" | "approved" | "rejected";
+type WeeklyApprovalStatus = "pending" | "approved" | "executing" | "executed" | "failed" | "rejected";
 
 interface WeeklyApproval {
   taskId: string;
@@ -293,10 +293,25 @@ function Bubble({
                   >✕ Reject</button>
                 </div>
               ) : (
-                <div style={{ color: msg.weeklyApproval.status === "approved" ? B.green : "#F87171", fontWeight: 800 }}>
-                  {msg.weeklyApproval.status === "approved"
-                    ? "✓ Week approved — Apollos is generating the platform drafts."
-                    : "✕ Weekly campaign rejected. Nothing will be generated or published."}
+                <div style={{
+                  color:
+                    msg.weeklyApproval.status === "failed" || msg.weeklyApproval.status === "rejected"
+                      ? "#F87171"
+                      : msg.weeklyApproval.status === "executed"
+                        ? B.green
+                        : B.blue,
+                  fontWeight: 800,
+                }}>
+                  {msg.weeklyApproval.status === "approved" &&
+                    "✓ Week approved — waiting for the guarded worker."}
+                  {msg.weeklyApproval.status === "executing" &&
+                    "⚙ Apollos is generating the isolated platform drafts."}
+                  {msg.weeklyApproval.status === "executed" &&
+                    "✓ Drafts ready — review the complete weekly package before scheduling."}
+                  {msg.weeklyApproval.status === "failed" &&
+                    "⚠ Weekly generation stopped after bounded retries. Open Under the Hood for the exact failure."}
+                  {msg.weeklyApproval.status === "rejected" &&
+                    "✕ Weekly campaign rejected. Nothing will be generated or published."}
                 </div>
               )}
             </div>
@@ -331,6 +346,61 @@ export default function ApollosPage() {
   const micSupported     = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();
+
+  useEffect(() => {
+    const active = messages.filter(
+      (message) =>
+        message.weeklyApproval?.status === "approved" ||
+        message.weeklyApproval?.status === "executing",
+    );
+    if (active.length === 0) return;
+
+    let cancelled = false;
+    const refresh = async () => {
+      const results = await Promise.all(
+        active.map(async (message) => {
+          try {
+            const task = await apiFetch(`/agent-tasks/${message.weeklyApproval!.taskId}`) as {
+              status?: string;
+            };
+            return { messageId: message.id, status: task.status };
+          } catch {
+            return { messageId: message.id, status: undefined };
+          }
+        }),
+      );
+      if (cancelled) return;
+      setMessages((current) =>
+        current.map((message) => {
+          const result = results.find((item) => item.messageId === message.id);
+          const status = result?.status;
+          if (
+            !message.weeklyApproval ||
+            !["approved", "executing", "executed", "failed", "rejected"].includes(
+              status ?? "",
+            ) ||
+            status === message.weeklyApproval.status
+          ) {
+            return message;
+          }
+          return {
+            ...message,
+            weeklyApproval: {
+              ...message.weeklyApproval,
+              status: status as WeeklyApprovalStatus,
+            },
+          };
+        }),
+      );
+    };
+
+    void refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [apiFetch, messages]);
 
   // ── Live data queries ────────────────────────────────────────────────────────
   const ciQuery    = useCallIntelligenceQuery("30days", { retry: 1 });
@@ -710,13 +780,11 @@ export default function ApollosPage() {
           };
         };
         const status: WeeklyApprovalStatus =
-          data.executionStatus === "approved" ||
-          data.executionStatus === "executing" ||
-          data.executionStatus === "executed"
-            ? "approved"
-            : data.executionStatus === "rejected" || data.executionStatus === "failed"
-              ? "rejected"
-              : "pending";
+          ["approved", "executing", "executed", "failed", "rejected"].includes(
+            data.executionStatus,
+          )
+            ? data.executionStatus as WeeklyApprovalStatus
+            : "pending";
         setMessages(prev => [...prev, {
           id: uid(),
           role: "apollos",

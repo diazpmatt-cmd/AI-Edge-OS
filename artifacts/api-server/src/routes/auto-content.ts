@@ -34,6 +34,7 @@ import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
 import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";
 import {
   assertWeeklyGenerationContract,
+  findWeeklyGenerationJobForDraft,
   type WeeklyCampaignPlan,
   type WeeklyGenerationJob,
 } from "../lib/apollos-weekly-campaign.js";
@@ -53,6 +54,37 @@ function isValidSchedulerSecret(header: string | string[] | undefined): boolean 
 }
 
 const router = Router();
+
+type ApprovedWeeklyPayload = {
+  batchKey: string;
+  plan: WeeklyCampaignPlan;
+  generationJobs: readonly WeeklyGenerationJob[];
+};
+
+function parseApprovedWeeklyPayload(raw: unknown): ApprovedWeeklyPayload {
+  const payload =
+    typeof raw === "string" ? JSON.parse(raw) : raw as Record<string, unknown>;
+  if (
+    !payload ||
+    typeof payload.batchKey !== "string" ||
+    !payload.plan ||
+    !Array.isArray(payload.generationJobs)
+  ) {
+    throw new Error("APOLLOS_WEEKLY_TASK_PAYLOAD_INVALID");
+  }
+  const parsed = {
+    batchKey: payload.batchKey,
+    plan: payload.plan as WeeklyCampaignPlan,
+    generationJobs:
+      payload.generationJobs as readonly WeeklyGenerationJob[],
+  };
+  assertWeeklyGenerationContract(
+    parsed.batchKey,
+    parsed.plan,
+    parsed.generationJobs,
+  );
+  return parsed;
+}
 
 export function resolveOpenAiBaseUrl(): string {
   const configured = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim()
@@ -1853,6 +1885,7 @@ export function parseImageProviderFailure(status: number, rawBody: string): Imag
 //   [S14] DB commit
 
 router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
+  let approvedWeeklyPayload: ApprovedWeeklyPayload | null = null;
   // [S1] Authentication — Clerk for interactive generation, or the same
   // DB-verified scheduler settings boundary used by autonomous text generation.
   const isSchedulerCall = isValidSchedulerSecret(req.headers["x-scheduler-secret"]);
@@ -1862,7 +1895,10 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     const approvedTaskId = req.headers["x-apollos-task-id"] as string | undefined;
     if (approvedTaskId) {
       const [approvedTask] = await db
-        .select({ userId: agentTasksTable.userId })
+        .select({
+          userId: agentTasksTable.userId,
+          payload: agentTasksTable.payload,
+        })
         .from(agentTasksTable)
         .where(and(
           eq(agentTasksTable.id, approvedTaskId),
@@ -1872,6 +1908,16 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
         ));
       if (!approvedTask) {
         res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
+        return;
+      }
+      try {
+        approvedWeeklyPayload = parseApprovedWeeklyPayload(
+          approvedTask.payload,
+        );
+      } catch {
+        res.status(403).json({
+          error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+        });
         return;
       }
       userId = approvedTask.userId;
@@ -1927,17 +1973,61 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   // [T2] Post/draft ownership — if a postId is provided, verify it belongs to this user.
   // Must run BEFORE any provider interaction; provider is never called on 404/403.
   if (postId) {
-    const postRow = await pool.query<{ id: string; user_id: string }>(
-      `SELECT id, user_id FROM social_posts WHERE id = $1 LIMIT 1`,
+    const postRow = await pool.query<{
+      id: string;
+      user_id: string;
+      weekly_plan_id: string | null;
+      platforms: string;
+      status: string;
+    }>(
+      `SELECT id, user_id, weekly_plan_id, platforms, status
+         FROM social_posts WHERE id = $1 LIMIT 1`,
       [postId],
     );
     if (postRow.rows.length === 0) {
       res.status(404).json({ error: "Post not found" });
       return;
     }
-    if (postRow.rows[0]!.user_id !== userId) {
+    const post = postRow.rows[0]!;
+    if (post.user_id !== userId) {
       res.status(403).json({ error: "Forbidden: post does not belong to this user" });
       return;
+    }
+    if (approvedWeeklyPayload) {
+      try {
+        const draftPlatforms = JSON.parse(post.platforms) as unknown;
+        if (
+          post.status !== "draft" ||
+          typeof post.weekly_plan_id !== "string" ||
+          !Array.isArray(draftPlatforms) ||
+          draftPlatforms.length !== 1
+        ) {
+          throw new Error("APOLLOS_WEEKLY_IMAGE_DRAFT_INVALID");
+        }
+        const job = findWeeklyGenerationJobForDraft(
+          approvedWeeklyPayload.batchKey,
+          approvedWeeklyPayload.plan,
+          approvedWeeklyPayload.generationJobs,
+          {
+            weeklyPlanId: post.weekly_plan_id,
+            generatorPlatform:
+              draftPlatforms[0] as WeeklyGenerationJob["generatorPlatform"],
+          },
+        );
+        const expectedSize =
+          job.generatorPlatform === "youtube" ? "1536x1024" : "1024x1024";
+        if (
+          idempotencyKey !== `${job.jobKey}:${postId}:image-v1` ||
+          size !== expectedSize
+        ) {
+          throw new Error("APOLLOS_WEEKLY_IMAGE_REQUEST_MISMATCH");
+        }
+      } catch {
+        res.status(403).json({
+          error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+        });
+        return;
+      }
     }
   }
 

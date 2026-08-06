@@ -1,5 +1,4 @@
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
 import { socialPostsTable } from "@workspace/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Request, RequestHandler } from "express";
@@ -43,6 +42,7 @@ export const rejectPublishingPostMutation: RequestHandler = async (
   }
 
   try {
+    const { db } = await import("@workspace/db");
     const locked = await db
       .select({ id: socialPostsTable.id })
       .from(socialPostsTable)

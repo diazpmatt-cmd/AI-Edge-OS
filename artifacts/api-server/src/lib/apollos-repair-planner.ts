@@ -3,6 +3,7 @@ import type { ApollosDiagnosis } from "./apollos-diagnostics.js";
 
 export type ApollosRepairEffect =
   | "read_only"
+  | "checkpoint_resume"
   | "internal_change"
   | "deployment_change"
   | "credential_change"
@@ -59,7 +60,7 @@ const step = (
   capability,
   effect,
   executableByApollos,
-  requiresApproval: effect !== "read_only",
+  requiresApproval: effect !== "read_only" && effect !== "checkpoint_resume",
   verification,
 });
 
@@ -160,7 +161,7 @@ const TEMPLATES: Readonly<Record<string, Template>> = {
     approvalReason: null,
     steps: [
       inspect("inspect-lease-owner", "Inspect lease ownership", "Confirm whether the lease is active, expired, and uniquely owned.", "At most one live worker owns the checkpoint."),
-      step("recover-expired-lease", "Recover expired lease", "If and only if expired, reclaim the internal lease and skip completed checkpoints.", "prepare", "read_only", true, "The next incomplete checkpoint is selected without duplicating receipts."),
+      step("recover-expired-lease", "Recover expired lease", "If and only if expired, reclaim the internal lease and skip completed checkpoints.", "prepare", "checkpoint_resume", true, "The next incomplete checkpoint is selected without duplicating receipts."),
     ],
   },
   APOLLOS_ROOT_AUTHENTICATION_FAILED: {
@@ -189,7 +190,7 @@ const TEMPLATES: Readonly<Record<string, Template>> = {
     approvalReason: null,
     steps: [
       inspect("confirm-retry-window", "Confirm retry window", "Read the provider retry-after or cooldown value.", "The next eligible retry time is recorded."),
-      step("resume-after-cooldown", "Resume after cooldown", "After eligibility, resume exactly one failed checkpoint with bounded backoff.", "prepare", "read_only", true, "The provider returns success and no duplicate receipt is created."),
+      step("resume-after-cooldown", "Resume after cooldown", "After eligibility, resume exactly one failed checkpoint with bounded backoff.", "prepare", "checkpoint_resume", true, "The provider returns success and no duplicate receipt is created."),
     ],
   },
   APOLLOS_ROOT_UPSTREAM_UNREACHABLE: {
@@ -198,7 +199,7 @@ const TEMPLATES: Readonly<Record<string, Template>> = {
     approvalReason: null,
     steps: [
       inspect("probe-upstream-health", "Probe upstream health", "Check the upstream health endpoint, DNS, and container route.", "The expected upstream returns HTTP 200 and resolves correctly."),
-      step("retry-upstream-checkpoint", "Retry failed checkpoint", "Resume one failed checkpoint with bounded backoff.", "prepare", "read_only", true, "The checkpoint records a successful receipt."),
+      step("retry-upstream-checkpoint", "Retry failed checkpoint", "Resume one failed checkpoint with bounded backoff.", "prepare", "checkpoint_resume", true, "The checkpoint records a successful receipt."),
     ],
   },
 };
@@ -209,7 +210,7 @@ function deepFreezeSteps(inputs: readonly StepInput[]): readonly ApollosRepairSt
 
 function validateSafety(steps: readonly ApollosRepairStep[]): void {
   for (const item of steps) {
-    if (item.effect !== "read_only" && !item.requiresApproval) {
+    if (item.effect !== "read_only" && item.effect !== "checkpoint_resume" && !item.requiresApproval) {
       throw new Error(`Unsafe repair step ${item.key}: mutable effects require approval`);
     }
   }

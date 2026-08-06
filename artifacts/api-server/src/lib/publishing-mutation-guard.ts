@@ -1,4 +1,6 @@
 export const PUBLISHING_STATE_LOCKED_CODE = "PUBLISHING_STATE_LOCKED";
+export const VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE =
+  "VERIFIED_DELIVERY_RECEIPT_LOCKED";
 
 export const PUBLISHING_RESULT_STATUSES = [
   "publishing",
@@ -94,11 +96,42 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $delivery_function$
 BEGIN
-  IF OLD.status IN ('published', 'published_with_warning')
-     AND (
-       OLD.external_post_id IS NOT NULL
-       OR OLD.external_post_url IS NOT NULL
-     ) THEN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status IN (
+      'published',
+      'published_with_warning',
+      'idempotency_hit'
+    ) AND (
+      OLD.external_post_id IS NOT NULL
+      OR OLD.external_post_url IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '55000',
+        MESSAGE = '${VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE}',
+        DETAIL = 'A verified provider receipt cannot be deleted.';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF OLD.status IN (
+    'published',
+    'published_with_warning',
+    'idempotency_hit'
+  ) AND (
+    OLD.external_post_id IS NOT NULL
+    OR OLD.external_post_url IS NOT NULL
+  ) THEN
+    IF NEW.post_id IS DISTINCT FROM OLD.post_id
+       OR NEW.user_id IS DISTINCT FROM OLD.user_id
+       OR NEW.platform IS DISTINCT FROM OLD.platform
+       OR NEW.attempt_number IS DISTINCT FROM OLD.attempt_number
+       OR NEW.attempt_id IS DISTINCT FROM OLD.attempt_id THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '55000',
+        MESSAGE = '${VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE}',
+        DETAIL = 'A verified provider receipt cannot be reassigned to another delivery identity.';
+    END IF;
+
     NEW.status := OLD.status;
     NEW.external_post_id := COALESCE(OLD.external_post_id, NEW.external_post_id);
     NEW.external_post_url := COALESCE(OLD.external_post_url, NEW.external_post_url);
@@ -204,19 +237,13 @@ BEGIN
           )
         )::integer,
         count(*) FILTER (
-          WHERE NOT (
-            latest.status IN ('failed', 'skipped', 'cancelled')
-            OR (
-              latest.status IN (
-                'published',
-                'published_with_warning',
-                'idempotency_hit'
-              )
-              AND (
-                latest.external_post_id IS NOT NULL
-                OR latest.external_post_url IS NOT NULL
-              )
-            )
+          WHERE latest.status NOT IN (
+            'failed',
+            'skipped',
+            'cancelled',
+            'published',
+            'published_with_warning',
+            'idempotency_hit'
           )
         )::integer,
         max(COALESCE(latest.published_at, latest.updated_at)) FILTER (
@@ -296,7 +323,7 @@ BEGIN
        AND NOT tgisinternal
   ) THEN
     EXECUTE 'CREATE TRIGGER trg_ai_edge_preserve_verified_delivery_receipt
-      BEFORE UPDATE ON platform_deliveries
+      BEFORE UPDATE OR DELETE ON platform_deliveries
       FOR EACH ROW
       EXECUTE FUNCTION ai_edge_preserve_verified_delivery_receipt()';
   END IF;

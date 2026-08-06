@@ -14,7 +14,10 @@ import { sendSms } from "./sms";
 import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
 import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
 import { publishingService, sanitizeError } from "./publishing-service.js";
-import { reconcileSchedulerPublishException } from "./scheduler-publish-recovery.js";
+import {
+  reconcileSchedulerPublishException,
+  SCHEDULER_RECOVERY_OWNED_POST_STATUSES,
+} from "./scheduler-publish-recovery.js";
 import {
   buildScheduledPreflightFailureMessage,
   isEarlyCanonicalPublishRejection,
@@ -193,7 +196,7 @@ export async function publishDuePosts(): Promise<void> {
           error: msg,
         });
 
-        await db
+        const transitioned = await db
           .update(socialPostsTable)
           .set({
             status:       recovery.status,
@@ -205,20 +208,35 @@ export async function publishDuePosts(): Promise<void> {
             and(
               eq(socialPostsTable.id, id),
               eq(socialPostsTable.userId, userId),
+              inArray(
+                socialPostsTable.status,
+                [...SCHEDULER_RECOVERY_OWNED_POST_STATUSES],
+              ),
             ),
-          );
+          )
+          .returning({ id: socialPostsTable.id });
 
-        logger.error(
-          {
-            postId: id,
-            publishStatus: recovery.status,
-            verifiedPublished: recovery.verifiedPublished,
-            terminalFailures: recovery.terminalFailures,
-            unresolved: recovery.unresolved,
-            expectedPlatforms: recovery.expectedPlatforms,
-          },
-          "[scheduler] publish exception reconciled from delivery ledger",
-        );
+        if (transitioned.length === 1) {
+          logger.error(
+            {
+              postId: id,
+              publishStatus: recovery.status,
+              verifiedPublished: recovery.verifiedPublished,
+              terminalFailures: recovery.terminalFailures,
+              unresolved: recovery.unresolved,
+              expectedPlatforms: recovery.expectedPlatforms,
+            },
+            "[scheduler] publish exception reconciled from delivery ledger",
+          );
+        } else {
+          logger.info(
+            {
+              postId: id,
+              proposedStatus: recovery.status,
+            },
+            "[scheduler] delivery reconciliation lost scheduler-owned state — newer state preserved",
+          );
+        }
       } catch (recoveryError: unknown) {
         const recoveryMessage = sanitizeError(
           recoveryError instanceof Error

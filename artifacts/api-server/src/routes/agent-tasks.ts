@@ -19,6 +19,18 @@ import {
 
 const router = Router();
 
+function chicagoCalendarDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function repairDailyLimit(env: NodeJS.ProcessEnv): number {
   const parsed = Number(env.APOLLOS_REPAIR_DAILY_TENANT_LIMIT);
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50 ? parsed : 6;
@@ -90,6 +102,11 @@ export async function atomicApprove(
             weeklyPlanId: socialPostsTable.weeklyPlanId,
             status: socialPostsTable.status,
             approvalStatus: socialPostsTable.approvalStatus,
+            platforms: socialPostsTable.platforms,
+            scheduledAt: socialPostsTable.scheduledAt,
+            imageData: socialPostsTable.imageData,
+            videoUrl: socialPostsTable.videoUrl,
+            mediaMimeType: socialPostsTable.mediaMimeType,
           })
           .from(socialPostsTable)
           .where(
@@ -105,12 +122,41 @@ export async function atomicApprove(
               post.status !== "draft" ||
               post.approvalStatus !== "pending_review",
           ) ||
-          generationJobs.some(
-            (job) =>
-              posts.filter(
+          generationJobs.some((job) => {
+            const jobPosts = posts
+              .filter(
                 (post) => post.weeklyPlanId === job.weeklyPlanId,
-              ).length !== job.count,
-          )
+              )
+              .sort(
+                (left, right) =>
+                  new Date(left.scheduledAt!).getTime() -
+                  new Date(right.scheduledAt!).getTime(),
+              );
+            if (jobPosts.length !== job.count) return true;
+            return jobPosts.some((post, index) => {
+              let boundPlatforms: unknown;
+              try {
+                boundPlatforms = JSON.parse(post.platforms);
+              } catch {
+                return true;
+              }
+              const mediaValid =
+                job.generatorPlatform === "youtube"
+                  ? post.videoUrl?.startsWith("/objects/") &&
+                    post.mediaMimeType === "video/mp4"
+                  : post.imageData?.startsWith("/objects/") &&
+                    post.mediaMimeType === "image/png";
+              return (
+                !Array.isArray(boundPlatforms) ||
+                boundPlatforms.length !== 1 ||
+                boundPlatforms[0] !== job.generatorPlatform ||
+                !post.scheduledAt ||
+                chicagoCalendarDate(new Date(post.scheduledAt)) !==
+                  job.scheduleDates[index] ||
+                !mediaValid
+              );
+            });
+          })
         ) {
           throw new Error("APOLLOS_WEEKLY_APPROVAL_DRAFT_MISMATCH");
         }

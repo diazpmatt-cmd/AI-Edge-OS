@@ -52,6 +52,20 @@ describe("buildApollosRepairAdapterStatus", () => {
       });
   });
 
+  it("publishes expired-lease recovery as a bounded checkpoint resume", () => {
+    const status = buildApollosRepairAdapterStatus(
+      {},
+      [...APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS],
+    );
+    expect(status.find((item) => item.stepKey === "recover-expired-lease"))
+      .toMatchObject({
+        state: "ready",
+        reasonCode: "APOLLOS_REPAIR_ADAPTER_READY",
+        effect: "checkpoint_resume",
+        requiresApproval: false,
+      });
+  });
+
   it("distinguishes a missing handler from a disabled adapter", () => {
     const status = buildApollosRepairAdapterStatus(
       { APOLLOS_REPAIR_ADAPTER_UPSTREAM_PROBE_ENABLED: "true" },

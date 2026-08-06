@@ -74,6 +74,7 @@ export const APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS = Object.freeze([
   "find-earliest-failure",
   "collect-causal-evidence",
   "inspect-lease-owner",
+  "recover-expired-lease",
 ] as const);
 
 export function assertApollosRepairHandlerContract(
@@ -130,8 +131,7 @@ export const APOLLOS_REPAIR_ADAPTER_POLICIES: readonly ApollosRepairAdapterPolic
       "checkpoint_resume",
       ["APOLLOS_ROOT_EXECUTION_LEASE"],
       {
-        defaultEnabled: false,
-        enableEnvironmentVariable: "APOLLOS_REPAIR_ADAPTER_LEASE_RECOVERY_ENABLED",
+        defaultEnabled: true,
         requiresApproval: false,
         maxDurationMs: 15_000,
       },

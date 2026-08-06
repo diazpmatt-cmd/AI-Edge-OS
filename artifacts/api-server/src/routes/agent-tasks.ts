@@ -3,7 +3,7 @@ import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { agentTasksTable, agentTaskStepsTable } from "@workspace/db/schema";
 import type { AgentTask } from "@workspace/db/schema";
-import { eq, and, asc, desc, gte, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, inArray, sql } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 import { diagnoseApollosTask } from "../lib/apollos-diagnostics.js";
 import { buildApollosRepairPlan } from "../lib/apollos-repair-planner.js";
@@ -384,6 +384,26 @@ router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
         hashtext(${`apollos-repair:${userId}`})
       )`,
     );
+    const [existing] = await tx
+      .select()
+      .from(agentTasksTable)
+      .where(
+        and(
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.taskType, "execute_repair_plan"),
+          eq(agentTasksTable.payload, JSON.stringify(payload)),
+          inArray(agentTasksTable.status, [
+            "pending_review",
+            "approved",
+            "executing",
+            "executed",
+          ]),
+        ),
+      )
+      .orderBy(desc(agentTasksTable.createdAt))
+      .limit(1);
+    if (existing) return { task: existing, reused: true };
+
     const recent = await tx
       .select({ id: agentTasksTable.id })
       .from(agentTasksTable)
@@ -413,7 +433,7 @@ router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
       ruleId: evaluation.ruleId,
       ruleSetVersion: RULE_SET_VERSION,
     }).returning();
-    return inserted;
+    return { task: inserted, reused: false };
   });
   if (!repairTask) {
     return res.status(429).json({
@@ -425,9 +445,10 @@ router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
   }
 
   return res.status(201).json({
-    task: repairTask,
+    task: repairTask.task,
     repairPlan,
     approvalRequired: true,
+    reused: repairTask.reused,
   });
 });
 

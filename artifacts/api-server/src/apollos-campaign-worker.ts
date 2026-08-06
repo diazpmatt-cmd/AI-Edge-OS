@@ -266,9 +266,12 @@ async function completeCheckpoint(
             lease_expires_at=NULL,
             completed_at=now(),
             updated_at=now()
-      WHERE task_id=$1 AND step_key=$2 AND status='running'
+      WHERE task_id=$1
+        AND step_key=$2
+        AND status='running'
+        AND lease_owner=$4
       RETURNING id`,
-    [taskId, stepKey, JSON.stringify(receipt)],
+    [taskId, stepKey, JSON.stringify(receipt), runtimeId],
   );
   if (result.rowCount !== 1) {
     throw new Error(`APOLLOS_CHECKPOINT_COMPLETE_CONFLICT:${stepKey}`);
@@ -288,9 +291,12 @@ async function failCheckpoint(
             lease_expires_at=NULL,
             completed_at=now(),
             updated_at=now()
-      WHERE task_id=$1 AND step_key=$2 AND status='running'
+      WHERE task_id=$1
+        AND step_key=$2
+        AND status='running'
+        AND lease_owner=$4
       RETURNING id`,
-    [taskId, stepKey, failureCode.slice(0, 300)],
+    [taskId, stepKey, failureCode.slice(0, 300), runtimeId],
   );
   if (result.rowCount !== 1) {
     throw new Error(`APOLLOS_CHECKPOINT_FAIL_CONFLICT:${stepKey}`);

@@ -311,13 +311,19 @@ export function diagnoseApollosTask(
   const frozenEvidence = Object.freeze([...evidence]);
   const fingerprint = evidenceFingerprint(input.taskId, frozenEvidence);
   if (evidence.length === 0) {
-    const updatedAtMs = input.taskUpdatedAt
-      ? Date.parse(input.taskUpdatedAt)
-      : Number.NaN;
+    const heartbeatTimes = [
+      input.taskUpdatedAt,
+      ...input.steps.map((step) => step.updatedAt),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => Date.parse(value))
+      .filter(Number.isFinite);
+    const latestHeartbeatMs =
+      heartbeatTimes.length > 0 ? Math.max(...heartbeatTimes) : Number.NaN;
     const staleExecution =
       input.taskStatus === "executing" &&
-      Number.isFinite(updatedAtMs) &&
-      Date.now() - updatedAtMs >= 15 * 60 * 1000;
+      Number.isFinite(latestHeartbeatMs) &&
+      Date.now() - latestHeartbeatMs >= 15 * 60 * 1000;
     if (staleExecution) {
       const stalledEvidence = Object.freeze([
         Object.freeze({

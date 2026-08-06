@@ -206,33 +206,79 @@ export async function atomicReject(
   userId: string,
   note: string | null,
 ): Promise<RejectResult> {
-  const [updated] = await db
-    .update(agentTasksTable)
-    .set({
-      status:       "rejected",
-      resolution:   "rejected",
-      decisionBy:   userId,
-      decisionAt:   new Date(),
-      decisionNote: note,
-    })
-    .where(
-      and(
-        eq(agentTasksTable.id, taskId),
-        eq(agentTasksTable.userId, userId),
-        eq(agentTasksTable.status, "pending_review"),
-      ),
-    )
-    .returning();
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(agentTasksTable)
+      .set({
+        status:       "rejected",
+        resolution:   "rejected",
+        decisionBy:   userId,
+        decisionAt:   new Date(),
+        decisionNote: note,
+      })
+      .where(
+        and(
+          eq(agentTasksTable.id, taskId),
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.status, "pending_review"),
+        ),
+      )
+      .returning();
 
-  if (updated) return { task: updated };
+    if (updated) {
+      if (updated.taskType === "weekly_campaign") {
+        const payload =
+          typeof updated.payload === "string"
+            ? JSON.parse(updated.payload)
+            : updated.payload;
+        const batchKey = payload?.batchKey;
+        const plan = payload?.plan as WeeklyCampaignPlan;
+        const generationJobs =
+          payload?.generationJobs as readonly WeeklyGenerationJob[];
+        if (
+          typeof batchKey !== "string" ||
+          !plan ||
+          !Array.isArray(generationJobs)
+        ) {
+          throw new Error("APOLLOS_WEEKLY_REJECTION_PAYLOAD_INVALID");
+        }
+        assertWeeklyGenerationContract(batchKey, plan, generationJobs);
+        const weeklyPlanIds = generationJobs.map(
+          (job) => job.weeklyPlanId,
+        );
+        const rejectedAt = new Date();
+        const rejectedPosts = await tx
+          .update(socialPostsTable)
+          .set({
+            approvalStatus: "rejected",
+            approvedBy: userId,
+            approvedAt: rejectedAt,
+            updatedAt: rejectedAt,
+          })
+          .where(
+            and(
+              eq(socialPostsTable.userId, userId),
+              inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+              eq(socialPostsTable.status, "draft"),
+              eq(socialPostsTable.approvalStatus, "pending_review"),
+            ),
+          )
+          .returning({ id: socialPostsTable.id });
+        if (rejectedPosts.length !== plan.deliveryCount) {
+          throw new Error("APOLLOS_WEEKLY_REJECTION_UPDATE_MISMATCH");
+        }
+      }
+      return { task: updated };
+    }
 
-  const [probe] = await db
-    .select({ id: agentTasksTable.id, status: agentTasksTable.status })
-    .from(agentTasksTable)
-    .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
+    const [probe] = await tx
+      .select({ id: agentTasksTable.id, status: agentTasksTable.status })
+      .from(agentTasksTable)
+      .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
 
-  if (!probe) return { notFound: true };
-  return { conflict: probe.status };
+    if (!probe) return { notFound: true };
+    return { conflict: probe.status };
+  });
 }
 
 // ── POST /agent-tasks — submit a task for approval ────────────────────────────
@@ -624,7 +670,21 @@ router.post("/agent-tasks/:id/reject", async (req, res) => {
   const { note } = req.body as { note?: string };
   const parsedNote = typeof note === "string" ? note.trim() || null : null;
 
-  const result = await atomicReject(req.params.id, userId, parsedNote);
+  let result: RejectResult;
+  try {
+    result = await atomicReject(req.params.id, userId, parsedNote);
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      error.message.startsWith("APOLLOS_WEEKLY_")
+        ? error.message
+        : "APOLLOS_WEEKLY_REJECTION_FAILED";
+    return res.status(409).json({
+      error:
+        "The weekly package changed or is incomplete. Review the current package before rejecting it.",
+      code,
+    });
+  }
 
   if ("notFound" in result) {
     return res.status(404).json({ error: "Task not found" });

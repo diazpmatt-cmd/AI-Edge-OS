@@ -303,6 +303,15 @@ router.get("/dab/apollos-readiness", async (req, res) => {
       expectedCapability: "prepare",
     },
     {
+      id: "expanded-platforms",
+      route: routeApollosCommand(
+        "Prepare a week's content for Nextdoor, Yelp, and Thumbtack.",
+      ),
+      expectedOperation: "weekly_campaign",
+      expectedApprovalBoundary: "before_external_effect",
+      expectedCapability: "prepare",
+    },
+    {
       id: "diagnosis",
       route: routeApollosCommand("Diagnose why publishing failed."),
       expectedOperation: "system_diagnosis",

@@ -39,6 +39,7 @@ import { platformDeliveriesTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import type { PlatformDelivery } from "@workspace/db/schema";
 import { evaluateContentClaims } from "@workspace/db";
+import { parsePublishingPlatformBinding } from "./publishing-platform-binding.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,19 @@ export async function validatePreFlight(
   }
 
   // Platforms
-  const platforms: string[] = JSON.parse(post.platforms || "[]");
+  const platformBinding = parsePublishingPlatformBinding(post.platforms);
+  if (!platformBinding.ok) {
+    return {
+      approved,
+      platforms: [],
+      canProceed: false,
+      blockers: [
+        ...blockers,
+        `${platformBinding.code}: ${platformBinding.message}`,
+      ],
+    };
+  }
+  const platforms = [...platformBinding.platforms];
   if (platforms.length === 0) {
     blockers.push("No platforms selected");
   }
@@ -322,7 +335,14 @@ export class PublishingService {
     }
 
     // ── Step 3: Validate platforms ───────────────────────────────────────────
-    const platforms: string[] = JSON.parse(post.platforms || "[]");
+    const platformBinding = parsePublishingPlatformBinding(post.platforms);
+    if (!platformBinding.ok) {
+      return this.errorResult(
+        postId,
+        `${platformBinding.code}: ${platformBinding.message}`,
+      );
+    }
+    const platforms = [...platformBinding.platforms];
     if (platforms.length === 0) {
       return this.errorResult(postId, "No platforms selected on this post");
     }
@@ -574,14 +594,20 @@ export class PublishingService {
     if (!post) {
       return { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Source post not found", apiResponseStatus: null };
     }
-    let boundPlatforms: unknown;
-    try {
-      boundPlatforms = JSON.parse(post.platforms || "[]");
-    } catch {
-      return { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Source post platform binding is invalid", apiResponseStatus: null };
+    const platformBinding = parsePublishingPlatformBinding(post.platforms);
+    if (!platformBinding.ok) {
+      return {
+        platform: existing.platform,
+        deliveryId,
+        status: "failed",
+        externalPostId: null,
+        externalPostUrl: null,
+        errorMessage: `${platformBinding.code}: ${platformBinding.message}`,
+        apiResponseStatus: null,
+      };
     }
+    const boundPlatforms = platformBinding.platforms;
     if (
-      !Array.isArray(boundPlatforms) ||
       boundPlatforms.length !== 1 ||
       boundPlatforms[0] !== existing.platform
     ) {

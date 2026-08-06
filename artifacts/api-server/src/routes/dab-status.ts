@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import { classifyDabRuntimeStatus } from "../lib/dab-runtime-status";
 import { buildApollosCapabilities } from "../lib/apollos-capabilities";
+import { decideApollosCommand, routeApollosCommand } from "../lib/apollos-command-router";
 
 const router = Router();
 
@@ -196,8 +197,8 @@ router.get("/dab/agent-status", async (_req, res) => {
 });
 
 
-router.get("/dab/capabilities", (_req, res) => {
-  const capabilities = buildApollosCapabilities({
+function currentApollosCapabilities() {
+  return buildApollosCapabilities({
     agentWorkerEnabled: process.env.DAB_AGENT_WORKER_ENABLED === "true",
     agentProviderEnabled: process.env.DAB_AGENT_PROVIDER_ENABLED === "true",
     agentKillSwitch: process.env.DAB_AGENT_KILL_SWITCH !== "false",
@@ -214,7 +215,10 @@ router.get("/dab/capabilities", (_req, res) => {
       process.env.DAB_PUBLISHING_KILL_SWITCH !== "false",
     schedulerSecretPresent: Boolean(process.env.SCHEDULER_SECRET),
   });
+}
 
+router.get("/dab/capabilities", (_req, res) => {
+  const capabilities = currentApollosCapabilities();
   const counts = capabilities.reduce(
     (summary, item) => {
       summary[item.state] += 1;
@@ -237,6 +241,29 @@ router.get("/dab/capabilities", (_req, res) => {
             : "disabled",
     counts,
     capabilities,
+  });
+});
+
+router.post("/dab/capabilities/resolve", (req, res) => {
+  const command =
+    typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  if (!command) {
+    res.status(400).json({
+      error: "APOLLOS_COMMAND_REQUIRED",
+      message: "A non-empty command is required.",
+    });
+    return;
+  }
+
+  const route = routeApollosCommand(command);
+  const decision = decideApollosCommand(route, currentApollosCapabilities());
+  res.status(
+    decision.disposition === "clarification_required" ? 422 : 200,
+  ).json({
+    operator: "Apollos",
+    checkedAt: new Date().toISOString(),
+    command,
+    decision,
   });
 });
 

@@ -117,6 +117,22 @@ export function routeApollosCommand(command: string): ApollosCommandRoute {
     });
   }
 
+  // Advice stays advice even when its subject is content. Preparation requires
+  // an explicit creation verb; merely asking what to post is not permission to
+  // create, queue, or mutate anything.
+  if (hasRecommend && !hasCreate) {
+    return frozenRoute({
+      operation: "business_recommendation",
+      capability: "recommend",
+      confidence: "high",
+      approvalBoundary: "none",
+      requiresApprovalNow: false,
+      requestedExternalEffect: false,
+      reasonCode: "APOLLOS_ROUTE_RECOMMENDATION",
+      matchedSignals: signals,
+    });
+  }
+
   if (hasCreate || hasContent) {
     return frozenRoute({
       operation: "content_preparation",

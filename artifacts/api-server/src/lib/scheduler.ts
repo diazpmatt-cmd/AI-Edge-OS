@@ -15,6 +15,10 @@ import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
 import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
 import { publishingService, sanitizeError } from "./publishing-service.js";
 import { reconcileSchedulerPublishException } from "./scheduler-publish-recovery.js";
+import {
+  buildScheduledPreflightFailureMessage,
+  isEarlyCanonicalPublishRejection,
+} from "./publishing-preflight-policy.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
@@ -94,7 +98,42 @@ export async function publishDuePosts(): Promise<void> {
         SCHEDULER_SECRET,
       );
 
-      if (
+      if (isEarlyCanonicalPublishRejection(result)) {
+        const failureMessage = buildScheduledPreflightFailureMessage(
+          sanitizeError(result.summary),
+        );
+        const transitioned = await db
+          .update(socialPostsTable)
+          .set({
+            status: "failed",
+            errorMessage: failureMessage,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(socialPostsTable.id, id),
+              eq(socialPostsTable.userId, userId),
+              eq(socialPostsTable.status, "scheduled"),
+            ),
+          )
+          .returning({ id: socialPostsTable.id });
+
+        if (transitioned.length === 1) {
+          logger.error(
+            {
+              postId: id,
+              publishStatus: "failed",
+              summary: failureMessage,
+            },
+            "[scheduler] terminal publishing preflight rejection — future ticks stopped",
+          );
+        } else {
+          logger.info(
+            { postId: id, returnedStatus: result.postStatus },
+            "[scheduler] preflight rejection lost scheduled-state race — newer state preserved",
+          );
+        }
+      } else if (
         result.published > 0 &&
         result.failed === 0 &&
         result.skipped === 0

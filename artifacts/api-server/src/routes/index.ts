@@ -42,6 +42,7 @@ import dabStatusRouter from "./dab-status";
 import dabApprovalsRouter from "./dab-approvals";
 import dabPreparationsRouter from "./dab-preparations";
 import dabFirstPublishRouter from "./dab-first-publish";
+import leadEmailStatusRouter from "./lead-email-status";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,7 @@ router.use(dabStatusRouter);
 router.use(dabApprovalsRouter);
 router.use(dabPreparationsRouter);
 router.use(dabFirstPublishRouter);
+router.use(leadEmailStatusRouter);
 router.use(keywordsRouter);
 router.use(articlesRouter);
 router.use(articleAssetsRouter);

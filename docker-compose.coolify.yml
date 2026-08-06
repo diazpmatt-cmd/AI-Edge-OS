@@ -198,6 +198,49 @@ services:
       retries: 3
       start_period: 30s
 
+  lead-email-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - >-
+        if [ "$${LEAD_EMAIL_WORKER_ENABLED}" != "true" ]; then
+          echo "Lead email worker disabled";
+          exec sleep infinity;
+        fi;
+        exec node --enable-source-maps ./artifacts/api-server/dist/lead-email-worker.mjs
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      LEAD_EMAIL_WORKER_ENABLED: ${LEAD_EMAIL_WORKER_ENABLED:-false}
+      LEAD_EMAIL_RUN_ONCE: ${LEAD_EMAIL_RUN_ONCE:-false}
+      LEAD_EMAIL_POLL_MS: ${LEAD_EMAIL_POLL_MS:-300000}
+      LEAD_EMAIL_MAX_BACKOFF_MS: ${LEAD_EMAIL_MAX_BACKOFF_MS:-3600000}
+      LEAD_EMAIL_STALE_AFTER_MS: ${LEAD_EMAIL_STALE_AFTER_MS:-1200000}
+      GMAIL_REQUEST_TIMEOUT_MS: ${GMAIL_REQUEST_TIMEOUT_MS:-20000}
+      GMAIL_MAX_PAGES_PER_POLL: ${GMAIL_MAX_PAGES_PER_POLL:-10}
+      GMAIL_MAX_MESSAGE_TEXT_CHARS: ${GMAIL_MAX_MESSAGE_TEXT_CHARS:-100000}
+      GMAIL_CHECKPOINT_OVERLAP_MS: ${GMAIL_CHECKPOINT_OVERLAP_MS:-21600000}
+      GMAIL_USER_ID: ${GMAIL_USER_ID:-me}
+      GMAIL_LEAD_QUERY: ${GMAIL_LEAD_QUERY:-}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN:-}
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   web:
     build:
       context: .

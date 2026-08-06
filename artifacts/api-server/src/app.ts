@@ -31,16 +31,9 @@ const frontendDir = path.join(
   "public",
 );
 
-try {
-  await bootstrapPublishingMutationGuard();
-} catch (error) {
-  logger.error(
-    {
-      err: error instanceof Error ? error.message : String(error),
-    },
-    "[publishing-mutation-guard] database trigger bootstrap failed",
-  );
-}
+// Fail startup closed if PostgreSQL cannot install the atomic in-flight guard.
+// Serving without this trigger would reopen the approved-payload race.
+await bootstrapPublishingMutationGuard();
 
 const app: Express = express();
 

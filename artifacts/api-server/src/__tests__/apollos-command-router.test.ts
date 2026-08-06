@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeApollosCommand } from "../lib/apollos-command-router";
+import { decideApollosCommand, routeApollosCommand } from "../lib/apollos-command-router";
 
 describe("routeApollosCommand", () => {
   it("routes a one-command weekly campaign to preparation before approval", () => {
@@ -83,5 +83,89 @@ describe("routeApollosCommand", () => {
     "Schedule a 7-day campaign across all 4 platforms",
   ])("recognizes weekly command phrasing: %s", (command) => {
     expect(routeApollosCommand(command).operation).toBe("weekly_campaign");
+  });
+});
+
+
+describe("decideApollosCommand", () => {
+  const capabilities = [
+    { id: "diagnose" as const, state: "ready" as const, reasonCode: "DIAG_READY", detail: "Diagnostics ready." },
+    { id: "recommend" as const, state: "ready" as const, reasonCode: "REC_READY", detail: "Recommendations ready." },
+    { id: "prepare" as const, state: "ready" as const, reasonCode: "PREP_READY", detail: "Preparation ready." },
+    { id: "publish" as const, state: "ready" as const, reasonCode: "PUB_READY", detail: "Publishing ready." },
+  ];
+
+  it("allows a ready read-only diagnosis immediately", () => {
+    const decision = decideApollosCommand(
+      routeApollosCommand("Diagnose why the video failed"),
+      capabilities,
+    );
+    expect(decision).toMatchObject({
+      disposition: "ready",
+      executableNow: true,
+      capabilityState: "ready",
+      reasonCode: "APOLLOS_COMMAND_READY",
+    });
+  });
+
+  it("holds a ready external effect for approval", () => {
+    const decision = decideApollosCommand(
+      routeApollosCommand("Publish this Facebook post now"),
+      capabilities,
+    );
+    expect(decision).toMatchObject({
+      disposition: "approval_required",
+      executableNow: false,
+      capabilityState: "ready",
+      reasonCode: "APOLLOS_COMMAND_APPROVAL_REQUIRED",
+    });
+  });
+
+  it("returns the exact runtime blocker", () => {
+    const blocked = capabilities.map((item) =>
+      item.id === "prepare"
+        ? {
+            ...item,
+            state: "blocked" as const,
+            reasonCode: "APOLLOS_PREPARATION_KILL_SWITCH",
+            detail: "Preparation is blocked by its kill switch.",
+          }
+        : item,
+    );
+    const decision = decideApollosCommand(
+      routeApollosCommand("Create a Facebook campaign draft"),
+      blocked,
+    );
+    expect(decision).toMatchObject({
+      disposition: "capability_blocked",
+      executableNow: false,
+      capabilityState: "blocked",
+      reasonCode: "APOLLOS_PREPARATION_KILL_SWITCH",
+      detail: "Preparation is blocked by its kill switch.",
+    });
+  });
+
+  it("fails closed when the required capability is absent", () => {
+    const decision = decideApollosCommand(
+      routeApollosCommand("Publish this post"),
+      capabilities.filter((item) => item.id !== "publish"),
+    );
+    expect(decision).toMatchObject({
+      disposition: "capability_blocked",
+      executableNow: false,
+      capabilityState: "missing",
+      reasonCode: "APOLLOS_CAPABILITY_NOT_REGISTERED",
+    });
+  });
+
+  it("requires clarification before consulting runtime tools", () => {
+    const decision = decideApollosCommand(
+      routeApollosCommand("Do the thing"),
+      capabilities,
+    );
+    expect(decision).toMatchObject({
+      disposition: "clarification_required",
+      executableNow: false,
+    });
   });
 });

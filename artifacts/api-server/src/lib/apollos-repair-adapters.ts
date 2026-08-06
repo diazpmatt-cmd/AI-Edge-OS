@@ -222,6 +222,11 @@ export function buildApollosRepairAdapterRegistry(input: {
       !adapterPolicy.requiresApproval
     ) {
       reasonCode = "APOLLOS_REPAIR_ADAPTER_APPROVAL_POLICY_WEAK";
+    } else if (
+      adapterPolicy.requiresApproval &&
+      !step.requiresApproval
+    ) {
+      reasonCode = "APOLLOS_REPAIR_PLAN_APPROVAL_POLICY_WEAK";
     } else if (!enabled(adapterPolicy, input.env)) {
       reasonCode = "APOLLOS_REPAIR_ADAPTER_DISABLED";
     } else if (!input.handlers[step.key]) {

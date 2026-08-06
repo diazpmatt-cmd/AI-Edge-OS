@@ -110,6 +110,39 @@ interface RepairAdapterStatusResponse {
   adapters: RepairAdapterStatus[];
 }
 
+interface RepairHistoryResponse {
+  operator: "Apollos";
+  checkedAt: string;
+  count: number;
+  history: {
+    taskId: string;
+    sourceTaskId: string | null;
+    planId: string | null;
+    diagnosisId: string | null;
+    status: string;
+    failureCode: string | null;
+    failureDetail: string | null;
+    createdAt: string;
+    updatedAt: string;
+    steps: {
+      stepKey: string;
+      position: number;
+      capability: string;
+      status: string;
+      failureCode: string | null;
+      attempts: number;
+      maxAttempts: number;
+      receipt: {
+        status: "verified" | "failed" | null;
+        evidenceDigest: string | null;
+        completedAt: string | null;
+      } | null;
+      completedAt: string | null;
+      updatedAt: string;
+    }[];
+  }[];
+}
+
 // ── Static data ───────────────────────────────────────────────────────────────
 const OPENING_MESSAGE: Message = {
   id: "opening",
@@ -496,6 +529,15 @@ export default function ApollosPage() {
     retry: 1,
   });
   const repairAdapterStatus = repairAdaptersQuery.data;
+  const repairHistoryQuery = useQuery<RepairHistoryResponse>({
+    queryKey: ["apollos-repair-history"],
+    queryFn: () =>
+      apiFetch("/dab/repair-history") as Promise<RepairHistoryResponse>,
+    enabled: underHoodOpen,
+    refetchInterval: underHoodOpen ? 15_000 : false,
+    retry: 1,
+  });
+  const repairHistory = repairHistoryQuery.data;
 
   useEffect(() => {
     const active = messages.filter(
@@ -1672,17 +1714,99 @@ export default function ApollosPage() {
                     );
                   })}
                 </div>
+                <div style={{ marginTop: 11, paddingTop: 9, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+                  <div style={{ display: "flex", alignItems: "center", marginBottom: 7 }}>
+                    <span style={{ flex: 1, color: B.silver, fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".6px" }}>
+                      Recent repair attempts
+                    </span>
+                    {repairHistory && (
+                      <span style={{ color: B.dim, fontSize: 8 }}>{repairHistory.count}</span>
+                    )}
+                  </div>
+                  {repairHistoryQuery.isLoading ? (
+                    <div style={{ color: B.dim, fontSize: 9 }}>Reading receipts…</div>
+                  ) : repairHistoryQuery.isError ? (
+                    <div style={{ color: "#F87171", fontSize: 9 }}>Repair history unavailable.</div>
+                  ) : !repairHistory || repairHistory.history.length === 0 ? (
+                    <div style={{ color: B.dim, fontSize: 9, lineHeight: 1.4 }}>
+                      No repair attempts yet. Apollos has nothing to confess.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {repairHistory.history.slice(0, 5).map((task) => {
+                        const taskColor = task.status === "completed" || task.status === "succeeded"
+                          ? B.green
+                          : task.status === "failed"
+                            ? "#F87171"
+                            : task.status === "running"
+                              ? B.blue
+                              : B.gold;
+                        return (
+                          <details key={task.taskId} style={{
+                            padding: "7px 8px", borderRadius: 7,
+                            background: `${taskColor}08`,
+                            border: `1px solid ${taskColor}20`,
+                          }}>
+                            <summary style={{ cursor: "pointer", color: B.silver, fontSize: 9, fontWeight: 800 }}>
+                              <span style={{ color: taskColor }}>{task.status.replaceAll("_", " ")}</span>
+                              <span style={{ color: B.dim, fontWeight: 500 }}>
+                                {" · "}{new Date(task.updatedAt).toLocaleString()}
+                              </span>
+                            </summary>
+                            {task.failureCode && (
+                              <div style={{ marginTop: 5, color: "#F87171", fontSize: 8, lineHeight: 1.35 }}>
+                                {task.failureCode}
+                              </div>
+                            )}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                              {task.steps.map((step) => {
+                                const stepColor = step.status === "completed"
+                                  ? B.green
+                                  : step.status === "failed"
+                                    ? "#F87171"
+                                    : step.status === "running"
+                                      ? B.blue
+                                      : B.dim;
+                                return (
+                                  <div key={step.stepKey} style={{ paddingLeft: 7, borderLeft: `2px solid ${stepColor}55` }}>
+                                    <div style={{ color: B.silver, fontSize: 8.5 }}>
+                                      {step.position}. {step.stepKey.replaceAll("-", " ")}
+                                    </div>
+                                    <div style={{ color: stepColor, fontSize: 7.5, textTransform: "uppercase" }}>
+                                      {step.status} · attempt {step.attempts}/{step.maxAttempts}
+                                      {step.receipt?.status === "verified" ? " · receipt verified" : ""}
+                                    </div>
+                                    {step.failureCode && (
+                                      <div style={{ color: "#F87171", fontSize: 7.5 }}>{step.failureCode}</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div style={{ color: B.dim, fontSize: 7, marginTop: 6, wordBreak: "break-all" }}>
+                              Task {task.taskId}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <button
-                  onClick={() => repairAdaptersQuery.refetch()}
-                  disabled={repairAdaptersQuery.isFetching}
+                  onClick={() => {
+                    repairAdaptersQuery.refetch();
+                    repairHistoryQuery.refetch();
+                  }}
+                  disabled={repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching}
                   style={{
                     width: "100%", marginTop: 9, padding: "6px 8px",
                     background: "rgba(0,174,239,.07)", border: "1px solid rgba(0,174,239,.18)",
                     borderRadius: 7, color: B.blue, fontSize: 9.5, fontWeight: 800,
-                    cursor: repairAdaptersQuery.isFetching ? "wait" : "pointer",
+                    cursor: repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "wait" : "pointer",
                   }}
                 >
-                  {repairAdaptersQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
+                  {repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
                 </button>
               </>
             )}

@@ -6,6 +6,7 @@ import { buildApollosRepairPlan, type ApollosRepairPlan } from "./lib/apollos-re
 import { runApollosRepairPlan, type ApollosRepairAction } from "./lib/apollos-repair-runner.js";
 import type { ApollosRepairStepReceipt } from "./lib/apollos-repair-execution.js";
 import { readApollosRepairWorkerConfig } from "./lib/apollos-repair-worker-config.js";
+import { buildApollosRepairAdapterRegistry } from "./lib/apollos-repair-adapters.js";
 
 const config = readApollosRepairWorkerConfig(process.env);
 let stopped = false;
@@ -358,6 +359,22 @@ async function processOne(): Promise<void> {
 
     await ensureRepairSteps(task.id, plan);
     const receipts = await loadReceipts(task.id);
+    const adapterRegistry = buildApollosRepairAdapterRegistry({
+      plan,
+      handlers: inspectionActions(payload.sourceTaskId, task.user_id),
+      env: process.env,
+    });
+    logger.info(
+      {
+        repairTaskId: task.id,
+        adapters: adapterRegistry.decisions.map((item) => ({
+          stepKey: item.stepKey,
+          allowed: item.allowed,
+          reasonCode: item.reasonCode,
+        })),
+      },
+      "[apollos-repair] adapter permissions resolved",
+    );
     const controller = new AbortController();
     const result = await runApollosRepairPlan(
       {
@@ -370,7 +387,7 @@ async function processOne(): Promise<void> {
         signal: controller.signal,
       },
       {
-        actions: inspectionActions(payload.sourceTaskId, task.user_id),
+        actions: adapterRegistry.actions,
         readCurrentBinding: async () => {
           const current = await currentPlan(payload.sourceTaskId, task.user_id);
           return {

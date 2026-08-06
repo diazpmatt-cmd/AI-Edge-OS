@@ -274,6 +274,8 @@ router.get("/dab/repair-runtime", async (_req, res) => {
     running: string;
     completed: string;
     failed: string;
+    expired: string;
+    oldest_queued_at: Date | null;
     latest_activity_at: Date | null;
   }>(
     `SELECT
@@ -294,12 +296,34 @@ router.get("/dab/repair-runtime", async (_req, res) => {
          WHERE task_type='execute_repair_plan'
            AND status='failed'
        )::text AS failed,
+       count(*) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status='executing'
+           AND execution_started_at IS NOT NULL
+           AND execution_started_at < now() - ($1::text || ' milliseconds')::interval
+       )::text AS expired,
+       min(created_at) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status='approved'
+           AND resolution='approved'
+       ) AS oldest_queued_at,
        max(updated_at) FILTER (
          WHERE task_type='execute_repair_plan'
        ) AS latest_activity_at
      FROM agent_tasks`,
+    [config.leaseMs],
   );
   const counts = queue.rows[0];
+  const expiredClaims = Number(counts?.expired ?? 0);
+  const oldestQueuedAgeMs = counts?.oldest_queued_at
+    ? Math.max(0, Date.now() - counts.oldest_queued_at.getTime())
+    : null;
+  const backlogAfterMs = Math.min(
+    Math.max(config.intervalMs * 8, 300_000),
+    86_400_000,
+  );
+  const backlogStalled =
+    oldestQueuedAgeMs !== null && oldestQueuedAgeMs > backlogAfterMs;
   const staleAfterMs = Math.min(
     Math.max(config.intervalMs * 3, 60_000),
     86_400_000,
@@ -331,6 +355,8 @@ router.get("/dab/repair-runtime", async (_req, res) => {
         ? "uninitialized"
         : heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
           ? "degraded"
+          : expiredClaims > 0 || backlogStalled
+            ? "degraded"
           : heartbeat.state === "ready"
             ? "ready"
             : "degraded";
@@ -348,7 +374,11 @@ router.get("/dab/repair-runtime", async (_req, res) => {
             : status === "degraded"
               ? heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
                 ? "APOLLOS_REPAIR_HEARTBEAT_STALE"
-                : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
+                : expiredClaims > 0
+                  ? "APOLLOS_REPAIR_EXPIRED_CLAIM"
+                  : backlogStalled
+                    ? "APOLLOS_REPAIR_BACKLOG_STALLED"
+                    : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
               : "APOLLOS_REPAIR_WORKER_READY",
     enabled: config.enabled,
     killSwitch: config.killSwitch,
@@ -363,6 +393,9 @@ router.get("/dab/repair-runtime", async (_req, res) => {
       running: Number(counts?.running ?? 0),
       completed: Number(counts?.completed ?? 0),
       failed: Number(counts?.failed ?? 0),
+      expired: expiredClaims,
+      oldestQueuedAgeMs,
+      backlogAfterMs,
     },
     latestActivityAt: counts?.latest_activity_at?.toISOString() ?? null,
     staleAfterMs,

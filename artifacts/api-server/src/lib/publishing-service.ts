@@ -564,7 +564,40 @@ export class PublishingService {
       return { platform: existing.platform, deliveryId, status: "idempotency_hit", externalPostId: existing.externalPostId, externalPostUrl: existing.externalPostUrl, errorMessage: null, apiResponseStatus: null };
     }
 
-    // Delegate to publishPost (it handles attempt_number increment)
+    const [post] = await db
+      .select({ platforms: socialPostsTable.platforms })
+      .from(socialPostsTable)
+      .where(and(
+        eq(socialPostsTable.id, existing.postId),
+        eq(socialPostsTable.userId, userId),
+      ));
+    if (!post) {
+      return { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Source post not found", apiResponseStatus: null };
+    }
+    let boundPlatforms: unknown;
+    try {
+      boundPlatforms = JSON.parse(post.platforms || "[]");
+    } catch {
+      return { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Source post platform binding is invalid", apiResponseStatus: null };
+    }
+    if (
+      !Array.isArray(boundPlatforms) ||
+      boundPlatforms.length !== 1 ||
+      boundPlatforms[0] !== existing.platform
+    ) {
+      return {
+        platform: existing.platform,
+        deliveryId,
+        status: "failed",
+        externalPostId: null,
+        externalPostUrl: null,
+        errorMessage:
+          "Single-platform retry requires an isolated platform draft; successful platforms were not replayed",
+        apiResponseStatus: null,
+      };
+    }
+
+    // Isolated platform drafts can safely reuse the canonical publish pipeline.
     const result = await this.publishPost(existing.postId, userId, triggeredBy, internalBase, schedulerSecret);
     const deliveryResult = result.deliveries.find(d => d.platform === existing.platform);
     return deliveryResult ?? { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Retry failed — no result returned", apiResponseStatus: null };

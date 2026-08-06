@@ -1362,7 +1362,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       platforms: parseWeeklyCampaignPlatforms(command),
     });
     const batchKey =
-      `weekly:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
+      `weekly:v${plan.version}:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
     const generationJobs = buildWeeklyGenerationJobs(batchKey, plan);
 
     const evaluation = evaluateTask("weekly_campaign", {

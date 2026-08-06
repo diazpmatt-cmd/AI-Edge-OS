@@ -72,6 +72,18 @@ export async function migrateAgentTasks(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_agent_task_steps_lease
       ON agent_task_steps(status, lease_expires_at)
       WHERE status='running';
+
+    CREATE TABLE IF NOT EXISTS apollos_repair_worker_heartbeats (
+      runtime_id       TEXT        PRIMARY KEY,
+      observed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      state            TEXT        NOT NULL
+                                   CHECK (state IN ('ready','degraded','blocked','disabled')),
+      reason_code      TEXT        NOT NULL,
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_apollos_repair_heartbeats_observed
+      ON apollos_repair_worker_heartbeats(observed_at DESC);
   `);
 
   console.log("[AGENT-TASKS] Migration complete");

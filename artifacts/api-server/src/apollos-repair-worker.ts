@@ -575,8 +575,45 @@ async function processOne(): Promise<void> {
   }
 }
 
+async function ensureHeartbeatTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS apollos_repair_worker_heartbeats (
+      runtime_id  TEXT PRIMARY KEY,
+      observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      state       TEXT NOT NULL
+                  CHECK (state IN ('ready','degraded','blocked','disabled')),
+      reason_code TEXT NOT NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+async function recordHeartbeat(
+  state: "ready" | "degraded" | "blocked" | "disabled",
+  reasonCode: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO apollos_repair_worker_heartbeats
+       (runtime_id,observed_at,state,reason_code,updated_at)
+     VALUES ($1,now(),$2,$3,now())
+     ON CONFLICT (runtime_id) DO UPDATE
+       SET observed_at=EXCLUDED.observed_at,
+           state=EXCLUDED.state,
+           reason_code=EXCLUDED.reason_code,
+           updated_at=now()`,
+    [config.runtimeId, state, reasonCode],
+  );
+}
+
 async function main(): Promise<void> {
+  await ensureHeartbeatTable();
   if (!config.enabled || config.killSwitch) {
+    await recordHeartbeat(
+      config.enabled ? "blocked" : "disabled",
+      config.enabled
+        ? "APOLLOS_REPAIR_KILL_SWITCH"
+        : "APOLLOS_REPAIR_WORKER_DISABLED",
+    );
     logger.info(config, "[apollos-repair] disabled");
     return;
   }
@@ -592,7 +629,17 @@ async function main(): Promise<void> {
     try {
       await recoverExpiredClaims();
       await processOne();
+      await recordHeartbeat("ready", "APOLLOS_REPAIR_WORKER_READY");
     } catch (error) {
+      await recordHeartbeat(
+        "degraded",
+        "APOLLOS_REPAIR_WORKER_TICK_FAILED",
+      ).catch((heartbeatError) => {
+        logger.error(
+          { error: heartbeatError },
+          "[apollos-repair] heartbeat failed",
+        );
+      });
       logger.error({ error }, "[apollos-repair] tick failed closed");
     }
     await new Promise((resolve) => setTimeout(resolve, config.intervalMs));

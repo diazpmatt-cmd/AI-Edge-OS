@@ -373,8 +373,10 @@ async function runGenerationJob(
     ai_topic: string | null;
     ai_city: string | null;
     image_recommendation: string | null;
+    platforms: string;
+    status: string;
   }>(
-    `SELECT id, ai_topic, ai_city, image_recommendation
+    `SELECT id, ai_topic, ai_city, image_recommendation, platforms, status
        FROM social_posts
       WHERE user_id=$1 AND weekly_plan_id=$2
       ORDER BY scheduled_at ASC, created_at ASC`,
@@ -384,6 +386,30 @@ async function runGenerationJob(
     throw new Error(
       `APOLLOS_WEEKLY_DRAFT_COUNT_MISMATCH:${job.generatorPlatform}:${drafts.rows.length}:${job.count}`,
     );
+  }
+  for (const draft of drafts.rows) {
+    let boundPlatforms: unknown;
+    try {
+      boundPlatforms = JSON.parse(draft.platforms);
+    } catch {
+      throw new Error(
+        `APOLLOS_WEEKLY_DRAFT_PLATFORM_INVALID:${job.generatorPlatform}`,
+      );
+    }
+    if (
+      !Array.isArray(boundPlatforms) ||
+      boundPlatforms.length !== 1 ||
+      boundPlatforms[0] !== job.generatorPlatform
+    ) {
+      throw new Error(
+        `APOLLOS_WEEKLY_DRAFT_PLATFORM_MISMATCH:${job.generatorPlatform}`,
+      );
+    }
+    if (draft.status !== "draft") {
+      throw new Error(
+        `APOLLOS_WEEKLY_DRAFT_STATUS_MISMATCH:${job.generatorPlatform}`,
+      );
+    }
   }
 
   logger.info(

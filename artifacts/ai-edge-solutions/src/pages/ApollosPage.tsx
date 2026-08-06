@@ -153,6 +153,10 @@ interface RepairHistoryResponse {
     failureCode: string | null;
     failureDetail: string | null;
     createdAt: string;
+    approvedAt: string | null;
+    executionStartedAt: string | null;
+    executionCompletedAt: string | null;
+    executionAttempts: number;
     updatedAt: string;
     steps: {
       stepKey: string;
@@ -1923,6 +1927,13 @@ export default function ApollosPage() {
                                 {" · "}{new Date(task.updatedAt).toLocaleString()}
                               </span>
                             </summary>
+                            <div style={{ marginTop: 5, color: B.dim, fontSize: 7.5, lineHeight: 1.45 }}>
+                              Requested {new Date(task.createdAt).toLocaleString()}
+                              {task.approvedAt ? ` · approved ${new Date(task.approvedAt).toLocaleString()}` : ""}
+                              {task.executionStartedAt ? ` · started ${new Date(task.executionStartedAt).toLocaleString()}` : ""}
+                              {task.executionCompletedAt ? ` · completed ${new Date(task.executionCompletedAt).toLocaleString()}` : ""}
+                              {task.executionAttempts > 0 ? ` · ${task.executionAttempts} attempt${task.executionAttempts === 1 ? "" : "s"}` : ""}
+                            </div>
                             {task.failureCode && (
                               <div style={{ marginTop: 5, color: "#F87171", fontSize: 8, lineHeight: 1.35 }}>
                                 {task.failureCode}

@@ -1,9 +1,14 @@
 import { db, pool } from "@workspace/db";
-import { socialPostsTable } from "@workspace/db/schema";
+import { socialConnectionsTable, socialPostsTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { logger } from "./lib/logger.js";
 import { publishingService } from "./lib/publishing-service.js";
-import { readPublishingWorkerConfig, stablePublishPayloadHash, type Dab8aPlatform } from "./lib/dab-publishing-policy.js";
+import {
+  readPublishingWorkerConfig,
+  stablePublishPayloadHash,
+  validateBbbCaption,
+  type Dab8aPlatform,
+} from "./lib/dab-publishing-policy.js";
 import { SCHEDULER_SECRET } from "./lib/scheduler-secret.js";
 
 const config = readPublishingWorkerConfig();
@@ -82,8 +87,9 @@ function assertPublishingPreflight(
   ) {
     throw new Error("PREFLIGHT_APPROVAL_BINDING_MISMATCH");
   }
-  if (!post.caption?.trim()) {
-    throw new Error("PREFLIGHT_CAPTION_MISSING");
+  const caption = validateBbbCaption(post.caption);
+  if (!caption.ok) {
+    throw new Error(`PREFLIGHT_${caption.code}`);
   }
   if (!post.scheduledAt) {
     throw new Error("PREFLIGHT_SCHEDULE_MISSING");
@@ -119,6 +125,32 @@ function assertPublishingPreflight(
   }
 }
 
+async function assertConnectionPreflight(
+  userId: string,
+  platform: string,
+): Promise<void> {
+  const provider = platform === "google" ? "google_business" : platform;
+  const connection = await db
+    .select({
+      id: socialConnectionsTable.id,
+      expiresAt: socialConnectionsTable.expiresAt,
+    })
+    .from(socialConnectionsTable)
+    .where(
+      and(
+        eq(socialConnectionsTable.userId, userId),
+        eq(socialConnectionsTable.provider, provider),
+      ),
+    )
+    .then((rows) => rows[0]);
+  if (!connection) {
+    throw new Error("PREFLIGHT_PLATFORM_NOT_CONNECTED");
+  }
+  if (connection.expiresAt && connection.expiresAt <= new Date()) {
+    throw new Error("PREFLIGHT_PLATFORM_CONNECTION_EXPIRED");
+  }
+}
+
 async function processOne() {
   const execution = await claimOne();
   if (!execution) return;
@@ -128,6 +160,7 @@ async function processOne() {
       .then((rows) => rows[0]);
     if (!post) throw new Error("POST_NOT_FOUND");
     assertPublishingPreflight(post, execution);
+    await assertConnectionPreflight(execution.user_id, execution.platform);
     const currentHash = stablePublishPayloadHash({
       postId: post.id,
       userId: execution.user_id,

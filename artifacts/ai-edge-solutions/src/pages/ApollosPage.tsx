@@ -1942,8 +1942,10 @@ export default function ApollosPage() {
                             )}
                             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
                               {task.steps.map((step) => {
-                                const stepColor = step.status === "completed"
-                                  ? B.green
+                                const stepColor = step.receipt && !step.receipt.bindingVerified
+                                  ? "#F87171"
+                                  : step.status === "completed"
+                                    ? B.green
                                   : step.status === "failed"
                                     ? "#F87171"
                                     : step.status === "running"

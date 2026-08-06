@@ -154,6 +154,34 @@ describe("buildApollosRepairAdapterRegistry", () => {
       .toBe("APOLLOS_REPAIR_ADAPTER_APPROVAL_POLICY_WEAK");
   });
 
+  it("rejects a plan that weakens a production adapter approval gate", () => {
+    const renderer = plan("APOLLOS_ROOT_VIDEO_RENDERER_FAILED");
+    const forged = {
+      ...renderer,
+      steps: renderer.steps.map((step) =>
+        step.key === "prepare-renderer-fix"
+          ? { ...step, requiresApproval: false }
+          : step,
+      ),
+    };
+    const registry = buildApollosRepairAdapterRegistry({
+      plan: forged,
+      handlers: {
+        "prepare-renderer-fix": async () => ({
+          verified: true,
+          evidence: {},
+        }),
+      },
+      env: { APOLLOS_REPAIR_ADAPTER_RENDERER_CHANGE_ENABLED: "true" },
+    });
+    const decision = registry.decisions.find(
+      (item) => item.stepKey === "prepare-renderer-fix",
+    );
+    expect(decision?.reasonCode)
+      .toBe("APOLLOS_REPAIR_PLAN_APPROVAL_POLICY_WEAK");
+    expect(registry.actions["prepare-renderer-fix"]).toBeUndefined();
+  });
+
   it("aborts and rejects adapters that exceed their runtime ceiling", async () => {
     vi.useFakeTimers();
     try {

@@ -324,7 +324,40 @@ router.get("/dab/repair-history", async (req, res) => {
           maxAttempts: step.max_attempts,
           receipt:
             step.output_receipt && typeof step.output_receipt === "object"
-              ? step.output_receipt
+              ? (() => {
+                  const receipt = step.output_receipt as Record<string, unknown>;
+                  return {
+                    planId:
+                      typeof receipt.planId === "string" ? receipt.planId : null,
+                    diagnosisId:
+                      typeof receipt.diagnosisId === "string"
+                        ? receipt.diagnosisId
+                        : null,
+                    stepKey:
+                      typeof receipt.stepKey === "string"
+                        ? receipt.stepKey
+                        : step.step_key,
+                    status:
+                      receipt.status === "verified" || receipt.status === "failed"
+                        ? receipt.status
+                        : null,
+                    effect:
+                      typeof receipt.effect === "string" ? receipt.effect : null,
+                    verification:
+                      typeof receipt.verification === "string"
+                        ? receipt.verification
+                        : null,
+                    evidenceDigest:
+                      typeof receipt.evidenceDigest === "string" &&
+                      /^[a-f0-9]{64}$/.test(receipt.evidenceDigest)
+                        ? receipt.evidenceDigest
+                        : null,
+                    completedAt:
+                      typeof receipt.completedAt === "string"
+                        ? receipt.completedAt
+                        : null,
+                  };
+                })()
               : null,
           completedAt: step.completed_at?.toISOString() ?? null,
           updatedAt: step.updated_at.toISOString(),

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type WeeklyCampaignPlatform =
   | "facebook"
   | "instagram"
@@ -170,6 +172,7 @@ export function buildWeeklyCampaignPlan(input: {
 
 export interface WeeklyGenerationJob {
   readonly jobKey: string;
+  readonly planFingerprint: string;
   readonly platform: WeeklyCampaignPlatform;
   readonly generatorPlatform: "facebook" | "instagram" | "google" | "youtube";
   readonly count: number;
@@ -178,12 +181,41 @@ export interface WeeklyGenerationJob {
   readonly approvalMode: "approval_required";
 }
 
+export function fingerprintWeeklyCampaignPlan(
+  plan: WeeklyCampaignPlan,
+): string {
+  const canonical = JSON.stringify({
+    version: plan.version,
+    startDate: plan.startDate,
+    endDate: plan.endDate,
+    platforms: plan.platforms,
+    slots: plan.slots.map((slot) => ({
+      slotId: slot.slotId,
+      date: slot.date,
+      platform: slot.platform,
+      mediaType: slot.mediaType,
+      creativeGroup: slot.creativeGroup,
+      requiresApproval: slot.requiresApproval,
+    })),
+    deliveryCount: plan.deliveryCount,
+    approvalMode: plan.approvalMode,
+    publishMode: plan.publishMode,
+    safeguards: plan.safeguards,
+  });
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
 export function buildWeeklyGenerationJobs(
   batchKey: string,
   plan: WeeklyCampaignPlan,
 ): readonly WeeklyGenerationJob[] {
   if (typeof batchKey !== "string" || batchKey.trim().length < 8) {
     throw new Error("APOLLOS_WEEKLY_BATCH_KEY_INVALID");
+  }
+
+  const planFingerprint = fingerprintWeeklyCampaignPlan(plan);
+  if (!/^[a-f0-9]{64}$/.test(planFingerprint)) {
+    throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_INVALID");
   }
 
   const jobs = plan.platforms.map((platform) => {
@@ -198,6 +230,7 @@ export function buildWeeklyGenerationJobs(
     const stablePlatformKey = `${batchKey}:${platform}`;
     return Object.freeze({
       jobKey: stablePlatformKey,
+      planFingerprint,
       platform,
       generatorPlatform,
       count,
@@ -207,6 +240,9 @@ export function buildWeeklyGenerationJobs(
     });
   });
 
+  if (jobs.some((job) => job.planFingerprint !== planFingerprint)) {
+    throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_MISMATCH");
+  }
   if (jobs.length !== plan.platforms.length) {
     throw new Error("APOLLOS_WEEKLY_JOB_COUNT_MISMATCH");
   }

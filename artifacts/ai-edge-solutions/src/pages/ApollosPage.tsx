@@ -290,6 +290,12 @@ function Bubble({
               </div>
               {msg.weeklyApproval.status === "pending" ? (
                 <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+                  <a
+                    href="/admin/bbb-autopilot"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ background: "rgba(0,174,239,.14)", border: "1px solid rgba(0,174,239,.5)", color: B.blue, borderRadius: 9, padding: "9px 14px", fontWeight: 800, textDecoration: "none" }}
+                  >↗ Review Complete Package</a>
                   <button
                     disabled={actionBusy}
                     onClick={() => onWeeklyDecision(msg.id, msg.weeklyApproval!.taskId, "approve")}

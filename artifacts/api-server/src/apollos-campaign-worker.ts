@@ -56,7 +56,7 @@ async function recoverExpiredClaims() {
     `UPDATE agent_tasks
         SET status = CASE
               WHEN execution_attempts >= $1 THEN 'failed'
-              ELSE 'approved'
+              ELSE 'generation_queued'
             END,
             failure_code = CASE
               WHEN execution_attempts >= $1
@@ -84,8 +84,8 @@ async function claimOne() {
       `SELECT id, user_id, payload, execution_attempts
          FROM agent_tasks
         WHERE task_type='weekly_campaign'
-          AND status='approved'
-          AND resolution='approved'
+          AND status='generation_queued'
+          AND resolution IS NULL
           AND execution_attempts < $1
         ORDER BY decision_at ASC NULLS LAST, created_at ASC
         FOR UPDATE SKIP LOCKED
@@ -359,17 +359,17 @@ async function processOne() {
     }
     await pool.query(
       `UPDATE agent_tasks
-          SET status='executed',
+          SET status='pending_review',
               execution_completed_at=now(),
               failure_code=NULL,
-              decision_note='All platform generation jobs verified',
+              decision_note='All captions, images, and video verified; package ready for one approval',
               updated_at=now()
         WHERE id=$1 AND status='executing'`,
       [task.id],
     );
-    logger.info({ taskId: task.id }, "[apollos-campaign] weekly batch executed");
+    logger.info({ taskId: task.id }, "[apollos-campaign] weekly package ready for approval");
   } catch (error) {
-    const raw = error instanceof Error ? error.message : "APOLLOS_WEEKLY_EXECUTION_FAILED";
+    const raw = error instanceof Error ? error.message : "APOLLOS_WEEKLY_GENERATION_FAILED";
     const code = raw.replace(/Bearer\s+\S+/gi, "[REDACTED]").slice(0, 300);
     const terminal = task.execution_attempts >= maxAttempts;
     await pool.query(
@@ -382,14 +382,14 @@ async function processOne() {
         WHERE id=$1 AND status='executing'`,
       [
         task.id,
-        terminal ? "failed" : "approved",
+        terminal ? "failed" : "generation_queued",
         terminal ? "APOLLOS_WEEKLY_RETRIES_EXHAUSTED" : code,
-        terminal ? code : `Retry queued after: ${code}`,
+        terminal ? code : `Generation retry queued after: ${code}`,
       ],
     );
     logger.error(
       { taskId: task.id, code, terminal },
-      "[apollos-campaign] weekly batch failed closed",
+      "[apollos-campaign] weekly generation failed closed",
     );
   }
 }

@@ -360,26 +360,69 @@ router.get("/dab/repair-runtime", async (_req, res) => {
           : heartbeat.state === "ready"
             ? "ready"
             : "degraded";
+  const reasonCode =
+    status === "disabled"
+      ? "APOLLOS_REPAIR_WORKER_DISABLED"
+      : status === "blocked"
+        ? "APOLLOS_REPAIR_KILL_SWITCH"
+        : status === "uninitialized"
+          ? "APOLLOS_REPAIR_HEARTBEAT_MISSING"
+          : status === "degraded"
+            ? heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
+              ? "APOLLOS_REPAIR_HEARTBEAT_STALE"
+              : expiredClaims > 0
+                ? "APOLLOS_REPAIR_EXPIRED_CLAIM"
+                : backlogStalled
+                  ? "APOLLOS_REPAIR_BACKLOG_STALLED"
+                  : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
+            : "APOLLOS_REPAIR_WORKER_READY";
+  const remediationByReason: Record<
+    string,
+    { owner: string; nextStep: string }
+  > = {
+    APOLLOS_REPAIR_WORKER_DISABLED: {
+      owner: "deployment",
+      nextStep: "Enable APOLLOS_REPAIR_WORKER_ENABLED and redeploy.",
+    },
+    APOLLOS_REPAIR_KILL_SWITCH: {
+      owner: "operator",
+      nextStep: "Review the incident, then explicitly release APOLLOS_REPAIR_KILL_SWITCH.",
+    },
+    APOLLOS_REPAIR_HEARTBEAT_MISSING: {
+      owner: "deployment",
+      nextStep: "Confirm the repair-worker container is running and inspect its startup log.",
+    },
+    APOLLOS_REPAIR_HEARTBEAT_STALE: {
+      owner: "deployment",
+      nextStep: "Restart or redeploy the repair worker, then verify a fresh heartbeat.",
+    },
+    APOLLOS_REPAIR_EXPIRED_CLAIM: {
+      owner: "apollos",
+      nextStep: "Allow one worker cycle to recover the expired claim; inspect again if it remains.",
+    },
+    APOLLOS_REPAIR_BACKLOG_STALLED: {
+      owner: "apollos",
+      nextStep: "Verify worker heartbeat and kill switch, then inspect the oldest approved repair.",
+    },
+    APOLLOS_REPAIR_WORKER_TICK_FAILED: {
+      owner: "engineering",
+      nextStep: "Inspect the repair-worker tick error and the earliest failed checkpoint.",
+    },
+    APOLLOS_REPAIR_WORKER_READY: {
+      owner: "apollos",
+      nextStep: "No action required.",
+    },
+  };
+  const remediation = remediationByReason[reasonCode] ?? {
+    owner: "engineering",
+    nextStep: "Inspect the stable reason code and the latest tenant-scoped repair receipt.",
+  };
+
   res.json({
     operator: "Apollos",
     checkedAt,
     status,
-    reasonCode:
-      status === "disabled"
-        ? "APOLLOS_REPAIR_WORKER_DISABLED"
-        : status === "blocked"
-          ? "APOLLOS_REPAIR_KILL_SWITCH"
-          : status === "uninitialized"
-            ? "APOLLOS_REPAIR_HEARTBEAT_MISSING"
-            : status === "degraded"
-              ? heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
-                ? "APOLLOS_REPAIR_HEARTBEAT_STALE"
-                : expiredClaims > 0
-                  ? "APOLLOS_REPAIR_EXPIRED_CLAIM"
-                  : backlogStalled
-                    ? "APOLLOS_REPAIR_BACKLOG_STALLED"
-                    : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
-              : "APOLLOS_REPAIR_WORKER_READY",
+    reasonCode,
     enabled: config.enabled,
     killSwitch: config.killSwitch,
     runtimeId: config.runtimeId,
@@ -398,6 +441,7 @@ router.get("/dab/repair-runtime", async (_req, res) => {
       backlogAfterMs,
     },
     latestActivityAt: counts?.latest_activity_at?.toISOString() ?? null,
+    remediation,
     staleAfterMs,
     heartbeatAgeMs,
     latestHeartbeat: heartbeat

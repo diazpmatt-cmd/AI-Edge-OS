@@ -44,10 +44,12 @@ function getGcsWifClientConfiguration(
   environment: ObjectStorageEnvironment,
   fileExists: (path: string) => boolean,
 ) {
+  // GCS workload identity requires the external-account credential file.
+  // GOOGLE_API_CERTIFICATE_CONFIG is optional mTLS configuration and must not
+  // be required or inspected for normal OAuth/WIF clients.
   const requiredVariables = [
     "GOOGLE_CLOUD_PROJECT",
     "GOOGLE_APPLICATION_CREDENTIALS",
-    "GOOGLE_API_CERTIFICATE_CONFIG",
   ] as const;
   const missingVariables = requiredVariables.filter(
     (name) => !environment[name]?.trim(),
@@ -59,11 +61,8 @@ function getGcsWifClientConfiguration(
     );
   }
 
-  const credentialFiles = [
-    environment.GOOGLE_APPLICATION_CREDENTIALS!.trim(),
-    environment.GOOGLE_API_CERTIFICATE_CONFIG!.trim(),
-  ];
-  if (credentialFiles.some((path) => !fileExists(path))) {
+  const credentialFile = environment.GOOGLE_APPLICATION_CREDENTIALS!.trim();
+  if (!fileExists(credentialFile)) {
     throw new ObjectStorageConfigurationError(
       "Google Cloud keyless workload identity files are unavailable.",
     );

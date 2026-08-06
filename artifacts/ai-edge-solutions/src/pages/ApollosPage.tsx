@@ -119,6 +119,13 @@ interface ApollosReadinessResponse {
     status: "pass" | "warn" | "fail";
     reasonCode: string;
   }[];
+  commandSelfTest: {
+    id: string;
+    passed: boolean;
+    operation: string;
+    approvalBoundary: string;
+    reasonCode: string;
+  }[];
   capabilityCounts: {
     ready: number;
     degraded: number;
@@ -622,6 +629,7 @@ export default function ApollosPage() {
         ? {
             overallStatus: apollosReadiness.overallStatus,
             checks: apollosReadiness.checks,
+            commandSelfTest: apollosReadiness.commandSelfTest,
             capabilityCounts: apollosReadiness.capabilityCounts,
             adapterCounts: apollosReadiness.adapterCounts,
           }
@@ -1888,6 +1896,18 @@ export default function ApollosPage() {
                       <span>{check.reasonCode.replace("APOLLOS_", "").replaceAll("_", " ").toLowerCase()}</span>
                     </div>
                   ))}
+                  <details style={{ marginTop: 4 }}>
+                    <summary style={{ cursor: "pointer", color: B.blue, fontSize: 7.8, fontWeight: 800 }}>
+                      Command contract probes
+                    </summary>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+                      {apollosReadiness.commandSelfTest.map((probe) => (
+                        <div key={probe.id} style={{ color: probe.passed ? B.green : "#F87171", fontSize: 7.5 }}>
+                          {probe.passed ? "✓" : "✕"} {probe.id.replaceAll("-", " ")} · {probe.operation} · {probe.approvalBoundary.replaceAll("_", " ")}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
             </div>

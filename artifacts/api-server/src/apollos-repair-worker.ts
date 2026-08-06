@@ -575,6 +575,19 @@ async function processOne(): Promise<void> {
   }
 }
 
+async function ensureHeartbeatTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS apollos_repair_worker_heartbeats (
+      runtime_id  TEXT PRIMARY KEY,
+      observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      state       TEXT NOT NULL
+                  CHECK (state IN ('ready','degraded','blocked','disabled')),
+      reason_code TEXT NOT NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
 async function recordHeartbeat(
   state: "ready" | "degraded" | "blocked" | "disabled",
   reasonCode: string,
@@ -593,6 +606,7 @@ async function recordHeartbeat(
 }
 
 async function main(): Promise<void> {
+  await ensureHeartbeatTable();
   if (!config.enabled || config.killSwitch) {
     await recordHeartbeat(
       config.enabled ? "blocked" : "disabled",

@@ -82,29 +82,48 @@ const schedulerRecoverySql = SCHEDULER_AGGREGATE_RECOVERY_PREFIXES
   .join(" OR ");
 
 /**
- * PostgreSQL remains the final authority for the in-flight mutation freeze.
- * The API middleware provides friendly 409 responses, but this trigger closes
- * the check-then-write race and protects writes from every process and route.
- *
- * The legacy provider adapter computes an aggregate result before the canonical
- * PublishingService finalizes the post. Its premature transition is held at
- * `publishing` until the latest tenant-scoped attempt for every expected
- * platform is terminal in the durable delivery ledger. Scheduler exception
- * reconciliation retains a narrow actor-and-message-bound bypass.
+ * PostgreSQL is the final authority for immutable in-flight payloads, monotonic
+ * provider receipts, and aggregate status derived from the completed ledger.
  */
 export const PUBLISHING_MUTATION_GUARD_DDL = `
 BEGIN;
 SELECT pg_advisory_xact_lock(hashtext('ai_edge_publishing_mutation_guard_v1'));
 
+CREATE OR REPLACE FUNCTION ai_edge_preserve_verified_delivery_receipt()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $delivery_function$
+BEGIN
+  IF OLD.status IN ('published', 'published_with_warning')
+     AND (
+       OLD.external_post_id IS NOT NULL
+       OR OLD.external_post_url IS NOT NULL
+     ) THEN
+    NEW.status := OLD.status;
+    NEW.external_post_id := COALESCE(OLD.external_post_id, NEW.external_post_id);
+    NEW.external_post_url := COALESCE(OLD.external_post_url, NEW.external_post_url);
+    NEW.published_at := COALESCE(OLD.published_at, NEW.published_at);
+    NEW.failed_at := OLD.failed_at;
+    NEW.error_message := OLD.error_message;
+  END IF;
+
+  RETURN NEW;
+END;
+$delivery_function$;
+
 CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $function$
+AS $post_function$
 DECLARE
   expected_platforms text[] := ARRAY[]::text[];
   expected_platform_count integer := 0;
   latest_delivery_count integer := 0;
+  verified_published_count integer := 0;
+  warning_receipt_count integer := 0;
+  terminal_failure_count integer := 0;
   latest_unresolved_count integer := 0;
+  latest_published_at timestamptz := NULL;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     IF OLD.status = 'publishing' THEN
@@ -155,24 +174,76 @@ BEGIN
       SELECT
         count(*)::integer,
         count(*) FILTER (
+          WHERE latest.status IN (
+            'published',
+            'published_with_warning',
+            'idempotency_hit'
+          )
+          AND (
+            latest.external_post_id IS NOT NULL
+            OR latest.external_post_url IS NOT NULL
+          )
+        )::integer,
+        count(*) FILTER (
+          WHERE latest.status = 'published_with_warning'
+          AND (
+            latest.external_post_id IS NOT NULL
+            OR latest.external_post_url IS NOT NULL
+          )
+        )::integer,
+        count(*) FILTER (
+          WHERE latest.status IN ('failed', 'skipped', 'cancelled')
+          OR (
+            latest.status IN (
+              'published',
+              'published_with_warning',
+              'idempotency_hit'
+            )
+            AND latest.external_post_id IS NULL
+            AND latest.external_post_url IS NULL
+          )
+        )::integer,
+        count(*) FILTER (
           WHERE NOT (
             latest.status IN ('failed', 'skipped', 'cancelled')
             OR (
-              latest.status IN ('published', 'published_with_warning', 'idempotency_hit')
+              latest.status IN (
+                'published',
+                'published_with_warning',
+                'idempotency_hit'
+              )
               AND (
                 latest.external_post_id IS NOT NULL
                 OR latest.external_post_url IS NOT NULL
               )
             )
           )
-        )::integer
-      INTO latest_delivery_count, latest_unresolved_count
+        )::integer,
+        max(COALESCE(latest.published_at, latest.updated_at)) FILTER (
+          WHERE latest.status IN (
+            'published',
+            'published_with_warning',
+            'idempotency_hit'
+          )
+          AND (
+            latest.external_post_id IS NOT NULL
+            OR latest.external_post_url IS NOT NULL
+          )
+        )
+      INTO
+        latest_delivery_count,
+        verified_published_count,
+        warning_receipt_count,
+        terminal_failure_count,
+        latest_unresolved_count,
+        latest_published_at
       FROM (
         SELECT DISTINCT ON (platform)
           platform,
           status,
           external_post_id,
           external_post_url,
+          published_at,
           attempt_number,
           updated_at
         FROM platform_deliveries
@@ -186,22 +257,50 @@ BEGIN
         expected_platform_count = 0
         OR latest_delivery_count <> expected_platform_count
         OR latest_unresolved_count > 0
-      ) AND NOT (
-        COALESCE(OLD.published_by, '') = 'scheduler'
-        AND (${schedulerRecoverySql})
+        OR verified_published_count + terminal_failure_count
+          <> expected_platform_count
       ) THEN
-        NEW.status := OLD.status;
-        NEW.published_at := OLD.published_at;
+        IF NOT (
+          COALESCE(OLD.published_by, '') = 'scheduler'
+          AND (${schedulerRecoverySql})
+        ) THEN
+          NEW.status := OLD.status;
+          NEW.published_at := OLD.published_at;
+        END IF;
+      ELSIF verified_published_count = expected_platform_count
+            AND warning_receipt_count = 0 THEN
+        NEW.status := 'published';
+        NEW.published_at := latest_published_at;
+        NEW.error_message := NULL;
+      ELSIF verified_published_count > 0 THEN
+        NEW.status := 'published_with_warning';
+        NEW.published_at := latest_published_at;
+      ELSE
+        NEW.status := 'failed';
+        NEW.published_at := NULL;
       END IF;
     END IF;
   END IF;
 
   RETURN NEW;
 END;
-$function$;
+$post_function$;
 
-DO $trigger$
+DO $triggers$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_trigger
+     WHERE tgname = 'trg_ai_edge_preserve_verified_delivery_receipt'
+       AND tgrelid = 'platform_deliveries'::regclass
+       AND NOT tgisinternal
+  ) THEN
+    EXECUTE 'CREATE TRIGGER trg_ai_edge_preserve_verified_delivery_receipt
+      BEFORE UPDATE ON platform_deliveries
+      FOR EACH ROW
+      EXECUTE FUNCTION ai_edge_preserve_verified_delivery_receipt()';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
       FROM pg_trigger
@@ -215,7 +314,7 @@ BEGIN
       EXECUTE FUNCTION ai_edge_guard_publishing_post_mutation()';
   END IF;
 END;
-$trigger$;
+$triggers$;
 COMMIT;
 `;
 

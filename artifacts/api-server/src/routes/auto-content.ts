@@ -32,6 +32,11 @@ import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../
 import { objectStorageClient } from "../lib/objectStorage.js";
 import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
 import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";
+import {
+  assertWeeklyGenerationContract,
+  type WeeklyCampaignPlan,
+  type WeeklyGenerationJob,
+} from "../lib/apollos-weekly-campaign.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -502,7 +507,10 @@ router.post("/auto-content/generate", async (req, res) => {
     const approvedTaskId = req.headers["x-apollos-task-id"] as string | undefined;
     if (approvedTaskId) {
       const [approvedTask] = await db
-        .select({ userId: agentTasksTable.userId })
+        .select({
+          userId: agentTasksTable.userId,
+          payload: agentTasksTable.payload,
+        })
         .from(agentTasksTable)
         .where(and(
           eq(agentTasksTable.id, approvedTaskId),
@@ -514,6 +522,53 @@ router.post("/auto-content/generate", async (req, res) => {
         res.status(403).json({
           error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
           message: "The weekly campaign task is not approved for execution.",
+        });
+        return;
+      }
+
+      try {
+        const payload =
+          typeof approvedTask.payload === "string"
+            ? JSON.parse(approvedTask.payload)
+            : approvedTask.payload;
+        const batchKey = payload?.batchKey;
+        const plan = payload?.plan as WeeklyCampaignPlan;
+        const generationJobs =
+          payload?.generationJobs as readonly WeeklyGenerationJob[];
+        if (
+          typeof batchKey !== "string" ||
+          !plan ||
+          !Array.isArray(generationJobs)
+        ) {
+          throw new Error("APOLLOS_WEEKLY_TASK_PAYLOAD_INVALID");
+        }
+        assertWeeklyGenerationContract(batchKey, plan, generationJobs);
+
+        const requestedPlanId =
+          typeof req.body?.weeklyPlanId === "string"
+            ? req.body.weeklyPlanId
+            : "";
+        const requestedPlatforms = Array.isArray(req.body?.platforms)
+          ? req.body.platforms
+          : [];
+        const requestedCount = req.body?.count;
+        const boundJob = generationJobs.find(
+          (job) => job.weeklyPlanId === requestedPlanId,
+        );
+        if (
+          req.body?.schedulerMode !== "weekly_plan" ||
+          !boundJob ||
+          requestedPlatforms.length !== 1 ||
+          requestedPlatforms[0] !== boundJob.generatorPlatform ||
+          requestedCount !== boundJob.count
+        ) {
+          throw new Error("APOLLOS_WEEKLY_REQUEST_PAYLOAD_MISMATCH");
+        }
+      } catch {
+        res.status(403).json({
+          error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+          message:
+            "The generation request does not match the approved weekly campaign.",
         });
         return;
       }

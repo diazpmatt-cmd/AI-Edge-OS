@@ -2527,6 +2527,8 @@ export function buildSafeVideoNarration(opts: {
 // Creates a branded 16:9 MP4 from an existing campaign image plus AI narration.
 // Interactive only for V1: autonomous video cadence remains a separate control.
 router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
+  let approvedWeeklyPayload: ApprovedWeeklyPayload | null = null;
+  let boundWeeklyVideoJob: WeeklyGenerationJob | null = null;
   const isSchedulerCall = isValidSchedulerSecret(req.headers["x-scheduler-secret"]);
   const { userId: clerkUserId } = getAuth(req);
   let userId: string | null = clerkUserId ?? null;
@@ -2537,7 +2539,10 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       return;
     }
     const [approvedTask] = await db
-      .select({ userId: agentTasksTable.userId })
+      .select({
+        userId: agentTasksTable.userId,
+        payload: agentTasksTable.payload,
+      })
       .from(agentTasksTable)
       .where(and(
         eq(agentTasksTable.id, approvedTaskId),
@@ -2547,6 +2552,14 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       ));
     if (!approvedTask) {
       res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
+      return;
+    }
+    try {
+      approvedWeeklyPayload = parseApprovedWeeklyPayload(approvedTask.payload);
+    } catch {
+      res.status(403).json({
+        error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+      });
       return;
     }
     userId = approvedTask.userId;
@@ -2567,15 +2580,44 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
     id: string; user_id: string; image_data: string | null; matched_image_url: string | null;
     caption: string; caption_facebook: string | null; ai_topic: string | null;
     cta_value: string | null; youtube_title: string | null;
+    weekly_plan_id: string | null; platforms: string; status: string;
   }>(
     `SELECT id, user_id, image_data, matched_image_url, caption, caption_facebook,
-            ai_topic, cta_value, youtube_title
+            ai_topic, cta_value, youtube_title, weekly_plan_id, platforms, status
        FROM social_posts WHERE id = $1 LIMIT 1`,
     [postId],
   );
   const post = postResult.rows[0];
   if (!post) { res.status(404).json({ error: "Post not found" }); return; }
   if (post.user_id !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (approvedWeeklyPayload) {
+    try {
+      const draftPlatforms = JSON.parse(post.platforms) as unknown;
+      if (
+        post.status !== "draft" ||
+        typeof post.weekly_plan_id !== "string" ||
+        !Array.isArray(draftPlatforms) ||
+        draftPlatforms.length !== 1 ||
+        draftPlatforms[0] !== "youtube"
+      ) {
+        throw new Error("APOLLOS_WEEKLY_VIDEO_DRAFT_INVALID");
+      }
+      boundWeeklyVideoJob = findWeeklyGenerationJobForDraft(
+        approvedWeeklyPayload.batchKey,
+        approvedWeeklyPayload.plan,
+        approvedWeeklyPayload.generationJobs,
+        {
+          weeklyPlanId: post.weekly_plan_id,
+          generatorPlatform: "youtube",
+        },
+      );
+    } catch {
+      res.status(403).json({
+        error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+      });
+      return;
+    }
+  }
 
   const imagePath = post.image_data ?? post.matched_image_url;
   if (!imagePath) {
@@ -2586,6 +2628,19 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   const idempotencyKey = typeof req.body?.idempotencyKey === "string" && req.body.idempotencyKey.trim()
     ? req.body.idempotencyKey.trim().slice(0, 180)
     : `${postId}-youtube-v2`;
+  if (
+    boundWeeklyVideoJob &&
+    (
+      idempotencyKey !==
+        `${boundWeeklyVideoJob.jobKey}:${postId}:video-v2` ||
+      req.body?.videoMode !== "professional"
+    )
+  ) {
+    res.status(403).json({
+      error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+    });
+    return;
+  }
   const existing = await pool.query<{ id: string; status: string; storage_key: string | null; duration_seconds: number | null; updated_at: Date }>(
     `SELECT id, status, storage_key, duration_seconds, updated_at
        FROM content_video_generations

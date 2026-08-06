@@ -8,6 +8,7 @@ import {
   APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,
   buildApollosRepairAdapterStatus,
 } from "../lib/apollos-repair-adapters";
+import { readApollosRepairWorkerConfig } from "../lib/apollos-repair-worker-config";
 
 const router = Router();
 
@@ -221,6 +222,110 @@ function currentApollosCapabilities() {
     schedulerSecretPresent: Boolean(process.env.SCHEDULER_SECRET),
   });
 }
+
+router.get("/dab/repair-runtime", async (_req, res) => {
+  const checkedAt = new Date().toISOString();
+  let config;
+  try {
+    config = readApollosRepairWorkerConfig(process.env);
+  } catch (error) {
+    res.status(503).json({
+      operator: "Apollos",
+      checkedAt,
+      status: "misconfigured",
+      reasonCode:
+        error instanceof Error
+          ? error.message
+          : "APOLLOS_REPAIR_CONFIG_INVALID",
+    });
+    return;
+  }
+
+  const tables = await pool.query<{ tasks: string | null; steps: string | null }>(
+    `SELECT to_regclass('public.agent_tasks')::text AS tasks,
+            to_regclass('public.agent_task_steps')::text AS steps`,
+  );
+  if (!tables.rows[0]?.tasks || !tables.rows[0]?.steps) {
+    res.json({
+      operator: "Apollos",
+      checkedAt,
+      status: config.enabled ? "uninitialized" : "disabled",
+      enabled: config.enabled,
+      killSwitch: config.killSwitch,
+      runtimeId: config.runtimeId,
+      limits: {
+        intervalMs: config.intervalMs,
+        leaseMs: config.leaseMs,
+        maxAttempts: config.maxAttempts,
+      },
+      queue: null,
+      latestActivityAt: null,
+    });
+    return;
+  }
+
+  const queue = await pool.query<{
+    queued: string;
+    running: string;
+    completed: string;
+    failed: string;
+    latest_activity_at: Date | null;
+  }>(
+    `SELECT
+       count(*) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status IN ('approved','queued')
+       )::text AS queued,
+       count(*) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status='running'
+       )::text AS running,
+       count(*) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status IN ('completed','succeeded','executed')
+       )::text AS completed,
+       count(*) FILTER (
+         WHERE task_type='execute_repair_plan'
+           AND status='failed'
+       )::text AS failed,
+       max(updated_at) FILTER (
+         WHERE task_type='execute_repair_plan'
+       ) AS latest_activity_at
+     FROM agent_tasks`,
+  );
+  const counts = queue.rows[0];
+  const status = !config.enabled
+    ? "disabled"
+    : config.killSwitch
+      ? "blocked"
+      : "ready";
+  res.json({
+    operator: "Apollos",
+    checkedAt,
+    status,
+    reasonCode:
+      status === "disabled"
+        ? "APOLLOS_REPAIR_WORKER_DISABLED"
+        : status === "blocked"
+          ? "APOLLOS_REPAIR_KILL_SWITCH"
+          : "APOLLOS_REPAIR_WORKER_READY",
+    enabled: config.enabled,
+    killSwitch: config.killSwitch,
+    runtimeId: config.runtimeId,
+    limits: {
+      intervalMs: config.intervalMs,
+      leaseMs: config.leaseMs,
+      maxAttempts: config.maxAttempts,
+    },
+    queue: {
+      queued: Number(counts?.queued ?? 0),
+      running: Number(counts?.running ?? 0),
+      completed: Number(counts?.completed ?? 0),
+      failed: Number(counts?.failed ?? 0),
+    },
+    latestActivityAt: counts?.latest_activity_at?.toISOString() ?? null,
+  });
+});
 
 router.get("/dab/repair-history", async (req, res) => {
   const { userId } = getAuth(req);

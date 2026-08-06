@@ -525,6 +525,7 @@ function buildScheduleSlots(
 // ── POST /auto-content/generate ───────────────────────────────────────────────
 
 router.post("/auto-content/generate", async (req, res) => {
+  let approvedWeeklyGeneration = false;
   // ── Auth: Clerk (user-triggered) OR scheduler (internal only) ─────────────
   // SECURITY: Never trust an arbitrary x-scheduler-user-id header — this
   // creates a user impersonation vector for anyone who obtains the scheduler
@@ -599,6 +600,7 @@ router.post("/auto-content/generate", async (req, res) => {
         ) {
           throw new Error("APOLLOS_WEEKLY_REQUEST_PAYLOAD_MISMATCH");
         }
+        approvedWeeklyGeneration = true;
       } catch {
         res.status(403).json({
           error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
@@ -679,6 +681,7 @@ router.post("/auto-content/generate", async (req, res) => {
     toneStyle: bodyToneStyle, postAngles: bodyPostAngles,
     usedCombos: passedUsedCombos, count,
     schedulerMode: bodySchedulerMode,
+    scheduleDates: bodyScheduleDates,
   } = req.body;
 
   let serviceAreas = bodyServiceAreas as string[] | undefined;
@@ -888,8 +891,24 @@ router.post("/auto-content/generate", async (req, res) => {
     );
     slots = baseDates.map((dateSlot, idx) => {
       const svc = svcSlots[idx];
+      const plannedDate =
+        approvedWeeklyGeneration &&
+        Array.isArray(bodyScheduleDates) &&
+        typeof bodyScheduleDates[idx] === "string"
+          ? bodyScheduleDates[idx]
+          : null;
+      const [plannedHour, plannedMinute] =
+        effectiveTimes[idx % effectiveTimes.length]!.split(":").map(Number);
+      const scheduledDate = plannedDate
+        ? chicagoHourToUtc(
+            new Date(`${plannedDate}T00:00:00.000Z`),
+            plannedHour,
+            plannedMinute,
+          )
+        : dateSlot.date;
       return {
         ...dateSlot,
+        date: scheduledDate,
         topic: svc?.service.displayName ?? dateSlot.topic,
         precomputedServiceId:     svc?.service.serviceId ?? null,
         precomputedCampaignGoal:  svc?.campaignGoal,

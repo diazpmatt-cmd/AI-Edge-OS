@@ -22,6 +22,14 @@ export function hasValidInternalPublishSecret(
 }
 
 export const requireInternalPublishAdapter: RequestHandler = (req, res, next) => {
+  // Express also matches the legitimate `/social-posts/bulk/publish` route to
+  // the parameterized `/:id/publish` middleware with id="bulk". Preserve that
+  // canonical user workflow while keeping real post-ID adapter calls internal.
+  if (req.params.id === "bulk") {
+    next();
+    return;
+  }
+
   if (hasValidInternalPublishSecret(req.headers["x-scheduler-secret"])) {
     next();
     return;

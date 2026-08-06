@@ -548,6 +548,7 @@ export default function ApollosPage() {
   const [repairRetryBusy, setRepairRetryBusy] = useState<string | null>(null);
   const [repairDecisionBusy, setRepairDecisionBusy] = useState<string | null>(null);
   const [repairRetryMessage, setRepairRetryMessage] = useState<string | null>(null);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
   // ── Voice INPUT state (SpeechRecognition) ────────────────────────────────
@@ -586,6 +587,48 @@ export default function ApollosPage() {
     retry: 1,
   });
   const repairHistory = repairHistoryQuery.data;
+
+  async function copyRepairDiagnostics() {
+    const bundle = {
+      generatedAt: new Date().toISOString(),
+      runtime: repairRuntime
+        ? {
+            status: repairRuntime.status,
+            reasonCode: repairRuntime.reasonCode ?? null,
+            queue: repairRuntime.queue,
+            heartbeat: repairRuntime.latestHeartbeat
+              ? {
+                  observedAt: repairRuntime.latestHeartbeat.observedAt,
+                  state: repairRuntime.latestHeartbeat.state,
+                  reasonCode: repairRuntime.latestHeartbeat.reasonCode,
+                }
+              : null,
+            remediation: repairRuntime.remediation ?? null,
+          }
+        : null,
+      adapters: repairAdapterStatus
+        ? {
+            overallStatus: repairAdapterStatus.overallStatus,
+            counts: repairAdapterStatus.counts,
+            items: repairAdapterStatus.adapters.map((adapter) => ({
+              stepKey: adapter.stepKey,
+              state: adapter.state,
+              reasonCode: adapter.reasonCode,
+            })),
+          }
+        : null,
+      receiptIntegrity: repairHistory?.receiptIntegrity ?? null,
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(bundle, null, 2));
+      setDiagnosticsCopied(true);
+      window.setTimeout(() => setDiagnosticsCopied(false), 2500);
+    } catch {
+      setRepairRetryMessage(
+        "The browser blocked clipboard access. No diagnostic data was sent.",
+      );
+    }
+  }
 
   async function decideRepair(
     taskId: string,
@@ -2033,6 +2076,19 @@ export default function ApollosPage() {
                     </div>
                   )}
                 </div>
+
+                <button
+                  onClick={copyRepairDiagnostics}
+                  disabled={!repairRuntime && !repairAdapterStatus && !repairHistory}
+                  style={{
+                    width: "100%", marginTop: 9, padding: "6px 8px",
+                    background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)",
+                    borderRadius: 7, color: B.silver, fontSize: 9.5, fontWeight: 800,
+                    cursor: !repairRuntime && !repairAdapterStatus && !repairHistory ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {diagnosticsCopied ? "✓ Diagnostics copied" : "Copy sanitized diagnostics"}
+                </button>
 
                 <button
                   onClick={() => {

@@ -1,12 +1,21 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { agentTasksTable, agentTaskStepsTable } from "@workspace/db/schema";
+import {
+  agentTasksTable,
+  agentTaskStepsTable,
+  socialPostsTable,
+} from "@workspace/db/schema";
 import type { AgentTask } from "@workspace/db/schema";
 import { eq, and, asc, desc, gte, inArray, sql } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 import { diagnoseApollosTask } from "../lib/apollos-diagnostics.js";
 import { buildApollosRepairPlan } from "../lib/apollos-repair-planner.js";
+import {
+  assertWeeklyGenerationContract,
+  type WeeklyCampaignPlan,
+  type WeeklyGenerationJob,
+} from "../lib/apollos-weekly-campaign.js";
 
 const router = Router();
 
@@ -36,32 +45,109 @@ export async function atomicApprove(
   taskId: string,
   userId: string,
 ): Promise<ApproveResult> {
-  const [updated] = await db
-    .update(agentTasksTable)
-    .set({
-      status:     "approved",
-      resolution: "approved",
-      decisionBy: userId,
-      decisionAt: new Date(),
-    })
-    .where(
-      and(
-        eq(agentTasksTable.id, taskId),
-        eq(agentTasksTable.userId, userId),
-        eq(agentTasksTable.status, "pending_review"),
-      ),
-    )
-    .returning();
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(agentTasksTable)
+      .set({
+        status:     "approved",
+        resolution: "approved",
+        decisionBy: userId,
+        decisionAt: new Date(),
+      })
+      .where(
+        and(
+          eq(agentTasksTable.id, taskId),
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.status, "pending_review"),
+        ),
+      )
+      .returning();
 
-  if (updated) return { task: updated };
+    if (updated) {
+      if (updated.taskType === "weekly_campaign") {
+        const payload =
+          typeof updated.payload === "string"
+            ? JSON.parse(updated.payload)
+            : updated.payload;
+        const batchKey = payload?.batchKey;
+        const plan = payload?.plan as WeeklyCampaignPlan;
+        const generationJobs =
+          payload?.generationJobs as readonly WeeklyGenerationJob[];
+        if (
+          typeof batchKey !== "string" ||
+          !plan ||
+          !Array.isArray(generationJobs)
+        ) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_PAYLOAD_INVALID");
+        }
+        assertWeeklyGenerationContract(batchKey, plan, generationJobs);
+        const weeklyPlanIds = generationJobs.map(
+          (job) => job.weeklyPlanId,
+        );
+        const posts = await tx
+          .select({
+            id: socialPostsTable.id,
+            weeklyPlanId: socialPostsTable.weeklyPlanId,
+            status: socialPostsTable.status,
+            approvalStatus: socialPostsTable.approvalStatus,
+          })
+          .from(socialPostsTable)
+          .where(
+            and(
+              eq(socialPostsTable.userId, userId),
+              inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+            ),
+          );
+        if (
+          posts.length !== plan.deliveryCount ||
+          posts.some(
+            (post) =>
+              post.status !== "draft" ||
+              post.approvalStatus !== "pending_review",
+          ) ||
+          generationJobs.some(
+            (job) =>
+              posts.filter(
+                (post) => post.weeklyPlanId === job.weeklyPlanId,
+              ).length !== job.count,
+          )
+        ) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_DRAFT_MISMATCH");
+        }
+        const approvedAt = new Date();
+        const approvedPosts = await tx
+          .update(socialPostsTable)
+          .set({
+            approvalStatus: "approved",
+            approvedBy: userId,
+            approvedAt,
+            status: "scheduled",
+            updatedAt: approvedAt,
+          })
+          .where(
+            and(
+              eq(socialPostsTable.userId, userId),
+              inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+              eq(socialPostsTable.status, "draft"),
+              eq(socialPostsTable.approvalStatus, "pending_review"),
+            ),
+          )
+          .returning({ id: socialPostsTable.id });
+        if (approvedPosts.length !== plan.deliveryCount) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_UPDATE_MISMATCH");
+        }
+      }
+      return { task: updated };
+    }
 
-  const [probe] = await db
-    .select({ id: agentTasksTable.id, status: agentTasksTable.status })
-    .from(agentTasksTable)
-    .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
+    const [probe] = await tx
+      .select({ id: agentTasksTable.id, status: agentTasksTable.status })
+      .from(agentTasksTable)
+      .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
 
-  if (!probe) return { notFound: true };
-  return { conflict: probe.status };
+    if (!probe) return { notFound: true };
+    return { conflict: probe.status };
+  });
 }
 
 type RejectResult =

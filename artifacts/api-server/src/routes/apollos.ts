@@ -1336,33 +1336,64 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       `weekly:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
     const generationJobs = buildWeeklyGenerationJobs(batchKey, plan);
 
-    const existing = await db
-      .select()
-      .from(agentTasksTable)
-      .where(
-        and(
-          eq(agentTasksTable.userId, userId),
-          eq(agentTasksTable.taskType, "weekly_campaign"),
-        ),
-      )
-      .orderBy(desc(agentTasksTable.createdAt))
-      .limit(25);
+    const evaluation = evaluateTask("weekly_campaign", {
+      batchKey,
+      command,
+      plan,
+      generationJobs,
+    });
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(
+          hashtext(${`apollos-weekly:${batchKey}`})
+        )`,
+      );
+      const existing = await tx
+        .select()
+        .from(agentTasksTable)
+        .where(
+          and(
+            eq(agentTasksTable.userId, userId),
+            eq(agentTasksTable.taskType, "weekly_campaign"),
+          ),
+        )
+        .orderBy(desc(agentTasksTable.createdAt))
+        .limit(25);
+      const duplicate = existing.find((task) => {
+        try {
+          const payload = JSON.parse(task.payload) as { batchKey?: unknown };
+          return payload.batchKey === batchKey;
+        } catch {
+          return false;
+        }
+      });
+      if (duplicate) return { task: duplicate, duplicate: true };
 
-    const duplicate = existing.find((task) => {
-      try {
-        const payload = JSON.parse(task.payload) as { batchKey?: unknown };
-        return payload.batchKey === batchKey;
-      } catch {
-        return false;
-      }
+      const [inserted] = await tx
+        .insert(agentTasksTable)
+        .values({
+          userId,
+          taskType: "weekly_campaign",
+          payload: JSON.stringify({ batchKey, command, plan, generationJobs }),
+          status: "generation_queued",
+          decision: evaluation.decision,
+          resolution: null,
+          decisionBy: null,
+          decisionAt: null,
+          decisionNote: null,
+          ruleId: evaluation.ruleId,
+          ruleSetVersion: RULE_SET_VERSION,
+        })
+        .returning();
+      return { task: inserted, duplicate: false };
     });
 
-    if (duplicate) {
+    if (result.duplicate) {
       res.status(200).json({
         status: "planned",
-        executionStatus: duplicate.status,
+        executionStatus: result.task.status,
         duplicate: true,
-        taskId: duplicate.id,
+        taskId: result.task.id,
         command,
         plan,
         generationJobs,
@@ -1370,40 +1401,17 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       return;
     }
 
-    const evaluation = evaluateTask("weekly_campaign", {
-      batchKey,
-      command,
-      plan,
-      generationJobs,
-    });
-    const [task] = await db
-      .insert(agentTasksTable)
-      .values({
-        userId,
-        taskType: "weekly_campaign",
-        payload: JSON.stringify({ batchKey, command, plan, generationJobs }),
-        status: "generation_queued",
-        decision: evaluation.decision,
-        resolution: null,
-        decisionBy: null,
-        decisionAt: null,
-        decisionNote: null,
-        ruleId: evaluation.ruleId,
-        ruleSetVersion: RULE_SET_VERSION,
-      })
-      .returning();
-
     res.status(201).json({
       status: "planned",
       executionStatus: "generating_drafts",
       duplicate: false,
-      taskId: task.id,
+      taskId: result.task.id,
       command,
       plan,
       generationJobs,
       approval: {
-        endpoint: `/api/agent-tasks/${task.id}/approve`,
-        rejectEndpoint: `/api/agent-tasks/${task.id}/reject`,
+        endpoint: `/api/agent-tasks/${result.task.id}/approve`,
+        rejectEndpoint: `/api/agent-tasks/${result.task.id}/reject`,
         ruleId: evaluation.ruleId,
       },
       nextAction:

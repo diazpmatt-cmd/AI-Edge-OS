@@ -1213,9 +1213,11 @@ ${contextBlock}`;
     `- Approval boundary: ${commandRoute.approvalBoundary}`,
     `- Approval required now: ${commandRoute.requiresApprovalNow}`,
     `- Reason: ${commandRoute.reasonCode}`,
-    commandRoute.confidence === "low"
-      ? "- Action: Ask one concise clarifying question. Do not claim execution."
-      : "- Action: Stay within the routed capability and approval boundary.",
+    commandRoute.reasonCode === "APOLLOS_ROUTE_FUTURE_PLATFORM_PREPARATION"
+      ? "- Action: Explain that content can be prepared, but these future channels are not connected for scheduling or publishing. Do not claim delivery."
+      : commandRoute.confidence === "low"
+        ? "- Action: Ask one concise clarifying question. Do not claim execution."
+        : "- Action: Stay within the routed capability and approval boundary.",
   ].join("\\n");
   const sessionFocus    = detectSessionFocus(history);
   const focusBlock      = sessionFocus ? `\n${buildFocusDirective(sessionFocus)}\n` : "";

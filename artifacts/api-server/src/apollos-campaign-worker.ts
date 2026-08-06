@@ -22,6 +22,8 @@ const internalBase =
 const intervalMs = Number(process.env.APOLLOS_CAMPAIGN_INTERVAL_MS ?? 15_000);
 const timeoutMs = Number(process.env.APOLLOS_CAMPAIGN_TIMEOUT_MS ?? 900_000);
 const maxAttempts = Number(process.env.APOLLOS_CAMPAIGN_MAX_ATTEMPTS ?? 3);
+const pilotPlatformCount = 4;
+const taskAttemptCeiling = maxAttempts * pilotPlatformCount;
 const leaseMs = Number(process.env.APOLLOS_CAMPAIGN_LEASE_MS ?? 1_200_000);
 let stopped = false;
 
@@ -282,7 +284,7 @@ async function failCheckpoint(
   taskId: string,
   stepKey: string,
   failureCode: string,
-): Promise<void> {
+): Promise<boolean> {
   const result = await pool.query(
     `UPDATE agent_task_steps
         SET status='failed',
@@ -295,12 +297,17 @@ async function failCheckpoint(
         AND step_key=$2
         AND status='running'
         AND lease_owner=$4
-      RETURNING id`,
+      RETURNING id, attempt_count, max_attempts`,
     [taskId, stepKey, failureCode.slice(0, 300), runtimeId],
   );
   if (result.rowCount !== 1) {
     throw new Error(`APOLLOS_CHECKPOINT_FAIL_CONFLICT:${stepKey}`);
   }
+  const row = result.rows[0] as {
+    attempt_count: number;
+    max_attempts: number;
+  };
+  return row.attempt_count >= row.max_attempts;
 }
 
 async function recoverExpiredClaims() {
@@ -340,7 +347,7 @@ async function recoverExpiredClaims() {
              AND step.lease_expires_at > now()
         )
       RETURNING task.id, task.status, task.failure_code`,
-    [maxAttempts, leaseMs],
+    [taskAttemptCeiling, leaseMs],
   );
   for (const task of recovered.rows) {
     logger.warn(
@@ -374,7 +381,7 @@ async function claimOne() {
         ORDER BY decision_at ASC NULLS LAST, created_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1`,
-      [maxAttempts],
+      [taskAttemptCeiling],
     );
     const task = found.rows[0];
     if (!task) {
@@ -817,6 +824,7 @@ async function verifyWeeklyPackageReady(
 async function processOne() {
   const task = await claimOne();
   if (!task) return;
+  let failedCheckpointExhausted = false;
   try {
     const jobs = validateJobs(task.payload);
     const definitions = checkpointDefinitions(jobs);
@@ -881,7 +889,11 @@ async function processOne() {
           error instanceof Error
             ? error.message.replace(/Bearer\s+\S+/gi, "[REDACTED]")
             : "APOLLOS_CHECKPOINT_EXECUTION_FAILED";
-        await failCheckpoint(task.id, checkpoint.stepKey, code);
+        failedCheckpointExhausted = await failCheckpoint(
+          task.id,
+          checkpoint.stepKey,
+          code,
+        );
         throw error;
       } finally {
         stopHeartbeat();
@@ -911,7 +923,9 @@ async function processOne() {
   } catch (error) {
     const raw = error instanceof Error ? error.message : "APOLLOS_WEEKLY_GENERATION_FAILED";
     const code = raw.replace(/Bearer\s+\S+/gi, "[REDACTED]").slice(0, 300);
-    const terminal = task.execution_attempts >= maxAttempts;
+    const terminal =
+      failedCheckpointExhausted ||
+      task.execution_attempts >= taskAttemptCeiling;
     await pool.query(
       `UPDATE agent_tasks
           SET status=$2,

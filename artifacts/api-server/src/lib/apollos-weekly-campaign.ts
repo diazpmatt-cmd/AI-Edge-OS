@@ -130,10 +130,25 @@ export function buildWeeklyCampaignPlan(input: {
     }),
   );
 
+  const endDate = addDays(input.startDate, 6);
+  if (slots.length === 0) {
+    throw new Error("APOLLOS_WEEKLY_SLOTS_REQUIRED");
+  }
+  if (new Set(slots.map((slot) => slot.slotId)).size !== slots.length) {
+    throw new Error("APOLLOS_WEEKLY_SLOT_ID_DUPLICATE");
+  }
+  if (
+    slots.some(
+      (slot) => slot.date < input.startDate || slot.date > endDate,
+    )
+  ) {
+    throw new Error("APOLLOS_WEEKLY_SLOT_OUT_OF_RANGE");
+  }
+
   return Object.freeze({
     version: 1 as const,
     startDate: input.startDate,
-    endDate: addDays(input.startDate, 6),
+    endDate,
     platforms,
     slots: Object.freeze(slots),
     deliveryCount: slots.length,

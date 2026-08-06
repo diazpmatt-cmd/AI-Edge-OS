@@ -258,6 +258,27 @@ export function assertWeeklyGenerationContract(
   }
 }
 
+export function findWeeklyGenerationJobForDraft(
+  batchKey: string,
+  plan: WeeklyCampaignPlan,
+  jobs: readonly WeeklyGenerationJob[],
+  draft: {
+    readonly weeklyPlanId: string;
+    readonly generatorPlatform: WeeklyGenerationJob["generatorPlatform"];
+  },
+): WeeklyGenerationJob {
+  assertWeeklyGenerationContract(batchKey, plan, jobs);
+  const matches = jobs.filter(
+    (job) =>
+      job.weeklyPlanId === draft.weeklyPlanId &&
+      job.generatorPlatform === draft.generatorPlatform,
+  );
+  if (matches.length !== 1) {
+    throw new Error("APOLLOS_WEEKLY_DRAFT_JOB_BINDING_INVALID");
+  }
+  return matches[0]!;
+}
+
 export function buildWeeklyGenerationJobs(
   batchKey: string,
   plan: WeeklyCampaignPlan,

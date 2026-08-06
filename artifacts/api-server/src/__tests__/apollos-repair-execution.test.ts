@@ -136,8 +136,9 @@ describe("decideApollosRepairExecution", () => {
     const forgedLaterReceipt = verified(plan, "retry-upstream-checkpoint");
     const result = decide(plan, { receipts: [forgedLaterReceipt] });
     expect(result).toMatchObject({
-      action: "run",
-      nextStep: { key: "probe-upstream-health" },
+      action: "stop_unverified",
+      reasonCode: "APOLLOS_REPAIR_RECEIPT_SEQUENCE_INVALID",
+      nextStep: null,
       completedSteps: 1,
     });
   });

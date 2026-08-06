@@ -2392,7 +2392,7 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       title,
       clientName: resolved.context.clientName,
       cta,
-      openAiBaseUrl: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+      openAiBaseUrl: resolveOpenAiBaseUrl(),
       openAiApiKey: resolveOpenAiApiKey(),
     });
 
@@ -2441,6 +2441,16 @@ router.get("/auto-content/generate-video/:id/signed-url", async (req, res): Prom
   if (video.client_id !== resolved.client.id) { res.status(403).json({ error: "Forbidden" }); return; }
   if (video.status !== "completed" || !video.storage_key) {
     res.status(409).json({ error: "Video not yet available", status: video.status });
+    return;
+  }
+
+  if (video.storage_key.startsWith("uploads/")) {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      ok: true,
+      signedUrl: `${origin}/api/storage/objects/objects/${video.storage_key}`,
+      expiresIn: SIGNED_URL_EXPIRY_SECONDS,
+    });
     return;
   }
 

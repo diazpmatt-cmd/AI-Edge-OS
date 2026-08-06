@@ -205,6 +205,59 @@ export function fingerprintWeeklyCampaignPlan(
   return createHash("sha256").update(canonical).digest("hex");
 }
 
+export function assertWeeklyGenerationContract(
+  batchKey: string,
+  plan: WeeklyCampaignPlan,
+  jobs: readonly WeeklyGenerationJob[],
+): void {
+  const fingerprint = fingerprintWeeklyCampaignPlan(plan);
+  if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
+    throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_INVALID");
+  }
+  if (jobs.length !== plan.platforms.length) {
+    throw new Error("APOLLOS_WEEKLY_JOB_COUNT_MISMATCH");
+  }
+  if (new Set(jobs.map((job) => job.jobKey)).size !== jobs.length) {
+    throw new Error("APOLLOS_WEEKLY_JOB_KEY_DUPLICATE");
+  }
+
+  for (const platform of plan.platforms) {
+    const job = jobs.find((candidate) => candidate.platform === platform);
+    if (!job) {
+      throw new Error("APOLLOS_WEEKLY_PLATFORM_JOB_MISSING");
+    }
+    const expectedJobKey = `${batchKey}:${platform}`;
+    const expectedGenerator =
+      platform === "google_business" ? "google" : platform;
+    const expectedCount = plan.slots.filter(
+      (slot) => slot.platform === platform,
+    ).length;
+    if (job.planFingerprint !== fingerprint) {
+      throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_MISMATCH");
+    }
+    if (job.jobKey !== expectedJobKey || job.weeklyPlanId !== expectedJobKey) {
+      throw new Error("APOLLOS_WEEKLY_JOB_KEY_MISMATCH");
+    }
+    if (job.generatorPlatform !== expectedGenerator) {
+      throw new Error("APOLLOS_WEEKLY_GENERATOR_PLATFORM_MISMATCH");
+    }
+    if (job.count !== expectedCount || job.count < 1) {
+      throw new Error("APOLLOS_WEEKLY_PLATFORM_DELIVERY_COUNT_MISMATCH");
+    }
+    if (
+      job.schedulerMode !== "weekly_plan" ||
+      job.approvalMode !== "approval_required"
+    ) {
+      throw new Error("APOLLOS_WEEKLY_JOB_SAFEGUARD_MISMATCH");
+    }
+  }
+
+  const scheduledDeliveries = jobs.reduce((sum, job) => sum + job.count, 0);
+  if (scheduledDeliveries !== plan.deliveryCount) {
+    throw new Error("APOLLOS_WEEKLY_DELIVERY_COUNT_MISMATCH");
+  }
+}
+
 export function buildWeeklyGenerationJobs(
   batchKey: string,
   plan: WeeklyCampaignPlan,
@@ -240,19 +293,6 @@ export function buildWeeklyGenerationJobs(
     });
   });
 
-  if (jobs.some((job) => job.planFingerprint !== planFingerprint)) {
-    throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_MISMATCH");
-  }
-  if (jobs.length !== plan.platforms.length) {
-    throw new Error("APOLLOS_WEEKLY_JOB_COUNT_MISMATCH");
-  }
-  if (new Set(jobs.map((job) => job.jobKey)).size !== jobs.length) {
-    throw new Error("APOLLOS_WEEKLY_JOB_KEY_DUPLICATE");
-  }
-  const scheduledDeliveries = jobs.reduce((sum, job) => sum + job.count, 0);
-  if (scheduledDeliveries !== plan.deliveryCount) {
-    throw new Error("APOLLOS_WEEKLY_DELIVERY_COUNT_MISMATCH");
-  }
-
+  assertWeeklyGenerationContract(batchKey, plan, jobs);
   return Object.freeze(jobs);
 }

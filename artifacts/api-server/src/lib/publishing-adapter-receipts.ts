@@ -41,6 +41,16 @@ export function selectLatestAdapterDeliveryAttempts(
   return latest;
 }
 
+export function hasCompleteAdapterDeliveryScope(
+  platforms: readonly string[],
+  latest: ReadonlyMap<string, AdapterReceiptDeliveryRow>,
+): boolean {
+  return (
+    platforms.length > 0 &&
+    platforms.every((platform) => latest.has(platform))
+  );
+}
+
 export async function persistAdapterReceiptEnvelope(input: {
   readonly postId: string;
   readonly body: unknown;
@@ -80,13 +90,15 @@ export async function persistAdapterReceiptEnvelope(input: {
       inArray(platformDeliveriesTable.platform, platforms),
     ));
   const latest = selectLatestAdapterDeliveryAttempts(deliveryRows);
-  const results = input.body.results as Record<string, AdapterPlatformResult>;
+  if (!hasCompleteAdapterDeliveryScope(platforms, latest)) {
+    return { persisted: 0, expected: platforms.length };
+  }
 
+  const results = input.body.results as Record<string, AdapterPlatformResult>;
   const persisted = await db.transaction(async (tx) => {
     let count = 0;
     for (const platform of platforms) {
-      const delivery = latest.get(platform);
-      if (!delivery) continue;
+      const delivery = latest.get(platform)!;
       const decision = mapAdapterResultToDelivery(results[platform]);
       const now = new Date();
       const updated = await tx

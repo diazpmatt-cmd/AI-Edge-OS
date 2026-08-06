@@ -44,11 +44,17 @@ function isValidSchedulerSecret(header: string | string[] | undefined): boolean 
 
 const router = Router();
 
+export function resolveOpenAiBaseUrl(): string {
+  const configured = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim()
+    || process.env.OPENAI_BASE_URL?.trim()
+    || "https://api.openai.com/v1";
+  return configured.replace(/\/+$/, "");
+}
+
 function getAiModel() {
-  // Prefer Replit-managed integration (no billing quota); fall back to direct key
-  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
-    ?? process.env.OPENAI_BASE_URL
-    ?? "https://api.openai.com/v1";
+  // Prefer Replit-managed integration when it has a usable URL; blank Coolify
+  // placeholders must fall back to the direct OpenAI endpoint.
+  const baseURL = resolveOpenAiBaseUrl();
   const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
     ?? process.env.OPENAI_API_KEY;
   if (!key) throw new Error("No OpenAI API key configured. Add OPENAI_API_KEY to Secrets.");
@@ -1741,7 +1747,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   const clientId = resolved.client.id;
 
   // [S2] API key fail-fast — canonical resolver (AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY)
-  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const baseURL = resolveOpenAiBaseUrl();
   const apiKey  = resolveOpenAiApiKey();
   if (!apiKey) {
     res.status(503).json({ error: "Image generation not available (provider not configured)" });

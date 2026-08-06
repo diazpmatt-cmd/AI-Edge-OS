@@ -4,6 +4,7 @@ import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
+import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard.js";
 
 const rawPort = process.env["PORT"];
 
@@ -22,6 +23,7 @@ if (Number.isNaN(port) || port <= 0) {
 migrateSchema()
   .then(() => migrateLeadAuditEvents())
   .then(() => migrateAgentTasks())
+  .then(() => bootstrapPublishingMutationGuard())
   .then(() => import("./app.js"))
   .then(({ default: app }) => {
     app.listen(port, (err: unknown) => {
@@ -39,6 +41,6 @@ migrateSchema()
     });
   })
   .catch((err) => {
-    logger.error({ err }, "Startup migration failed — server will not start");
+    logger.error({ err }, "Startup migration or publishing guard failed — server will not start");
     process.exit(1);
   });

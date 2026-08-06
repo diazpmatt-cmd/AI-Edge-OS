@@ -16,6 +16,7 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import { requireInternalPublishAdapter } from "./middlewares/internalPublishAdapterMiddleware";
+import { rejectPublishingPostMutation } from "./middlewares/publishingMutationGuardMiddleware";
 
 const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
@@ -88,6 +89,27 @@ app.use(
     ),
   })),
 );
+
+// Friendly API boundary for every known user mutation that could alter or
+// remove an approved payload while provider delivery is in flight. PostgreSQL's
+// trigger remains the atomic authority if state changes after this read check.
+app.patch("/api/social-posts/:id", rejectPublishingPostMutation);
+app.delete("/api/social-posts/:id", rejectPublishingPostMutation);
+app.post("/api/social-posts/bulk/publish", rejectPublishingPostMutation);
+for (const pathSuffix of [
+  "approve",
+  "queue",
+  "cancel",
+  "image-match",
+  "retry",
+  "archive",
+  "restore",
+]) {
+  app.post(
+    `/api/social-posts/:id/${pathSuffix}`,
+    rejectPublishingPostMutation,
+  );
+}
 
 app.use("/api", router);
 

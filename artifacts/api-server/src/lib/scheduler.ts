@@ -1,5 +1,11 @@
 import { db, pool as dbPool } from "@workspace/db";
-import { socialPostsTable, leadsTable, autoContentSettingsTable, clientsTable } from "@workspace/db/schema";
+import {
+  socialPostsTable,
+  leadsTable,
+  autoContentSettingsTable,
+  clientsTable,
+  platformDeliveriesTable,
+} from "@workspace/db/schema";
 import { createWeeklyPlanId, evaluateClientEligibility, isValidIanaTimezone } from "@workspace/db";
 import { eq, and, gte, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
@@ -7,7 +13,8 @@ import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
 import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
 import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
-import { publishingService } from "./publishing-service.js";
+import { publishingService, sanitizeError } from "./publishing-service.js";
+import { reconcileSchedulerPublishException } from "./scheduler-publish-recovery.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
@@ -45,8 +52,9 @@ export async function publishDuePosts(): Promise<void> {
   // auto-approve rule) sets approvalStatus to 'approved' or 'auto_approved'.
   const duePosts = await db
     .select({
-      id:     socialPostsTable.id,
-      userId: socialPostsTable.userId,
+      id:        socialPostsTable.id,
+      userId:    socialPostsTable.userId,
+      platforms: socialPostsTable.platforms,
     })
     .from(socialPostsTable)
     .where(
@@ -67,7 +75,7 @@ export async function publishDuePosts(): Promise<void> {
   const port = parseInt(process.env.PORT ?? "8080", 10);
   const base = `http://127.0.0.1:${port}`;
 
-  for (const { id, userId } of duePosts) {
+  for (const { id, userId, platforms } of duePosts) {
     if (inFlight.has(id)) {
       logger.info({ postId: id }, "[scheduler] skipping — already in flight");
       continue;
@@ -113,18 +121,76 @@ export async function publishDuePosts(): Promise<void> {
         );
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = sanitizeError(err instanceof Error ? err.message : String(err));
       logger.error({ postId: id, err: msg }, "[scheduler] publish request error");
 
-      // Network/runtime failure before the route could update status — do it here
-      await db
-        .update(socialPostsTable)
-        .set({
-          status:       "failed",
-          errorMessage: `Scheduler network error: ${msg}`,
-          updatedAt:    new Date(),
-        })
-        .where(eq(socialPostsTable.id, id));
+      // Reconcile from durable tenant-scoped platform receipts instead of
+      // blindly overwriting a partial or completed external delivery as failed.
+      // If reconciliation itself cannot read/write the DB, leave the existing
+      // ledger/post state untouched and continue with the next due post.
+      try {
+        const deliveryRows = await db
+          .select({
+            platform:        platformDeliveriesTable.platform,
+            status:          platformDeliveriesTable.status,
+            attemptNumber:   platformDeliveriesTable.attemptNumber,
+            externalPostId:  platformDeliveriesTable.externalPostId,
+            externalPostUrl: platformDeliveriesTable.externalPostUrl,
+            publishedAt:     platformDeliveriesTable.publishedAt,
+            updatedAt:       platformDeliveriesTable.updatedAt,
+          })
+          .from(platformDeliveriesTable)
+          .where(
+            and(
+              eq(platformDeliveriesTable.postId, id),
+              eq(platformDeliveriesTable.userId, userId),
+            ),
+          );
+
+        const expectedPlatforms = parseJson<string[]>(platforms, []);
+        const recovery = reconcileSchedulerPublishException({
+          expectedPlatforms,
+          deliveries: deliveryRows,
+          error: msg,
+        });
+
+        await db
+          .update(socialPostsTable)
+          .set({
+            status:       recovery.status,
+            publishedAt:  recovery.publishedAt ?? undefined,
+            errorMessage: recovery.errorMessage,
+            updatedAt:    new Date(),
+          })
+          .where(
+            and(
+              eq(socialPostsTable.id, id),
+              eq(socialPostsTable.userId, userId),
+            ),
+          );
+
+        logger.error(
+          {
+            postId: id,
+            publishStatus: recovery.status,
+            verifiedPublished: recovery.verifiedPublished,
+            terminalFailures: recovery.terminalFailures,
+            unresolved: recovery.unresolved,
+            expectedPlatforms: recovery.expectedPlatforms,
+          },
+          "[scheduler] publish exception reconciled from delivery ledger",
+        );
+      } catch (recoveryError: unknown) {
+        const recoveryMessage = sanitizeError(
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : String(recoveryError),
+        );
+        logger.error(
+          { postId: id, err: msg, recoveryErr: recoveryMessage },
+          "[scheduler] delivery-ledger reconciliation failed — existing state preserved",
+        );
+      }
     } finally {
       inFlight.delete(id);
     }

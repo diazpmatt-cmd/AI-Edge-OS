@@ -2300,6 +2300,45 @@ router.get("/auto-content/generate-image/:id/signed-url", async (req, res): Prom
   }
 });
 
+const VIDEO_NARRATION_BLOCKLIST = [
+  /\btermite(?:s)?\b/i,
+  /\bwhole[- ]home heat\b/i,
+  /\bheat treatment\b/i,
+  /\bwildlife removal\b/i,
+];
+
+export function buildSafeVideoNarration(opts: {
+  topic?: string | null;
+  clientName: string;
+  cta: string;
+}): string {
+  const topic = (opts.topic?.trim() || "local pest prevention")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/#\w+/g, "")
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+    .replace(/[^a-zA-Z0-9&'(),.!? -]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  const cta = opts.cta
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/#\w+/g, "")
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+  const narration = [
+    `Here is a quick local pest control update from ${opts.clientName}.`,
+    `Today's topic is ${topic}.`,
+    "Noticing a pest concern early can help you understand the situation and choose the right next step.",
+    `${opts.clientName} proudly serves homeowners and businesses throughout Baldwin County, Alabama, with discreet and professional pest control.`,
+    cta || "Contact us today to discuss your pest control needs.",
+  ].join(" ");
+  const blocked = VIDEO_NARRATION_BLOCKLIST.find(pattern => pattern.test(narration));
+  if (blocked) throw new Error("narration_contains_blocked_service");
+  return narration.slice(0, 900);
+}
+
 // ── Native slideshow video rendering ────────────────────────────────────────
 // Creates a branded 16:9 MP4 from an existing campaign image plus AI narration.
 // Interactive only for V1: autonomous video cadence remains a separate control.
@@ -2339,7 +2378,7 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
 
   const idempotencyKey = typeof req.body?.idempotencyKey === "string" && req.body.idempotencyKey.trim()
     ? req.body.idempotencyKey.trim().slice(0, 180)
-    : `${postId}-youtube-v1`;
+    : `${postId}-youtube-v2`;
   const existing = await pool.query<{ id: string; status: string; storage_key: string | null; duration_seconds: number | null; updated_at: Date }>(
     `SELECT id, status, storage_key, duration_seconds, updated_at
        FROM content_video_generations
@@ -2364,9 +2403,22 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   }
 
   const generationId = existing.rows[0]?.id ?? randomUUID();
-  const narration = (post.caption_facebook ?? post.caption).replace(/\s+/g, " ").trim().slice(0, 1_400);
   const title = (post.youtube_title?.trim() || `${post.ai_topic ?? "Local Pest Control"} | ${resolved.context.clientName}`).slice(0, 100);
   const cta = (post.cta_value?.trim() || resolved.context.ctaText).slice(0, 160);
+  let narration: string;
+  try {
+    narration = buildSafeVideoNarration({
+      topic: post.ai_topic ?? title.split("|")[0],
+      clientName: resolved.context.clientName,
+      cta,
+    });
+  } catch {
+    res.status(422).json({
+      error: "narration_safety_block",
+      message: "The video script referenced a service Bed Bugs & Beyond does not offer. The video was not generated.",
+    });
+    return;
+  }
 
   if (existing.rows[0]) {
     await pool.query(

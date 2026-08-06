@@ -78,4 +78,9 @@ jobs:
         run: docker compose -f docker-compose.coolify.yml config >/tmp/coolify-compose.yml
       - name: Build production images
         run: docker compose -f docker-compose.coolify.yml build
+      - name: Apollos media runtime preflight
+        run: |
+          api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
+          test -n "$api_image"
+          docker run --rm --entrypoint sh "$api_image" /app/deploy/smoke/apollos-media-runtime.sh
       - run: git diff --check

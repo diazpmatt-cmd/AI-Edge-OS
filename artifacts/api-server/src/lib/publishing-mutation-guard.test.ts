@@ -6,6 +6,7 @@ import {
   PUBLISHING_RESULT_STATUSES,
   PUBLISHING_STATE_LOCKED_CODE,
   SCHEDULER_AGGREGATE_RECOVERY_PREFIXES,
+  VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE,
   isPublishingResultStatus,
   isSchedulerAggregateRecoveryMessage,
   shouldDeferAdapterAggregateTransition,
@@ -155,9 +156,24 @@ describe("publishing mutation guard policy", () => {
     ).toBe(true);
   });
 
-  it("installs an idempotent update/delete trigger with ledger authority", () => {
+  it("installs monotonic delivery receipts and ledger-derived aggregate authority", () => {
     expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/^\s*BEGIN;/);
     expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/COMMIT;\s*$/);
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "CREATE OR REPLACE FUNCTION ai_edge_preserve_verified_delivery_receipt",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "BEFORE UPDATE OR DELETE ON platform_deliveries",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      `MESSAGE = '${VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE}'`,
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.post_id IS DISTINCT FROM OLD.post_id",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.external_post_id := COALESCE(OLD.external_post_id, NEW.external_post_id)",
+    );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation",
     );
@@ -175,13 +191,19 @@ describe("publishing mutation guard policy", () => {
       "SELECT DISTINCT ON (platform)",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
-      "latest_delivery_count <> expected_platform_count",
+      "verified_published_count + terminal_failure_count",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.status := 'published'",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.status := 'published_with_warning'",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.status := 'failed'",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "COALESCE(OLD.published_by, '') = 'scheduler'",
-    );
-    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
-      "NEW.status := OLD.status",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "pg_advisory_xact_lock",

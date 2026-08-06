@@ -4,6 +4,7 @@ import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
+import { startPublishingInterruptionRecoveryMonitor } from "./lib/publishing-interruption-recovery.js";
 import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard.js";
 
 const rawPort = process.env["PORT"];
@@ -33,6 +34,7 @@ migrateSchema()
       }
 
       logger.info({ port }, "Server listening");
+      startPublishingInterruptionRecoveryMonitor();
       if (isSchedulerEnabled()) {
         startScheduler();
       } else {

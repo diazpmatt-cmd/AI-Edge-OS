@@ -328,20 +328,28 @@ function inspectionActions(
       attempt_count: number;
       max_attempts: number;
     }>(
-      `UPDATE agent_task_steps AS step
+      `WITH candidate AS (
+         SELECT step.id
+           FROM agent_task_steps AS step
+           JOIN agent_tasks AS task ON task.id=step.task_id
+          WHERE step.task_id=$1
+            AND task.user_id=$2
+            AND step.status='running'
+            AND step.lease_expires_at IS NOT NULL
+            AND step.lease_expires_at < now()
+            AND step.attempt_count < step.max_attempts
+          ORDER BY step.position ASC
+          LIMIT 1
+          FOR UPDATE OF step SKIP LOCKED
+       )
+       UPDATE agent_task_steps AS step
           SET status='pending',
               lease_owner=NULL,
               lease_expires_at=NULL,
               failure_code=NULL,
               updated_at=now()
-         FROM agent_tasks AS task
-        WHERE step.task_id=$1
-          AND task.id=step.task_id
-          AND task.user_id=$2
-          AND step.status='running'
-          AND step.lease_expires_at IS NOT NULL
-          AND step.lease_expires_at < now()
-          AND step.attempt_count < step.max_attempts
+         FROM candidate
+        WHERE step.id=candidate.id
       RETURNING step.step_key,step.attempt_count,step.max_attempts`,
       [sourceTaskId, userId],
     );

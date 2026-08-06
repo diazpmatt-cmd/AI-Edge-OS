@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ObjectStorageService, objectStorageClient } from "./objectStorage.js";
@@ -75,6 +75,12 @@ export function buildApproximateSrt(narration: string, durationSeconds: number):
 }
 
 async function downloadImage(imagePath: string): Promise<Buffer> {
+  if (imagePath.startsWith("/objects/uploads/")) {
+    const objectId = imagePath.slice("/objects/uploads/".length);
+    if (!/^[0-9a-f-]{36}$/i.test(objectId)) throw new Error("invalid_local_image_path");
+    const localMediaDir = process.env.LOCAL_MEDIA_DIR?.trim();
+    if (localMediaDir) return readFile(path.join(localMediaDir, "uploads", objectId));
+  }
   if (imagePath.startsWith("/objects/")) {
     const service = new ObjectStorageService();
     const file = await service.getObjectEntityFile(imagePath);
@@ -98,8 +104,9 @@ function parsePrivateDir(privateDir: string): { bucket: string; prefix: string }
 }
 
 export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): Promise<NativeVideoRenderResult> {
-  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
-  if (!privateDir) throw new Error("storage_not_configured");
+  const localMediaDir = process.env.LOCAL_MEDIA_DIR?.trim();
+  const privateDir = process.env.PRIVATE_OBJECT_DIR?.trim() ?? "";
+  if (!localMediaDir && !privateDir) throw new Error("storage_not_configured");
   if (!input.openAiApiKey) throw new Error("tts_provider_not_configured");
 
   const workDir = await mkdtemp(path.join(tmpdir(), "aie-video-"));
@@ -163,9 +170,11 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
       `scale=1280:720:force_original_aspect_ratio=increase`,
       `crop=1280:720`,
       `zoompan=z='min(zoom+0.00045,1.08)':d=${frames}:s=1280x720:fps=30`,
-      `drawbox=x=0:y=0:w=iw:h=110:color=0x030612@0.78:t=fill:enable='between(t,0,4)'`,
+      `drawbox=x=0:y=0:w=iw:h=110:color=0x0D2B45@0.88:t=fill:enable='between(t,0,4)'`,
+      `drawbox=x=0:y=106:w=iw:h=4:color=0xF26C21@1:t=fill:enable='between(t,0,4)'`,
       `drawtext=fontfile=${font}:textfile=${titleFile}:fontcolor=white:fontsize=42:x=(w-text_w)/2:y=30:enable='between(t,0,4)'`,
-      `drawbox=x=0:y=h-150:w=iw:h=150:color=0x030612@0.86:t=fill:enable='gte(t,${outroStart})'`,
+      `drawbox=x=0:y=h-150:w=iw:h=150:color=0x0D2B45@0.92:t=fill:enable='gte(t,${outroStart})'`,
+      `drawbox=x=0:y=h-154:w=iw:h=4:color=0x39C6E8@1:t=fill:enable='gte(t,${outroStart})'`,
       `drawtext=fontfile=${font}:textfile=${ctaFile}:fontcolor=white:fontsize=34:line_spacing=10:x=(w-text_w)/2:y=h-125:enable='gte(t,${outroStart})'`,
       `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,MarginV=45'`,
       `format=yuv420p`,
@@ -183,14 +192,28 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
     const video = await readFile(outputFile);
     if (!video.length || video.length > VIDEO_MAX_BYTES) throw new Error("invalid_video_output");
 
-    const { bucket, prefix } = parsePrivateDir(privateDir);
-    const storageKey = `generated-videos/${input.generationId}.mp4`;
-    const objectName = `${prefix ? `${prefix}/` : ""}${storageKey}`;
-    await objectStorageClient.bucket(bucket).file(objectName).save(video, {
-      contentType: "video/mp4",
-      resumable: false,
-      metadata: { cacheControl: "private, max-age=0" },
-    });
+    let storageKey: string;
+    if (localMediaDir) {
+      const uploadsDir = path.join(localMediaDir, "uploads");
+      await mkdir(uploadsDir, { recursive: true });
+      const dataPath = path.join(uploadsDir, input.generationId);
+      await writeFile(dataPath, video, { flag: "wx" });
+      await writeFile(
+        `${dataPath}.json`,
+        JSON.stringify({ contentType: "video/mp4", byteSize: video.length, brand: "bed-bugs-and-beyond-v1" }),
+        { encoding: "utf8", flag: "wx" },
+      );
+      storageKey = `uploads/${input.generationId}`;
+    } else {
+      const { bucket, prefix } = parsePrivateDir(privateDir);
+      storageKey = `generated-videos/${input.generationId}.mp4`;
+      const objectName = `${prefix ? `${prefix}/` : ""}${storageKey}`;
+      await objectStorageClient.bucket(bucket).file(objectName).save(video, {
+        contentType: "video/mp4",
+        resumable: false,
+        metadata: { cacheControl: "private, max-age=0" },
+      });
+    }
 
     return {
       storageKey,

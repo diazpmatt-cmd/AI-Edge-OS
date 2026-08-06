@@ -417,6 +417,7 @@ export default function BBBContentAutopilotPage() {
   const [imagePrompt, setImagePrompt] = useState("");
   const [showCampaignHelp, setShowCampaignHelp] = useState(false);
   const [autoMediaEnabled, setAutoMediaEnabled] = useState(true);
+  const [videoCreativeMode, setVideoCreativeMode] = useState<"professional" | "pest-story">("professional");
 
   // V6: Production publishing workflow state
   const [showPublishDialog, setShowPublishDialog] = useState(false);
@@ -532,6 +533,7 @@ export default function BBBContentAutopilotPage() {
         method: "POST",
         body: JSON.stringify({
           postId,
+          videoMode: videoCreativeMode,
           ...(force && { idempotencyKey: `${postId}-youtube-revision-${Date.now()}` }),
         }),
       });
@@ -964,6 +966,32 @@ export default function BBBContentAutopilotPage() {
               </div>
             ))}
           </div>
+
+          {selectedPlatforms.has("youtube") && autoMediaEnabled && (
+            <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: "rgba(3,6,18,0.48)", border: "1px solid rgba(167,139,250,0.28)" }}>
+              <div style={{ color: B.white, fontSize: 12, fontWeight: 900, marginBottom: 5 }}>YouTube video style</div>
+              <div style={{ color: B.dim, fontSize: 10.5, marginBottom: 10 }}>Choose a polished service video or a humorous episode in the BB&B Pest Stories series.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                {([
+                  { id: "professional", label: "Professional", detail: "Tips, warning signs, and service promotions" },
+                  { id: "pest-story", label: "BB&B Pest Story", detail: "Funny serialized pest adventures and cliffhangers" },
+                ] as const).map(option => {
+                  const active = videoCreativeMode === option.id;
+                  return (
+                    <button key={option.id} type="button" onClick={() => setVideoCreativeMode(option.id)} style={{
+                      textAlign: "left", borderRadius: 10, padding: "11px 12px", cursor: "pointer",
+                      background: active ? "rgba(167,139,250,0.17)" : "rgba(15,23,42,0.62)",
+                      border: `1px solid ${active ? "rgba(167,139,250,0.7)" : B.border}`,
+                      color: active ? B.white : B.silver,
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 900 }}>{active ? "✓ " : ""}{option.label}</div>
+                      <div style={{ color: B.dim, fontSize: 9.5, marginTop: 4 }}>{option.detail}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
             <button type="button" onClick={handleGenerate} disabled={selectedQueueable.length === 0} style={{

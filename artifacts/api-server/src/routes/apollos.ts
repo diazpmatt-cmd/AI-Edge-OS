@@ -20,6 +20,7 @@ import {
   parseWeeklyCampaignPlatforms,
 } from "../lib/apollos-weekly-campaign";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine";
+import { routeApollosCommand } from "../lib/apollos-command-router";
 
 const router = Router();
 
@@ -1166,6 +1167,7 @@ ${contextBlock}`;
 
   // ── Intent detection + focused directive injection ─────────────────────────
   const intent = detectIntent(message);
+  const commandRoute = routeApollosCommand(message);
   const snap: IntentCtxSnapshot = {
     healthScore,
     deductions,
@@ -1203,17 +1205,29 @@ ${contextBlock}`;
     localPresenceChannels: ctx.localPresenceChannels,
   };
   const intentDirective = buildIntentDirective(intent, snap);
+  const commandRouteDirective = [
+    "CANONICAL COMMAND ROUTE (deterministic; do not override):",
+    `- Operation: ${commandRoute.operation}`,
+    `- Capability: ${commandRoute.capability}`,
+    `- Confidence: ${commandRoute.confidence}`,
+    `- Approval boundary: ${commandRoute.approvalBoundary}`,
+    `- Approval required now: ${commandRoute.requiresApprovalNow}`,
+    `- Reason: ${commandRoute.reasonCode}`,
+    commandRoute.confidence === "low"
+      ? "- Action: Ask one concise clarifying question. Do not claim execution."
+      : "- Action: Stay within the routed capability and approval boundary.",
+  ].join("\\n");
   const sessionFocus    = detectSessionFocus(history);
   const focusBlock      = sessionFocus ? `\n${buildFocusDirective(sessionFocus)}\n` : "";
   const finalSystemPrompt = systemPrompt.replace(
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA",
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intentDirective}${focusBlock}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${intentDirective}\n\n${commandRouteDirective}${focusBlock}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIVE BUSINESS DATA`,
   );
 
   try {
     const model = getAiModel();
     const { text } = await generateText({ model, system: finalSystemPrompt, prompt: message });
-    res.json({ reply: text.trim(), intent });
+    res.json({ reply: text.trim(), intent, commandRoute });
   } catch (err: any) {
     // Always log the full technical error server-side — never expose it to the client
     console.error("[APOLLOS-CHAT] AI error:", err?.status ?? err?.statusCode, err?.message, err?.error ?? "");
@@ -1238,7 +1252,7 @@ ${contextBlock}`;
           autopilotPaused:          ctx.autopilotPaused,
           gorilladeskCustomerCount: ctx.gorilladeskCustomerCount,
         });
-        res.json({ reply: fallback, intent });
+        res.json({ reply: fallback, intent, commandRoute });
       } catch (fallbackErr) {
         console.error("[APOLLOS-CHAT] Fallback brief failed:", fallbackErr);
         res.json({ reply: "Apollos is temporarily unavailable — the AI API quota is exhausted. Please contact your administrator to restore service.", intent });

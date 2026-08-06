@@ -228,7 +228,7 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
       `drawtext=fontfile=${font}:text='${input.clientName.replace(/[':]/g, "")}':fontcolor=white:fontsize=44:x=(w-text_w)/2:y=290:enable='gte(t,${outroStart})',`,
       `drawtext=fontfile=${font}:textfile=${ctaFile}:fontcolor=0x39C6E8:fontsize=30:x=(w-text_w)/2:y=355:enable='gte(t,${outroStart})',`,
       `drawtext=fontfile=${font}:textfile=${phoneFile}:fontcolor=0xF26C21:fontsize=54:x=(w-text_w)/2:y=410:enable='gte(t,${outroStart})',`,
-      `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,MarginV=42':enable='lt(t,${outroStart})',`,
+      `subtitles=${subtitleFile}:force_style='FontName=DejaVu Sans,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,MarginV=42',`,
       "format=yuv420p[base]",
       ";[3:v]scale=210:118[logo]",
       `;[base][logo]overlay=W-w-28:22:enable='lt(t,${outroStart})'[video]`,

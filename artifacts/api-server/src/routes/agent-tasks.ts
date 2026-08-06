@@ -6,6 +6,7 @@ import type { AgentTask } from "@workspace/db/schema";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 import { diagnoseApollosTask } from "../lib/apollos-diagnostics.js";
+import { buildApollosRepairPlan } from "../lib/apollos-repair-planner.js";
 
 const router = Router();
 
@@ -210,6 +211,7 @@ router.get("/agent-tasks/:id", async (req, res) => {
     ...task,
     steps,
     diagnosis,
+    repairPlan: buildApollosRepairPlan(diagnosis),
     progress: {
       completedSteps,
       totalSteps: steps.length,
@@ -256,6 +258,39 @@ router.get("/agent-tasks/:id/diagnosis", async (req, res) => {
       updatedAt: step.updatedAt.toISOString(),
     })),
   }));
+});
+
+// ── GET /agent-tasks/:id/repair-plan — diagnosis-bound safe plan ──────────────
+router.get("/agent-tasks/:id/repair-plan", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const [task] = await db
+    .select()
+    .from(agentTasksTable)
+    .where(and(eq(agentTasksTable.id, req.params.id), eq(agentTasksTable.userId, userId)));
+  if (!task) return res.status(404).json({ error: "Task not found" });
+
+  const steps = await db
+    .select()
+    .from(agentTaskStepsTable)
+    .where(eq(agentTaskStepsTable.taskId, task.id))
+    .orderBy(asc(agentTaskStepsTable.position));
+  const diagnosis = diagnoseApollosTask({
+    taskId: task.id,
+    taskStatus: task.status,
+    taskFailureCode: task.failureCode,
+    taskDetail: task.decisionNote,
+    taskUpdatedAt: task.updatedAt.toISOString(),
+    steps: steps.map((item) => ({
+      stepKey: item.stepKey,
+      status: item.status,
+      failureCode: item.failureCode,
+      updatedAt: item.updatedAt.toISOString(),
+    })),
+  });
+
+  return res.json(buildApollosRepairPlan(diagnosis));
 });
 
 // ── POST /agent-tasks/:id/approve — human approves a pending task ─────────────

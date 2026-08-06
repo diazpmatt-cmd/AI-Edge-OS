@@ -34,6 +34,27 @@ function normalizeWeeklyApprovalStatus(status?: string): WeeklyApprovalStatus | 
   return null;
 }
 
+interface RepairPlanSummary {
+  planId: string;
+  diagnosisId: string;
+  status: "not_required" | "ready" | "approval_required" | "manual_required" | "insufficient_evidence";
+  smallestSafeRepair: string;
+  canApollosExecute: boolean;
+  approvalRequired: boolean;
+  approvalReason: string | null;
+  repairAuthority: "apollos" | "operator" | "provider" | "deployment";
+  steps: {
+    key: string;
+    position: number;
+    title: string;
+    action: string;
+    effect: "read_only" | "checkpoint_resume" | "internal_change" | "deployment_change" | "credential_change" | "provider_change" | "external_publish";
+    executableByApollos: boolean;
+    requiresApproval: boolean;
+    verification: string;
+  }[];
+}
+
 interface WeeklyApproval {
   taskId: string;
   startDate: string;
@@ -58,6 +79,7 @@ interface WeeklyApproval {
     recommendedRepair: string;
     verification: string[];
   } | null;
+  repairPlan?: RepairPlanSummary | null;
 }
 
 interface Message {
@@ -379,6 +401,33 @@ function Bubble({
                         <strong>Verify:</strong>{" "}
                         {msg.weeklyApproval.diagnosis.verification.join(" → ")}
                       </div>
+                      {msg.weeklyApproval.repairPlan && (
+                        <div style={{ marginTop: 8, padding: 8, borderRadius: 7, background: "rgba(0,174,239,.07)", border: "1px solid rgba(0,174,239,.16)" }}>
+                          <div style={{ color: B.blue, fontWeight: 900 }}>
+                            🛠 Smallest safe repair · {msg.weeklyApproval.repairPlan.status.replaceAll("_", " ").toUpperCase()}
+                          </div>
+                          <div style={{ marginTop: 3 }}>{msg.weeklyApproval.repairPlan.smallestSafeRepair}</div>
+                          {msg.weeklyApproval.repairPlan.approvalRequired && (
+                            <div style={{ color: B.gold, marginTop: 3 }}>
+                              Approval required{msg.weeklyApproval.repairPlan.approvalReason ? `: ${msg.weeklyApproval.repairPlan.approvalReason}` : "."}
+                            </div>
+                          )}
+                          {msg.weeklyApproval.repairPlan.steps.length > 0 && (
+                            <ol style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                              {msg.weeklyApproval.repairPlan.steps.map((repairStep) => (
+                                <li key={repairStep.key} style={{ marginTop: 3 }}>
+                                  <strong>{repairStep.title}</strong>
+                                  {" — "}{repairStep.action}
+                                  {repairStep.requiresApproval ? " · approval gate" : ""}
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                          <div style={{ color: B.dim, marginTop: 5 }}>
+                            Plan {msg.weeklyApproval.repairPlan.planId} · bound to diagnosis {msg.weeklyApproval.repairPlan.diagnosisId}
+                          </div>
+                        </div>
+                      )}
                       <div style={{ color: B.dim, marginTop: 4 }}>
                         {msg.weeklyApproval.diagnosis.rootCauseCode}
                       </div>
@@ -452,6 +501,7 @@ export default function ApollosPage() {
                 recommendedRepair: string;
                 verification: string[];
               } | null;
+              repairPlan?: RepairPlanSummary | null;
             };
             return {
               messageId: message.id,
@@ -462,6 +512,7 @@ export default function ApollosPage() {
               totalSteps: task.progress?.totalSteps ?? 0,
               currentStep: task.progress?.currentStep ?? null,
               diagnosis: task.diagnosis ?? null,
+              repairPlan: task.repairPlan ?? null,
             };
           } catch {
             return {
@@ -473,6 +524,7 @@ export default function ApollosPage() {
               totalSteps: undefined,
               currentStep: undefined,
               diagnosis: null,
+              repairPlan: null,
             };
           }
         }),
@@ -489,7 +541,8 @@ export default function ApollosPage() {
             result?.completedSteps === message.weeklyApproval.completedSteps &&
             result?.totalSteps === message.weeklyApproval.totalSteps &&
             result?.currentStep === message.weeklyApproval.currentStep &&
-            result?.diagnosis?.diagnosisId === message.weeklyApproval.diagnosis?.diagnosisId
+            result?.diagnosis?.diagnosisId === message.weeklyApproval.diagnosis?.diagnosisId &&
+            result?.repairPlan?.planId === message.weeklyApproval.repairPlan?.planId
           ) {
             return message;
           }
@@ -504,6 +557,7 @@ export default function ApollosPage() {
               totalSteps: result?.totalSteps,
               currentStep: result?.currentStep,
               diagnosis: result?.diagnosis ?? null,
+              repairPlan: result?.repairPlan ?? null,
             },
           };
         }),

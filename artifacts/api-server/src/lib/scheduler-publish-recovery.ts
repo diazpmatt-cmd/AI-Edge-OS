@@ -1,5 +1,3 @@
-import { sanitizeError } from "./publishing-service.js";
-
 export type SchedulerRecoveryStatus =
   | "published"
   | "published_with_warning"
@@ -23,6 +21,21 @@ export interface SchedulerPublishRecovery {
   readonly expectedPlatforms: number;
   readonly publishedAt: Date | null;
   readonly errorMessage: string;
+}
+
+const SECRET_PATTERNS = [
+  /access_token=[^&\s"']*/gi,
+  /Bearer\s+[A-Za-z0-9._\-]+/gi,
+  /eyJ[A-Za-z0-9._\-]+/g,
+  /\b[A-Za-z0-9]{40,}\b/g,
+];
+
+function sanitizeSchedulerError(value: string): string {
+  let sanitized = value || "Unknown scheduler error";
+  for (const pattern of SECRET_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "[REDACTED]");
+  }
+  return sanitized.slice(0, 500);
 }
 
 function dateMs(value: Date | string | null): number {
@@ -72,28 +85,40 @@ export function reconcileSchedulerPublishException(input: {
   readonly error: string;
 }): SchedulerPublishRecovery {
   const expected = [...new Set(input.expectedPlatforms.filter(Boolean))];
+  const expectedKnown = expected.length > 0;
   const latest = latestByPlatform(input.deliveries);
-  const platforms = expected.length > 0 ? expected : [...latest.keys()];
+  const platforms = expectedKnown ? expected : [...latest.keys()];
   const evidence = platforms
     .map((platform) => latest.get(platform))
     .filter((delivery): delivery is SchedulerDeliveryEvidence => Boolean(delivery));
 
   const verified = evidence.filter(hasVerifiedReceipt);
   const terminalFailures = evidence.filter(isTerminalFailure).length;
-  const unresolved = Math.max(
-    0,
-    platforms.length - verified.length - terminalFailures,
-  );
+  const unresolved = expectedKnown
+    ? Math.max(0, platforms.length - verified.length - terminalFailures)
+    : 0;
   const publishedAtMs = verified.reduce(
-    (latestTime, delivery) => Math.max(latestTime, dateMs(delivery.publishedAt)),
+    (latestTime, delivery) =>
+      Math.max(
+        latestTime,
+        dateMs(delivery.publishedAt) > Number.NEGATIVE_INFINITY
+          ? dateMs(delivery.publishedAt)
+          : dateMs(delivery.updatedAt),
+      ),
     Number.NEGATIVE_INFINITY,
   );
   const publishedAt = Number.isFinite(publishedAtMs)
     ? new Date(publishedAtMs)
     : null;
-  const sanitized = sanitizeError(input.error || "Unknown scheduler error");
+  const sanitized = sanitizeSchedulerError(
+    input.error || "Unknown scheduler error",
+  );
 
-  if (platforms.length > 0 && verified.length === platforms.length) {
+  if (
+    expectedKnown &&
+    platforms.length > 0 &&
+    verified.length === platforms.length
+  ) {
     return Object.freeze({
       status: "published" as const,
       verifiedPublished: verified.length,
@@ -113,11 +138,12 @@ export function reconcileSchedulerPublishException(input: {
       verifiedPublished: verified.length,
       terminalFailures,
       unresolved,
-      expectedPlatforms: platforms.length,
+      expectedPlatforms: expectedKnown ? platforms.length : 0,
       publishedAt,
       errorMessage:
-        `Scheduler error after ${verified.length}/${platforms.length || "unknown"} ` +
-        `verified external deliveries; successful platform receipts were preserved. ${sanitized}`,
+        expectedKnown
+          ? `Scheduler error after ${verified.length}/${platforms.length} verified external deliveries; successful platform receipts were preserved. ${sanitized}`
+          : `Scheduler error after ${verified.length} verified external deliveries, but the expected platform scope was unavailable; successful receipts were preserved without claiming complete publication. ${sanitized}`,
     });
   }
 
@@ -126,7 +152,7 @@ export function reconcileSchedulerPublishException(input: {
     verifiedPublished: 0,
     terminalFailures,
     unresolved,
-    expectedPlatforms: platforms.length,
+    expectedPlatforms: expectedKnown ? platforms.length : 0,
     publishedAt: null,
     errorMessage: `Scheduler publish error before any verified external receipt: ${sanitized}`,
   });

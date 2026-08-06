@@ -8,7 +8,7 @@ export type PersistInternalPublishReceipts =
 
 export function shouldCaptureInternalPublishReceipt(
   routeId: string | undefined,
-): boolean {
+): routeId is string {
   return Boolean(routeId && routeId !== "bulk");
 }
 
@@ -16,12 +16,13 @@ export function createInternalPublishReceiptMiddleware(
   persist: PersistInternalPublishReceipts = persistAdapterReceiptEnvelope,
 ): RequestHandler {
   return (req, res, next) => {
-    if (!shouldCaptureInternalPublishReceipt(req.params.id)) {
+    const routeId = req.params.id;
+    if (!shouldCaptureInternalPublishReceipt(routeId)) {
       next();
       return;
     }
 
-    const postId = req.params.id;
+    const postId = routeId;
     const sendJson = res.json.bind(res);
     let responseCaptured = false;
 

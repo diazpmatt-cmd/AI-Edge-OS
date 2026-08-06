@@ -155,6 +155,21 @@ describe("reconcileSchedulerPublishException", () => {
     expect(recovery.errorMessage).toContain("scope was unavailable");
   });
 
+  it("treats malformed non-array platform scope as unknown", () => {
+    const recovery = reconcileSchedulerPublishException({
+      expectedPlatforms: { facebook: true },
+      deliveries: [published("facebook")],
+      error: "platform JSON was malformed",
+    });
+
+    expect(recovery).toMatchObject({
+      status: "published_with_warning",
+      verifiedPublished: 1,
+      expectedPlatforms: 0,
+    });
+    expect(recovery.errorMessage).toContain("scope was unavailable");
+  });
+
   it("uses the delivery update time when a verified receipt lacks publishedAt", () => {
     const recovery = reconcileSchedulerPublishException({
       expectedPlatforms: ["facebook"],

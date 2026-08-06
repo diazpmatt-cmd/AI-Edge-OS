@@ -20,7 +20,6 @@ services:
       LOCAL_MEDIA_DIR: /data/media
       GOOGLE_CLOUD_PROJECT: project-4978b26c-b88e-454b-875
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp/workload-identity-credential.json
-      GOOGLE_API_CERTIFICATE_CONFIG: /run/secrets/gcp/certificate-config.json
       SCHEDULER_ENABLED: "false"
       REFERRAL_SCHEDULER_ENABLED: "false"
       AI_VISIBILITY_SCHEDULER_ENABLED: "false"
@@ -46,22 +45,6 @@ services:
       - type: bind
         source: ./secrets/gcp/workload-identity-credential.json
         target: /run/secrets/gcp/workload-identity-credential.json
-        read_only: true
-      - type: bind
-        source: ./secrets/gcp/certificate-config.json
-        target: /run/secrets/gcp/certificate-config.json
-        read_only: true
-      - type: bind
-        source: ./secrets/gcp/client-cert.pem
-        target: /run/secrets/gcp/client-cert.pem
-        read_only: true
-      - type: bind
-        source: ./secrets/gcp/client-key.pem
-        target: /run/secrets/gcp/client-key.pem
-        read_only: true
-      - type: bind
-        source: ./secrets/gcp/trust-chain.pem
-        target: /run/secrets/gcp/trust-chain.pem
         read_only: true
     expose:
       - "3000"

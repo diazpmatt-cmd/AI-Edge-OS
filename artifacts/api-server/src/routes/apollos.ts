@@ -12,6 +12,11 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, gte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import {
+  buildWeeklyCampaignPlan,
+  isWeeklyCampaignCommand,
+  parseWeeklyCampaignPlatforms,
+} from "../lib/apollos-weekly-campaign";
 
 const router = Router();
 
@@ -1240,6 +1245,63 @@ ${contextBlock}`;
     } else {
       res.status(500).json({ error: "Apollos is temporarily unavailable. Please try again in a moment." });
     }
+  }
+});
+
+
+function nextMondayDate(now = new Date()): string {
+  const day = now.getUTCDay();
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
+  const next = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + daysUntilMonday,
+  ));
+  return next.toISOString().slice(0, 10);
+}
+
+router.post("/apollos/weekly-campaign/plan", (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const command =
+    typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  if (!isWeeklyCampaignCommand(command)) {
+    res.status(400).json({
+      error: "APOLLOS_WEEKLY_COMMAND_NOT_RECOGNIZED",
+      message:
+        "Ask Apollos to create, build, prepare, or schedule a week of content and name the platforms or say all four.",
+    });
+    return;
+  }
+
+  const startDate =
+    typeof req.body?.startDate === "string"
+      ? req.body.startDate
+      : nextMondayDate();
+
+  try {
+    const plan = buildWeeklyCampaignPlan({
+      startDate,
+      platforms: parseWeeklyCampaignPlatforms(command),
+    });
+    res.status(201).json({
+      status: "planned",
+      executionStatus: "awaiting_batch_approval",
+      command,
+      plan,
+      nextAction:
+        "Generate platform-specific drafts and media, then present the complete weekly package for one human approval.",
+    });
+  } catch (error) {
+    const code =
+      error instanceof Error
+        ? error.message
+        : "APOLLOS_WEEKLY_PLAN_FAILED";
+    res.status(400).json({ error: code });
   }
 });
 

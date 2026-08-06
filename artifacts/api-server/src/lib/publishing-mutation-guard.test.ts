@@ -5,7 +5,10 @@ import {
   PUBLISHING_MUTATION_GUARD_DDL,
   PUBLISHING_RESULT_STATUSES,
   PUBLISHING_STATE_LOCKED_CODE,
+  SCHEDULER_AGGREGATE_RECOVERY_PREFIXES,
   isPublishingResultStatus,
+  isSchedulerAggregateRecoveryMessage,
+  shouldDeferAdapterAggregateTransition,
 } from "./publishing-mutation-guard";
 
 describe("publishing mutation guard policy", () => {
@@ -55,7 +58,106 @@ describe("publishing mutation guard policy", () => {
     expect(PUBLISHING_MUTATION_ALLOWED_COLUMNS).not.toContain("cancelled_at");
   });
 
-  it("installs an idempotent update/delete trigger with the stable error code", () => {
+  it("defers adapter aggregate status until every expected latest lane is terminal", () => {
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "published",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 2,
+        latestUnresolvedCount: 2,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "published_with_warning",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 1,
+        latestUnresolvedCount: 0,
+        errorMessage: "Google failed",
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "failed",
+        expectedPlatformCount: 0,
+        latestDeliveryCount: 0,
+        latestUnresolvedCount: 0,
+        errorMessage: "Provider adapter failed",
+      }),
+    ).toBe(true);
+  });
+
+  it("allows canonical completion only when expected terminal evidence is complete", () => {
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "published",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 2,
+        latestUnresolvedCount: 0,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "failed",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 2,
+        latestUnresolvedCount: 0,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "publishing",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 0,
+        latestUnresolvedCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("requires scheduler ownership and an exact internal recovery family", () => {
+    expect(SCHEDULER_AGGREGATE_RECOVERY_PREFIXES).toEqual([
+      "Scheduler recovered aggregate state from",
+      "Scheduler error after",
+      "Scheduler publish error before",
+    ]);
+
+    for (const prefix of SCHEDULER_AGGREGATE_RECOVERY_PREFIXES) {
+      expect(isSchedulerAggregateRecoveryMessage(`${prefix} details`)).toBe(true);
+    }
+    expect(isSchedulerAggregateRecoveryMessage("Scheduler provider failed")).toBe(false);
+    expect(isSchedulerAggregateRecoveryMessage("provider failed")).toBe(false);
+
+    const recoveryMessage =
+      "Scheduler publish error before any verified external receipt";
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "failed",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 1,
+        latestUnresolvedCount: 1,
+        publishedBy: "scheduler",
+        errorMessage: recoveryMessage,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "failed",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 1,
+        latestUnresolvedCount: 1,
+        publishedBy: "user_123",
+        errorMessage: recoveryMessage,
+      }),
+    ).toBe(true);
+  });
+
+  it("installs an idempotent update/delete trigger with ledger authority", () => {
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/^\s*BEGIN;/);
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/COMMIT;\s*$/);
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation",
     );
@@ -65,6 +167,21 @@ describe("publishing mutation guard policy", () => {
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain("to_jsonb(NEW)");
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       `MESSAGE = '${PUBLISHING_STATE_LOCKED_CODE}'`,
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "array_agg(DISTINCT btrim(value))",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "SELECT DISTINCT ON (platform)",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "latest_delivery_count <> expected_platform_count",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "COALESCE(OLD.published_by, '') = 'scheduler'",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "NEW.status := OLD.status",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "pg_advisory_xact_lock",

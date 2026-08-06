@@ -16,6 +16,7 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import { requireInternalPublishAdapter } from "./middlewares/internalPublishAdapterMiddleware";
+import { persistInternalPublishAdapterReceipts } from "./middlewares/internalPublishReceiptMiddleware";
 import { rejectPublishingPostMutation } from "./middlewares/publishingMutationGuardMiddleware";
 
 const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
@@ -77,9 +78,13 @@ app.use("/api", leadDeliveryWebhooksRouter);
 app.use("/api", telnyxRouter);
 
 // Provider adapters are an internal implementation detail of PublishingService.
-// Block both unauthenticated and signed-in direct calls before the main router;
-// canonical callers supply the shared in-process scheduler secret.
-app.use("/api/social-posts/:id/publish", requireInternalPublishAdapter);
+// Block direct calls and persist their provider receipts before releasing the
+// internal response to the canonical publishing pipeline.
+app.use(
+  "/api/social-posts/:id/publish",
+  requireInternalPublishAdapter,
+  persistInternalPublishAdapterReceipts,
+);
 
 app.use(
   clerkMiddleware((req) => ({

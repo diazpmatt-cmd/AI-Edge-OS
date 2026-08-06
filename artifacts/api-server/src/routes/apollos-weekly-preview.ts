@@ -56,9 +56,10 @@ router.post("/apollos/weekly-campaign/preview", (req, res) => {
     typeof req.body?.startDate === "string"
       ? req.body.startDate
       : undefined;
+  const now = new Date();
 
   try {
-    const preview = buildWeeklyCampaignPreview({ command, startDate });
+    const preview = buildWeeklyCampaignPreview({ command, startDate, now });
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json(preview);
   } catch (error) {
@@ -70,7 +71,7 @@ router.post("/apollos/weekly-campaign/preview", (req, res) => {
     if (code === "APOLLOS_WEEKLY_START_DATE_OUT_OF_RANGE") {
       res.status(422).json({
         error: code,
-        ...getWeeklyCampaignDateRange(),
+        ...getWeeklyCampaignDateRange(now),
       });
       return;
     }

@@ -215,6 +215,36 @@ services:
       retries: 3
       start_period: 30s
 
+  apollos-repair-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "on-failure:3"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/apollos-repair-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      APOLLOS_REPAIR_WORKER_ENABLED: "true"
+      APOLLOS_REPAIR_KILL_SWITCH: "false"
+      APOLLOS_REPAIR_RUNTIME_ID: apollos-repair-production-1
+      APOLLOS_REPAIR_INTERVAL_MS: "15000"
+      APOLLOS_REPAIR_LEASE_MS: "120000"
+      APOLLOS_REPAIR_MAX_ATTEMPTS: "1"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   web:
     build:
       context: .

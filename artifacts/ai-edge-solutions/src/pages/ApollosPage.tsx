@@ -124,6 +124,14 @@ interface ApollosReadinessResponse {
     passed: boolean;
     operation: string;
     approvalBoundary: string;
+    capability?: string;
+    reasonCode: string;
+  }[];
+  decisionSelfTest: {
+    id: string;
+    passed: boolean;
+    disposition: string;
+    executableNow: boolean;
     reasonCode: string;
   }[];
   capabilityCounts: {
@@ -630,6 +638,7 @@ export default function ApollosPage() {
             overallStatus: apollosReadiness.overallStatus,
             checks: apollosReadiness.checks,
             commandSelfTest: apollosReadiness.commandSelfTest,
+            decisionSelfTest: apollosReadiness.decisionSelfTest,
             capabilityCounts: apollosReadiness.capabilityCounts,
             adapterCounts: apollosReadiness.adapterCounts,
           }
@@ -1904,6 +1913,11 @@ export default function ApollosPage() {
                       {apollosReadiness.commandSelfTest.map((probe) => (
                         <div key={probe.id} style={{ color: probe.passed ? B.green : "#F87171", fontSize: 7.5 }}>
                           {probe.passed ? "✓" : "✕"} {probe.id.replaceAll("-", " ")} · {probe.operation} · {probe.approvalBoundary.replaceAll("_", " ")}
+                        </div>
+                      ))}
+                      {apollosReadiness.decisionSelfTest.map((probe) => (
+                        <div key={probe.id} style={{ color: probe.passed ? B.green : "#F87171", fontSize: 7.5 }}>
+                          {probe.passed ? "✓" : "✕"} {probe.id.replaceAll("-", " ")} · {probe.disposition.replaceAll("_", " ")} · executable {probe.executableNow ? "yes" : "no"}
                         </div>
                       ))}
                     </div>

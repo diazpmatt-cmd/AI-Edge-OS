@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   APOLLOS_REPAIR_ADAPTER_POLICIES,
+  APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,
+  assertApollosRepairHandlerContract,
   buildApollosRepairAdapterStatus,
 } from "../lib/apollos-repair-adapters";
 
@@ -62,6 +64,31 @@ describe("buildApollosRepairAdapterStatus", () => {
         reasonCode: "APOLLOS_REPAIR_ADAPTER_KILL_SWITCH",
         handlerRegistered: true,
       });
+  });
+
+  it("accepts exactly the implemented inspection handler contract", () => {
+    const handlers = Object.fromEntries(
+      APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS.map((key) => [
+        key,
+        async () => ({ verified: true, evidence: {} }),
+      ]),
+    );
+    expect(() => assertApollosRepairHandlerContract(handlers)).not.toThrow();
+  });
+
+  it("fails closed when handlers drift from the published contract", () => {
+    expect(() =>
+      assertApollosRepairHandlerContract({
+        "preserve-render-inputs": async () => ({
+          verified: true,
+          evidence: {},
+        }),
+        "unpublished-handler": async () => ({
+          verified: true,
+          evidence: {},
+        }),
+      }),
+    ).toThrow("APOLLOS_REPAIR_HANDLER_CONTRACT_MISMATCH");
   });
 
   it("returns immutable status in the same order as the policy registry", () => {

@@ -4,7 +4,10 @@ import { pool } from "@workspace/db";
 import { classifyDabRuntimeStatus } from "../lib/dab-runtime-status";
 import { buildApollosCapabilities } from "../lib/apollos-capabilities";
 import { decideApollosCommand, routeApollosCommand } from "../lib/apollos-command-router";
-import { buildApollosRepairAdapterStatus } from "../lib/apollos-repair-adapters";
+import {
+  APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,
+  buildApollosRepairAdapterStatus,
+} from "../lib/apollos-repair-adapters";
 
 const router = Router();
 
@@ -219,13 +222,6 @@ function currentApollosCapabilities() {
   });
 }
 
-const registeredRepairAdapterKeys = Object.freeze([
-  "preserve-render-inputs",
-  "preserve-binding-evidence",
-  "find-earliest-failure",
-  "collect-causal-evidence",
-]);
-
 router.get("/dab/repair-history", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) {
@@ -376,7 +372,7 @@ router.get("/dab/repair-history", async (req, res) => {
 router.get("/dab/repair-adapters", (_req, res) => {
   const adapters = buildApollosRepairAdapterStatus(
     process.env,
-    registeredRepairAdapterKeys,
+    APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,
   );
   const counts = adapters.reduce(
     (summary, adapter) => {

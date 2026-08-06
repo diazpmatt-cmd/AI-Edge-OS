@@ -68,6 +68,26 @@ const policy = (
     maxDurationMs: options.maxDurationMs,
   });
 
+export const APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS = Object.freeze([
+  "preserve-render-inputs",
+  "preserve-binding-evidence",
+  "find-earliest-failure",
+  "collect-causal-evidence",
+] as const);
+
+export function assertApollosRepairHandlerContract(
+  handlers: Readonly<Record<string, ApollosRepairAction>>,
+): void {
+  const actual = Object.keys(handlers).sort();
+  const expected = [...APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS].sort();
+  if (
+    actual.length !== expected.length ||
+    actual.some((key, index) => key !== expected[index])
+  ) {
+    throw new Error("APOLLOS_REPAIR_HANDLER_CONTRACT_MISMATCH");
+  }
+}
+
 export const APOLLOS_REPAIR_ADAPTER_POLICIES: readonly ApollosRepairAdapterPolicy[] =
   Object.freeze([
     policy(

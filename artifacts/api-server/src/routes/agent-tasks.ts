@@ -3,12 +3,17 @@ import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { agentTasksTable, agentTaskStepsTable } from "@workspace/db/schema";
 import type { AgentTask } from "@workspace/db/schema";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, gte, sql } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 import { diagnoseApollosTask } from "../lib/apollos-diagnostics.js";
 import { buildApollosRepairPlan } from "../lib/apollos-repair-planner.js";
 
 const router = Router();
+
+function repairDailyLimit(env: NodeJS.ProcessEnv): number {
+  const parsed = Number(env.APOLLOS_REPAIR_DAILY_TENANT_LIMIT);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50 ? parsed : 6;
+}
 
 // ── Atomic helpers ─────────────────────────────────────────────────────────────
 //
@@ -372,19 +377,52 @@ router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
     });
   }
 
-  const [repairTask] = await db.insert(agentTasksTable).values({
-    userId,
-    taskType: "execute_repair_plan",
-    payload: JSON.stringify(payload),
-    status: "pending_review",
-    decision: evaluation.decision,
-    resolution: null,
-    decisionBy: null,
-    decisionAt: null,
-    decisionNote: null,
-    ruleId: evaluation.ruleId,
-    ruleSetVersion: RULE_SET_VERSION,
-  }).returning();
+  const dailyLimit = repairDailyLimit(process.env);
+  const repairTask = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(
+        hashtext(${`apollos-repair:${userId}`})
+      )`,
+    );
+    const recent = await tx
+      .select({ id: agentTasksTable.id })
+      .from(agentTasksTable)
+      .where(
+        and(
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.taskType, "execute_repair_plan"),
+          gte(
+            agentTasksTable.createdAt,
+            new Date(Date.now() - 24 * 60 * 60 * 1000),
+          ),
+        ),
+      )
+      .limit(dailyLimit);
+    if (recent.length >= dailyLimit) return null;
+
+    const [inserted] = await tx.insert(agentTasksTable).values({
+      userId,
+      taskType: "execute_repair_plan",
+      payload: JSON.stringify(payload),
+      status: "pending_review",
+      decision: evaluation.decision,
+      resolution: null,
+      decisionBy: null,
+      decisionAt: null,
+      decisionNote: null,
+      ruleId: evaluation.ruleId,
+      ruleSetVersion: RULE_SET_VERSION,
+    }).returning();
+    return inserted;
+  });
+  if (!repairTask) {
+    return res.status(429).json({
+      error: "The tenant repair request budget has been reached.",
+      code: "APOLLOS_REPAIR_TENANT_BUDGET_EXHAUSTED",
+      limit: dailyLimit,
+      windowHours: 24,
+    });
+  }
 
   return res.status(201).json({
     task: repairTask,

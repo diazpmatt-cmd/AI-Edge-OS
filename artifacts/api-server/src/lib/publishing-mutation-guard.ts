@@ -137,7 +137,11 @@ BEGIN
 
     IF NEW.status <> 'publishing' THEN
       BEGIN
-        SELECT COALESCE(array_agg(DISTINCT value), ARRAY[]::text[])
+        SELECT COALESCE(
+          array_agg(DISTINCT btrim(value))
+            FILTER (WHERE btrim(value) <> ''),
+          ARRAY[]::text[]
+        )
           INTO expected_platforms
           FROM jsonb_array_elements_text(
             COALESCE(NULLIF(OLD.platforms, ''), '[]')::jsonb
@@ -183,7 +187,7 @@ BEGIN
         OR latest_delivery_count <> expected_platform_count
         OR latest_unresolved_count > 0
       ) AND NOT (
-        OLD.published_by = 'scheduler'
+        COALESCE(OLD.published_by, '') = 'scheduler'
         AND (${schedulerRecoverySql})
       ) THEN
         NEW.status := OLD.status;

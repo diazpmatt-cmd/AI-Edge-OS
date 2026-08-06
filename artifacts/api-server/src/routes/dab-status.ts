@@ -495,8 +495,9 @@ router.get("/dab/repair-runtime", async (req, res) => {
        max(updated_at) FILTER (
          WHERE task_type='execute_repair_plan'
        ) AS latest_activity_at
-     FROM agent_tasks`,
-    [config.leaseMs],
+     FROM agent_tasks
+    WHERE user_id=$2`,
+    [config.leaseMs, userId],
   );
   const counts = queue.rows[0];
   const expiredClaims = Number(counts?.expired ?? 0);

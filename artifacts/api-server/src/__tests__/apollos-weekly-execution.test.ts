@@ -6,10 +6,10 @@ import {
 } from "../lib/apollos-weekly-execution";
 
 describe("Apollos weekly execution state rules", () => {
-  it("claims only an approved batch and increments attempts", () => {
+  it("claims only a queued generation batch and increments attempts", () => {
     expect(
       claimWeeklyExecution({
-        status: "approved",
+        status: "generation_queued",
         attempts: 0,
         maxAttempts: 3,
       }),
@@ -17,15 +17,15 @@ describe("Apollos weekly execution state rules", () => {
       nextStatus: "executing",
       attempts: 1,
       terminal: false,
-      reasonCode: "APOLLOS_WEEKLY_EXECUTION_CLAIMED",
+      reasonCode: "APOLLOS_WEEKLY_GENERATION_CLAIMED",
     });
   });
 
   it("refuses pending, rejected, and already executing batches", () => {
-    for (const status of ["pending_review", "rejected", "executing", "executed"]) {
+    for (const status of ["approved", "pending_review", "rejected", "executing", "executed"]) {
       expect(() =>
         claimWeeklyExecution({ status, attempts: 0, maxAttempts: 3 }),
-      ).toThrow("APOLLOS_WEEKLY_NOT_APPROVED");
+      ).toThrow("APOLLOS_WEEKLY_NOT_QUEUED");
     }
   });
 
@@ -33,9 +33,9 @@ describe("Apollos weekly execution state rules", () => {
     expect(
       failWeeklyExecution({ attempts: 1, maxAttempts: 3 }),
     ).toMatchObject({
-      nextStatus: "approved",
+      nextStatus: "generation_queued",
       terminal: false,
-      reasonCode: "APOLLOS_WEEKLY_RETRY_QUEUED",
+      reasonCode: "APOLLOS_WEEKLY_GENERATION_RETRY_QUEUED",
     });
   });
 
@@ -51,16 +51,16 @@ describe("Apollos weekly execution state rules", () => {
 
   it("marks a fully verified batch executed", () => {
     expect(completeWeeklyExecution()).toMatchObject({
-      nextStatus: "executed",
+      nextStatus: "pending_review",
       terminal: true,
-      reasonCode: "APOLLOS_WEEKLY_EXECUTION_COMPLETE",
+      reasonCode: "APOLLOS_WEEKLY_PACKAGE_READY",
     });
   });
 
   it("rejects malformed retry configuration", () => {
     expect(() =>
       claimWeeklyExecution({
-        status: "approved",
+        status: "generation_queued",
         attempts: -1,
         maxAttempts: 3,
       }),

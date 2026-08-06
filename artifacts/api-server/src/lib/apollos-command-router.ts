@@ -154,3 +154,87 @@ export function routeApollosCommand(command: string): ApollosCommandRoute {
     matchedSignals: signals,
   });
 }
+
+
+export interface ApollosCapabilitySnapshot {
+  readonly id: ApollosCommandCapability;
+  readonly state: "ready" | "degraded" | "blocked" | "disabled";
+  readonly reasonCode: string;
+  readonly detail: string;
+}
+
+export interface ApollosCommandDecision {
+  readonly route: ApollosCommandRoute;
+  readonly disposition:
+    | "ready"
+    | "approval_required"
+    | "capability_degraded"
+    | "capability_blocked"
+    | "clarification_required";
+  readonly executableNow: boolean;
+  readonly capabilityState: ApollosCapabilitySnapshot["state"] | "missing";
+  readonly reasonCode: string;
+  readonly detail: string;
+}
+
+export function decideApollosCommand(
+  route: ApollosCommandRoute,
+  capabilities: readonly ApollosCapabilitySnapshot[],
+): ApollosCommandDecision {
+  if (route.confidence === "low") {
+    return Object.freeze({
+      route,
+      disposition: "clarification_required",
+      executableNow: false,
+      capabilityState: "missing",
+      reasonCode: route.reasonCode,
+      detail: "The request needs one concise clarification before Apollos selects a tool.",
+    });
+  }
+
+  const capability = capabilities.find((item) => item.id === route.capability);
+  if (!capability) {
+    return Object.freeze({
+      route,
+      disposition: "capability_blocked",
+      executableNow: false,
+      capabilityState: "missing",
+      reasonCode: "APOLLOS_CAPABILITY_NOT_REGISTERED",
+      detail: `The required ${route.capability} capability is not registered.`,
+    });
+  }
+
+  if (capability.state !== "ready") {
+    return Object.freeze({
+      route,
+      disposition:
+        capability.state === "degraded"
+          ? "capability_degraded"
+          : "capability_blocked",
+      executableNow: false,
+      capabilityState: capability.state,
+      reasonCode: capability.reasonCode,
+      detail: capability.detail,
+    });
+  }
+
+  if (route.requiresApprovalNow) {
+    return Object.freeze({
+      route,
+      disposition: "approval_required",
+      executableNow: false,
+      capabilityState: capability.state,
+      reasonCode: "APOLLOS_COMMAND_APPROVAL_REQUIRED",
+      detail: "The requested external effect is ready but requires explicit human approval.",
+    });
+  }
+
+  return Object.freeze({
+    route,
+    disposition: "ready",
+    executableNow: true,
+    capabilityState: capability.state,
+    reasonCode: "APOLLOS_COMMAND_READY",
+    detail: "The routed capability is available within its configured safety boundary.",
+  });
+}

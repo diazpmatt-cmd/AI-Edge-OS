@@ -16,6 +16,7 @@ import {
 import {
   buildWeeklyDeliverySummary,
   type WeeklyDeliveryAttemptInput,
+  type WeeklyDeliveryPostInput,
 } from "../lib/apollos-weekly-delivery-status.js";
 
 const router = Router();
@@ -65,7 +66,7 @@ router.get("/agent-tasks/:id/weekly-delivery-status", async (req, res) => {
     assertWeeklyGenerationContract(batchKey, plan, generationJobs);
 
     const weeklyPlanIds = generationJobs.map((job) => job.weeklyPlanId);
-    const posts = await db
+    const posts: WeeklyDeliveryPostInput[] = await db
       .select({
         id: socialPostsTable.id,
         weeklyPlanId: socialPostsTable.weeklyPlanId,

@@ -2391,7 +2391,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   // existing authenticated/public media URL boundary when delivery is approved.
   if (postId) {
     const mediaPath = `/objects/${storageKey}`;
-    await pool.query(
+    const attachment = await pool.query(
       `UPDATE social_posts
           SET image_data = $1,
               matched_image_url = $1,
@@ -2399,9 +2399,26 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
               media_filename = $2,
               media_mime_type = 'image/png',
               updated_at = NOW()
-        WHERE id = $3 AND user_id = $4`,
+        WHERE id = $3 AND user_id = $4
+        RETURNING id`,
       [mediaPath, `campaign-${imageId}.png`, postId, userId],
     );
+    if (attachment.rowCount !== 1) {
+      if (localDataPath) await unlink(localDataPath).catch(() => {});
+      if (localMetadataPath) await unlink(localMetadataPath).catch(() => {});
+      if (gcsLocation) {
+        await objectStorageClient
+          .bucket(gcsLocation.bucketName)
+          .file(gcsLocation.objectPath)
+          .delete({ ignoreNotFound: true })
+          .catch(() => {});
+      }
+      await markFailed("post_attachment_failed");
+      res.status(500).json({
+        error: "Generated image could not be attached to its draft",
+      });
+      return;
+    }
   }
 
   res.json({ ok: true, generationId: imageId, storageKey });

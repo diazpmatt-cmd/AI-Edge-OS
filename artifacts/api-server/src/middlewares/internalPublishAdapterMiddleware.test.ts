@@ -19,13 +19,13 @@ describe("hasValidInternalPublishSecret", () => {
 });
 
 describe("requireInternalPublishAdapter", () => {
-  it("blocks a request without the internal secret", () => {
+  it("blocks a post-ID request without the internal secret", () => {
     const json = vi.fn();
     const status = vi.fn(() => ({ json }));
     const next = vi.fn();
 
     requireInternalPublishAdapter(
-      { headers: {} } as never,
+      { params: { id: "post-123" }, headers: {} } as never,
       { status } as never,
       next,
     );
@@ -35,5 +35,19 @@ describe("requireInternalPublishAdapter", () => {
       expect.objectContaining({ error: "INTERNAL_PUBLISH_ADAPTER_ONLY" }),
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("preserves the canonical bulk publish route", () => {
+    const status = vi.fn();
+    const next = vi.fn();
+
+    requireInternalPublishAdapter(
+      { params: { id: "bulk" }, headers: {} } as never,
+      { status } as never,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(status).not.toHaveBeenCalled();
   });
 });

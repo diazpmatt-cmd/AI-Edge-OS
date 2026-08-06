@@ -1,14 +1,35 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { agentTasksTable, agentTaskStepsTable } from "@workspace/db/schema";
+import {
+  agentTasksTable,
+  agentTaskStepsTable,
+  socialPostsTable,
+} from "@workspace/db/schema";
 import type { AgentTask } from "@workspace/db/schema";
 import { eq, and, asc, desc, gte, inArray, sql } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 import { diagnoseApollosTask } from "../lib/apollos-diagnostics.js";
 import { buildApollosRepairPlan } from "../lib/apollos-repair-planner.js";
+import {
+  assertWeeklyGenerationContract,
+  type WeeklyCampaignPlan,
+  type WeeklyGenerationJob,
+} from "../lib/apollos-weekly-campaign.js";
 
 const router = Router();
+
+function chicagoCalendarDate(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 function repairDailyLimit(env: NodeJS.ProcessEnv): number {
   const parsed = Number(env.APOLLOS_REPAIR_DAILY_TENANT_LIMIT);
@@ -36,32 +57,143 @@ export async function atomicApprove(
   taskId: string,
   userId: string,
 ): Promise<ApproveResult> {
-  const [updated] = await db
-    .update(agentTasksTable)
-    .set({
-      status:     "approved",
-      resolution: "approved",
-      decisionBy: userId,
-      decisionAt: new Date(),
-    })
-    .where(
-      and(
-        eq(agentTasksTable.id, taskId),
-        eq(agentTasksTable.userId, userId),
-        eq(agentTasksTable.status, "pending_review"),
-      ),
-    )
-    .returning();
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(agentTasksTable)
+      .set({
+        status:     "approved",
+        resolution: "approved",
+        decisionBy: userId,
+        decisionAt: new Date(),
+      })
+      .where(
+        and(
+          eq(agentTasksTable.id, taskId),
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.status, "pending_review"),
+        ),
+      )
+      .returning();
 
-  if (updated) return { task: updated };
+    if (updated) {
+      if (updated.taskType === "weekly_campaign") {
+        const payload =
+          typeof updated.payload === "string"
+            ? JSON.parse(updated.payload)
+            : updated.payload;
+        const batchKey = payload?.batchKey;
+        const plan = payload?.plan as WeeklyCampaignPlan;
+        const generationJobs =
+          payload?.generationJobs as readonly WeeklyGenerationJob[];
+        if (
+          typeof batchKey !== "string" ||
+          !plan ||
+          !Array.isArray(generationJobs)
+        ) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_PAYLOAD_INVALID");
+        }
+        assertWeeklyGenerationContract(batchKey, plan, generationJobs);
+        const weeklyPlanIds = generationJobs.map(
+          (job) => job.weeklyPlanId,
+        );
+        const posts = await tx
+          .select({
+            id: socialPostsTable.id,
+            weeklyPlanId: socialPostsTable.weeklyPlanId,
+            status: socialPostsTable.status,
+            approvalStatus: socialPostsTable.approvalStatus,
+            platforms: socialPostsTable.platforms,
+            scheduledAt: socialPostsTable.scheduledAt,
+            imageData: socialPostsTable.imageData,
+            videoUrl: socialPostsTable.videoUrl,
+            mediaMimeType: socialPostsTable.mediaMimeType,
+          })
+          .from(socialPostsTable)
+          .where(
+            and(
+              eq(socialPostsTable.userId, userId),
+              inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+            ),
+          );
+        if (
+          posts.length !== plan.deliveryCount ||
+          posts.some(
+            (post) =>
+              post.status !== "draft" ||
+              post.approvalStatus !== "pending_review",
+          ) ||
+          generationJobs.some((job) => {
+            const jobPosts = posts
+              .filter(
+                (post) => post.weeklyPlanId === job.weeklyPlanId,
+              )
+              .sort(
+                (left, right) =>
+                  new Date(left.scheduledAt!).getTime() -
+                  new Date(right.scheduledAt!).getTime(),
+              );
+            if (jobPosts.length !== job.count) return true;
+            return jobPosts.some((post, index) => {
+              let boundPlatforms: unknown;
+              try {
+                boundPlatforms = JSON.parse(post.platforms);
+              } catch {
+                return true;
+              }
+              const mediaValid =
+                job.generatorPlatform === "youtube"
+                  ? post.videoUrl?.startsWith("/objects/") &&
+                    post.mediaMimeType === "video/mp4"
+                  : post.imageData?.startsWith("/objects/") &&
+                    post.mediaMimeType === "image/png";
+              return (
+                !Array.isArray(boundPlatforms) ||
+                boundPlatforms.length !== 1 ||
+                boundPlatforms[0] !== job.generatorPlatform ||
+                !post.scheduledAt ||
+                chicagoCalendarDate(new Date(post.scheduledAt)) !==
+                  job.scheduleDates[index] ||
+                !mediaValid
+              );
+            });
+          })
+        ) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_DRAFT_MISMATCH");
+        }
+        const approvedAt = new Date();
+        const approvedPosts = await tx
+          .update(socialPostsTable)
+          .set({
+            approvalStatus: "approved",
+            approvedBy: userId,
+            approvedAt,
+            status: "scheduled",
+            updatedAt: approvedAt,
+          })
+          .where(
+            and(
+              eq(socialPostsTable.userId, userId),
+              inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+              eq(socialPostsTable.status, "draft"),
+              eq(socialPostsTable.approvalStatus, "pending_review"),
+            ),
+          )
+          .returning({ id: socialPostsTable.id });
+        if (approvedPosts.length !== plan.deliveryCount) {
+          throw new Error("APOLLOS_WEEKLY_APPROVAL_UPDATE_MISMATCH");
+        }
+      }
+      return { task: updated };
+    }
 
-  const [probe] = await db
-    .select({ id: agentTasksTable.id, status: agentTasksTable.status })
-    .from(agentTasksTable)
-    .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
+    const [probe] = await tx
+      .select({ id: agentTasksTable.id, status: agentTasksTable.status })
+      .from(agentTasksTable)
+      .where(and(eq(agentTasksTable.id, taskId), eq(agentTasksTable.userId, userId)));
 
-  if (!probe) return { notFound: true };
-  return { conflict: probe.status };
+    if (!probe) return { notFound: true };
+    return { conflict: probe.status };
+  });
 }
 
 type RejectResult =
@@ -457,7 +589,21 @@ router.post("/agent-tasks/:id/approve", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const result = await atomicApprove(req.params.id, userId);
+  let result: ApproveResult;
+  try {
+    result = await atomicApprove(req.params.id, userId);
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      error.message.startsWith("APOLLOS_WEEKLY_")
+        ? error.message
+        : "APOLLOS_WEEKLY_APPROVAL_FAILED";
+    return res.status(409).json({
+      error:
+        "The weekly package changed or is incomplete. Review the current package before approving it.",
+      code,
+    });
+  }
 
   if ("notFound" in result) {
     return res.status(404).json({ error: "Task not found" });

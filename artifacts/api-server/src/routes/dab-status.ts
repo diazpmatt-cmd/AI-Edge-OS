@@ -467,11 +467,17 @@ router.get("/dab/repair-history", async (req, res) => {
     status: string;
     failure_code: string | null;
     decision_note: string | null;
+    decision_at: Date | null;
+    execution_started_at: Date | null;
+    execution_completed_at: Date | null;
+    execution_attempts: number;
     created_at: Date;
     updated_at: Date;
     payload: string;
   }>(
-    `SELECT id,status,failure_code,decision_note,created_at,updated_at,payload
+    `SELECT id,status,failure_code,decision_note,decision_at,
+            execution_started_at,execution_completed_at,execution_attempts,
+            created_at,updated_at,payload
        FROM agent_tasks
       WHERE user_id=$1 AND task_type='execute_repair_plan'
       ORDER BY created_at DESC
@@ -540,6 +546,10 @@ router.get("/dab/repair-history", async (req, res) => {
       failureCode: task.failure_code,
       failureDetail: task.decision_note,
       createdAt: task.created_at.toISOString(),
+      approvedAt: task.decision_at?.toISOString() ?? null,
+      executionStartedAt: task.execution_started_at?.toISOString() ?? null,
+      executionCompletedAt: task.execution_completed_at?.toISOString() ?? null,
+      executionAttempts: task.execution_attempts,
       updatedAt: task.updated_at.toISOString(),
       steps: steps.rows
         .filter((step) => step.task_id === task.id)

@@ -23,6 +23,13 @@ describe("hasVerifiedExternalReceipt", () => {
     ).toBe(true);
     expect(
       hasVerifiedExternalReceipt({
+        status: "idempotency_hit",
+        externalPostId: "external-1",
+        externalPostUrl: null,
+      }),
+    ).toBe(true);
+    expect(
+      hasVerifiedExternalReceipt({
         status: "published",
         externalPostId: null,
         externalPostUrl: null,

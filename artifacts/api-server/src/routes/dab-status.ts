@@ -223,7 +223,12 @@ function currentApollosCapabilities() {
   });
 }
 
-router.get("/dab/apollos-readiness", async (_req, res) => {
+router.get("/dab/apollos-readiness", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   const checkedAt = new Date().toISOString();
   const capabilities = currentApollosCapabilities();
   const capabilityCounts = capabilities.reduce(
@@ -398,7 +403,12 @@ router.get("/dab/apollos-readiness", async (_req, res) => {
   });
 });
 
-router.get("/dab/repair-runtime", async (_req, res) => {
+router.get("/dab/repair-runtime", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   const checkedAt = new Date().toISOString();
   let config;
   try {
@@ -807,7 +817,12 @@ router.get("/dab/repair-history", async (req, res) => {
   });
 });
 
-router.get("/dab/repair-adapters", (_req, res) => {
+router.get("/dab/repair-adapters", (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   const adapters = buildApollosRepairAdapterStatus(
     process.env,
     APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,

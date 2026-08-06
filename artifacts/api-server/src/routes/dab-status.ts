@@ -397,9 +397,13 @@ router.get("/dab/apollos-readiness", async (req, res) => {
     executableNow: probe.decision.executableNow,
     reasonCode: probe.decision.reasonCode,
   }));
+  const futurePlatformBoundaryReady =
+    commandSelfTest.find((probe) => probe.id === "expanded-platforms")
+      ?.reasonCode === "APOLLOS_ROUTE_FUTURE_PLATFORM_PREPARATION";
   const commandRoutingReady =
     commandSelfTest.every((probe) => probe.passed) &&
-    decisionSelfTest.every((probe) => probe.passed);
+    decisionSelfTest.every((probe) => probe.passed) &&
+    futurePlatformBoundaryReady;
 
   const checks = [
     {

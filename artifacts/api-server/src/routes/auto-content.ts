@@ -20,7 +20,9 @@ import {
   buildSystemPrompt,
 } from "@workspace/db";
 import { randomUUID, timingSafeEqual } from "crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
@@ -29,6 +31,7 @@ import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../lib/client-resolver.js";
 import { objectStorageClient } from "../lib/objectStorage.js";
 import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
+import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";
 
 // Constant-time scheduler secret validation — prevents timing oracle attacks.
 // Both buffers must be the same length before comparison.
@@ -1655,6 +1658,69 @@ function makeObjectPath(bucketPrefix: string, imageId: string): string {
   return `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
 }
 
+
+function runBrandingFfmpeg(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("brand_overlay_timeout"));
+    }, 30_000);
+    child.stderr.on("data", chunk => {
+      if (stderr.length < 8_000) stderr += String(chunk);
+    });
+    child.once("error", error => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", code => {
+      clearTimeout(timeout);
+      if (code === 0) resolve();
+      else reject(new Error(`brand_overlay_failed:${code}:${stderr.slice(-600)}`));
+    });
+  });
+}
+
+/**
+ * Deterministic BB&B branding gate. The provider creates only the campaign
+ * artwork; the exact client-supplied logo is composited afterward.
+ */
+export async function applyBbbBranding(image: Buffer, size: string): Promise<Buffer> {
+  const workDir = await mkdtemp(join(tmpdir(), "bbb-brand-"));
+  const sourcePath = join(workDir, "source.png");
+  const logoPath = join(workDir, "official-logo.png");
+  const outputPath = join(workDir, "branded.png");
+  const square = size === "1024x1024";
+  const logoWidth = square ? 220 : 300;
+  const margin = square ? 28 : 36;
+  try {
+    await Promise.all([
+      writeFile(sourcePath, image),
+      writeFile(logoPath, Buffer.from(BBB_LOGO_PNG_BASE64, "base64")),
+    ]);
+    // Crop the supplied 16:9 white canvas to its centered vertical logo lockup,
+    // retain the exact logo pixels, and place it on a clean white brand plaque.
+    const filter = [
+      `[1:v]crop=440:510:292:32,scale=${logoWidth}:-1[logo]`,
+      `[0:v][logo]overlay=W-w-${margin}:H-h-${margin}:format=auto`,
+    ].join(";");
+    await runBrandingFfmpeg([
+      "-y", "-i", sourcePath, "-i", logoPath,
+      "-filter_complex", filter,
+      "-frames:v", "1",
+      outputPath,
+    ]);
+    const branded = await readFile(outputPath);
+    if (!branded.length || branded.length > IMAGE_BUFFER_MAX_BYTES) {
+      throw new Error("invalid_branded_image");
+    }
+    return branded;
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 type ImageProviderFailure = {
   code: string;
   message: string;
@@ -1978,7 +2044,12 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
         "Content-Type":  "application/json",
         "Authorization": `Bearer ${apiKey}`,  // [S11] key never logged
       },
-      body:   JSON.stringify({ model: "gpt-image-1", prompt: effectivePrompt, size, n: 1 }),
+      body: JSON.stringify({
+        model: "gpt-image-1",
+        prompt: `${effectivePrompt}. Use this exact brand palette throughout the artwork: deep navy ${BBB_BRAND.navy}, ocean blue ${BBB_BRAND.oceanBlue}, aqua ${BBB_BRAND.aqua}, coral orange ${BBB_BRAND.coralOrange}, and white. Leave the lower-right safe area visually clean for the official logo overlay. Do not generate, imitate, spell, or approximate any logo or business name.`,
+        size,
+        n: 1,
+      }),
       signal: controller.signal,
     });
   } catch (fetchErr: any) {
@@ -2051,6 +2122,20 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     return;
   }
 
+  // Exact brand asset is mandatory. Never save or publish unbranded provider art.
+  let brandedImageBuffer: Buffer;
+  try {
+    brandedImageBuffer = await applyBbbBranding(imageBuffer, size);
+  } catch (brandErr: any) {
+    console.error("[auto-content/generate-image] branding error:", sanitizeProviderDiagnostic(brandErr?.message ?? "unknown"));
+    await markFailed("brand_overlay_failed");
+    res.status(500).json({
+      error: "Official branding could not be applied",
+      message: "The artwork was generated, but the official Bed Bugs & Beyond logo could not be embedded. Nothing was saved or queued.",
+    });
+    return;
+  }
+
   // ── Persist generated image ───────────────────────────────────────────────
   // Coolify uses the same named durable volume as manual uploads. Other
   // environments continue to use the configured private object store.
@@ -2067,10 +2152,10 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       await mkdir(uploadsDir, { recursive: true });
       localDataPath = join(uploadsDir, imageId);
       localMetadataPath = `${localDataPath}.json`;
-      await writeFile(localDataPath, imageBuffer, { flag: "wx" });
+      await writeFile(localDataPath, brandedImageBuffer, { flag: "wx" });
       await writeFile(
         localMetadataPath,
-        JSON.stringify({ contentType: "image/png", byteSize: imageBuffer.length }),
+        JSON.stringify({ contentType: "image/png", byteSize: brandedImageBuffer.length, brand: "bed-bugs-and-beyond-v1" }),
         { encoding: "utf8", flag: "wx" },
       );
       storageKey = `uploads/${imageId}`;
@@ -2079,7 +2164,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
       const objectPath = makeObjectPath(bucketPrefix, imageId);
       await objectStorageClient.bucket(bucketName).file(objectPath)
-        .save(imageBuffer, { contentType: "image/png", resumable: false });
+        .save(brandedImageBuffer, { contentType: "image/png", resumable: false });
       gcsLocation = { bucketName, objectPath };
       storageKey = `generated-images/${imageId}.png`;
     }

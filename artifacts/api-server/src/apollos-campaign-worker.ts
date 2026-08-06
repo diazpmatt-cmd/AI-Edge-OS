@@ -37,9 +37,10 @@ function validateJobs(payloadText: string): GenerationJob[] {
       !["facebook", "instagram", "google", "youtube"].includes(
         String(job.generatorPlatform),
       ) ||
+      typeof job.count !== "number" ||
       !Number.isInteger(job.count) ||
-      Number(job.count) < 1 ||
-      Number(job.count) > 7 ||
+      job.count < 1 ||
+      job.count > 7 ||
       typeof job.weeklyPlanId !== "string" ||
       job.schedulerMode !== "weekly_plan" ||
       job.approvalMode !== "approval_required"

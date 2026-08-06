@@ -113,6 +113,7 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
   const imageFile = path.join(workDir, "campaign.png");
   const audioFile = path.join(workDir, "narration.mp3");
   const subtitleFile = path.join(workDir, "captions.srt");
+  const musicFile = path.join(workDir, "brand-music.wav");
   const titleFile = path.join(workDir, "title.txt");
   const ctaFile = path.join(workDir, "cta.txt");
   const outputFile = path.join(workDir, "campaign.mp4");
@@ -132,9 +133,9 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
       },
       body: JSON.stringify({
         model: "gpt-4o-mini-tts",
-        voice: "alloy",
+        voice: "coral",
         input: narration,
-        instructions: "Warm, trustworthy local-service commercial voice. Clear and conversational, never sensational.",
+        instructions: "Speak like a friendly, upbeat local radio host. Sound warm, lively, confident, and genuinely helpful. Smile through the delivery, vary the pace and emphasis naturally, and keep the energy engaging without sounding alarmist or theatrical.",
         response_format: "mp3",
       }),
       signal: AbortSignal.timeout(TTS_TIMEOUT_MS),
@@ -180,10 +181,27 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
       `format=yuv420p`,
     ].join(",");
 
+    // Original procedural music bed: a soft, bright major chord with gentle
+    // movement. It is generated locally, carries no third-party licensing risk,
+    // and stays well below the narration.
+    const musicExpression = "0.035*(sin(2*PI*261.63*t)+0.55*sin(2*PI*329.63*t)+0.4*sin(2*PI*392.00*t))*(0.78+0.22*sin(2*PI*0.5*t))";
     await runProcess("ffmpeg", [
-      "-y", "-loop", "1", "-i", imageFile, "-i", audioFile,
+      "-y", "-f", "lavfi",
+      "-i", `aevalsrc=${musicExpression}:s=44100:d=${duration}`,
+      "-c:a", "pcm_s16le", musicFile,
+    ], 30_000);
+
+    const musicFadeOut = Math.max(0, duration - 2);
+    const audioMix = [
+      "[1:a]volume=1.0[voice]",
+      `[2:a]volume=0.16,afade=t=in:st=0:d=1,afade=t=out:st=${musicFadeOut}:d=2[music]`,
+      "[voice][music]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+    ].join(";");
+    await runProcess("ffmpeg", [
+      "-y", "-loop", "1", "-i", imageFile, "-i", audioFile, "-i", musicFile,
       "-vf", filter,
-      "-map", "0:v:0", "-map", "1:a:0", "-t", String(duration),
+      "-filter_complex", audioMix,
+      "-map", "0:v:0", "-map", "[aout]", "-t", String(duration),
       "-c:v", "libx264", "-preset", "medium", "-crf", "21",
       "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
       outputFile,

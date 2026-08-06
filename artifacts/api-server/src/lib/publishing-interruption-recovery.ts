@@ -135,6 +135,12 @@ export async function reconcileInterruptedPublishingPosts(
         },
         "[publishing-recovery] stale aggregate finalized from durable receipts",
       );
+    } else {
+      unresolved++;
+      logger.info(
+        { postId: post.id, proposedStatus: recovery.status },
+        "[publishing-recovery] aggregate state changed before recovery write",
+      );
     }
   }
 

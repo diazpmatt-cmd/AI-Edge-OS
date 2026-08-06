@@ -13,7 +13,9 @@ export function hasVerifiedExternalReceipt(
   delivery: DeliveryReceiptShape,
 ): boolean {
   return (
-    ["published", "published_with_warning"].includes(delivery.status) &&
+    ["published", "published_with_warning", "idempotency_hit"].includes(
+      delivery.status,
+    ) &&
     Boolean(delivery.externalPostId || delivery.externalPostUrl)
   );
 }

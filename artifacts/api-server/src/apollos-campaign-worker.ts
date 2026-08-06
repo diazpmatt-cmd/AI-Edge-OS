@@ -206,6 +206,56 @@ async function runGenerationJob(
   }));
 }
 
+async function copyFacebookMediaToInstagram(
+  userId: string,
+  facebookJob: GenerationJob,
+  instagramDrafts: GeneratedDraft[],
+): Promise<boolean> {
+  const facebook = await pool.query<{
+    image_data: string | null;
+    matched_image_url: string | null;
+    matched_image_score: string | null;
+    media_filename: string | null;
+    media_mime_type: string | null;
+  }>(
+    `SELECT image_data, matched_image_url, matched_image_score,
+            media_filename, media_mime_type
+       FROM social_posts
+      WHERE user_id=$1 AND weekly_plan_id=$2
+      ORDER BY scheduled_at ASC, created_at ASC`,
+    [userId, facebookJob.weeklyPlanId],
+  );
+  if (
+    facebook.rows.length !== instagramDrafts.length ||
+    facebook.rows.some((row) => !row.image_data)
+  ) {
+    return false;
+  }
+  for (let index = 0; index < instagramDrafts.length; index += 1) {
+    const source = facebook.rows[index]!;
+    await pool.query(
+      `UPDATE social_posts
+          SET image_data=$1,
+              matched_image_url=$2,
+              matched_image_score=$3,
+              media_filename=$4,
+              media_mime_type=$5,
+              updated_at=now()
+        WHERE id=$6 AND user_id=$7`,
+      [
+        source.image_data,
+        source.matched_image_url,
+        source.matched_image_score,
+        source.media_filename,
+        source.media_mime_type,
+        instagramDrafts[index]!.id,
+        userId,
+      ],
+    );
+  }
+  return true;
+}
+
 async function generateDraftMedia(
   taskId: string,
   job: GenerationJob,
@@ -283,8 +333,26 @@ async function processOne() {
   if (!task) return;
   try {
     const jobs = validateJobs(task.payload);
+    const facebookJob = jobs.find(
+      (job) => job.generatorPlatform === "facebook",
+    );
     for (const job of jobs) {
       const drafts = await runGenerationJob(task.id, task.user_id, job);
+      const reusedMetaMedia =
+        job.generatorPlatform === "instagram" && facebookJob
+          ? await copyFacebookMediaToInstagram(
+              task.user_id,
+              facebookJob,
+              drafts,
+            )
+          : false;
+      if (reusedMetaMedia) {
+        logger.info(
+          { taskId: task.id, drafts: drafts.length },
+          "[apollos-campaign] Facebook media reused for Instagram",
+        );
+        continue;
+      }
       for (const draft of drafts) {
         await generateDraftMedia(task.id, job, draft);
       }

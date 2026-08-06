@@ -91,3 +91,9 @@ export function isAdapterResultsEnvelope(
   const results = (body as { results?: unknown }).results;
   return Boolean(results && typeof results === "object" && !Array.isArray(results));
 }
+
+export function readAdapterResultsEnvelope(
+  body: unknown,
+): Record<string, AdapterPlatformResult> | null {
+  return isAdapterResultsEnvelope(body) ? body.results : null;
+}

@@ -177,4 +177,29 @@ describe("reconcileSchedulerPublishException", () => {
       "2026-08-10T13:05:00.000Z",
     );
   });
+
+  it("preserves warned provider receipts without upgrading to clean published", () => {
+    const recovery = reconcileSchedulerPublishException({
+      expectedPlatforms: ["facebook"],
+      deliveries: [
+        {
+          platform: "facebook",
+          status: "published_with_warning",
+          attemptNumber: 1,
+          externalPostId: "facebook-receipt",
+          externalPostUrl: null,
+          publishedAt: "2026-08-10T13:05:00.000Z",
+          updatedAt: "2026-08-10T13:05:00.000Z",
+        },
+      ],
+      error: "degraded provider result",
+    });
+
+    expect(recovery).toMatchObject({
+      status: "published_with_warning",
+      verifiedPublished: 1,
+      terminalFailures: 0,
+      unresolved: 0,
+    });
+  });
 });

@@ -2624,6 +2624,12 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
     res.status(422).json({ error: "campaign_image_required", message: "Generate or attach a campaign image before rendering video." });
     return;
   }
+  if (approvedWeeklyPayload && !imagePath.startsWith("/objects/")) {
+    res.status(403).json({
+      error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+    });
+    return;
+  }
 
   const idempotencyKey = typeof req.body?.idempotencyKey === "string" && req.body.idempotencyKey.trim()
     ? req.body.idempotencyKey.trim().slice(0, 180)

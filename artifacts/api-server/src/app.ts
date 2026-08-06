@@ -10,7 +10,6 @@ import oauthCallbacksRouter from "./routes/oauth-callbacks";
 import leadDeliveryWebhooksRouter from "./routes/lead-delivery-webhooks";
 import telnyxRouter from "./routes/telnyx";
 import { logger } from "./lib/logger";
-import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -30,10 +29,6 @@ const frontendDir = path.join(
   "dist",
   "public",
 );
-
-// Fail startup closed if PostgreSQL cannot install the atomic in-flight guard.
-// Serving without this trigger would reopen the approved-payload race.
-await bootstrapPublishingMutationGuard();
 
 const app: Express = express();
 

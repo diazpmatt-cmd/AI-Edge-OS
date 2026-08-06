@@ -539,6 +539,8 @@ export default function ApollosPage() {
   const [recsOpen, setRecsOpen]         = useState(true);
   const [timelineOpen, setTimelineOpen] = useState(true);
   const [underHoodOpen, setUnderHoodOpen] = useState(false);
+  const [repairRetryBusy, setRepairRetryBusy] = useState<string | null>(null);
+  const [repairRetryMessage, setRepairRetryMessage] = useState<string | null>(null);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
   // ── Voice INPUT state (SpeechRecognition) ────────────────────────────────
@@ -577,6 +579,41 @@ export default function ApollosPage() {
     retry: 1,
   });
   const repairHistory = repairHistoryQuery.data;
+
+  async function requestRepairRetry(
+    repairTaskId: string,
+    sourceTaskId: string,
+    planId: string,
+    diagnosisId: string,
+  ) {
+    if (repairRetryBusy) return;
+    setRepairRetryBusy(repairTaskId);
+    setRepairRetryMessage(null);
+    try {
+      const result = await apiFetch(
+        `/agent-tasks/${sourceTaskId}/repair-plan/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId, diagnosisId }),
+        },
+      ) as { reused?: boolean };
+      setRepairRetryMessage(
+        result.reused
+          ? "An equivalent repair request is already active."
+          : "A new repair request is waiting for your approval.",
+      );
+      await repairHistoryQuery.refetch();
+    } catch (error) {
+      setRepairRetryMessage(
+        error instanceof Error
+          ? error.message
+          : "The repair retry request failed closed.",
+      );
+    } finally {
+      setRepairRetryBusy(null);
+    }
+  }
 
   useEffect(() => {
     const active = messages.filter(
@@ -1811,6 +1848,11 @@ export default function ApollosPage() {
                       <span style={{ color: B.dim, fontSize: 8 }}>{repairHistory.count}</span>
                     )}
                   </div>
+                  {repairRetryMessage && (
+                    <div style={{ marginBottom: 7, color: B.gold, fontSize: 8.5, lineHeight: 1.4 }}>
+                      {repairRetryMessage}
+                    </div>
+                  )}
                   {repairHistoryQuery.isLoading ? (
                     <div style={{ color: B.dim, fontSize: 9 }}>Reading receipts…</div>
                   ) : repairHistoryQuery.isError ? (
@@ -1871,6 +1913,26 @@ export default function ApollosPage() {
                                 );
                               })}
                             </div>
+                            {task.status === "failed" && task.sourceTaskId && task.planId && task.diagnosisId && (
+                              <button
+                                onClick={() => requestRepairRetry(
+                                  task.taskId,
+                                  task.sourceTaskId!,
+                                  task.planId!,
+                                  task.diagnosisId!,
+                                )}
+                                disabled={repairRetryBusy !== null}
+                                style={{
+                                  width: "100%", marginTop: 7, padding: "5px 7px",
+                                  borderRadius: 6, border: "1px solid rgba(251,191,36,.28)",
+                                  background: "rgba(251,191,36,.08)", color: B.gold,
+                                  fontSize: 8.5, fontWeight: 900,
+                                  cursor: repairRetryBusy ? "wait" : "pointer",
+                                }}
+                              >
+                                {repairRetryBusy === task.taskId ? "Requesting…" : "Request safe retry"}
+                              </button>
+                            )}
                             <div style={{ color: B.dim, fontSize: 7, marginTop: 6, wordBreak: "break-all" }}>
                               Task {task.taskId}
                             </div>

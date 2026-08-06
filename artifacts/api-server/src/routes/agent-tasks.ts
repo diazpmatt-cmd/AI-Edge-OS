@@ -543,7 +543,21 @@ router.post("/agent-tasks/:id/approve", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-  const result = await atomicApprove(req.params.id, userId);
+  let result: ApproveResult;
+  try {
+    result = await atomicApprove(req.params.id, userId);
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      error.message.startsWith("APOLLOS_WEEKLY_")
+        ? error.message
+        : "APOLLOS_WEEKLY_APPROVAL_FAILED";
+    return res.status(409).json({
+      error:
+        "The weekly package changed or is incomplete. Review the current package before approving it.",
+      code,
+    });
+  }
 
   if ("notFound" in result) {
     return res.status(404).json({ error: "Task not found" });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isAdapterResultsEnvelope,
   mapAdapterResultToDelivery,
+  readAdapterResultsEnvelope,
 } from "./publishing-adapter-result";
 
 describe("mapAdapterResultToDelivery", () => {
@@ -57,15 +58,28 @@ describe("mapAdapterResultToDelivery", () => {
   });
 });
 
-describe("isAdapterResultsEnvelope", () => {
+describe("adapter results envelopes", () => {
   it("accepts object result maps and rejects malformed bodies", () => {
-    expect(
-      isAdapterResultsEnvelope({
-        results: { facebook: { ok: true, postId: "fb-1" } },
-      }),
-    ).toBe(true);
+    const envelope = {
+      results: { facebook: { ok: true, postId: "fb-1" } },
+    };
+    expect(isAdapterResultsEnvelope(envelope)).toBe(true);
+    expect(readAdapterResultsEnvelope(envelope)).toEqual(envelope.results);
     expect(isAdapterResultsEnvelope({ results: [] })).toBe(false);
-    expect(isAdapterResultsEnvelope({})).toBe(false);
-    expect(isAdapterResultsEnvelope(null)).toBe(false);
+    expect(readAdapterResultsEnvelope({ results: [] })).toBeNull();
+    expect(readAdapterResultsEnvelope({})).toBeNull();
+    expect(readAdapterResultsEnvelope(null)).toBeNull();
+  });
+
+  it("reads a valid partial result map independently of HTTP status", () => {
+    const body = {
+      error: "unexpected adapter exception",
+      results: {
+        facebook: { ok: true, postId: "fb-1" },
+        google: { ok: false, error: "Google failed" },
+      },
+    };
+
+    expect(readAdapterResultsEnvelope(body)).toEqual(body.results);
   });
 });

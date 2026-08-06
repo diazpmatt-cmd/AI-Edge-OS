@@ -1,7 +1,10 @@
 import type { RequestHandler } from "express";
 
 import { logger } from "../lib/logger.js";
+import { readAdapterResultsEnvelope } from "../lib/publishing-adapter-result.js";
 import { persistAdapterReceiptEnvelope } from "../lib/publishing-adapter-receipts.js";
+
+export const INTERNAL_PARTIAL_ADAPTER_STATUS = 207;
 
 export type PersistInternalPublishReceipts =
   typeof persistAdapterReceiptEnvelope;
@@ -10,6 +13,15 @@ export function shouldCaptureInternalPublishReceipt(
   routeId: string | undefined,
 ): routeId is string {
   return Boolean(routeId && routeId !== "bulk");
+}
+
+export function resolveInternalAdapterResponseStatus(
+  currentStatus: number,
+  body: unknown,
+): number {
+  return currentStatus >= 500 && readAdapterResultsEnvelope(body)
+    ? INTERNAL_PARTIAL_ADAPTER_STATUS
+    : currentStatus;
 }
 
 export function createInternalPublishReceiptMiddleware(
@@ -29,6 +41,14 @@ export function createInternalPublishReceiptMiddleware(
     res.json = ((body: unknown) => {
       if (responseCaptured) return res;
       responseCaptured = true;
+
+      const normalizedStatus = resolveInternalAdapterResponseStatus(
+        res.statusCode,
+        body,
+      );
+      if (normalizedStatus !== res.statusCode) {
+        res.status(normalizedStatus);
+      }
 
       void persist({ postId, body })
         .then(({ persisted, expected }) => {

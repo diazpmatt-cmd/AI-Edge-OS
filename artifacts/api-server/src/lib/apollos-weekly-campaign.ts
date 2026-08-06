@@ -16,7 +16,7 @@ export interface WeeklyCampaignSlot {
 }
 
 export interface WeeklyCampaignPlan {
-  readonly version: 1;
+  readonly version: 2;
   readonly startDate: string;
   readonly endDate: string;
   readonly platforms: readonly WeeklyCampaignPlatform[];
@@ -148,7 +148,7 @@ export function buildWeeklyCampaignPlan(input: {
   }
 
   return Object.freeze({
-    version: 1 as const,
+    version: 2 as const,
     startDate: input.startDate,
     endDate,
     platforms,

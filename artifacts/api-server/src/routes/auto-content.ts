@@ -1647,6 +1647,43 @@ function makeObjectPath(bucketPrefix: string, imageId: string): string {
   return `${bucketPrefix ? bucketPrefix + "/" : ""}generated-images/${imageId}.png`;
 }
 
+type ImageProviderFailure = {
+  code: string;
+  message: string;
+};
+
+function sanitizeProviderDiagnostic(value: unknown): string {
+  const raw = typeof value === "string" ? value : "";
+  return raw
+    .replace(/Bearer\s+[^\s"']+/gi, "Bearer [redacted]")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted-api-key]")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim()
+    .slice(0, 300);
+}
+
+export function parseImageProviderFailure(status: number, rawBody: string): ImageProviderFailure {
+  let code = `provider_http_${status}`;
+  let message = "";
+  try {
+    const parsed = JSON.parse(rawBody) as {
+      error?: { code?: unknown; type?: unknown; message?: unknown };
+      code?: unknown;
+      message?: unknown;
+    };
+    const providerError = parsed.error;
+    const rawCode = providerError?.code ?? providerError?.type ?? parsed.code;
+    if (typeof rawCode === "string" && rawCode.trim()) {
+      code = sanitizeProviderDiagnostic(rawCode).replace(/[^a-zA-Z0-9_.-]/g, "_");
+    }
+    message = sanitizeProviderDiagnostic(providerError?.message ?? parsed.message);
+  } catch {
+    message = sanitizeProviderDiagnostic(rawBody);
+  }
+  if (!message) message = `Image provider rejected the request (HTTP ${status})`;
+  return { code, message };
+}
+
 // ── POST /auto-content/generate-image ────────────────────────────────────────
 // Security controls (preflight order — provider is never called on any rejection):
 //   [S1]  Authentication
@@ -1942,17 +1979,36 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       await markFailed("provider_timeout");
       res.status(504).json({ error: "image_generation_timeout", message: "The image provider did not finish within two minutes. Please retry." });
     } else {
-      await markFailed(`provider_error:${fetchErr?.message ?? "unknown"}`);
-      res.status(502).json({ error: "Image generation failed" });
+      const reason = sanitizeProviderDiagnostic(fetchErr?.message ?? "unknown");
+      console.error("[auto-content/generate-image] provider connection error:", reason);
+      await markFailed(`provider_connection_failed:${reason || "unknown"}`);
+      res.status(502).json({
+        error: "Image provider connection failed",
+        code: "provider_connection_failed",
+        message: reason
+          ? `Could not reach the image provider: ${reason}`
+          : "Could not reach the image provider. Check the API base URL and outbound network access.",
+      });
     }
     return;
   }
   clearTimeout(timeoutId);
 
   if (!aiRes.ok) {
-    console.error("[auto-content/generate-image] provider HTTP error:", aiRes.status);
-    await markFailed(`provider_http_${aiRes.status}`);
-    res.status(502).json({ error: "Image generation failed" });
+    const rawError = (await aiRes.text()).slice(0, 16 * 1024);
+    const providerFailure = parseImageProviderFailure(aiRes.status, rawError);
+    console.error(
+      "[auto-content/generate-image] provider HTTP error:",
+      aiRes.status,
+      providerFailure.code,
+    );
+    await markFailed(`provider_http_${aiRes.status}:${providerFailure.code}:${providerFailure.message}`);
+    res.status(502).json({
+      error: providerFailure.message,
+      code: providerFailure.code,
+      providerStatus: aiRes.status,
+      message: providerFailure.message,
+    });
     return;
   }
 

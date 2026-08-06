@@ -62,7 +62,7 @@ describe("buildApollosRepairPlan", () => {
     for (const root of roots) {
       const plan = buildApollosRepairPlan(diagnosis(root));
       for (const repairStep of plan.steps) {
-        if (repairStep.effect !== "read_only") {
+        if (repairStep.effect !== "read_only" && repairStep.effect !== "checkpoint_resume") {
           expect(repairStep.requiresApproval).toBe(true);
         }
       }

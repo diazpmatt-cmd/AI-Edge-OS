@@ -191,17 +191,17 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
 
     // A recognizable BB&B jingle: bright, playful arpeggio notes with a soft
     // rhythmic pulse. Generated locally so it is original and reusable.
-    const beat = "mod(t,4)";
+    const beat = "mod(t\\,4)";
     const musicExpression = [
       "0.075*(",
-      `sin(2*PI*329.63*t)*between(${beat},0.00,0.42)`,
-      `+sin(2*PI*392.00*t)*between(${beat},0.50,0.92)`,
-      `+sin(2*PI*523.25*t)*between(${beat},1.00,1.42)`,
-      `+sin(2*PI*392.00*t)*between(${beat},1.50,1.92)`,
-      `+sin(2*PI*349.23*t)*between(${beat},2.00,2.42)`,
-      `+sin(2*PI*440.00*t)*between(${beat},2.50,2.92)`,
-      `+sin(2*PI*523.25*t)*between(${beat},3.00,3.42)`,
-      `+sin(2*PI*659.25*t)*between(${beat},3.50,3.92)`,
+      `sin(2*PI*329.63*t)*between(${beat}\\,0.00\\,0.42)`,
+      `+sin(2*PI*392.00*t)*between(${beat}\\,0.50\\,0.92)`,
+      `+sin(2*PI*523.25*t)*between(${beat}\\,1.00\\,1.42)`,
+      `+sin(2*PI*392.00*t)*between(${beat}\\,1.50\\,1.92)`,
+      `+sin(2*PI*349.23*t)*between(${beat}\\,2.00\\,2.42)`,
+      `+sin(2*PI*440.00*t)*between(${beat}\\,2.50\\,2.92)`,
+      `+sin(2*PI*523.25*t)*between(${beat}\\,3.00\\,3.42)`,
+      `+sin(2*PI*659.25*t)*between(${beat}\\,3.50\\,3.92)`,
       ")+0.018*sin(2*PI*130.81*t)",
     ].join("");
     await runProcess("ffmpeg", [

@@ -2437,6 +2437,7 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   }
 
   try {
+    const requestedVideoMode = req.body?.videoMode === "pest-story" ? "pest-story" : "professional";
     const rendered = await renderNativeCampaignVideo({
       generationId,
       imagePath,
@@ -2444,6 +2445,8 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       title,
       clientName: resolved.context.clientName,
       cta,
+      phoneNumber: "(251) 324-9090",
+      videoMode: requestedVideoMode,
       openAiBaseUrl: resolveOpenAiBaseUrl(),
       openAiApiKey: resolveOpenAiApiKey(),
     });

@@ -78,6 +78,17 @@ jobs:
         run: docker compose -f docker-compose.coolify.yml config >/tmp/coolify-compose.yml
       - name: Build production images
         run: docker compose -f docker-compose.coolify.yml build
+      - name: Apollos core runtime preflight
+        run: |
+          api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
+          test -n "$api_image"
+          docker run --rm \
+            --entrypoint sh \
+            -e NODE_ENV=test \
+            -e LOCAL_MEDIA_DIR=/tmp/apollos-media \
+            -e SCHEDULER_ENABLED=false \
+            -e REFERRAL_DELIVERY_EMERGENCY_STOP=true \
+            "$api_image" /app/deploy/smoke/apollos-core-runtime.sh
       - name: Apollos media runtime preflight
         run: |
           api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"

@@ -51,6 +51,7 @@ function latestByPlatform(
 ): ReadonlyMap<string, SchedulerDeliveryEvidence> {
   const latest = new Map<string, SchedulerDeliveryEvidence>();
   for (const delivery of deliveries) {
+    if (!delivery.platform) continue;
     const current = latest.get(delivery.platform);
     if (
       !current ||
@@ -81,11 +82,21 @@ function isTerminalFailure(delivery: SchedulerDeliveryEvidence): boolean {
 }
 
 export function reconcileSchedulerPublishException(input: {
-  readonly expectedPlatforms: readonly string[];
+  readonly expectedPlatforms: unknown;
   readonly deliveries: readonly SchedulerDeliveryEvidence[];
   readonly error: string;
 }): SchedulerPublishRecovery {
-  const expected = [...new Set(input.expectedPlatforms.filter(Boolean))];
+  const expectedInput = Array.isArray(input.expectedPlatforms)
+    ? input.expectedPlatforms
+    : [];
+  const expected = [
+    ...new Set(
+      expectedInput.filter(
+        (platform): platform is string =>
+          typeof platform === "string" && platform.length > 0,
+      ),
+    ),
+  ];
   const expectedKnown = expected.length > 0;
   const latest = latestByPlatform(input.deliveries);
   const platforms = expectedKnown ? expected : [...latest.keys()];

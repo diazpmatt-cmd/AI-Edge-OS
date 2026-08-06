@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
 import { classifyDabRuntimeStatus } from "../lib/dab-runtime-status";
+import { buildApollosCapabilities } from "../lib/apollos-capabilities";
 
 const router = Router();
 
@@ -191,6 +192,51 @@ router.get("/dab/agent-status", async (_req, res) => {
       recommendation: latestResult.rows[0].recommendation,
     } : null,
     contextCoverage: contextCoverage(latestRequest.rows[0]?.context),
+  });
+});
+
+
+router.get("/dab/capabilities", (_req, res) => {
+  const capabilities = buildApollosCapabilities({
+    agentWorkerEnabled: process.env.DAB_AGENT_WORKER_ENABLED === "true",
+    agentProviderEnabled: process.env.DAB_AGENT_PROVIDER_ENABLED === "true",
+    agentKillSwitch: process.env.DAB_AGENT_KILL_SWITCH !== "false",
+    aiCredentialPresent: Boolean(
+      process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    ),
+    preparationWorkerEnabled:
+      process.env.DAB_PREPARATION_WORKER_ENABLED === "true",
+    preparationKillSwitch:
+      process.env.DAB_PREPARATION_KILL_SWITCH !== "false",
+    publishingWorkerEnabled:
+      process.env.DAB_PUBLISHING_WORKER_ENABLED === "true",
+    publishingKillSwitch:
+      process.env.DAB_PUBLISHING_KILL_SWITCH !== "false",
+    schedulerSecretPresent: Boolean(process.env.SCHEDULER_SECRET),
+  });
+
+  const counts = capabilities.reduce(
+    (summary, item) => {
+      summary[item.state] += 1;
+      return summary;
+    },
+    { ready: 0, degraded: 0, blocked: 0, disabled: 0 },
+  );
+
+  res.json({
+    operator: "Apollos",
+    role: "AI Edge engineering and operations",
+    checkedAt: new Date().toISOString(),
+    overallStatus:
+      counts.blocked > 0
+        ? "blocked"
+        : counts.degraded > 0
+          ? "degraded"
+          : counts.ready > 0
+            ? "ready"
+            : "disabled",
+    counts,
+    capabilities,
   });
 });
 

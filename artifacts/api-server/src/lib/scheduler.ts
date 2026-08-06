@@ -7,6 +7,7 @@ import { SCHEDULER_SECRET } from "./scheduler-secret";
 import { sendSms } from "./sms";
 import { runBacklinkSchedulerMonitor } from "./backlink-scheduler-monitor.js";
 import { runAiVisibilitySchedulerMonitor } from "./ai-visibility-scheduler-monitor.js";
+import { publishingService } from "./publishing-service.js";
 
 export type { SkipReason, EligibilityInput, EligibilityResult } from "@workspace/db";
 export type { SchedulerCycleSummary };
@@ -77,25 +78,38 @@ export async function publishDuePosts(): Promise<void> {
     try {
       logger.info({ postId: id, userId }, "[scheduler] publishing post");
 
-      const res = await fetch(`${base}/api/social-posts/${id}/publish`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":       "application/json",
-          "x-scheduler-secret": SCHEDULER_SECRET,
-        },
-      });
+      const result = await publishingService.publishPost(
+        id,
+        userId,
+        "scheduler",
+        base,
+        SCHEDULER_SECRET,
+      );
 
-      const body = await res.json() as Record<string, unknown>;
-
-      if (res.ok && body.ok) {
+      if (
+        result.published > 0 &&
+        result.failed === 0 &&
+        result.skipped === 0
+      ) {
         logger.info(
-          { postId: id, publishStatus: body.status },
-          "[scheduler] post published successfully",
+          {
+            postId: id,
+            publishStatus: result.postStatus,
+            deliveries: result.published,
+          },
+          "[scheduler] post published with verified delivery receipts",
         );
       } else {
         logger.error(
-          { postId: id, httpStatus: res.status, body },
-          "[scheduler] post publish failed — route handled status update",
+          {
+            postId: id,
+            publishStatus: result.postStatus,
+            published: result.published,
+            failed: result.failed,
+            skipped: result.skipped,
+            summary: result.summary,
+          },
+          "[scheduler] canonical publish incomplete — delivery ledger preserved",
         );
       }
     } catch (err: unknown) {

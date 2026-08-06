@@ -129,6 +129,7 @@ interface RepairRuntimeResponse {
     backlogAfterMs?: number;
   } | null;
   latestActivityAt: string | null;
+  remediation?: { owner: string; nextStep: string };
   staleAfterMs?: number;
   heartbeatAgeMs?: number | null;
   latestHeartbeat?: {
@@ -1723,6 +1724,12 @@ export default function ApollosPage() {
               {repairRuntime?.reasonCode && repairRuntime.status !== "ready" && (
                 <div style={{ marginTop: 4, color: repairRuntime.status === "blocked" || repairRuntime.status === "misconfigured" || repairRuntime.status === "degraded" ? "#F87171" : B.dim, fontSize: 8, lineHeight: 1.35 }}>
                   {repairRuntime.reasonCode.replaceAll("_", " ").toLowerCase()}
+                </div>
+              )}
+              {repairRuntime?.remediation && repairRuntime.status !== "ready" && (
+                <div style={{ marginTop: 5, padding: "6px", borderRadius: 6, background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.15)", color: B.silver, fontSize: 8, lineHeight: 1.4 }}>
+                  <strong style={{ color: B.gold }}>{repairRuntime.remediation.owner}:</strong>{" "}
+                  {repairRuntime.remediation.nextStep}
                 </div>
               )}
               {repairRuntime?.latestHeartbeat && (

@@ -411,6 +411,118 @@ router.get("/agent-tasks/:id", async (req, res) => {
   });
 });
 
+// ── GET /agent-tasks/:id/weekly-package-status — safe readiness summary ─────
+router.get("/agent-tasks/:id/weekly-package-status", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const [task] = await db
+    .select()
+    .from(agentTasksTable)
+    .where(
+      and(
+        eq(agentTasksTable.id, req.params.id),
+        eq(agentTasksTable.userId, userId),
+      ),
+    );
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  if (task.taskType !== "weekly_campaign") {
+    return res.status(422).json({
+      error: "This task is not a weekly campaign.",
+      code: "APOLLOS_WEEKLY_STATUS_TASK_TYPE_INVALID",
+    });
+  }
+
+  try {
+    const payload =
+      typeof task.payload === "string" ? JSON.parse(task.payload) : task.payload;
+    const batchKey = payload?.batchKey;
+    const plan = payload?.plan as WeeklyCampaignPlan;
+    const generationJobs =
+      payload?.generationJobs as readonly WeeklyGenerationJob[];
+    if (
+      typeof batchKey !== "string" ||
+      !plan ||
+      !Array.isArray(generationJobs)
+    ) {
+      throw new Error("APOLLOS_WEEKLY_STATUS_PAYLOAD_INVALID");
+    }
+    assertWeeklyGenerationContract(batchKey, plan, generationJobs);
+
+    const weeklyPlanIds = generationJobs.map((job) => job.weeklyPlanId);
+    const posts = await db
+      .select({
+        weeklyPlanId: socialPostsTable.weeklyPlanId,
+        status: socialPostsTable.status,
+        approvalStatus: socialPostsTable.approvalStatus,
+        imageData: socialPostsTable.imageData,
+        videoUrl: socialPostsTable.videoUrl,
+        mediaMimeType: socialPostsTable.mediaMimeType,
+      })
+      .from(socialPostsTable)
+      .where(
+        and(
+          eq(socialPostsTable.userId, userId),
+          inArray(socialPostsTable.weeklyPlanId, weeklyPlanIds),
+        ),
+      );
+
+    const channels = generationJobs.map((job) => {
+      const channelPosts = posts.filter(
+        (post) => post.weeklyPlanId === job.weeklyPlanId,
+      );
+      const mediaReady = channelPosts.filter((post) =>
+        job.generatorPlatform === "youtube"
+          ? post.videoUrl?.startsWith("/objects/") &&
+            post.mediaMimeType === "video/mp4"
+          : post.imageData?.startsWith("/objects/") &&
+            post.mediaMimeType === "image/png",
+      ).length;
+      return {
+        platform: job.generatorPlatform,
+        expected: job.count,
+        generated: channelPosts.length,
+        mediaReady,
+        pendingReview: channelPosts.filter(
+          (post) => post.approvalStatus === "pending_review",
+        ).length,
+        scheduled: channelPosts.filter(
+          (post) => post.status === "scheduled",
+        ).length,
+        rejected: channelPosts.filter(
+          (post) => post.approvalStatus === "rejected",
+        ).length,
+        ready:
+          channelPosts.length === job.count &&
+          mediaReady === job.count,
+      };
+    });
+
+    return res.json({
+      taskId: task.id,
+      taskStatus: task.status,
+      approvalRequired: task.status === "pending_review",
+      expectedDeliveries: plan.deliveryCount,
+      generatedDeliveries: posts.length,
+      readyChannels: channels.filter((channel) => channel.ready).length,
+      totalChannels: channels.length,
+      packageReady:
+        posts.length === plan.deliveryCount &&
+        channels.every((channel) => channel.ready),
+      channels,
+    });
+  } catch (error) {
+    const code =
+      error instanceof Error && error.message.startsWith("APOLLOS_WEEKLY_")
+        ? error.message
+        : "APOLLOS_WEEKLY_STATUS_FAILED";
+    return res.status(409).json({
+      error: "The weekly package status could not be verified.",
+      code,
+    });
+  }
+});
+
 // ── GET /agent-tasks/:id/diagnosis — evidence-based root cause ───────────────
 router.get("/agent-tasks/:id/diagnosis", async (req, res) => {
   const { userId } = getAuth(req);

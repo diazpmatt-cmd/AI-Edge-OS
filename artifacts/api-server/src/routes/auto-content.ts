@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, pool } from "@workspace/db";
-import { autoContentSettingsTable, socialPostsTable, imageAssetsTable, clientsTable } from "@workspace/db/schema";
+import { autoContentSettingsTable, socialPostsTable, imageAssetsTable, clientsTable, agentTasksTable } from "@workspace/db/schema";
 import {
   normalizeTopics,
   validateTopicForGeneration,
@@ -499,20 +499,41 @@ router.post("/auto-content/generate", async (req, res) => {
   let userId: string | null = clerkUserId ?? null;
 
   if (!userId && isSchedulerCall) {
-    const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
-    if (!settingsId) {
-      res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
-      return;
+    const approvedTaskId = req.headers["x-apollos-task-id"] as string | undefined;
+    if (approvedTaskId) {
+      const [approvedTask] = await db
+        .select({ userId: agentTasksTable.userId })
+        .from(agentTasksTable)
+        .where(and(
+          eq(agentTasksTable.id, approvedTaskId),
+          eq(agentTasksTable.taskType, "weekly_campaign"),
+          eq(agentTasksTable.status, "executing"),
+          eq(agentTasksTable.decision, "requires_review"),
+        ));
+      if (!approvedTask) {
+        res.status(403).json({
+          error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
+          message: "The weekly campaign task is not approved for execution.",
+        });
+        return;
+      }
+      userId = approvedTask.userId;
+    } else {
+      const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
+      if (!settingsId) {
+        res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
+        return;
+      }
+      const [settingsRow] = await db
+        .select({ userId: autoContentSettingsTable.userId, autopilotEnabled: autoContentSettingsTable.autopilotEnabled })
+        .from(autoContentSettingsTable)
+        .where(eq(autoContentSettingsTable.id, settingsId));
+      if (!settingsRow || settingsRow.autopilotEnabled !== "true") {
+        res.status(403).json({ error: "Forbidden: settings not found or autopilot not enabled" });
+        return;
+      }
+      userId = settingsRow.userId;
     }
-    const [settingsRow] = await db
-      .select({ userId: autoContentSettingsTable.userId, autopilotEnabled: autoContentSettingsTable.autopilotEnabled })
-      .from(autoContentSettingsTable)
-      .where(eq(autoContentSettingsTable.id, settingsId));
-    if (!settingsRow || settingsRow.autopilotEnabled !== "true") {
-      res.status(403).json({ error: "Forbidden: settings not found or autopilot not enabled" });
-      return;
-    }
-    userId = settingsRow.userId;
   }
 
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -1783,24 +1804,42 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   const { userId: clerkUserId } = getAuth(req);
   let userId: string | null = clerkUserId ?? null;
   if (!userId && isSchedulerCall) {
-    const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
-    if (!settingsId) {
-      res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
-      return;
+    const approvedTaskId = req.headers["x-apollos-task-id"] as string | undefined;
+    if (approvedTaskId) {
+      const [approvedTask] = await db
+        .select({ userId: agentTasksTable.userId })
+        .from(agentTasksTable)
+        .where(and(
+          eq(agentTasksTable.id, approvedTaskId),
+          eq(agentTasksTable.taskType, "weekly_campaign"),
+          eq(agentTasksTable.status, "executing"),
+          eq(agentTasksTable.decision, "requires_review"),
+        ));
+      if (!approvedTask) {
+        res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
+        return;
+      }
+      userId = approvedTask.userId;
+    } else {
+      const settingsId = req.headers["x-scheduler-settings-id"] as string | undefined;
+      if (!settingsId) {
+        res.status(401).json({ error: "Unauthorized: scheduler call missing x-scheduler-settings-id" });
+        return;
+      }
+      const [settingsRow] = await db
+        .select({
+          userId: autoContentSettingsTable.userId,
+          autopilotEnabled: autoContentSettingsTable.autopilotEnabled,
+          autoMediaEnabled: autoContentSettingsTable.autoMediaEnabled,
+        })
+        .from(autoContentSettingsTable)
+        .where(eq(autoContentSettingsTable.id, settingsId));
+      if (!settingsRow || settingsRow.autopilotEnabled !== "true" || settingsRow.autoMediaEnabled !== "true") {
+        res.status(403).json({ error: "Forbidden: autonomous media is not enabled" });
+        return;
+      }
+      userId = settingsRow.userId;
     }
-    const [settingsRow] = await db
-      .select({
-        userId: autoContentSettingsTable.userId,
-        autopilotEnabled: autoContentSettingsTable.autopilotEnabled,
-        autoMediaEnabled: autoContentSettingsTable.autoMediaEnabled,
-      })
-      .from(autoContentSettingsTable)
-      .where(eq(autoContentSettingsTable.id, settingsId));
-    if (!settingsRow || settingsRow.autopilotEnabled !== "true" || settingsRow.autoMediaEnabled !== "true") {
-      res.status(403).json({ error: "Forbidden: autonomous media is not enabled" });
-      return;
-    }
-    userId = settingsRow.userId;
   }
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
@@ -2343,7 +2382,30 @@ export function buildSafeVideoNarration(opts: {
 // Creates a branded 16:9 MP4 from an existing campaign image plus AI narration.
 // Interactive only for V1: autonomous video cadence remains a separate control.
 router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
-  const { userId } = getAuth(req);
+  const isSchedulerCall = isValidSchedulerSecret(req.headers["x-scheduler-secret"]);
+  const { userId: clerkUserId } = getAuth(req);
+  let userId: string | null = clerkUserId ?? null;
+  if (!userId && isSchedulerCall) {
+    const approvedTaskId = req.headers["x-apollos-task-id"] as string | undefined;
+    if (!approvedTaskId) {
+      res.status(401).json({ error: "Unauthorized: approved Apollos task is required" });
+      return;
+    }
+    const [approvedTask] = await db
+      .select({ userId: agentTasksTable.userId })
+      .from(agentTasksTable)
+      .where(and(
+        eq(agentTasksTable.id, approvedTaskId),
+        eq(agentTasksTable.taskType, "weekly_campaign"),
+        eq(agentTasksTable.status, "executing"),
+        eq(agentTasksTable.decision, "requires_review"),
+      ));
+    if (!approvedTask) {
+      res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
+      return;
+    }
+    userId = approvedTask.userId;
+  }
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const resolved = await resolveClientContentContextFromDb(userId);

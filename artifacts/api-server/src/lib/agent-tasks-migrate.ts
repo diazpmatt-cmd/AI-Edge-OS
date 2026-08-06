@@ -25,11 +25,19 @@ export async function migrateAgentTasks(): Promise<void> {
       decision_note    TEXT,
       rule_id          TEXT,
       rule_set_version TEXT        NOT NULL DEFAULT 'v1',
+      execution_attempts INTEGER     NOT NULL DEFAULT 0,
+      execution_started_at TIMESTAMPTZ,
+      execution_completed_at TIMESTAMPTZ,
+      failure_code      TEXT,
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS resolution TEXT;
+    ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS execution_attempts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS execution_started_at TIMESTAMPTZ;
+    ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS execution_completed_at TIMESTAMPTZ;
+    ALTER TABLE agent_tasks ADD COLUMN IF NOT EXISTS failure_code TEXT;
 
     CREATE INDEX IF NOT EXISTS idx_agent_tasks_user_created
       ON agent_tasks(user_id, created_at DESC);

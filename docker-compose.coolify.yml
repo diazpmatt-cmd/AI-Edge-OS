@@ -181,6 +181,40 @@ services:
       retries: 3
       start_period: 30s
 
+
+  apollos-campaign-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "on-failure:3"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/apollos-campaign-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:?SCHEDULER_SECRET is required}
+      APOLLOS_CAMPAIGN_WORKER_ENABLED: "true"
+      APOLLOS_CAMPAIGN_KILL_SWITCH: "false"
+      APOLLOS_CAMPAIGN_RUNTIME_ID: apollos-campaign-production-1
+      APOLLOS_CAMPAIGN_INTERVAL_MS: "15000"
+      APOLLOS_CAMPAIGN_TIMEOUT_MS: "900000"
+      APOLLOS_CAMPAIGN_MAX_ATTEMPTS: "3"
+      APOLLOS_CAMPAIGN_LEASE_MS: "1200000"
+      APOLLOS_CAMPAIGN_INTERNAL_BASE_URL: http://api:3000
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   web:
     build:
       context: .

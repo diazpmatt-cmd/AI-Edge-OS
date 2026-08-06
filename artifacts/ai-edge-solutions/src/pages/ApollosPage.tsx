@@ -25,11 +25,32 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+type WeeklyApprovalStatus = "generating" | "pending" | "approved" | "executed" | "failed" | "rejected";
+
+function normalizeWeeklyApprovalStatus(status?: string): WeeklyApprovalStatus | null {
+  if (status === "generation_queued" || status === "generating_drafts" || status === "executing") return "generating";
+  if (status === "pending_review" || status === "awaiting_batch_approval") return "pending";
+  if (status === "approved" || status === "executed" || status === "failed" || status === "rejected") return status;
+  return null;
+}
+
+interface WeeklyApproval {
+  taskId: string;
+  startDate: string;
+  endDate: string;
+  deliveryCount: number;
+  platforms: string[];
+  status: WeeklyApprovalStatus;
+  failureCode?: string | null;
+  failureDetail?: string | null;
+}
+
 interface Message {
   id: string;
   role: "apollos" | "user";
   text: string;
   time: string;
+  weeklyApproval?: WeeklyApproval;
 }
 
 // ── Static data ───────────────────────────────────────────────────────────────
@@ -216,7 +237,15 @@ function ComingSoon() {
   );
 }
 
-function Bubble({ msg }: { msg: Message }) {
+function Bubble({
+  msg,
+  actionBusy,
+  onWeeklyDecision,
+}: {
+  msg: Message;
+  actionBusy: boolean;
+  onWeeklyDecision: (messageId: string, taskId: string, decision: "approve" | "reject") => void;
+}) {
   const isApollos = msg.role === "apollos";
   return (
     <div style={{
@@ -253,6 +282,65 @@ function Bubble({ msg }: { msg: Message }) {
             }}>Apollos</div>
           )}
           {msg.text}
+          {msg.weeklyApproval && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${B.border}` }}>
+              <div style={{ fontSize: 11, color: B.silver, marginBottom: 9 }}>
+                {msg.weeklyApproval.startDate} through {msg.weeklyApproval.endDate}
+                {" · "}{msg.weeklyApproval.deliveryCount} deliveries
+              </div>
+              {msg.weeklyApproval.status === "pending" ? (
+                <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+                  <a
+                    href="/admin/bbb-autopilot"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ background: "rgba(0,174,239,.14)", border: "1px solid rgba(0,174,239,.5)", color: B.blue, borderRadius: 9, padding: "9px 14px", fontWeight: 800, textDecoration: "none" }}
+                  >↗ Review Complete Package</a>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => onWeeklyDecision(msg.id, msg.weeklyApproval!.taskId, "approve")}
+                    style={{ background: "rgba(34,197,94,.18)", border: "1px solid rgba(34,197,94,.55)", color: B.green, borderRadius: 9, padding: "9px 14px", fontWeight: 800, cursor: actionBusy ? "wait" : "pointer" }}
+                  >✓ Approve Week</button>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => onWeeklyDecision(msg.id, msg.weeklyApproval!.taskId, "reject")}
+                    style={{ background: "rgba(248,113,113,.14)", border: "1px solid rgba(248,113,113,.45)", color: "#F87171", borderRadius: 9, padding: "9px 14px", fontWeight: 800, cursor: actionBusy ? "wait" : "pointer" }}
+                  >✕ Reject</button>
+                </div>
+              ) : (
+                <div style={{
+                  color:
+                    msg.weeklyApproval.status === "failed" || msg.weeklyApproval.status === "rejected"
+                      ? "#F87171"
+                      : msg.weeklyApproval.status === "executed"
+                        ? B.green
+                        : B.blue,
+                  fontWeight: 800,
+                }}>
+                  {msg.weeklyApproval.status === "generating" &&
+                    "⚙ Apollos is creating every caption, image, and YouTube video. Approval appears when the complete package is ready."}
+                  {msg.weeklyApproval.status === "approved" &&
+                    "✓ Complete weekly package approved — ready for guarded scheduling and delivery."}
+                  {msg.weeklyApproval.status === "executed" &&
+                    "✓ Approved weekly campaign completed."}
+                  {msg.weeklyApproval.status === "failed" &&
+                    "⚠ Weekly generation stopped after bounded retries. Open Under the Hood for the exact failure."}
+                  {msg.weeklyApproval.status === "rejected" &&
+                    "✕ Weekly package rejected. Its drafts remain unpublished."}
+                </div>
+              )}
+              {msg.weeklyApproval.status === "failed" && (
+                <div style={{ marginTop: 8, padding: 9, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
+                  <strong style={{ color: "#F87171" }}>
+                    {msg.weeklyApproval.failureCode ?? "APOLLOS_WEEKLY_GENERATION_FAILED"}
+                  </strong>
+                  {msg.weeklyApproval.failureDetail
+                    ? ` · ${msg.weeklyApproval.failureDetail}`
+                    : ""}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ fontSize: 10, color: B.dim }}>{msg.time}</div>
       </div>
@@ -266,6 +354,7 @@ export default function ApollosPage() {
   const [messages, setMessages]     = useState<Message[]>([OPENING_MESSAGE]);
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
+  const [weeklyActionBusy, setWeeklyActionBusy] = useState<string | null>(null);
   const briefFiredRef               = useRef(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [recsOpen, setRecsOpen]         = useState(true);
@@ -282,6 +371,72 @@ export default function ApollosPage() {
   const micSupported     = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();
+
+  useEffect(() => {
+    const active = messages.filter(
+      (message) =>
+        message.weeklyApproval?.status === "generating",
+    );
+    if (active.length === 0) return;
+
+    let cancelled = false;
+    const refresh = async () => {
+      const results = await Promise.all(
+        active.map(async (message) => {
+          try {
+            const task = await apiFetch(`/agent-tasks/${message.weeklyApproval!.taskId}`) as {
+              status?: string;
+              failureCode?: string | null;
+              decisionNote?: string | null;
+            };
+            return {
+              messageId: message.id,
+              status: task.status,
+              failureCode: task.failureCode ?? null,
+              failureDetail: task.decisionNote ?? null,
+            };
+          } catch {
+            return {
+              messageId: message.id,
+              status: undefined,
+              failureCode: null,
+              failureDetail: null,
+            };
+          }
+        }),
+      );
+      if (cancelled) return;
+      setMessages((current) =>
+        current.map((message) => {
+          const result = results.find((item) => item.messageId === message.id);
+          const status = normalizeWeeklyApprovalStatus(result?.status);
+          if (
+            !message.weeklyApproval ||
+            !status ||
+            status === message.weeklyApproval.status
+          ) {
+            return message;
+          }
+          return {
+            ...message,
+            weeklyApproval: {
+              ...message.weeklyApproval,
+              status,
+              failureCode: result?.failureCode ?? null,
+              failureDetail: result?.failureDetail ?? null,
+            },
+          };
+        }),
+      );
+    };
+
+    void refresh();
+    const timer = window.setInterval(refresh, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [apiFetch, messages]);
 
   // ── Live data queries ────────────────────────────────────────────────────────
   const ciQuery    = useCallIntelligenceQuery("30days", { retry: 1 });
@@ -638,6 +793,58 @@ export default function ApollosPage() {
     setResponding(true);
 
     const lower = trimmed.toLowerCase();
+    const weeklyCommand =
+      /\b(create|generate|build|prepare|schedule)\b/.test(lower) &&
+      (/\bweek(?:'s|s|ly)?\b/.test(lower) || /seven[- ]day|7[- ]day/.test(lower)) &&
+      (/all (four|4)|facebook|instagram|google business|\bgbp\b|youtube/.test(lower));
+
+    if (weeklyCommand) {
+      try {
+        const data = await apiFetch("/apollos/weekly-campaign/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: trimmed }),
+        }) as {
+          taskId: string;
+          duplicate?: boolean;
+          executionStatus: string;
+          plan: {
+            startDate: string;
+            endDate: string;
+            deliveryCount: number;
+            platforms: string[];
+          };
+        };
+        const status = normalizeWeeklyApprovalStatus(data.executionStatus) ?? "generating";
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: "apollos",
+          text: data.duplicate
+            ? "I found the existing weekly campaign instead of creating a duplicate."
+            : "I am building your complete weekly package now: 5 Facebook posts, 5 Instagram posts, 2 Google Business Profile posts, and 1 YouTube video. You will receive one approval decision after every caption and media asset is ready.",
+          time: nowTime(),
+          weeklyApproval: {
+            taskId: data.taskId,
+            startDate: data.plan.startDate,
+            endDate: data.plan.endDate,
+            deliveryCount: data.plan.deliveryCount,
+            platforms: data.plan.platforms,
+            status,
+          },
+        }]);
+      } catch (err: any) {
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: "apollos",
+          text: `I could not create the weekly campaign. ${err?.message ?? "Unknown error"}`,
+          time: nowTime(),
+        }]);
+      } finally {
+        setResponding(false);
+      }
+      return;
+    }
+
     const intent = NAV_INTENTS.find(i => i.patterns.some(p => lower.includes(p)));
 
     if (intent) {
@@ -675,6 +882,44 @@ export default function ApollosPage() {
       } finally {
         setResponding(false);
       }
+    }
+  }
+
+  async function decideWeeklyCampaign(
+    messageId: string,
+    taskId: string,
+    decision: "approve" | "reject",
+  ) {
+    if (weeklyActionBusy) return;
+    setWeeklyActionBusy(taskId);
+    try {
+      await apiFetch(`/agent-tasks/${taskId}/${decision}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: decision === "reject"
+          ? JSON.stringify({ note: "Rejected from Apollos weekly campaign review." })
+          : JSON.stringify({}),
+      });
+      setMessages(current => current.map(message =>
+        message.id === messageId && message.weeklyApproval
+          ? {
+              ...message,
+              weeklyApproval: {
+                ...message.weeklyApproval,
+                status: decision === "approve" ? "approved" : "rejected",
+              },
+            }
+          : message
+      ));
+    } catch (err: any) {
+      setMessages(current => [...current, {
+        id: uid(),
+        role: "apollos",
+        text: `The weekly decision was not recorded. ${err?.message ?? "Please try again."}`,
+        time: nowTime(),
+      }]);
+    } finally {
+      setWeeklyActionBusy(null);
     }
   }
 
@@ -997,7 +1242,14 @@ export default function ApollosPage() {
             </div>
           </div>
 
-          {messages.map(m => <Bubble key={m.id} msg={m} />)}
+          {messages.map(m => (
+            <Bubble
+              key={m.id}
+              msg={m}
+              actionBusy={weeklyActionBusy === m.weeklyApproval?.taskId}
+              onWeeklyDecision={decideWeeklyCampaign}
+            />
+          ))}
 
           {/* Typing indicator */}
           {responding && (

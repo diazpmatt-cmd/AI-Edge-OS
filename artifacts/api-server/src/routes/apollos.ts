@@ -9,9 +9,17 @@ import {
   reviewRequestsTable,
   reviewPlatformStatsTable,
   leadsTable,
+  agentTasksTable,
 } from "@workspace/db/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import {
+  buildWeeklyCampaignPlan,
+  buildWeeklyGenerationJobs,
+  isWeeklyCampaignCommand,
+  parseWeeklyCampaignPlatforms,
+} from "../lib/apollos-weekly-campaign";
+import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine";
 
 const router = Router();
 
@@ -1240,6 +1248,132 @@ ${contextBlock}`;
     } else {
       res.status(500).json({ error: "Apollos is temporarily unavailable. Please try again in a moment." });
     }
+  }
+});
+
+
+function nextMondayDate(now = new Date()): string {
+  const day = now.getUTCDay();
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
+  const next = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + daysUntilMonday,
+  ));
+  return next.toISOString().slice(0, 10);
+}
+
+router.post("/apollos/weekly-campaign/plan", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const command =
+    typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  if (!isWeeklyCampaignCommand(command)) {
+    res.status(400).json({
+      error: "APOLLOS_WEEKLY_COMMAND_NOT_RECOGNIZED",
+      message:
+        "Ask Apollos to create, build, prepare, or schedule a week of content and name the platforms or say all four.",
+    });
+    return;
+  }
+
+  const startDate =
+    typeof req.body?.startDate === "string"
+      ? req.body.startDate
+      : nextMondayDate();
+
+  try {
+    const plan = buildWeeklyCampaignPlan({
+      startDate,
+      platforms: parseWeeklyCampaignPlatforms(command),
+    });
+    const batchKey =
+      `weekly:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
+    const generationJobs = buildWeeklyGenerationJobs(batchKey, plan);
+
+    const existing = await db
+      .select()
+      .from(agentTasksTable)
+      .where(
+        and(
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.taskType, "weekly_campaign"),
+        ),
+      )
+      .orderBy(desc(agentTasksTable.createdAt))
+      .limit(25);
+
+    const duplicate = existing.find((task) => {
+      try {
+        const payload = JSON.parse(task.payload) as { batchKey?: unknown };
+        return payload.batchKey === batchKey;
+      } catch {
+        return false;
+      }
+    });
+
+    if (duplicate) {
+      res.status(200).json({
+        status: "planned",
+        executionStatus: duplicate.status,
+        duplicate: true,
+        taskId: duplicate.id,
+        command,
+        plan,
+        generationJobs,
+      });
+      return;
+    }
+
+    const evaluation = evaluateTask("weekly_campaign", {
+      batchKey,
+      command,
+      plan,
+      generationJobs,
+    });
+    const [task] = await db
+      .insert(agentTasksTable)
+      .values({
+        userId,
+        taskType: "weekly_campaign",
+        payload: JSON.stringify({ batchKey, command, plan, generationJobs }),
+        status: "generation_queued",
+        decision: evaluation.decision,
+        resolution: null,
+        decisionBy: null,
+        decisionAt: null,
+        decisionNote: null,
+        ruleId: evaluation.ruleId,
+        ruleSetVersion: RULE_SET_VERSION,
+      })
+      .returning();
+
+    res.status(201).json({
+      status: "planned",
+      executionStatus: "generating_drafts",
+      duplicate: false,
+      taskId: task.id,
+      command,
+      plan,
+      generationJobs,
+      approval: {
+        endpoint: `/api/agent-tasks/${task.id}/approve`,
+        rejectEndpoint: `/api/agent-tasks/${task.id}/reject`,
+        ruleId: evaluation.ruleId,
+      },
+      nextAction:
+        "Apollos is generating the platform-specific drafts and media. One approval will be requested after the complete weekly package is ready.",
+    });
+  } catch (error) {
+    const code =
+      error instanceof Error
+        ? error.message
+        : "APOLLOS_WEEKLY_PLAN_FAILED";
+    res.status(400).json({ error: code });
   }
 });
 

@@ -71,7 +71,7 @@ jobs:
           corepack prepare pnpm@10.26.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck:libs
-      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/apollos-capabilities.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-publishing-policy.test.ts
+      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/apollos-capabilities.test.ts src/__tests__/apollos-weekly-campaign.test.ts src/__tests__/apollos-weekly-approval.test.ts src/__tests__/apollos-weekly-execution.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-publishing-policy.test.ts
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/ai-edge-solutions run build
       - name: Validate Compose rendering

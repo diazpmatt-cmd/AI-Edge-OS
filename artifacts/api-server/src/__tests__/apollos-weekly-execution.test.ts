@@ -49,7 +49,7 @@ describe("Apollos weekly execution state rules", () => {
     });
   });
 
-  it("marks a fully verified batch executed", () => {
+  it("marks a fully verified package ready for review", () => {
     expect(completeWeeklyExecution()).toMatchObject({
       nextStatus: "pending_review",
       terminal: true,

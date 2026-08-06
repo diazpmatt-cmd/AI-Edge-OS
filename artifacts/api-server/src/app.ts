@@ -10,12 +10,14 @@ import oauthCallbacksRouter from "./routes/oauth-callbacks";
 import leadDeliveryWebhooksRouter from "./routes/lead-delivery-webhooks";
 import telnyxRouter from "./routes/telnyx";
 import { logger } from "./lib/logger";
+import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import { requireInternalPublishAdapter } from "./middlewares/internalPublishAdapterMiddleware";
+import { rejectPublishingPostMutation } from "./middlewares/publishingMutationGuardMiddleware";
 
 const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +30,17 @@ const frontendDir = path.join(
   "dist",
   "public",
 );
+
+try {
+  await bootstrapPublishingMutationGuard();
+} catch (error) {
+  logger.error(
+    {
+      err: error instanceof Error ? error.message : String(error),
+    },
+    "[publishing-mutation-guard] database trigger bootstrap failed",
+  );
+}
 
 const app: Express = express();
 
@@ -88,6 +101,27 @@ app.use(
     ),
   })),
 );
+
+// Friendly API boundary for every known user mutation that could alter or
+// remove an approved payload while provider delivery is in flight. PostgreSQL's
+// trigger remains the atomic authority if state changes after this read check.
+app.patch("/api/social-posts/:id", rejectPublishingPostMutation);
+app.delete("/api/social-posts/:id", rejectPublishingPostMutation);
+app.post("/api/social-posts/bulk/publish", rejectPublishingPostMutation);
+for (const pathSuffix of [
+  "approve",
+  "queue",
+  "cancel",
+  "image-match",
+  "retry",
+  "archive",
+  "restore",
+]) {
+  app.post(
+    `/api/social-posts/:id/${pathSuffix}`,
+    rejectPublishingPostMutation,
+  );
+}
 
 app.use("/api", router);
 

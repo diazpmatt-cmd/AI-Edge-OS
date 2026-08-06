@@ -507,7 +507,7 @@ function Bubble({
                     </>
                   )}
                   {msg.weeklyApproval.status === "approved" &&
-                    "✓ Complete weekly package approved — ready for guarded scheduling and delivery."}
+                    "✓ Complete weekly package approved and scheduled. Each platform will publish at its approved time and must return an external receipt."}
                   {msg.weeklyApproval.status === "executed" &&
                     "✓ Approved weekly campaign completed."}
                   {msg.weeklyApproval.status === "failed" &&

@@ -29,6 +29,7 @@ const SECRET_PATTERNS = [
   /eyJ[A-Za-z0-9._\-]+/g,
   /\b[A-Za-z0-9]{40,}\b/g,
 ];
+const RECEIPT_STATUSES = new Set(["published", "published_with_warning"]);
 
 function sanitizeSchedulerError(value: string): string {
   let sanitized = value || "Unknown scheduler error";
@@ -65,7 +66,7 @@ function latestByPlatform(
 
 function hasVerifiedReceipt(delivery: SchedulerDeliveryEvidence): boolean {
   return (
-    delivery.status === "published" &&
+    RECEIPT_STATUSES.has(delivery.status) &&
     Boolean(delivery.externalPostId || delivery.externalPostUrl)
   );
 }
@@ -73,7 +74,7 @@ function hasVerifiedReceipt(delivery: SchedulerDeliveryEvidence): boolean {
 function isTerminalFailure(delivery: SchedulerDeliveryEvidence): boolean {
   return (
     ["failed", "skipped", "cancelled"].includes(delivery.status) ||
-    (delivery.status === "published" &&
+    (RECEIPT_STATUSES.has(delivery.status) &&
       !delivery.externalPostId &&
       !delivery.externalPostUrl)
   );
@@ -93,6 +94,9 @@ export function reconcileSchedulerPublishException(input: {
     .filter((delivery): delivery is SchedulerDeliveryEvidence => Boolean(delivery));
 
   const verified = evidence.filter(hasVerifiedReceipt);
+  const warningReceipts = verified.filter(
+    (delivery) => delivery.status === "published_with_warning",
+  ).length;
   const terminalFailures = evidence.filter(isTerminalFailure).length;
   const unresolved = expectedKnown
     ? Math.max(0, platforms.length - verified.length - terminalFailures)
@@ -117,7 +121,8 @@ export function reconcileSchedulerPublishException(input: {
   if (
     expectedKnown &&
     platforms.length > 0 &&
-    verified.length === platforms.length
+    verified.length === platforms.length &&
+    warningReceipts === 0
   ) {
     return Object.freeze({
       status: "published" as const,

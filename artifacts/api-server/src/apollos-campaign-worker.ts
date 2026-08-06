@@ -925,6 +925,7 @@ async function processOne() {
     const code = raw.replace(/Bearer\s+\S+/gi, "[REDACTED]").slice(0, 300);
     const terminal =
       failedCheckpointExhausted ||
+      code.includes("APOLLOS_CHECKPOINT_RETRIES_EXHAUSTED") ||
       task.execution_attempts >= taskAttemptCeiling;
     await pool.query(
       `UPDATE agent_tasks

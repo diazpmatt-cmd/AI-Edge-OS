@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { selectLatestAdapterDeliveryAttempts } from "./publishing-adapter-receipts";
+import {
+  hasCompleteAdapterDeliveryScope,
+  selectLatestAdapterDeliveryAttempts,
+} from "./publishing-adapter-receipts";
 
 const row = (
   platform: string,
@@ -44,5 +47,25 @@ describe("selectLatestAdapterDeliveryAttempts", () => {
     ]);
 
     expect(latest.get("facebook")?.id).toBe("first");
+  });
+});
+
+describe("hasCompleteAdapterDeliveryScope", () => {
+  it("requires a latest delivery row for every expected platform", () => {
+    const latest = selectLatestAdapterDeliveryAttempts([
+      row("facebook", 1, "2026-08-06T20:00:00.000Z"),
+      row("google", 1, "2026-08-06T20:01:00.000Z"),
+    ]);
+
+    expect(
+      hasCompleteAdapterDeliveryScope(["facebook", "google"], latest),
+    ).toBe(true);
+    expect(
+      hasCompleteAdapterDeliveryScope(
+        ["facebook", "google", "youtube"],
+        latest,
+      ),
+    ).toBe(false);
+    expect(hasCompleteAdapterDeliveryScope([], latest)).toBe(false);
   });
 });

@@ -1,6 +1,8 @@
 export const PUBLISHING_STATE_LOCKED_CODE = "PUBLISHING_STATE_LOCKED";
 export const VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE =
   "VERIFIED_DELIVERY_RECEIPT_LOCKED";
+export const VERIFIED_DELIVERY_DELETE_OVERRIDE_SETTING =
+  "ai_edge.allow_verified_receipt_delete";
 
 export const PUBLISHING_RESULT_STATUSES = [
   "publishing",
@@ -104,11 +106,14 @@ BEGIN
     ) AND (
       OLD.external_post_id IS NOT NULL
       OR OLD.external_post_url IS NOT NULL
-    ) THEN
+    ) AND COALESCE(
+      current_setting('${VERIFIED_DELIVERY_DELETE_OVERRIDE_SETTING}', true),
+      'off'
+    ) <> 'on' THEN
       RAISE EXCEPTION USING
         ERRCODE = '55000',
         MESSAGE = '${VERIFIED_DELIVERY_RECEIPT_LOCKED_CODE}',
-        DETAIL = 'A verified provider receipt cannot be deleted.';
+        DETAIL = 'A verified provider receipt cannot be deleted without the explicit transaction-local maintenance override.';
     END IF;
     RETURN OLD;
   END IF;

@@ -34,6 +34,8 @@ interface WeeklyApproval {
   deliveryCount: number;
   platforms: string[];
   status: WeeklyApprovalStatus;
+  failureCode?: string | null;
+  failureDetail?: string | null;
 }
 
 interface Message {
@@ -314,6 +316,16 @@ function Bubble({
                     "✕ Weekly campaign rejected. Nothing will be generated or published."}
                 </div>
               )}
+              {msg.weeklyApproval.status === "failed" && (
+                <div style={{ marginTop: 8, padding: 9, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
+                  <strong style={{ color: "#F87171" }}>
+                    {msg.weeklyApproval.failureCode ?? "APOLLOS_WEEKLY_EXECUTION_FAILED"}
+                  </strong>
+                  {msg.weeklyApproval.failureDetail
+                    ? ` · ${msg.weeklyApproval.failureDetail}`
+                    : ""}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -362,10 +374,22 @@ export default function ApollosPage() {
           try {
             const task = await apiFetch(`/agent-tasks/${message.weeklyApproval!.taskId}`) as {
               status?: string;
+              failureCode?: string | null;
+              decisionNote?: string | null;
             };
-            return { messageId: message.id, status: task.status };
+            return {
+              messageId: message.id,
+              status: task.status,
+              failureCode: task.failureCode ?? null,
+              failureDetail: task.decisionNote ?? null,
+            };
           } catch {
-            return { messageId: message.id, status: undefined };
+            return {
+              messageId: message.id,
+              status: undefined,
+              failureCode: null,
+              failureDetail: null,
+            };
           }
         }),
       );
@@ -388,6 +412,8 @@ export default function ApollosPage() {
             weeklyApproval: {
               ...message.weeklyApproval,
               status: status as WeeklyApprovalStatus,
+              failureCode: result?.failureCode ?? null,
+              failureDetail: result?.failureDetail ?? null,
             },
           };
         }),

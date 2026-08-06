@@ -292,11 +292,45 @@ router.get("/dab/apollos-readiness", async (req, res) => {
     ? Math.max(0, Date.now() - heartbeat.observed_at.getTime())
     : null;
 
+  const commandSelfTest = [
+    {
+      id: "weekly-campaign",
+      route: routeApollosCommand(
+        "Create and send out a week's posts on all four platforms.",
+      ),
+      expectedOperation: "weekly_campaign",
+      expectedApprovalBoundary: "before_external_effect",
+    },
+    {
+      id: "diagnosis",
+      route: routeApollosCommand("Diagnose why publishing failed."),
+      expectedOperation: "system_diagnosis",
+      expectedApprovalBoundary: "none",
+    },
+    {
+      id: "direct-publish",
+      route: routeApollosCommand("Publish this post live."),
+      expectedOperation: "external_publish",
+      expectedApprovalBoundary: "before_external_effect",
+    },
+  ].map((probe) => ({
+    id: probe.id,
+    passed:
+      probe.route.operation === probe.expectedOperation &&
+      probe.route.approvalBoundary === probe.expectedApprovalBoundary,
+    operation: probe.route.operation,
+    approvalBoundary: probe.route.approvalBoundary,
+    reasonCode: probe.route.reasonCode,
+  }));
+  const commandRoutingReady = commandSelfTest.every((probe) => probe.passed);
+
   const checks = [
     {
       id: "command-routing",
-      status: "pass" as const,
-      reasonCode: "APOLLOS_COMMAND_ROUTER_READY",
+      status: commandRoutingReady ? ("pass" as const) : ("fail" as const),
+      reasonCode: commandRoutingReady
+        ? "APOLLOS_COMMAND_ROUTER_READY"
+        : "APOLLOS_COMMAND_ROUTER_CONTRACT_FAILED",
     },
     {
       id: "capabilities",
@@ -387,6 +421,7 @@ router.get("/dab/apollos-readiness", async (req, res) => {
     checkedAt,
     overallStatus,
     checks,
+    commandSelfTest,
     capabilityCounts,
     adapterCounts,
     repairWorker: repairConfig

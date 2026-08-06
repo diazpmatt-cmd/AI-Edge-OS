@@ -167,6 +167,7 @@ interface RepairHistoryResponse {
       attempts: number;
       maxAttempts: number;
       receipt: {
+        bindingVerified: boolean;
         status: "verified" | "failed" | null;
         evidenceDigest: string | null;
         completedAt: string | null;
@@ -1955,7 +1956,8 @@ export default function ApollosPage() {
                                     </div>
                                     <div style={{ color: stepColor, fontSize: 7.5, textTransform: "uppercase" }}>
                                       {step.status} · attempt {step.attempts}/{step.maxAttempts}
-                                      {step.receipt?.status === "verified" ? " · receipt verified" : ""}
+                                      {step.receipt?.status === "verified" && step.receipt.bindingVerified ? " · receipt verified + bound" : ""}
+                                      {step.receipt && !step.receipt.bindingVerified ? " · binding mismatch" : ""}
                                     </div>
                                     {step.failureCode && (
                                       <div style={{ color: "#F87171", fontSize: 7.5 }}>{step.failureCode}</div>

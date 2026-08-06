@@ -642,6 +642,64 @@ async function verifyCompletedCheckpointOutputs(
     });
   }
 }
+
+async function verifyWeeklyPackageReady(
+  taskId: string,
+  userId: string,
+  jobs: readonly GenerationJob[],
+  definitions: readonly ApollosCheckpointDefinition[],
+): Promise<void> {
+  for (const job of jobs) {
+    await verifyCompletedCheckpointOutputs(userId, job);
+  }
+
+  const result = await pool.query<{
+    step_key: string;
+    status: string;
+    input_digest: string;
+    output_receipt: unknown;
+  }>(
+    `SELECT step_key, status, input_digest, output_receipt
+       FROM agent_task_steps
+      WHERE task_id=$1
+      ORDER BY position ASC`,
+    [taskId],
+  );
+  if (result.rows.length !== definitions.length) {
+    throw new Error("APOLLOS_WEEKLY_FINAL_CHECKPOINT_COUNT_MISMATCH");
+  }
+
+  for (let position = 0; position < definitions.length; position += 1) {
+    const definition = definitions[position]!;
+    const job = jobs[position]!;
+    const row = result.rows[position];
+    if (
+      !row ||
+      row.step_key !== definition.stepKey ||
+      row.status !== "completed" ||
+      row.input_digest !== definition.inputDigest
+    ) {
+      throw new Error(
+        `APOLLOS_WEEKLY_FINAL_CHECKPOINT_BINDING_MISMATCH:${definition.stepKey}`,
+      );
+    }
+    const receipt = row.output_receipt as Record<string, unknown> | null;
+    if (
+      !receipt ||
+      receipt.jobKey !== job.jobKey ||
+      receipt.planFingerprint !== job.planFingerprint ||
+      receipt.weeklyPlanId !== job.weeklyPlanId ||
+      receipt.platform !== job.generatorPlatform ||
+      receipt.draftCount !== job.count ||
+      typeof receipt.draftIdsDigest !== "string" ||
+      !/^[a-f0-9]{64}$/.test(receipt.draftIdsDigest)
+    ) {
+      throw new Error(
+        `APOLLOS_WEEKLY_FINAL_RECEIPT_MISMATCH:${definition.stepKey}`,
+      );
+    }
+  }
+}
 async function processOne() {
   const task = await claimOne();
   if (!task) return;
@@ -708,6 +766,12 @@ async function processOne() {
         throw error;
       }
     }
+    await verifyWeeklyPackageReady(
+      task.id,
+      task.user_id,
+      jobs,
+      definitions,
+    );
     await pool.query(
       `UPDATE agent_tasks
           SET status='pending_review',

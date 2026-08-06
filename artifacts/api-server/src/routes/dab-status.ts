@@ -300,26 +300,45 @@ router.get("/dab/apollos-readiness", async (req, res) => {
       ),
       expectedOperation: "weekly_campaign",
       expectedApprovalBoundary: "before_external_effect",
+      expectedCapability: "prepare",
     },
     {
       id: "diagnosis",
       route: routeApollosCommand("Diagnose why publishing failed."),
       expectedOperation: "system_diagnosis",
       expectedApprovalBoundary: "none",
+      expectedCapability: "diagnose",
+    },
+    {
+      id: "diagnosis-precedence",
+      route: routeApollosCommand("Why did publishing fail?"),
+      expectedOperation: "system_diagnosis",
+      expectedApprovalBoundary: "none",
+      expectedCapability: "diagnose",
+    },
+    {
+      id: "advice-not-action",
+      route: routeApollosCommand("What should I post today?"),
+      expectedOperation: "business_recommendation",
+      expectedApprovalBoundary: "none",
+      expectedCapability: "recommend",
     },
     {
       id: "direct-publish",
       route: routeApollosCommand("Publish this post live."),
       expectedOperation: "external_publish",
       expectedApprovalBoundary: "before_external_effect",
+      expectedCapability: "publish",
     },
   ].map((probe) => ({
     id: probe.id,
     passed:
       probe.route.operation === probe.expectedOperation &&
-      probe.route.approvalBoundary === probe.expectedApprovalBoundary,
+      probe.route.approvalBoundary === probe.expectedApprovalBoundary &&
+      probe.route.capability === probe.expectedCapability,
     operation: probe.route.operation,
     approvalBoundary: probe.route.approvalBoundary,
+    capability: probe.route.capability,
     reasonCode: probe.route.reasonCode,
   }));
   const commandRoutingReady = commandSelfTest.every((probe) => probe.passed);

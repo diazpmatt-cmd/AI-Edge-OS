@@ -7,6 +7,11 @@ import {
   validateCheckpointDefinitions,
   type ApollosCheckpointDefinition,
 } from "./lib/apollos-checkpoints.js";
+import {
+  assertWeeklyGenerationContract,
+  type WeeklyCampaignPlan,
+  type WeeklyGenerationJob,
+} from "./lib/apollos-weekly-campaign.js";
 
 const enabled = process.env.APOLLOS_CAMPAIGN_WORKER_ENABLED === "true";
 const killSwitch = process.env.APOLLOS_CAMPAIGN_KILL_SWITCH !== "false";
@@ -20,41 +25,26 @@ const maxAttempts = Number(process.env.APOLLOS_CAMPAIGN_MAX_ATTEMPTS ?? 3);
 const leaseMs = Number(process.env.APOLLOS_CAMPAIGN_LEASE_MS ?? 1_200_000);
 let stopped = false;
 
-interface GenerationJob {
-  jobKey: string;
-  generatorPlatform: "facebook" | "instagram" | "google" | "youtube";
-  count: number;
-  weeklyPlanId: string;
-  schedulerMode: "weekly_plan";
-  approvalMode: "approval_required";
-}
+type GenerationJob = WeeklyGenerationJob;
 
 function validateJobs(payloadText: string): GenerationJob[] {
   const payload = JSON.parse(payloadText) as {
+    batchKey?: unknown;
+    plan?: unknown;
     generationJobs?: unknown;
   };
-  if (!Array.isArray(payload.generationJobs) || payload.generationJobs.length < 1) {
+  if (
+    typeof payload.batchKey !== "string" ||
+    !payload.plan ||
+    !Array.isArray(payload.generationJobs) ||
+    payload.generationJobs.length < 1
+  ) {
     throw new Error("APOLLOS_WEEKLY_GENERATION_JOBS_MISSING");
   }
-  return payload.generationJobs.map((raw) => {
-    const job = raw as Partial<GenerationJob>;
-    if (
-      typeof job.jobKey !== "string" ||
-      !["facebook", "instagram", "google", "youtube"].includes(
-        String(job.generatorPlatform),
-      ) ||
-      typeof job.count !== "number" ||
-      !Number.isInteger(job.count) ||
-      job.count < 1 ||
-      job.count > 7 ||
-      typeof job.weeklyPlanId !== "string" ||
-      job.schedulerMode !== "weekly_plan" ||
-      job.approvalMode !== "approval_required"
-    ) {
-      throw new Error("APOLLOS_WEEKLY_GENERATION_JOB_INVALID");
-    }
-    return job as GenerationJob;
-  });
+  const plan = payload.plan as WeeklyCampaignPlan;
+  const jobs = payload.generationJobs as GenerationJob[];
+  assertWeeklyGenerationContract(payload.batchKey, plan, jobs);
+  return jobs;
 }
 
 interface CheckpointRow {
@@ -79,6 +69,8 @@ function checkpointDefinitions(
       inputDigest: createHash("sha256")
         .update(JSON.stringify({
           jobKey: job.jobKey,
+          planFingerprint: job.planFingerprint,
+          platform: job.platform,
           generatorPlatform: job.generatorPlatform,
           count: job.count,
           weeklyPlanId: job.weeklyPlanId,

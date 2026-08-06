@@ -138,4 +138,43 @@ describe("reconcileSchedulerPublishException", () => {
       unresolved: 1,
     });
   });
+
+  it("preserves receipts but never claims complete publication when scope is unknown", () => {
+    const recovery = reconcileSchedulerPublishException({
+      expectedPlatforms: [],
+      deliveries: [published("facebook")],
+      error: "platform JSON was unavailable",
+    });
+
+    expect(recovery).toMatchObject({
+      status: "published_with_warning",
+      verifiedPublished: 1,
+      expectedPlatforms: 0,
+      unresolved: 0,
+    });
+    expect(recovery.errorMessage).toContain("scope was unavailable");
+  });
+
+  it("uses the delivery update time when a verified receipt lacks publishedAt", () => {
+    const recovery = reconcileSchedulerPublishException({
+      expectedPlatforms: ["facebook"],
+      deliveries: [
+        {
+          platform: "facebook",
+          status: "published",
+          attemptNumber: 1,
+          externalPostId: "facebook-receipt",
+          externalPostUrl: null,
+          publishedAt: null,
+          updatedAt: "2026-08-10T13:05:00.000Z",
+        },
+      ],
+      error: "aggregate update failed",
+    });
+
+    expect(recovery.status).toBe("published");
+    expect(recovery.publishedAt?.toISOString()).toBe(
+      "2026-08-10T13:05:00.000Z",
+    );
+  });
 });

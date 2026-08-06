@@ -216,7 +216,7 @@ async function completeCheckpoint(
   stepKey: string,
   receipt: Record<string, unknown>,
 ): Promise<void> {
-  await pool.query(
+  const result = await pool.query(
     `UPDATE agent_task_steps
         SET status='completed',
             output_receipt=$3::jsonb,
@@ -225,9 +225,13 @@ async function completeCheckpoint(
             lease_expires_at=NULL,
             completed_at=now(),
             updated_at=now()
-      WHERE task_id=$1 AND step_key=$2 AND status='running'`,
+      WHERE task_id=$1 AND step_key=$2 AND status='running'
+      RETURNING id`,
     [taskId, stepKey, JSON.stringify(receipt)],
   );
+  if (result.rowCount !== 1) {
+    throw new Error(`APOLLOS_CHECKPOINT_COMPLETE_CONFLICT:${stepKey}`);
+  }
 }
 
 async function failCheckpoint(
@@ -235,7 +239,7 @@ async function failCheckpoint(
   stepKey: string,
   failureCode: string,
 ): Promise<void> {
-  await pool.query(
+  const result = await pool.query(
     `UPDATE agent_task_steps
         SET status='failed',
             failure_code=$3,
@@ -243,9 +247,13 @@ async function failCheckpoint(
             lease_expires_at=NULL,
             completed_at=now(),
             updated_at=now()
-      WHERE task_id=$1 AND step_key=$2 AND status='running'`,
+      WHERE task_id=$1 AND step_key=$2 AND status='running'
+      RETURNING id`,
     [taskId, stepKey, failureCode.slice(0, 300)],
   );
+  if (result.rowCount !== 1) {
+    throw new Error(`APOLLOS_CHECKPOINT_FAIL_CONFLICT:${stepKey}`);
+  }
 }
 
 async function recoverExpiredClaims() {

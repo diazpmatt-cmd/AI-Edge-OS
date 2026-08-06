@@ -507,12 +507,12 @@ router.post("/auto-content/generate", async (req, res) => {
         .where(and(
           eq(agentTasksTable.id, approvedTaskId),
           eq(agentTasksTable.taskType, "weekly_campaign"),
-          inArray(agentTasksTable.status, ["approved", "executing"]),
-          eq(agentTasksTable.resolution, "approved"),
+          eq(agentTasksTable.status, "executing"),
+          eq(agentTasksTable.decision, "requires_review"),
         ));
       if (!approvedTask) {
         res.status(403).json({
-          error: "APOLLOS_WEEKLY_APPROVAL_BINDING_INVALID",
+          error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID",
           message: "The weekly campaign task is not approved for execution.",
         });
         return;
@@ -1812,11 +1812,11 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
         .where(and(
           eq(agentTasksTable.id, approvedTaskId),
           eq(agentTasksTable.taskType, "weekly_campaign"),
-          inArray(agentTasksTable.status, ["approved", "executing"]),
-          eq(agentTasksTable.resolution, "approved"),
+          eq(agentTasksTable.status, "executing"),
+          eq(agentTasksTable.decision, "requires_review"),
         ));
       if (!approvedTask) {
-        res.status(403).json({ error: "APOLLOS_WEEKLY_APPROVAL_BINDING_INVALID" });
+        res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
         return;
       }
       userId = approvedTask.userId;
@@ -2397,11 +2397,11 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       .where(and(
         eq(agentTasksTable.id, approvedTaskId),
         eq(agentTasksTable.taskType, "weekly_campaign"),
-        inArray(agentTasksTable.status, ["approved", "executing"]),
-        eq(agentTasksTable.resolution, "approved"),
+        eq(agentTasksTable.status, "executing"),
+        eq(agentTasksTable.decision, "requires_review"),
       ));
     if (!approvedTask) {
-      res.status(403).json({ error: "APOLLOS_WEEKLY_APPROVAL_BINDING_INVALID" });
+      res.status(403).json({ error: "APOLLOS_WEEKLY_GENERATION_BINDING_INVALID" });
       return;
     }
     userId = approvedTask.userId;

@@ -73,6 +73,7 @@ function checkpointDefinitions(
           platform: job.platform,
           generatorPlatform: job.generatorPlatform,
           count: job.count,
+          scheduleDates: job.scheduleDates,
           weeklyPlanId: job.weeklyPlanId,
           schedulerMode: job.schedulerMode,
           approvalMode: job.approvalMode,
@@ -345,6 +346,7 @@ async function runGenerationJob(
     body: JSON.stringify({
       platforms: [job.generatorPlatform],
       count: job.count,
+      scheduleDates: job.scheduleDates,
       weeklyPlanId: job.weeklyPlanId,
       schedulerMode: job.schedulerMode,
       approvalMode: job.approvalMode,

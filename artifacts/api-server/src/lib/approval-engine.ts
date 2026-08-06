@@ -27,6 +27,7 @@ export interface ApprovalResult {
 
 export const KNOWN_TASK_TYPES = [
   "generate_content",
+  "weekly_campaign",
   "schedule_post",
   "publish_post",
   "update_auto_content_settings",
@@ -52,6 +53,7 @@ export const ALLOWED_PLATFORMS = new Set([
  * No rule can override this set — it is the primary safety boundary.
  */
 export const ALWAYS_REVIEW_TYPES = new Set<string>([
+  "weekly_campaign",
   "publish_post",
   "update_auto_content_settings",
   "update_client_settings",

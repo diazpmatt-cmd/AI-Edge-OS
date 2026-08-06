@@ -311,6 +311,50 @@ export function diagnoseApollosTask(
   const frozenEvidence = Object.freeze([...evidence]);
   const fingerprint = evidenceFingerprint(input.taskId, frozenEvidence);
   if (evidence.length === 0) {
+    const heartbeatTimes = [
+      input.taskUpdatedAt,
+      ...input.steps.map((step) => step.updatedAt),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => Date.parse(value))
+      .filter(Number.isFinite);
+    const latestHeartbeatMs =
+      heartbeatTimes.length > 0 ? Math.max(...heartbeatTimes) : Number.NaN;
+    const staleExecution =
+      input.taskStatus === "executing" &&
+      Number.isFinite(latestHeartbeatMs) &&
+      Date.now() - latestHeartbeatMs >= 15 * 60 * 1000;
+    if (staleExecution) {
+      const stalledEvidence = Object.freeze([
+        Object.freeze({
+          source: "runtime" as const,
+          code: "APOLLOS_EXECUTION_HEARTBEAT_STALE",
+          detail: "The task remained executing without a persisted update for at least 15 minutes.",
+          observedAt: input.taskUpdatedAt,
+          stepKey: null,
+        }),
+      ]);
+      return Object.freeze({
+        diagnosisId: evidenceFingerprint(input.taskId, stalledEvidence),
+        status: "incomplete",
+        confidence: "confirmed",
+        component: "Apollos worker heartbeat",
+        rootCauseCode: "APOLLOS_ROOT_EXECUTION_STALLED",
+        rootCause:
+          "The task is still marked executing, but its durable heartbeat has not advanced within the allowed window.",
+        repairAuthority: "apollos",
+        canApollosRepair: true,
+        requiresApproval: false,
+        recommendedRepair:
+          "Confirm no worker still owns an active lease, recover the expired execution, and resume from the next incomplete checkpoint.",
+        verification: Object.freeze([
+          "Confirm the task update timestamp advances after recovery.",
+          "Confirm only one worker owns the execution lease.",
+          "Confirm completed checkpoints are not repeated.",
+        ]),
+        evidence: stalledEvidence,
+      });
+    }
     const healthy = input.taskStatus === "executed" || input.taskStatus === "pending_review";
     return Object.freeze({
       diagnosisId: fingerprint,

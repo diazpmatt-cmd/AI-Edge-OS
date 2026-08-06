@@ -28,13 +28,14 @@ required_entries="
 /app/artifacts/api-server/dist/dab-agent-worker.mjs
 /app/artifacts/api-server/dist/dab-preparation-worker.mjs
 /app/artifacts/api-server/dist/dab-publishing-worker.mjs
+/app/artifacts/api-server/dist/apollos-campaign-worker.mjs
 "
 
 for entry in $required_entries; do
   [ -s "$entry" ] ||
     fail "APOLLOS_ENTRYPOINT_MISSING" "Required production entrypoint is missing or empty: $entry"
 done
-pass "APOLLOS_ENTRYPOINTS" "API and four DAB worker entrypoints are present"
+pass "APOLLOS_ENTRYPOINTS" "API, four DAB workers, and the Apollos campaign worker are present"
 
 media_root="${LOCAL_MEDIA_DIR:-/data/media}"
 mkdir -p "$media_root/uploads" 2>/dev/null ||
@@ -83,4 +84,4 @@ if [ -n "${GOOGLE_API_CERTIFICATE_CONFIG:-}" ]; then
 fi
 pass "APOLLOS_GOOGLE_CERT_CONFIG" "legacy optional mTLS certificate path is absent"
 
-printf 'APOLLOS_CORE_PREFLIGHT_OK node=%s entrypoints=5 media_root=%s\n'   "$(node --version)" "$media_root"
+printf 'APOLLOS_CORE_PREFLIGHT_OK node=%s entrypoints=6 media_root=%s\n'   "$(node --version)" "$media_root"

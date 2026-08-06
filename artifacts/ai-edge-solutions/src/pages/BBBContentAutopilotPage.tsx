@@ -67,6 +67,32 @@ interface BulkPublishResult {
   summary: string;
 }
 
+interface DeliveryDiagnostic {
+  stage: string;
+  nextAction: string;
+  retryable: boolean;
+}
+
+function diagnoseDeliveryFailure(message: string | null): DeliveryDiagnostic {
+  const value = (message ?? "").toLowerCase();
+  if (/certificate|object storage|video source|cannot fetch|media/.test(value)) {
+    return { stage: "Media retrieval", nextAction: "Verify the saved media path and storage route, then retry.", retryable: true };
+  }
+  if (/not connected|token|oauth|401|expired/.test(value)) {
+    return { stage: "Account authentication", nextAction: "Reconnect the platform account, then retry.", retryable: false };
+  }
+  if (/permission|scope|forbidden|403/.test(value)) {
+    return { stage: "Provider authorization", nextAction: "Reconnect with the required publishing permissions.", retryable: false };
+  }
+  if (/upload/.test(value)) {
+    return { stage: "Provider upload", nextAction: "Retry once; if it repeats, inspect the provider response below.", retryable: true };
+  }
+  if (/timeout|timed out|network|502|503|bad gateway/.test(value)) {
+    return { stage: "Provider network", nextAction: "The request is safe to retry.", retryable: true };
+  }
+  return { stage: "Platform delivery", nextAction: "Review the exact provider message below before retrying.", retryable: true };
+}
+
 interface ContentTemplate {
   topic:     string;
   facebook:  string;
@@ -2237,7 +2263,7 @@ export default function BBBContentAutopilotPage() {
                         </a>
                       )}
                       {d.errorMessage && (
-                        <span title={d.errorMessage} style={{ fontSize: 9, color: B.red, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                        <span style={{ fontSize: 9, color: B.red, maxWidth: 360, whiteSpace: "normal" as const, overflowWrap: "anywhere" as const }}>
                           {d.errorMessage}
                         </span>
                       )}
@@ -2245,6 +2271,30 @@ export default function BBBContentAutopilotPage() {
                   );
                 })}
               </div>
+            )}
+
+            {!publishResult.ok && publishResult.results.some(result => result.deliveries.some(delivery => delivery.errorMessage)) && (
+              <details style={{ marginTop: 12, borderRadius: 10, border: "1px solid rgba(56,189,248,0.28)", background: "rgba(3,6,18,0.5)", padding: "10px 12px" }}>
+                <summary style={{ cursor: "pointer", color: B.sky, fontSize: 11, fontWeight: 900 }}>
+                  🔧 Under the hood — exact failure details
+                </summary>
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  {publishResult.results.flatMap(result => result.deliveries).filter(delivery => delivery.errorMessage).map((delivery, index) => {
+                    const diagnostic = diagnoseDeliveryFailure(delivery.errorMessage);
+                    return (
+                      <div key={`${delivery.deliveryId}-${index}`} style={{ borderLeft: `3px solid ${B.red}`, padding: "8px 10px", background: "rgba(239,68,68,0.05)", borderRadius: 6 }}>
+                        <div style={{ color: B.white, fontSize: 11, fontWeight: 900 }}>{delivery.platform} · {diagnostic.stage}</div>
+                        <div style={{ color: B.red, fontSize: 10, marginTop: 5, overflowWrap: "anywhere" }}>{delivery.errorMessage}</div>
+                        <div style={{ color: B.silver, fontSize: 10, marginTop: 6 }}><strong>Next action:</strong> {diagnostic.nextAction}</div>
+                        <div style={{ color: B.dim, fontSize: 9, marginTop: 4 }}>
+                          Retryable: {diagnostic.retryable ? "Yes" : "Action required"} · Delivery ID: {delivery.deliveryId}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ color: B.dim, fontSize: 9, marginTop: 9 }}>Secrets and access tokens are intentionally removed from this diagnostic view.</div>
+              </details>
             )}
           </div>
         )}

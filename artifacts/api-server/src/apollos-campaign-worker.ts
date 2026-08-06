@@ -552,6 +552,48 @@ async function generateDraftMedia(
 }
 
 
+async function verifyDraftMedia(
+  userId: string,
+  job: GenerationJob,
+  draft: GeneratedDraft,
+): Promise<void> {
+  const result = await pool.query<{
+    image_data: string | null;
+    video_url: string | null;
+    media_mime_type: string | null;
+    status: string;
+  }>(
+    `SELECT image_data, video_url, media_mime_type, status
+       FROM social_posts
+      WHERE id=$1 AND user_id=$2 AND weekly_plan_id=$3
+      LIMIT 1`,
+    [draft.id, userId, job.weeklyPlanId],
+  );
+  const row = result.rows[0];
+  if (!row || row.status !== "draft") {
+    throw new Error(
+      `APOLLOS_WEEKLY_MEDIA_DRAFT_BINDING_MISMATCH:${job.generatorPlatform}`,
+    );
+  }
+  if (job.generatorPlatform === "youtube") {
+    if (
+      !row.video_url?.startsWith("/objects/") ||
+      row.media_mime_type !== "video/mp4"
+    ) {
+      throw new Error("APOLLOS_WEEKLY_VIDEO_NOT_PERSISTED:youtube");
+    }
+    return;
+  }
+  if (
+    !row.image_data?.startsWith("/objects/") ||
+    row.media_mime_type !== "image/png"
+  ) {
+    throw new Error(
+      `APOLLOS_WEEKLY_IMAGE_NOT_PERSISTED:${job.generatorPlatform}`,
+    );
+  }
+}
+
 async function processOne() {
   const task = await claimOne();
   if (!task) return;
@@ -592,6 +634,9 @@ async function processOne() {
             { taskId: task.id, drafts: drafts.length },
             "[apollos-campaign] Facebook media reused for Instagram",
           );
+        }
+        for (const draft of drafts) {
+          await verifyDraftMedia(task.user_id, job, draft);
         }
         await completeCheckpoint(task.id, checkpoint.stepKey, {
           jobKey: job.jobKey,

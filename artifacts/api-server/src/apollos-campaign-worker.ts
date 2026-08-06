@@ -772,16 +772,20 @@ async function processOne() {
       jobs,
       definitions,
     );
-    await pool.query(
+    const ready = await pool.query(
       `UPDATE agent_tasks
           SET status='pending_review',
               execution_completed_at=now(),
               failure_code=NULL,
               decision_note='All captions, images, and video verified; package ready for one approval',
               updated_at=now()
-        WHERE id=$1 AND status='executing'`,
+        WHERE id=$1 AND status='executing'
+        RETURNING id`,
       [task.id],
     );
+    if (ready.rowCount !== 1) {
+      throw new Error("APOLLOS_WEEKLY_READY_TRANSITION_CONFLICT");
+    }
     logger.info({ taskId: task.id }, "[apollos-campaign] weekly package ready for approval");
   } catch (error) {
     const raw = error instanceof Error ? error.message : "APOLLOS_WEEKLY_GENERATION_FAILED";

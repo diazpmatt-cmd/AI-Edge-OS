@@ -223,6 +223,181 @@ function currentApollosCapabilities() {
   });
 }
 
+router.get("/dab/apollos-readiness", async (_req, res) => {
+  const checkedAt = new Date().toISOString();
+  const capabilities = currentApollosCapabilities();
+  const capabilityCounts = capabilities.reduce(
+    (summary, item) => {
+      summary[item.state] += 1;
+      return summary;
+    },
+    { ready: 0, degraded: 0, blocked: 0, disabled: 0 },
+  );
+  const adapters = buildApollosRepairAdapterStatus(
+    process.env,
+    APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS,
+  );
+  const adapterCounts = adapters.reduce(
+    (summary, item) => {
+      summary[item.state] += 1;
+      return summary;
+    },
+    { ready: 0, disabled: 0, blocked: 0 },
+  );
+
+  let repairConfig: ReturnType<typeof readApollosRepairWorkerConfig> | null = null;
+  let repairConfigReason: string | null = null;
+  try {
+    repairConfig = readApollosRepairWorkerConfig(process.env);
+  } catch (error) {
+    repairConfigReason =
+      error instanceof Error
+        ? error.message
+        : "APOLLOS_REPAIR_CONFIG_INVALID";
+  }
+
+  let heartbeat: { observed_at: Date; state: string; reason_code: string } | null =
+    null;
+  if (repairConfig) {
+    const table = await pool.query<{ heartbeats: string | null }>(
+      `SELECT to_regclass(
+        'public.apollos_repair_worker_heartbeats'
+      )::text AS heartbeats`,
+    );
+    if (table.rows[0]?.heartbeats) {
+      heartbeat = (
+        await pool.query<{
+          observed_at: Date;
+          state: string;
+          reason_code: string;
+        }>(
+          `SELECT observed_at,state,reason_code
+             FROM apollos_repair_worker_heartbeats
+            WHERE runtime_id=$1
+            LIMIT 1`,
+          [repairConfig.runtimeId],
+        )
+      ).rows[0] ?? null;
+    }
+  }
+  const heartbeatStaleAfterMs = repairConfig
+    ? Math.min(Math.max(repairConfig.intervalMs * 3, 60_000), 86_400_000)
+    : null;
+  const heartbeatAgeMs = heartbeat
+    ? Math.max(0, Date.now() - heartbeat.observed_at.getTime())
+    : null;
+
+  const checks = [
+    {
+      id: "command-routing",
+      status: "pass" as const,
+      reasonCode: "APOLLOS_COMMAND_ROUTER_READY",
+    },
+    {
+      id: "capabilities",
+      status:
+        capabilityCounts.blocked > 0
+          ? ("warn" as const)
+          : ("pass" as const),
+      reasonCode:
+        capabilityCounts.blocked > 0
+          ? "APOLLOS_CAPABILITIES_BLOCKED"
+          : "APOLLOS_CAPABILITIES_READY",
+    },
+    {
+      id: "repair-config",
+      status: repairConfig ? ("pass" as const) : ("fail" as const),
+      reasonCode:
+        repairConfigReason ??
+        (repairConfig?.enabled
+          ? "APOLLOS_REPAIR_CONFIG_READY"
+          : "APOLLOS_REPAIR_WORKER_DISABLED"),
+    },
+    {
+      id: "repair-safety",
+      status:
+        !repairConfig
+          ? ("fail" as const)
+          : !repairConfig.enabled
+            ? ("warn" as const)
+            : repairConfig.killSwitch
+              ? ("fail" as const)
+              : ("pass" as const),
+      reasonCode:
+        !repairConfig
+          ? "APOLLOS_REPAIR_CONFIG_INVALID"
+          : !repairConfig.enabled
+            ? "APOLLOS_REPAIR_WORKER_DISABLED"
+            : repairConfig.killSwitch
+              ? "APOLLOS_REPAIR_KILL_SWITCH"
+              : "APOLLOS_REPAIR_SAFETY_READY",
+    },
+    {
+      id: "repair-heartbeat",
+      status:
+        !repairConfig?.enabled
+          ? ("warn" as const)
+          : !heartbeat ||
+              heartbeatAgeMs === null ||
+              heartbeatStaleAfterMs === null ||
+              heartbeatAgeMs > heartbeatStaleAfterMs ||
+              heartbeat.state !== "ready"
+            ? ("fail" as const)
+            : ("pass" as const),
+      reasonCode:
+        !repairConfig?.enabled
+          ? "APOLLOS_REPAIR_WORKER_DISABLED"
+          : !heartbeat
+            ? "APOLLOS_REPAIR_HEARTBEAT_MISSING"
+            : heartbeatAgeMs !== null &&
+                heartbeatStaleAfterMs !== null &&
+                heartbeatAgeMs > heartbeatStaleAfterMs
+              ? "APOLLOS_REPAIR_HEARTBEAT_STALE"
+              : heartbeat.reason_code,
+    },
+    {
+      id: "repair-adapters",
+      status:
+        adapterCounts.blocked > 0
+          ? ("fail" as const)
+          : adapterCounts.ready > 0
+            ? ("pass" as const)
+            : ("warn" as const),
+      reasonCode:
+        adapterCounts.blocked > 0
+          ? "APOLLOS_REPAIR_ADAPTERS_BLOCKED"
+          : adapterCounts.ready > 0
+            ? "APOLLOS_REPAIR_ADAPTERS_READY"
+            : "APOLLOS_REPAIR_ADAPTERS_DISABLED",
+    },
+  ];
+  const overallStatus = checks.some((check) => check.status === "fail")
+    ? "blocked"
+    : checks.some((check) => check.status === "warn")
+      ? "degraded"
+      : "ready";
+
+  res.json({
+    operator: "Apollos",
+    checkedAt,
+    overallStatus,
+    checks,
+    capabilityCounts,
+    adapterCounts,
+    repairWorker: repairConfig
+      ? {
+          enabled: repairConfig.enabled,
+          killSwitch: repairConfig.killSwitch,
+          intervalMs: repairConfig.intervalMs,
+          leaseMs: repairConfig.leaseMs,
+          maxAttempts: repairConfig.maxAttempts,
+          heartbeatAgeMs,
+          heartbeatStaleAfterMs,
+        }
+      : null,
+  });
+});
+
 router.get("/dab/repair-runtime", async (_req, res) => {
   const checkedAt = new Date().toISOString();
   let config;

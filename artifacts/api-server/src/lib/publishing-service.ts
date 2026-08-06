@@ -36,10 +36,11 @@ import { createHash } from "node:crypto";
 import { db, pool } from "@workspace/db";
 import { socialPostsTable, socialConnectionsTable } from "@workspace/db/schema";
 import { platformDeliveriesTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import type { PlatformDelivery } from "@workspace/db/schema";
 import { evaluateContentClaims } from "@workspace/db";
 import { parsePublishingPlatformBinding } from "./publishing-platform-binding.js";
+import { evaluateFullReplayReceiptGuard } from "./publishing-replay-safety.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -347,6 +348,70 @@ export class PublishingService {
       return this.errorResult(postId, "No platforms selected on this post");
     }
 
+    // Never replay a complete post when any selected platform already has a
+    // verified external receipt. Manual routes may have temporarily reset the
+    // aggregate row to "approved"; repair it from durable delivery evidence and
+    // direct the operator to the isolated failed-delivery retry path.
+    const existingReceiptRows = await db
+      .select({
+        platform: platformDeliveriesTable.platform,
+        status: platformDeliveriesTable.status,
+        externalPostId: platformDeliveriesTable.externalPostId,
+        externalPostUrl: platformDeliveriesTable.externalPostUrl,
+        publishedAt: platformDeliveriesTable.publishedAt,
+        updatedAt: platformDeliveriesTable.updatedAt,
+      })
+      .from(platformDeliveriesTable)
+      .where(and(
+        eq(platformDeliveriesTable.postId, postId),
+        eq(platformDeliveriesTable.userId, userId),
+        inArray(platformDeliveriesTable.platform, platforms),
+      ));
+    const replayGuard = evaluateFullReplayReceiptGuard({
+      platforms,
+      deliveries: existingReceiptRows,
+    });
+    if (replayGuard.blocked) {
+      const summary = sanitizeError(
+        replayGuard.message ??
+          "FULL_REPUBLISH_BLOCKED_VERIFIED_RECEIPT: Use isolated delivery retry.",
+      );
+      const repaired = await db
+        .update(socialPostsTable)
+        .set({
+          status: replayGuard.postStatus!,
+          publishedAt: replayGuard.publishedAt ?? undefined,
+          errorMessage:
+            replayGuard.postStatus === "published" ? null : summary,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(socialPostsTable.id, postId),
+          eq(socialPostsTable.userId, userId),
+          eq(socialPostsTable.status, post.status),
+        ))
+        .returning({ id: socialPostsTable.id });
+
+      if (repaired.length !== 1) {
+        return this.errorResult(
+          postId,
+          "FULL_REPUBLISH_STATE_CONFLICT: Post state changed while verified receipts were being checked; refresh before retrying.",
+        );
+      }
+
+      return {
+        postId,
+        postStatus: replayGuard.postStatus!,
+        totalPlatforms: replayGuard.totalPlatforms,
+        published: replayGuard.verifiedCount,
+        failed: 0,
+        skipped: 0,
+        warnings: replayGuard.totalPlatforms - replayGuard.verifiedCount,
+        deliveries: [],
+        summary,
+      };
+    }
+
     // Claims are rechecked at the final delivery boundary so stale, edited,
     // imported, or scheduler-selected content cannot bypass generation-time checks.
     const claimsDecision = evaluateContentClaims([
@@ -362,6 +427,12 @@ export class PublishingService {
     // ── Step 4: Check post isn't already published/publishing (idempotency) ──
     if (post.status === "published") {
       return this.errorResult(postId, "Post is already published");
+    }
+    if (post.status === "published_with_warning") {
+      return this.errorResult(
+        postId,
+        "FULL_REPUBLISH_BLOCKED_PARTIAL_STATUS: Retry only the isolated failed delivery.",
+      );
     }
     if (post.status === "publishing") {
       return this.errorResult(postId, "Post is already being published — wait for the current attempt to complete");

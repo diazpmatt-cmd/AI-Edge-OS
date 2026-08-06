@@ -15,6 +15,7 @@ import { eq, desc, gte, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
   buildWeeklyCampaignPlan,
+  buildWeeklyGenerationJobs,
   isWeeklyCampaignCommand,
   parseWeeklyCampaignPlatforms,
 } from "../lib/apollos-weekly-campaign";
@@ -1292,6 +1293,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
     });
     const batchKey =
       `weekly:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
+    const generationJobs = buildWeeklyGenerationJobs(batchKey, plan);
 
     const existing = await db
       .select()
@@ -1322,6 +1324,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
         taskId: duplicate.id,
         command,
         plan,
+        generationJobs,
       });
       return;
     }
@@ -1330,13 +1333,14 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       batchKey,
       command,
       plan,
+      generationJobs,
     });
     const [task] = await db
       .insert(agentTasksTable)
       .values({
         userId,
         taskType: "weekly_campaign",
-        payload: JSON.stringify({ batchKey, command, plan }),
+        payload: JSON.stringify({ batchKey, command, plan, generationJobs }),
         status: "pending_review",
         decision: evaluation.decision,
         resolution: null,
@@ -1355,6 +1359,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       taskId: task.id,
       command,
       plan,
+      generationJobs,
       approval: {
         endpoint: `/api/agent-tasks/${task.id}/approve`,
         rejectEndpoint: `/api/agent-tasks/${task.id}/reject`,

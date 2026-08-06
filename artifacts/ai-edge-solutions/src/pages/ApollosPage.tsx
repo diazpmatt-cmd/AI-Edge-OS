@@ -540,6 +540,7 @@ export default function ApollosPage() {
   const [timelineOpen, setTimelineOpen] = useState(true);
   const [underHoodOpen, setUnderHoodOpen] = useState(false);
   const [repairRetryBusy, setRepairRetryBusy] = useState<string | null>(null);
+  const [repairDecisionBusy, setRepairDecisionBusy] = useState<string | null>(null);
   const [repairRetryMessage, setRepairRetryMessage] = useState<string | null>(null);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
@@ -579,6 +580,45 @@ export default function ApollosPage() {
     retry: 1,
   });
   const repairHistory = repairHistoryQuery.data;
+
+  async function decideRepair(
+    taskId: string,
+    decision: "approve" | "reject",
+  ) {
+    if (repairDecisionBusy) return;
+    if (
+      decision === "approve" &&
+      !window.confirm("Approve this exact diagnosis-bound repair plan?")
+    ) {
+      return;
+    }
+    setRepairDecisionBusy(taskId);
+    setRepairRetryMessage(null);
+    try {
+      await apiFetch(`/agent-tasks/${taskId}/${decision}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: decision === "reject"
+          ? JSON.stringify({ note: "Rejected from Apollos Under the Hood." })
+          : JSON.stringify({}),
+      });
+      setRepairRetryMessage(
+        decision === "approve"
+          ? "Repair approved. The worker will claim it within its next cycle."
+          : "Repair rejected. No changes will be made.",
+      );
+      await repairHistoryQuery.refetch();
+      await repairRuntimeQuery.refetch();
+    } catch (error) {
+      setRepairRetryMessage(
+        error instanceof Error
+          ? error.message
+          : "The repair decision failed closed.",
+      );
+    } finally {
+      setRepairDecisionBusy(null);
+    }
+  }
 
   async function requestRepairRetry(
     repairTaskId: string,
@@ -1913,6 +1953,36 @@ export default function ApollosPage() {
                                 );
                               })}
                             </div>
+                            {task.status === "pending_review" && (
+                              <div style={{ display: "flex", gap: 5, marginTop: 7 }}>
+                                <button
+                                  onClick={() => decideRepair(task.taskId, "approve")}
+                                  disabled={repairDecisionBusy !== null}
+                                  style={{
+                                    flex: 1, padding: "5px 6px", borderRadius: 6,
+                                    border: "1px solid rgba(34,197,94,.3)",
+                                    background: "rgba(34,197,94,.08)", color: B.green,
+                                    fontSize: 8.5, fontWeight: 900,
+                                    cursor: repairDecisionBusy ? "wait" : "pointer",
+                                  }}
+                                >
+                                  {repairDecisionBusy === task.taskId ? "Working…" : "Approve repair"}
+                                </button>
+                                <button
+                                  onClick={() => decideRepair(task.taskId, "reject")}
+                                  disabled={repairDecisionBusy !== null}
+                                  style={{
+                                    flex: 1, padding: "5px 6px", borderRadius: 6,
+                                    border: "1px solid rgba(248,113,113,.3)",
+                                    background: "rgba(248,113,113,.08)", color: "#F87171",
+                                    fontSize: 8.5, fontWeight: 900,
+                                    cursor: repairDecisionBusy ? "wait" : "pointer",
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
                             {task.status === "failed" && task.sourceTaskId && task.planId && task.diagnosisId && (
                               <button
                                 onClick={() => requestRepairRetry(

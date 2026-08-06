@@ -61,6 +61,17 @@ describe("routeApollosCommand", () => {
     });
   });
 
+  it("keeps content advice read-only without an explicit creation verb", () => {
+    expect(
+      routeApollosCommand("What content should I post next?"),
+    ).toMatchObject({
+      operation: "business_recommendation",
+      capability: "recommend",
+      requiresApprovalNow: false,
+      requestedExternalEffect: false,
+    });
+  });
+
   it("requests clarification rather than pretending to understand", () => {
     expect(routeApollosCommand("Help me with that thing")).toMatchObject({
       operation: "unknown",

@@ -594,8 +594,14 @@ async function processOne() {
           );
         }
         await completeCheckpoint(task.id, checkpoint.stepKey, {
+          jobKey: job.jobKey,
+          planFingerprint: job.planFingerprint,
+          weeklyPlanId: job.weeklyPlanId,
           platform: job.generatorPlatform,
           draftCount: drafts.length,
+          draftIdsDigest: createHash("sha256")
+            .update(JSON.stringify(drafts.map((draft) => draft.id).sort()))
+            .digest("hex"),
           mediaStrategy: reusedMetaMedia ? "facebook_reuse" : "generated",
           verifiedAt: new Date().toISOString(),
         });

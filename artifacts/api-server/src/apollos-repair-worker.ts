@@ -325,16 +325,20 @@ async function finishTask(
   failureCode: string | null,
   note: string,
 ): Promise<void> {
-  await pool.query(
+  const updated = await pool.query(
     `UPDATE agent_tasks
         SET status=$2,
             failure_code=$3,
             decision_note=$4,
             execution_completed_at=now(),
             updated_at=now()
-      WHERE id=$1 AND status='executing'`,
+      WHERE id=$1 AND status='executing'
+      RETURNING id`,
     [taskId, status, failureCode, note.slice(0, 500)],
   );
+  if (updated.rowCount !== 1) {
+    throw new Error("APOLLOS_REPAIR_TASK_FINISH_CONFLICT");
+  }
 }
 
 async function processOne(): Promise<void> {

@@ -43,6 +43,9 @@ interface WeeklyApproval {
   status: WeeklyApprovalStatus;
   failureCode?: string | null;
   failureDetail?: string | null;
+  completedSteps?: number;
+  totalSteps?: number;
+  currentStep?: string | null;
 }
 
 interface Message {
@@ -317,8 +320,17 @@ function Bubble({
                         : B.blue,
                   fontWeight: 800,
                 }}>
-                  {msg.weeklyApproval.status === "generating" &&
-                    "⚙ Apollos is creating every caption, image, and YouTube video. Approval appears when the complete package is ready."}
+                  {msg.weeklyApproval.status === "generating" && (
+                    <>
+                      ⚙ Apollos is creating every caption, image, and YouTube video.
+                      {typeof msg.weeklyApproval.totalSteps === "number" &&
+                        msg.weeklyApproval.totalSteps > 0 &&
+                        ` ${msg.weeklyApproval.completedSteps ?? 0}/${msg.weeklyApproval.totalSteps} steps complete.`}
+                      {msg.weeklyApproval.currentStep &&
+                        ` Current: ${msg.weeklyApproval.currentStep.replace("generate:", "")}.`}
+                      {" Approval appears when the complete package is ready."}
+                    </>
+                  )}
                   {msg.weeklyApproval.status === "approved" &&
                     "✓ Complete weekly package approved — ready for guarded scheduling and delivery."}
                   {msg.weeklyApproval.status === "executed" &&
@@ -388,12 +400,20 @@ export default function ApollosPage() {
               status?: string;
               failureCode?: string | null;
               decisionNote?: string | null;
+              progress?: {
+                completedSteps?: number;
+                totalSteps?: number;
+                currentStep?: string | null;
+              };
             };
             return {
               messageId: message.id,
               status: task.status,
               failureCode: task.failureCode ?? null,
               failureDetail: task.decisionNote ?? null,
+              completedSteps: task.progress?.completedSteps ?? 0,
+              totalSteps: task.progress?.totalSteps ?? 0,
+              currentStep: task.progress?.currentStep ?? null,
             };
           } catch {
             return {
@@ -401,6 +421,9 @@ export default function ApollosPage() {
               status: undefined,
               failureCode: null,
               failureDetail: null,
+              completedSteps: undefined,
+              totalSteps: undefined,
+              currentStep: undefined,
             };
           }
         }),
@@ -413,7 +436,10 @@ export default function ApollosPage() {
           if (
             !message.weeklyApproval ||
             !status ||
-            status === message.weeklyApproval.status
+            status === message.weeklyApproval.status &&
+            result?.completedSteps === message.weeklyApproval.completedSteps &&
+            result?.totalSteps === message.weeklyApproval.totalSteps &&
+            result?.currentStep === message.weeklyApproval.currentStep
           ) {
             return message;
           }
@@ -424,6 +450,9 @@ export default function ApollosPage() {
               status,
               failureCode: result?.failureCode ?? null,
               failureDetail: result?.failureDetail ?? null,
+              completedSteps: result?.completedSteps,
+              totalSteps: result?.totalSteps,
+              currentStep: result?.currentStep,
             },
           };
         }),

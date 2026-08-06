@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { agentTasksTable } from "@workspace/db/schema";
+import { agentTasksTable, agentTaskStepsTable } from "@workspace/db/schema";
 import type { AgentTask } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine.js";
 
 const router = Router();
@@ -185,7 +185,30 @@ router.get("/agent-tasks/:id", async (req, res) => {
     .where(and(eq(agentTasksTable.id, req.params.id), eq(agentTasksTable.userId, userId)));
 
   if (!task) return res.status(404).json({ error: "Task not found" });
-  return res.json(task);
+
+  const steps = await db
+    .select()
+    .from(agentTaskStepsTable)
+    .where(eq(agentTaskStepsTable.taskId, task.id))
+    .orderBy(asc(agentTaskStepsTable.position));
+  const completedSteps = steps.filter((step) => step.status === "completed").length;
+  return res.json({
+    ...task,
+    steps,
+    progress: {
+      completedSteps,
+      totalSteps: steps.length,
+      percent:
+        steps.length === 0
+          ? 0
+          : Math.round((completedSteps / steps.length) * 100),
+      currentStep:
+        steps.find((step) => step.status === "running")?.stepKey ??
+        steps.find((step) => step.status === "pending" || step.status === "failed")
+          ?.stepKey ??
+        null,
+    },
+  });
 });
 
 // ── POST /agent-tasks/:id/approve — human approves a pending task ─────────────

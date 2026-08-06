@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { pool } from "@workspace/db";
 import { classifyDabRuntimeStatus } from "../lib/dab-runtime-status";
 import { buildApollosCapabilities } from "../lib/apollos-capabilities";
@@ -224,6 +225,120 @@ const registeredRepairAdapterKeys = Object.freeze([
   "find-earliest-failure",
   "collect-causal-evidence",
 ]);
+
+router.get("/dab/repair-history", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const tasks = await pool.query<{
+    id: string;
+    status: string;
+    failure_code: string | null;
+    decision_note: string | null;
+    created_at: Date;
+    updated_at: Date;
+    payload: string;
+  }>(
+    `SELECT id,status,failure_code,decision_note,created_at,updated_at,payload
+       FROM agent_tasks
+      WHERE user_id=$1 AND task_type='execute_repair_plan'
+      ORDER BY created_at DESC
+      LIMIT 25`,
+    [userId],
+  );
+
+  const taskIds = tasks.rows.map((task) => task.id);
+  const steps = taskIds.length === 0
+    ? { rows: [] as {
+        task_id: string;
+        step_key: string;
+        position: number;
+        capability: string;
+        status: string;
+        failure_code: string | null;
+        attempt_count: number;
+        max_attempts: number;
+        output_receipt: unknown;
+        completed_at: Date | null;
+        updated_at: Date;
+      }[] }
+    : await pool.query<{
+        task_id: string;
+        step_key: string;
+        position: number;
+        capability: string;
+        status: string;
+        failure_code: string | null;
+        attempt_count: number;
+        max_attempts: number;
+        output_receipt: unknown;
+        completed_at: Date | null;
+        updated_at: Date;
+      }>(
+        `SELECT task_id,step_key,position,capability,status,failure_code,
+                attempt_count,max_attempts,output_receipt,completed_at,updated_at
+           FROM agent_task_steps
+          WHERE task_id = ANY($1::text[])
+          ORDER BY task_id,position ASC`,
+        [taskIds],
+      );
+
+  const history = tasks.rows.map((task) => {
+    let binding: {
+      sourceTaskId: string | null;
+      planId: string | null;
+      diagnosisId: string | null;
+    } = { sourceTaskId: null, planId: null, diagnosisId: null };
+    try {
+      const payload = JSON.parse(task.payload) as Record<string, unknown>;
+      binding = {
+        sourceTaskId:
+          typeof payload.sourceTaskId === "string" ? payload.sourceTaskId : null,
+        planId: typeof payload.planId === "string" ? payload.planId : null,
+        diagnosisId:
+          typeof payload.diagnosisId === "string" ? payload.diagnosisId : null,
+      };
+    } catch {
+      // Keep the task visible with an empty binding; never expose raw payload.
+    }
+    return {
+      taskId: task.id,
+      ...binding,
+      status: task.status,
+      failureCode: task.failure_code,
+      failureDetail: task.decision_note,
+      createdAt: task.created_at.toISOString(),
+      updatedAt: task.updated_at.toISOString(),
+      steps: steps.rows
+        .filter((step) => step.task_id === task.id)
+        .map((step) => ({
+          stepKey: step.step_key,
+          position: step.position,
+          capability: step.capability,
+          status: step.status,
+          failureCode: step.failure_code,
+          attempts: step.attempt_count,
+          maxAttempts: step.max_attempts,
+          receipt:
+            step.output_receipt && typeof step.output_receipt === "object"
+              ? step.output_receipt
+              : null,
+          completedAt: step.completed_at?.toISOString() ?? null,
+          updatedAt: step.updated_at.toISOString(),
+        })),
+    };
+  });
+
+  res.json({
+    operator: "Apollos",
+    checkedAt: new Date().toISOString(),
+    count: history.length,
+    history,
+  });
+});
 
 router.get("/dab/repair-adapters", (_req, res) => {
   const adapters = buildApollosRepairAdapterStatus(

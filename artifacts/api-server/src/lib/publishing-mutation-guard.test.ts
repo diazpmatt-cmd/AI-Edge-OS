@@ -118,7 +118,7 @@ describe("publishing mutation guard policy", () => {
     ).toBe(false);
   });
 
-  it("keeps only exact scheduler exception recovery families available", () => {
+  it("requires scheduler ownership and an exact internal recovery family", () => {
     expect(SCHEDULER_AGGREGATE_RECOVERY_PREFIXES).toEqual([
       "Scheduler recovered aggregate state from",
       "Scheduler error after",
@@ -131,19 +131,33 @@ describe("publishing mutation guard policy", () => {
     expect(isSchedulerAggregateRecoveryMessage("Scheduler provider failed")).toBe(false);
     expect(isSchedulerAggregateRecoveryMessage("provider failed")).toBe(false);
 
+    const recoveryMessage =
+      "Scheduler publish error before any verified external receipt";
     expect(
       shouldDeferAdapterAggregateTransition({
         nextStatus: "failed",
         expectedPlatformCount: 2,
         latestDeliveryCount: 1,
         latestUnresolvedCount: 1,
-        errorMessage:
-          "Scheduler publish error before any verified external receipt",
+        publishedBy: "scheduler",
+        errorMessage: recoveryMessage,
       }),
     ).toBe(false);
+    expect(
+      shouldDeferAdapterAggregateTransition({
+        nextStatus: "failed",
+        expectedPlatformCount: 2,
+        latestDeliveryCount: 1,
+        latestUnresolvedCount: 1,
+        publishedBy: "user_123",
+        errorMessage: recoveryMessage,
+      }),
+    ).toBe(true);
   });
 
   it("installs an idempotent update/delete trigger with ledger authority", () => {
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/^\s*BEGIN;/);
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toMatch(/COMMIT;\s*$/);
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation",
     );
@@ -162,6 +176,9 @@ describe("publishing mutation guard policy", () => {
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "latest_delivery_count <> expected_platform_count",
+    );
+    expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
+      "OLD.published_by = 'scheduler'",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "NEW.status := OLD.status",

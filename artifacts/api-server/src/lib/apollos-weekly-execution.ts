@@ -1,7 +1,7 @@
 export type WeeklyExecutionStatus =
-  | "approved"
+  | "generation_queued"
   | "executing"
-  | "executed"
+  | "pending_review"
   | "failed";
 
 export interface WeeklyExecutionDecision {
@@ -16,8 +16,8 @@ export function claimWeeklyExecution(input: {
   readonly attempts: number;
   readonly maxAttempts: number;
 }): WeeklyExecutionDecision {
-  if (input.status !== "approved") {
-    throw new Error("APOLLOS_WEEKLY_NOT_APPROVED");
+  if (input.status !== "generation_queued") {
+    throw new Error("APOLLOS_WEEKLY_NOT_QUEUED");
   }
   if (
     !Number.isInteger(input.attempts) ||
@@ -39,16 +39,16 @@ export function claimWeeklyExecution(input: {
     nextStatus: "executing",
     attempts: input.attempts + 1,
     terminal: false,
-    reasonCode: "APOLLOS_WEEKLY_EXECUTION_CLAIMED",
+    reasonCode: "APOLLOS_WEEKLY_GENERATION_CLAIMED",
   });
 }
 
 export function completeWeeklyExecution(): WeeklyExecutionDecision {
   return Object.freeze({
-    nextStatus: "executed",
+    nextStatus: "pending_review",
     attempts: 0,
     terminal: true,
-    reasonCode: "APOLLOS_WEEKLY_EXECUTION_COMPLETE",
+    reasonCode: "APOLLOS_WEEKLY_PACKAGE_READY",
   });
 }
 
@@ -66,11 +66,11 @@ export function failWeeklyExecution(input: {
   }
   const terminal = input.attempts >= input.maxAttempts;
   return Object.freeze({
-    nextStatus: terminal ? "failed" : "approved",
+    nextStatus: terminal ? "failed" : "generation_queued",
     attempts: input.attempts,
     terminal,
     reasonCode: terminal
       ? "APOLLOS_WEEKLY_RETRIES_EXHAUSTED"
-      : "APOLLOS_WEEKLY_RETRY_QUEUED",
+      : "APOLLOS_WEEKLY_GENERATION_RETRY_QUEUED",
   });
 }

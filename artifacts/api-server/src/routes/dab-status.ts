@@ -566,6 +566,12 @@ router.get("/dab/repair-history", async (req, res) => {
               ? (() => {
                   const receipt = step.output_receipt as Record<string, unknown>;
                   return {
+                    bindingVerified:
+                      binding.planId !== null &&
+                      binding.diagnosisId !== null &&
+                      receipt.planId === binding.planId &&
+                      receipt.diagnosisId === binding.diagnosisId &&
+                      receipt.stepKey === step.step_key,
                     planId:
                       typeof receipt.planId === "string" ? receipt.planId : null,
                     diagnosisId:

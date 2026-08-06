@@ -241,9 +241,14 @@ router.get("/dab/repair-runtime", async (_req, res) => {
     return;
   }
 
-  const tables = await pool.query<{ tasks: string | null; steps: string | null }>(
+  const tables = await pool.query<{
+    tasks: string | null;
+    steps: string | null;
+    heartbeats: string | null;
+  }>(
     `SELECT to_regclass('public.agent_tasks')::text AS tasks,
-            to_regclass('public.agent_task_steps')::text AS steps`,
+            to_regclass('public.agent_task_steps')::text AS steps,
+            to_regclass('public.apollos_repair_worker_heartbeats')::text AS heartbeats`,
   );
   if (!tables.rows[0]?.tasks || !tables.rows[0]?.steps) {
     res.json({
@@ -295,11 +300,40 @@ router.get("/dab/repair-runtime", async (_req, res) => {
      FROM agent_tasks`,
   );
   const counts = queue.rows[0];
+  const staleAfterMs = Math.min(
+    Math.max(config.intervalMs * 3, 60_000),
+    86_400_000,
+  );
+  const heartbeat = tables.rows[0]?.heartbeats
+    ? (
+        await pool.query<{
+          runtime_id: string;
+          observed_at: Date;
+          state: "ready" | "degraded" | "blocked" | "disabled";
+          reason_code: string;
+        }>(
+          `SELECT runtime_id,observed_at,state,reason_code
+             FROM apollos_repair_worker_heartbeats
+            WHERE runtime_id=$1
+            LIMIT 1`,
+          [config.runtimeId],
+        )
+      ).rows[0] ?? null
+    : null;
+  const heartbeatAgeMs = heartbeat
+    ? Math.max(0, Date.now() - heartbeat.observed_at.getTime())
+    : null;
   const status = !config.enabled
     ? "disabled"
     : config.killSwitch
       ? "blocked"
-      : "ready";
+      : !heartbeat
+        ? "uninitialized"
+        : heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
+          ? "degraded"
+          : heartbeat.state === "ready"
+            ? "ready"
+            : "degraded";
   res.json({
     operator: "Apollos",
     checkedAt,
@@ -309,7 +343,13 @@ router.get("/dab/repair-runtime", async (_req, res) => {
         ? "APOLLOS_REPAIR_WORKER_DISABLED"
         : status === "blocked"
           ? "APOLLOS_REPAIR_KILL_SWITCH"
-          : "APOLLOS_REPAIR_WORKER_READY",
+          : status === "uninitialized"
+            ? "APOLLOS_REPAIR_HEARTBEAT_MISSING"
+            : status === "degraded"
+              ? heartbeatAgeMs !== null && heartbeatAgeMs > staleAfterMs
+                ? "APOLLOS_REPAIR_HEARTBEAT_STALE"
+                : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
+              : "APOLLOS_REPAIR_WORKER_READY",
     enabled: config.enabled,
     killSwitch: config.killSwitch,
     runtimeId: config.runtimeId,
@@ -325,6 +365,16 @@ router.get("/dab/repair-runtime", async (_req, res) => {
       failed: Number(counts?.failed ?? 0),
     },
     latestActivityAt: counts?.latest_activity_at?.toISOString() ?? null,
+    staleAfterMs,
+    heartbeatAgeMs,
+    latestHeartbeat: heartbeat
+      ? {
+          runtimeId: heartbeat.runtime_id,
+          observedAt: heartbeat.observed_at.toISOString(),
+          state: heartbeat.state,
+          reasonCode: heartbeat.reason_code,
+        }
+      : null,
   });
 });
 

@@ -113,7 +113,7 @@ interface RepairAdapterStatusResponse {
 interface RepairRuntimeResponse {
   operator: "Apollos";
   checkedAt: string;
-  status: "disabled" | "blocked" | "misconfigured" | "uninitialized" | "ready";
+  status: "disabled" | "blocked" | "degraded" | "misconfigured" | "uninitialized" | "ready";
   reasonCode?: string;
   enabled?: boolean;
   killSwitch?: boolean;
@@ -121,6 +121,14 @@ interface RepairRuntimeResponse {
   limits?: { intervalMs: number; leaseMs: number; maxAttempts: number };
   queue: { queued: number; running: number; completed: number; failed: number } | null;
   latestActivityAt: string | null;
+  staleAfterMs?: number;
+  heartbeatAgeMs?: number | null;
+  latestHeartbeat?: {
+    runtimeId: string;
+    observedAt: string;
+    state: "ready" | "degraded" | "blocked" | "disabled";
+    reasonCode: string;
+  } | null;
 }
 
 interface RepairHistoryResponse {
@@ -1687,14 +1695,14 @@ export default function ApollosPage() {
                   width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
                   background: repairRuntime?.status === "ready"
                     ? B.green
-                    : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured"
+                    : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured" || repairRuntime?.status === "degraded"
                       ? "#F87171"
                       : B.dim,
                 }} />
                 <span style={{ flex: 1, color: B.silver, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase" }}>
                   Repair worker
                 </span>
-                <span style={{ color: repairRuntime?.status === "ready" ? B.green : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured" ? "#F87171" : B.dim, fontSize: 8, fontWeight: 900, textTransform: "uppercase" }}>
+                <span style={{ color: repairRuntime?.status === "ready" ? B.green : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured" || repairRuntime?.status === "degraded" ? "#F87171" : B.dim, fontSize: 8, fontWeight: 900, textTransform: "uppercase" }}>
                   {repairRuntimeQuery.isLoading ? "checking" : repairRuntime?.status ?? "unavailable"}
                 </span>
               </div>
@@ -1704,8 +1712,16 @@ export default function ApollosPage() {
                 </div>
               )}
               {repairRuntime?.reasonCode && repairRuntime.status !== "ready" && (
-                <div style={{ marginTop: 4, color: repairRuntime.status === "blocked" || repairRuntime.status === "misconfigured" ? "#F87171" : B.dim, fontSize: 8, lineHeight: 1.35 }}>
+                <div style={{ marginTop: 4, color: repairRuntime.status === "blocked" || repairRuntime.status === "misconfigured" || repairRuntime.status === "degraded" ? "#F87171" : B.dim, fontSize: 8, lineHeight: 1.35 }}>
                   {repairRuntime.reasonCode.replaceAll("_", " ").toLowerCase()}
+                </div>
+              )}
+              {repairRuntime?.latestHeartbeat && (
+                <div style={{ marginTop: 3, color: B.dim, fontSize: 7.5 }}>
+                  Heartbeat {new Date(repairRuntime.latestHeartbeat.observedAt).toLocaleString()}
+                  {repairRuntime.heartbeatAgeMs !== null && repairRuntime.heartbeatAgeMs !== undefined
+                    ? ` · ${Math.round(repairRuntime.heartbeatAgeMs / 1000)}s ago`
+                    : ""}
                 </div>
               )}
               {repairRuntime?.latestActivityAt && (

@@ -304,23 +304,54 @@ async function failCheckpoint(
 }
 
 async function recoverExpiredClaims() {
-  await pool.query(
-    `UPDATE agent_tasks
+  const recovered = await pool.query<{
+    id: string;
+    status: string;
+    failure_code: string;
+  }>(
+    `UPDATE agent_tasks AS task
         SET status = CASE
-              WHEN execution_attempts >= $1 THEN 'failed'
+              WHEN task.execution_attempts >= $1 THEN 'failed'
               ELSE 'generation_queued'
             END,
+            execution_completed_at = CASE
+              WHEN task.execution_attempts >= $1 THEN now()
+              ELSE NULL
+            END,
             failure_code = CASE
-              WHEN execution_attempts >= $1
+              WHEN task.execution_attempts >= $1
                 THEN 'APOLLOS_WEEKLY_RETRIES_EXHAUSTED'
               ELSE 'APOLLOS_WEEKLY_LEASE_EXPIRED'
             END,
+            decision_note = CASE
+              WHEN task.execution_attempts >= $1
+                THEN 'Execution heartbeat expired after the bounded attempt ceiling'
+              ELSE 'Execution heartbeat expired; checkpoint-safe recovery queued'
+            END,
             updated_at = now()
-      WHERE task_type='weekly_campaign'
-        AND status='executing'
-        AND execution_started_at < now() - ($2::text || ' milliseconds')::interval`,
+      WHERE task.task_type='weekly_campaign'
+        AND task.status='executing'
+        AND task.updated_at < now() - ($2::text || ' milliseconds')::interval
+        AND NOT EXISTS (
+          SELECT 1
+            FROM agent_task_steps AS step
+           WHERE step.task_id=task.id
+             AND step.status='running'
+             AND step.lease_expires_at > now()
+        )
+      RETURNING task.id, task.status, task.failure_code`,
     [maxAttempts, leaseMs],
   );
+  for (const task of recovered.rows) {
+    logger.warn(
+      {
+        taskId: task.id,
+        recoveredStatus: task.status,
+        code: task.failure_code,
+      },
+      "[apollos-campaign] expired execution recovered",
+    );
+  }
 }
 
 async function claimOne() {

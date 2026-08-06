@@ -410,8 +410,9 @@ export default function BBBContentAutopilotPage() {
   const [activityLog,     setActivityLog]     = useState<ActivityEntry[]>([]);
   const [draftsSaved,     setDraftsSaved]     = useState<Set<string>>(new Set());
   const [mediaAttachment, setMediaAttachment] = useState<MediaAttachment | null>(null);
-  const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string }>>>({});
+  const [generatedMedia, setGeneratedMedia] = useState<Partial<Record<SocialProviderId, { attachment: MediaAttachment; previewUrl: string; size: string; durationSeconds?: number }>>>({});
   const [videoRenderError, setVideoRenderError] = useState<string | null>(null);
+  const [videoPreviewApproved, setVideoPreviewApproved] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
   const [showCampaignHelp, setShowCampaignHelp] = useState(false);
   const [autoMediaEnabled, setAutoMediaEnabled] = useState(true);
@@ -510,11 +511,11 @@ export default function BBBContentAutopilotPage() {
       return generatedTargets.flatMap(target => target.platforms.map(platform => ({ ...target, platform })));
     },
     onSuccess: (results) => {
-      setGeneratedMedia(Object.fromEntries(results.map(({ platform, size, generationId, signedUrl }) => [platform, {
+      setGeneratedMedia(Object.fromEntries(results.map(({ platform, size, generationId, storageKey, signedUrl }) => [platform, {
         size,
         previewUrl: signedUrl,
         attachment: {
-          objectPath: `/objects/generated-images/${generationId}.png`,
+          objectPath: `/objects/${storageKey}`,
           kind: "image" as const,
           mimeType: "image/png",
           filename: `${platform}-campaign-${generationId}.png`,
@@ -533,12 +534,16 @@ export default function BBBContentAutopilotPage() {
       const preview = await authFetch<{ signedUrl: string }>(`/auto-content/generate-video/${rendered.generationId}/signed-url`);
       return { ...rendered, signedUrl: preview.signedUrl };
     },
-    onMutate: () => setVideoRenderError(null),
-    onSuccess: ({ generationId, videoPath, signedUrl }) => {
+    onMutate: () => {
+      setVideoRenderError(null);
+      setVideoPreviewApproved(false);
+    },
+    onSuccess: ({ generationId, videoPath, signedUrl, durationSeconds }) => {
       setGeneratedMedia(previous => ({
         ...previous,
         youtube: {
-          size: "1280x720 MP4",
+          size: "1280×720 MP4",
+          durationSeconds,
           previewUrl: signedUrl,
           attachment: {
             objectPath: videoPath,
@@ -1292,12 +1297,36 @@ export default function BBBContentAutopilotPage() {
                     {platform.replace("_", " ")} · {media.size}
                   </div>
                   {media.attachment.kind === "video" ? (
-                    <video src={media.previewUrl} controls preload="metadata" aria-label={`${platform} generated video preview`} style={{ display: "block", width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
+                    <div>
+                      <video src={media.previewUrl} controls preload="metadata" aria-label={`${platform} generated video preview`} style={{ display: "block", width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 12, border: `2px solid ${videoPreviewApproved ? B.green : B.purple}` }} />
+                      <div style={{ marginTop: 9, padding: "10px 11px", borderRadius: 9, background: "rgba(167,139,250,0.07)", border: `1px solid ${B.border}` }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, color: B.silver, fontSize: 10, marginBottom: 8 }}>
+                          <span>▶ 1280×720</span>
+                          <span>• MP4</span>
+                          {media.durationSeconds != null && <span>• {media.durationSeconds} seconds</span>}
+                          <span>• Narrated</span>
+                          <span>• Captions</span>
+                          <span>• Official BB&B branding</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setVideoPreviewApproved(value => !value)}
+                          style={{ width: "100%", borderRadius: 8, padding: "9px 12px", fontWeight: 900, cursor: "pointer", color: videoPreviewApproved ? B.green : B.white, background: videoPreviewApproved ? "rgba(34,197,94,0.1)" : "rgba(167,139,250,0.15)", border: `1px solid ${videoPreviewApproved ? "rgba(34,197,94,0.45)" : "rgba(167,139,250,0.45)"}` }}
+                        >
+                          {videoPreviewApproved ? "✓ Video preview approved" : "Approve this video preview"}
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <img src={media.previewUrl} alt={`${platform} generated campaign preview`} style={{ display: "block", width: "100%", aspectRatio: platform === "instagram" ? "1" : "3 / 2", objectFit: "cover", borderRadius: 12, border: `1px solid ${B.border}` }} />
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {selectedPlatforms.has("youtube") && !savedDraftIds.has("youtube") && (
+            <div style={{ padding: 12, marginBottom: 12, borderRadius: 10, background: "rgba(167,139,250,0.07)", border: "1px solid rgba(167,139,250,0.25)", color: B.silver, fontSize: 11 }}>
+              <strong style={{ color: B.purple }}>YouTube preview workflow:</strong> Save the YouTube draft below. AI Edge will render the narrated MP4, display it here, and require your approval before publishing.
             </div>
           )}
           {generateCampaignVideo.isPending && (
@@ -1787,7 +1816,7 @@ export default function BBBContentAutopilotPage() {
                       if (!hasDraftsToPublish) return;
                       setShowPublishDialog(true);
                     }}
-                    disabled={!hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending}
+                    disabled={!hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending || (savedDraftIds.has("youtube") && (!generatedMedia.youtube || generatedMedia.youtube.attachment.kind !== "video" || !videoPreviewApproved))}
                     style={{
                       marginTop: 4,
                       background: !hasDraftsToPublish
@@ -1799,7 +1828,7 @@ export default function BBBContentAutopilotPage() {
                       borderRadius: 10, padding: "13px 14px",
                       fontSize: 13, fontWeight: 900,
                       color: !hasDraftsToPublish ? B.dim : B.white,
-                      cursor: !hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending ? "not-allowed" : "pointer",
+                      cursor: !hasDraftsToPublish || publishInProgress || generateCampaignVideo.isPending || (savedDraftIds.has("youtube") && !videoPreviewApproved) ? "not-allowed" : "pointer",
                       transition: "all 0.2s",
                       letterSpacing: "-0.2px",
                       boxShadow: hasDraftsToPublish && !publishInProgress ? "0 4px 20px rgba(0,174,239,0.25)" : "none",
@@ -1817,6 +1846,8 @@ export default function BBBContentAutopilotPage() {
                   >
                     {generateCampaignVideo.isPending
                       ? "🎬 Rendering YouTube Video…"
+                      : savedDraftIds.has("youtube") && generatedMedia.youtube?.attachment.kind === "video" && !videoPreviewApproved
+                      ? "▶ Preview and approve the YouTube video first"
                       : publishInProgress
                       ? "⏳ Publishing to live accounts..."
                       : !hasDraftsToPublish

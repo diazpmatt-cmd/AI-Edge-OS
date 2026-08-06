@@ -9,14 +9,16 @@ import {
   reviewRequestsTable,
   reviewPlatformStatsTable,
   leadsTable,
+  agentTasksTable,
 } from "@workspace/db/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
   buildWeeklyCampaignPlan,
   isWeeklyCampaignCommand,
   parseWeeklyCampaignPlatforms,
 } from "../lib/apollos-weekly-campaign";
+import { evaluateTask, RULE_SET_VERSION } from "../lib/approval-engine";
 
 const router = Router();
 
@@ -1260,7 +1262,7 @@ function nextMondayDate(now = new Date()): string {
   return next.toISOString().slice(0, 10);
 }
 
-router.post("/apollos/weekly-campaign/plan", (req, res) => {
+router.post("/apollos/weekly-campaign/plan", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
@@ -1288,13 +1290,78 @@ router.post("/apollos/weekly-campaign/plan", (req, res) => {
       startDate,
       platforms: parseWeeklyCampaignPlatforms(command),
     });
+    const batchKey =
+      `weekly:${userId}:${plan.startDate}:${plan.platforms.join(",")}`;
+
+    const existing = await db
+      .select()
+      .from(agentTasksTable)
+      .where(
+        and(
+          eq(agentTasksTable.userId, userId),
+          eq(agentTasksTable.taskType, "weekly_campaign"),
+        ),
+      )
+      .orderBy(desc(agentTasksTable.createdAt))
+      .limit(25);
+
+    const duplicate = existing.find((task) => {
+      try {
+        const payload = JSON.parse(task.payload) as { batchKey?: unknown };
+        return payload.batchKey === batchKey;
+      } catch {
+        return false;
+      }
+    });
+
+    if (duplicate) {
+      res.status(200).json({
+        status: "planned",
+        executionStatus: duplicate.status,
+        duplicate: true,
+        taskId: duplicate.id,
+        command,
+        plan,
+      });
+      return;
+    }
+
+    const evaluation = evaluateTask("weekly_campaign", {
+      batchKey,
+      command,
+      plan,
+    });
+    const [task] = await db
+      .insert(agentTasksTable)
+      .values({
+        userId,
+        taskType: "weekly_campaign",
+        payload: JSON.stringify({ batchKey, command, plan }),
+        status: "pending_review",
+        decision: evaluation.decision,
+        resolution: null,
+        decisionBy: null,
+        decisionAt: null,
+        decisionNote: null,
+        ruleId: evaluation.ruleId,
+        ruleSetVersion: RULE_SET_VERSION,
+      })
+      .returning();
+
     res.status(201).json({
       status: "planned",
       executionStatus: "awaiting_batch_approval",
+      duplicate: false,
+      taskId: task.id,
       command,
       plan,
+      approval: {
+        endpoint: `/api/agent-tasks/${task.id}/approve`,
+        rejectEndpoint: `/api/agent-tasks/${task.id}/reject`,
+        ruleId: evaluation.ruleId,
+      },
       nextAction:
-        "Generate platform-specific drafts and media, then present the complete weekly package for one human approval.",
+        "Review and approve this weekly batch. Draft and media execution remains blocked until approval.",
     });
   } catch (error) {
     const code =

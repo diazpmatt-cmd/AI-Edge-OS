@@ -341,7 +341,56 @@ router.get("/dab/apollos-readiness", async (req, res) => {
     capability: probe.route.capability,
     reasonCode: probe.route.reasonCode,
   }));
-  const commandRoutingReady = commandSelfTest.every((probe) => probe.passed);
+  const syntheticReadyCapabilities = (
+    ["diagnose", "recommend", "prepare", "publish"] as const
+  ).map((id) => ({
+    id,
+    state: "ready" as const,
+    reasonCode: "APOLLOS_SELF_TEST_CAPABILITY_READY",
+    detail: "Synthetic readiness fixture.",
+  }));
+  const decisionSelfTest = [
+    {
+      id: "weekly-ready",
+      decision: decideApollosCommand(
+        routeApollosCommand(
+          "Create and send out a week's posts on all four platforms.",
+        ),
+        syntheticReadyCapabilities,
+      ),
+      expectedDisposition: "ready",
+    },
+    {
+      id: "publish-approval",
+      decision: decideApollosCommand(
+        routeApollosCommand("Publish this post live."),
+        syntheticReadyCapabilities,
+      ),
+      expectedDisposition: "approval_required",
+    },
+    {
+      id: "unknown-clarification",
+      decision: decideApollosCommand(
+        routeApollosCommand("Do the thing."),
+        syntheticReadyCapabilities,
+      ),
+      expectedDisposition: "clarification_required",
+    },
+  ].map((probe) => ({
+    id: probe.id,
+    passed:
+      probe.decision.disposition === probe.expectedDisposition &&
+      (probe.expectedDisposition !== "ready" ||
+        probe.decision.executableNow === true) &&
+      (probe.expectedDisposition !== "approval_required" ||
+        probe.decision.executableNow === false),
+    disposition: probe.decision.disposition,
+    executableNow: probe.decision.executableNow,
+    reasonCode: probe.decision.reasonCode,
+  }));
+  const commandRoutingReady =
+    commandSelfTest.every((probe) => probe.passed) &&
+    decisionSelfTest.every((probe) => probe.passed);
 
   const checks = [
     {
@@ -441,6 +490,7 @@ router.get("/dab/apollos-readiness", async (req, res) => {
     overallStatus,
     checks,
     commandSelfTest,
+    decisionSelfTest,
     capabilityCounts,
     adapterCounts,
     repairWorker: repairConfig

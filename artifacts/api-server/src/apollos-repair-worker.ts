@@ -6,7 +6,10 @@ import { buildApollosRepairPlan, type ApollosRepairPlan } from "./lib/apollos-re
 import { runApollosRepairPlan, type ApollosRepairAction } from "./lib/apollos-repair-runner.js";
 import type { ApollosRepairStepReceipt } from "./lib/apollos-repair-execution.js";
 import { readApollosRepairWorkerConfig } from "./lib/apollos-repair-worker-config.js";
-import { buildApollosRepairAdapterRegistry } from "./lib/apollos-repair-adapters.js";
+import {
+  assertApollosRepairHandlerContract,
+  buildApollosRepairAdapterRegistry,
+} from "./lib/apollos-repair-adapters.js";
 
 const config = readApollosRepairWorkerConfig(process.env);
 let stopped = false;
@@ -359,9 +362,11 @@ async function processOne(): Promise<void> {
 
     await ensureRepairSteps(task.id, plan);
     const receipts = await loadReceipts(task.id);
+    const handlers = inspectionActions(payload.sourceTaskId, task.user_id);
+    assertApollosRepairHandlerContract(handlers);
     const adapterRegistry = buildApollosRepairAdapterRegistry({
       plan,
-      handlers: inspectionActions(payload.sourceTaskId, task.user_id),
+      handlers,
       env: process.env,
     });
     logger.info(

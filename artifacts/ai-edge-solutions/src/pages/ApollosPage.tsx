@@ -119,7 +119,15 @@ interface RepairRuntimeResponse {
   killSwitch?: boolean;
   runtimeId?: string;
   limits?: { intervalMs: number; leaseMs: number; maxAttempts: number };
-  queue: { queued: number; running: number; completed: number; failed: number } | null;
+  queue: {
+    queued: number;
+    running: number;
+    completed: number;
+    failed: number;
+    expired?: number;
+    oldestQueuedAgeMs?: number | null;
+    backlogAfterMs?: number;
+  } | null;
   latestActivityAt: string | null;
   staleAfterMs?: number;
   heartbeatAgeMs?: number | null;
@@ -1709,6 +1717,7 @@ export default function ApollosPage() {
               {repairRuntime?.queue && (
                 <div style={{ marginTop: 6, color: B.dim, fontSize: 8.5, lineHeight: 1.45 }}>
                   {repairRuntime.queue.queued} queued · {repairRuntime.queue.running} running · {repairRuntime.queue.completed} executed · {repairRuntime.queue.failed} failed
+                  {(repairRuntime.queue.expired ?? 0) > 0 ? ` · ${repairRuntime.queue.expired} expired` : ""}
                 </div>
               )}
               {repairRuntime?.reasonCode && repairRuntime.status !== "ready" && (

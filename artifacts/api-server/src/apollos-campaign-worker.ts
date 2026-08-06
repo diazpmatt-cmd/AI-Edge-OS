@@ -594,6 +594,54 @@ async function verifyDraftMedia(
   }
 }
 
+
+async function verifyCompletedCheckpointOutputs(
+  userId: string,
+  job: GenerationJob,
+): Promise<void> {
+  const result = await pool.query<{
+    id: string;
+    platforms: string;
+    status: string;
+  }>(
+    `SELECT id, platforms, status
+       FROM social_posts
+      WHERE user_id=$1 AND weekly_plan_id=$2
+      ORDER BY scheduled_at ASC, created_at ASC`,
+    [userId, job.weeklyPlanId],
+  );
+  if (result.rows.length !== job.count) {
+    throw new Error(
+      `APOLLOS_WEEKLY_RESUME_DRAFT_COUNT_MISMATCH:${job.generatorPlatform}`,
+    );
+  }
+  for (const row of result.rows) {
+    let platforms: unknown;
+    try {
+      platforms = JSON.parse(row.platforms);
+    } catch {
+      throw new Error(
+        `APOLLOS_WEEKLY_RESUME_PLATFORM_INVALID:${job.generatorPlatform}`,
+      );
+    }
+    if (
+      row.status !== "draft" ||
+      !Array.isArray(platforms) ||
+      platforms.length !== 1 ||
+      platforms[0] !== job.generatorPlatform
+    ) {
+      throw new Error(
+        `APOLLOS_WEEKLY_RESUME_DRAFT_BINDING_MISMATCH:${job.generatorPlatform}`,
+      );
+    }
+    await verifyDraftMedia(userId, job, {
+      id: row.id,
+      topic: null,
+      city: null,
+      imagePrompt: null,
+    });
+  }
+}
 async function processOne() {
   const task = await claimOne();
   if (!task) return;
@@ -609,9 +657,10 @@ async function processOne() {
       const checkpoint = definitions[position]!;
       const action = await claimCheckpoint(task.id, checkpoint);
       if (action === "skip") {
+        await verifyCompletedCheckpointOutputs(task.user_id, job);
         logger.info(
           { taskId: task.id, stepKey: checkpoint.stepKey },
-          "[apollos-campaign] completed checkpoint skipped",
+          "[apollos-campaign] completed checkpoint reverified and skipped",
         );
         continue;
       }

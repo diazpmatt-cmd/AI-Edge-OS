@@ -437,12 +437,20 @@ export class PublishingService {
         errorMessage = "Platform adapter did not return a result";
         failedAt     = new Date();
         failedCount++;
-      } else if (adapterResult.ok) {
-        newStatus      = "published";
+      } else if (
+        adapterResult.ok &&
+        (adapterResult.postId || adapterResult.postUrl)
+      ) {
+        newStatus       = "published";
         externalPostId  = adapterResult.postId ?? null;
         externalPostUrl = adapterResult.postUrl ?? null;
         publishedAt     = new Date();
         publishedCount++;
+      } else if (adapterResult.ok) {
+        newStatus    = "failed";
+        errorMessage = "Provider reported success without an external post receipt";
+        failedAt     = new Date();
+        failedCount++;
       } else {
         const sanitized = sanitizeError(adapterResult.error ?? "Unknown error");
         // Distinguish skipped (media validation) from hard failures

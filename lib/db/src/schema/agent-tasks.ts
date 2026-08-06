@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Agent Tasks — bounded autonomy approval layer.
@@ -33,6 +33,10 @@ export const agentTasksTable = pgTable("agent_tasks", {
   decisionNote:   text("decision_note"),
   ruleId:         text("rule_id"),
   ruleSetVersion: text("rule_set_version").notNull().default("v1"),
+  executionAttempts: integer("execution_attempts").notNull().default(0),
+  executionStartedAt: timestamp("execution_started_at", { withTimezone: true }),
+  executionCompletedAt: timestamp("execution_completed_at", { withTimezone: true }),
+  failureCode: text("failure_code"),
   createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

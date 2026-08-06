@@ -3,6 +3,22 @@ export type SchedulerRecoveryStatus =
   | "published_with_warning"
   | "failed";
 
+export const SCHEDULER_RECOVERY_OWNED_POST_STATUSES = [
+  "scheduled",
+  "publishing",
+] as const;
+
+export type SchedulerRecoveryOwnedPostStatus =
+  (typeof SCHEDULER_RECOVERY_OWNED_POST_STATUSES)[number];
+
+export function isSchedulerRecoveryOwnedPostStatus(
+  status: string,
+): status is SchedulerRecoveryOwnedPostStatus {
+  return SCHEDULER_RECOVERY_OWNED_POST_STATUSES.includes(
+    status as SchedulerRecoveryOwnedPostStatus,
+  );
+}
+
 export interface SchedulerDeliveryEvidence {
   readonly platform: string;
   readonly status: string;

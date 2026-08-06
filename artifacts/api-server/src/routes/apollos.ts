@@ -1371,6 +1371,9 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
       plan,
       generationJobs,
     });
+    if (evaluation.decision !== "requires_review") {
+      throw new Error("APOLLOS_WEEKLY_APPROVAL_BOUNDARY_INVALID");
+    }
     const result = await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(

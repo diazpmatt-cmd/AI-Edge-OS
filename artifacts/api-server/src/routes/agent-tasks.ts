@@ -444,7 +444,7 @@ router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
     });
   }
 
-  return res.status(201).json({
+  return res.status(repairTask.reused ? 200 : 201).json({
     task: repairTask.task,
     repairPlan,
     approvalRequired: true,

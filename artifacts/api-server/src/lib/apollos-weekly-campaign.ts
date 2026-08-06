@@ -147,3 +147,46 @@ export function buildWeeklyCampaignPlan(input: {
     ]),
   });
 }
+
+
+export interface WeeklyGenerationJob {
+  readonly jobKey: string;
+  readonly platform: WeeklyCampaignPlatform;
+  readonly generatorPlatform: "facebook" | "instagram" | "google" | "youtube";
+  readonly count: number;
+  readonly weeklyPlanId: string;
+  readonly schedulerMode: "weekly_plan";
+  readonly approvalMode: "approval_required";
+}
+
+export function buildWeeklyGenerationJobs(
+  batchKey: string,
+  plan: WeeklyCampaignPlan,
+): readonly WeeklyGenerationJob[] {
+  if (typeof batchKey !== "string" || batchKey.trim().length < 8) {
+    throw new Error("APOLLOS_WEEKLY_BATCH_KEY_INVALID");
+  }
+
+  const jobs = plan.platforms.map((platform) => {
+    const count = plan.slots.filter(
+      (slot) => slot.platform === platform,
+    ).length;
+    if (count < 1) {
+      throw new Error("APOLLOS_WEEKLY_PLATFORM_WITHOUT_SLOTS");
+    }
+    const generatorPlatform =
+      platform === "google_business" ? "google" : platform;
+    const stablePlatformKey = `${batchKey}:${platform}`;
+    return Object.freeze({
+      jobKey: stablePlatformKey,
+      platform,
+      generatorPlatform,
+      count,
+      weeklyPlanId: stablePlatformKey,
+      schedulerMode: "weekly_plan" as const,
+      approvalMode: "approval_required" as const,
+    });
+  });
+
+  return Object.freeze(jobs);
+}

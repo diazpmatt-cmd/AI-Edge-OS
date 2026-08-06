@@ -42,6 +42,28 @@ const CADENCE: Readonly<Record<WeeklyCampaignPlatform, readonly number[]>> =
     youtube: Object.freeze([3]),
   });
 
+const WEEKLY_CAMPAIGN_ACTION =
+  "(?:create|generate|build|prepare|schedule|publish|post|send)";
+
+const WEEKLY_CAMPAIGN_REQUEST = new RegExp(
+  `^(?:apollos\\s*[,;:\\-]?\\s*)?(?:` +
+    `(?:please\\s+)?${WEEKLY_CAMPAIGN_ACTION}\\b|` +
+    `(?:can|could|would|will)\\s+you\\s+(?:please\\s+)?${WEEKLY_CAMPAIGN_ACTION}\\b|` +
+    `i\\s+(?:want|need)\\s+you\\s+to\\s+${WEEKLY_CAMPAIGN_ACTION}\\b|` +
+    `let'?s\\s+${WEEKLY_CAMPAIGN_ACTION}\\b|` +
+    `go\\s+ahead\\s+and\\s+${WEEKLY_CAMPAIGN_ACTION}\\b` +
+  `)`,
+);
+
+const WEEKLY_CAMPAIGN_OBJECT =
+  /\b(?:posts?|content|campaign|calendar|plan|package|captions?|reels?|videos?)\b/;
+
+const NEGATED_OR_EXCLUDED_COMMAND =
+  /\b(?:do\s+not|don't|dont|never|stop|cancel|pause|hold|avoid|except|excluding|without|but\s+not)\b/;
+
+const STATUS_OR_ADVICE_QUESTION =
+  /^(?:apollos\s*[,;:\-]?\s*)?(?:why|what|when|where|who|how|did|does|do|is|are|was|were|has|have|had|should)\b/;
+
 function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = Date.parse(`${value}T00:00:00.000Z`);
@@ -93,11 +115,20 @@ export function parseWeeklyCampaignPlatforms(
 }
 
 export function isWeeklyCampaignCommand(command: string): boolean {
-  const normalized = command.trim().toLowerCase();
+  const normalized = command
+    .trim()
+    .toLowerCase()
+    .replace(/[’]/g, "'");
+
+  if (!normalized) return false;
+  if (NEGATED_OR_EXCLUDED_COMMAND.test(normalized)) return false;
+  if (STATUS_OR_ADVICE_QUESTION.test(normalized)) return false;
+  if (!WEEKLY_CAMPAIGN_REQUEST.test(normalized)) return false;
+
   return (
-    /\b(create|generate|build|prepare|schedule|publish|post|send)\b/.test(normalized) &&
     /\bweek(?:'s|s|ly)?\b|seven[- ]day|7[- ]day/.test(normalized) &&
-    parseWeeklyCampaignPlatforms(command).length > 0
+    WEEKLY_CAMPAIGN_OBJECT.test(normalized) &&
+    parseWeeklyCampaignPlatforms(normalized).length > 0
   );
 }
 
@@ -168,7 +199,6 @@ export function buildWeeklyCampaignPlan(input: {
     ]),
   });
 }
-
 
 export interface WeeklyGenerationJob {
   readonly jobKey: string;

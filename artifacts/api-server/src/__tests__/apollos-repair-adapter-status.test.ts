@@ -119,6 +119,26 @@ describe("buildApollosRepairAdapterStatus", () => {
     ).toThrow("APOLLOS_REPAIR_HANDLER_CONTRACT_MISMATCH");
   });
 
+  it("publishes upstream retry only when its explicit flag is enabled", () => {
+    const disabled = buildApollosRepairAdapterStatus(
+      {},
+      [...APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS],
+    );
+    expect(disabled.find((item) => item.stepKey === "retry-upstream-checkpoint"))
+      .toMatchObject({ state: "disabled" });
+
+    const enabled = buildApollosRepairAdapterStatus(
+      { APOLLOS_REPAIR_ADAPTER_UPSTREAM_RETRY_ENABLED: "true" },
+      [...APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS],
+    );
+    expect(enabled.find((item) => item.stepKey === "retry-upstream-checkpoint"))
+      .toMatchObject({
+        state: "ready",
+        effect: "checkpoint_resume",
+        handlerRegistered: true,
+      });
+  });
+
   it("returns immutable status in the same order as the policy registry", () => {
     const status = buildApollosRepairAdapterStatus({}, []);
     expect(status.map((item) => item.stepKey)).toEqual(

@@ -372,6 +372,46 @@ function inspectionActions(
       evidence: { stepKey, ...result.evidence },
     };
   };
+  const retryUpstreamCheckpoint: ApollosRepairAction = async ({ stepKey }) => {
+    const retried = await pool.query<{
+      step_key: string;
+      attempt_count: number;
+      max_attempts: number;
+    }>(
+      `WITH candidate AS (
+         SELECT step.id
+           FROM agent_task_steps AS step
+           JOIN agent_tasks AS task ON task.id=step.task_id
+          WHERE step.task_id=$1
+            AND task.user_id=$2
+            AND step.status='failed'
+            AND step.attempt_count < step.max_attempts
+          ORDER BY step.position ASC
+          LIMIT 1
+          FOR UPDATE OF step SKIP LOCKED
+       )
+       UPDATE agent_task_steps AS step
+          SET status='pending',
+              failure_code=NULL,
+              lease_owner=NULL,
+              lease_expires_at=NULL,
+              updated_at=now()
+         FROM candidate
+        WHERE step.id=candidate.id
+      RETURNING step.step_key,step.attempt_count,step.max_attempts`,
+      [sourceTaskId, userId],
+    );
+    return {
+      verified: retried.rowCount === 1,
+      evidence: {
+        stepKey,
+        retriedCount: retried.rowCount,
+        checkpoint: retried.rows[0]?.step_key ?? null,
+        attemptCount: retried.rows[0]?.attempt_count ?? null,
+        maxAttempts: retried.rows[0]?.max_attempts ?? null,
+      },
+    };
+  };
   const earliestFailure: ApollosRepairAction = async ({ stepKey }) => {
     const source = await readSource(sourceTaskId, userId);
     const failed = source.steps.find((item) => item.failure_code);
@@ -397,6 +437,7 @@ function inspectionActions(
     "inspect-lease-owner": inspectLease,
     "recover-expired-lease": recoverExpiredLease,
     "probe-upstream-health": probeUpstream,
+    "retry-upstream-checkpoint": retryUpstreamCheckpoint,
   });
 }
 

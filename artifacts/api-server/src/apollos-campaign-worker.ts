@@ -125,7 +125,18 @@ async function claimOne() {
   }
 }
 
-async function runGenerationJob(taskId: string, job: GenerationJob) {
+interface GeneratedDraft {
+  id: string;
+  topic: string | null;
+  city: string | null;
+  imagePrompt: string | null;
+}
+
+async function runGenerationJob(
+  taskId: string,
+  userId: string,
+  job: GenerationJob,
+): Promise<GeneratedDraft[]> {
   const response = await fetch(`${internalBase}/api/auto-content/generate`, {
     method: "POST",
     headers: {
@@ -158,16 +169,114 @@ async function runGenerationJob(taskId: string, job: GenerationJob) {
       `APOLLOS_WEEKLY_GENERATION_UNVERIFIED:${job.generatorPlatform}`,
     );
   }
+
+  const drafts = await pool.query<{
+    id: string;
+    ai_topic: string | null;
+    ai_city: string | null;
+    image_recommendation: string | null;
+  }>(
+    `SELECT id, ai_topic, ai_city, image_recommendation
+       FROM social_posts
+      WHERE user_id=$1 AND weekly_plan_id=$2
+      ORDER BY scheduled_at ASC, created_at ASC`,
+    [userId, job.weeklyPlanId],
+  );
+  if (drafts.rows.length !== job.count) {
+    throw new Error(
+      `APOLLOS_WEEKLY_DRAFT_COUNT_MISMATCH:${job.generatorPlatform}:${drafts.rows.length}:${job.count}`,
+    );
+  }
+
   logger.info(
     {
       taskId,
       platform: job.generatorPlatform,
       created: result.created ?? 0,
+      drafts: drafts.rows.length,
       idempotency: result.reason ?? null,
     },
     "[apollos-campaign] generation job verified",
   );
+  return drafts.rows.map((draft) => ({
+    id: draft.id,
+    topic: draft.ai_topic,
+    city: draft.ai_city,
+    imagePrompt: draft.image_recommendation,
+  }));
 }
+
+async function generateDraftMedia(
+  taskId: string,
+  job: GenerationJob,
+  draft: GeneratedDraft,
+) {
+  const imagePrompt =
+    draft.imagePrompt ??
+    `Professional branded ${draft.topic ?? "local service"} campaign artwork for ${draft.city ?? "the local service area"}`;
+  const imageResponse = await fetch(
+    `${internalBase}/api/auto-content/generate-image`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-scheduler-secret": SCHEDULER_SECRET,
+        "x-apollos-task-id": taskId,
+      },
+      body: JSON.stringify({
+        postId: draft.id,
+        prompt: imagePrompt,
+        size: job.generatorPlatform === "youtube" ? "1536x1024" : "1024x1024",
+        idempotencyKey: `${job.jobKey}:${draft.id}:image-v1`,
+        city: draft.city,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    },
+  );
+  const imageText = await imageResponse.text();
+  if (!imageResponse.ok || imageResponse.status === 202) {
+    throw new Error(
+      `APOLLOS_WEEKLY_IMAGE_FAILED:${job.generatorPlatform}:${imageResponse.status}:${imageText.slice(0, 240)}`,
+    );
+  }
+  const imageResult = JSON.parse(imageText) as { ok?: boolean };
+  if (imageResult.ok !== true) {
+    throw new Error(
+      `APOLLOS_WEEKLY_IMAGE_UNVERIFIED:${job.generatorPlatform}`,
+    );
+  }
+
+  if (job.generatorPlatform !== "youtube") return;
+
+  const videoResponse = await fetch(
+    `${internalBase}/api/auto-content/generate-video`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-scheduler-secret": SCHEDULER_SECRET,
+        "x-apollos-task-id": taskId,
+      },
+      body: JSON.stringify({
+        postId: draft.id,
+        idempotencyKey: `${job.jobKey}:${draft.id}:video-v2`,
+        videoMode: "professional",
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    },
+  );
+  const videoText = await videoResponse.text();
+  if (!videoResponse.ok || videoResponse.status === 202) {
+    throw new Error(
+      `APOLLOS_WEEKLY_VIDEO_FAILED:youtube:${videoResponse.status}:${videoText.slice(0, 240)}`,
+    );
+  }
+  const videoResult = JSON.parse(videoText) as { ok?: boolean };
+  if (videoResult.ok !== true) {
+    throw new Error("APOLLOS_WEEKLY_VIDEO_UNVERIFIED:youtube");
+  }
+}
+
 
 async function processOne() {
   const task = await claimOne();
@@ -175,7 +284,10 @@ async function processOne() {
   try {
     const jobs = validateJobs(task.payload);
     for (const job of jobs) {
-      await runGenerationJob(task.id, job);
+      const drafts = await runGenerationJob(task.id, task.user_id, job);
+      for (const draft of drafts) {
+        await generateDraftMedia(task.id, job, draft);
+      }
     }
     await pool.query(
       `UPDATE agent_tasks

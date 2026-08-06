@@ -737,8 +737,17 @@ router.post("/social-posts/:id/publish", async (req, res) => {
           // Step 2: Fetch video — object storage path (/objects/...) or external URL
           let videoBlob: Blob;
           let contentType: string;
-          if (videoUrl.startsWith("/objects/")) {
-            // Private object storage — download via ObjectStorageService (no HTTP needed)
+          if (videoUrl.startsWith("/objects/uploads/") && process.env.LOCAL_MEDIA_DIR?.trim()) {
+            // Generated media lives on the stable named volume. Read it directly
+            // instead of routing it through GCS workload identity.
+            const objectId = videoUrl.slice("/objects/uploads/".length);
+            if (!/^[0-9a-f-]{36}$/i.test(objectId)) throw new Error("Invalid local video object path");
+            const localPath = path.join(process.env.LOCAL_MEDIA_DIR.trim(), "uploads", objectId);
+            const localVideo = await fs.promises.readFile(localPath);
+            videoBlob = new Blob([new Uint8Array(localVideo)], { type: "video/mp4" });
+            contentType = "video/mp4";
+          } else if (videoUrl.startsWith("/objects/")) {
+            // Legacy private objects remain available through GCS.
             const objectFile = await objectStorageService.getObjectEntityFile(videoUrl);
             const storageRes = await objectStorageService.downloadObject(objectFile);
             videoBlob  = await storageRes.blob();

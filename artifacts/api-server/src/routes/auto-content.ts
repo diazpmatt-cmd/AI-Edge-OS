@@ -20,6 +20,8 @@ import {
   buildSystemPrompt,
 } from "@workspace/db";
 import { randomUUID, timingSafeEqual } from "crypto";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -2049,28 +2051,47 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Upload to Object Storage ──────────────────────────────────────────────
-  const privateDir = process.env.PRIVATE_OBJECT_DIR ?? "";
-  if (!privateDir) {
-    await markFailed("storage_not_configured");
-    res.status(500).json({ error: "Object storage not configured (PRIVATE_OBJECT_DIR missing)" });
-    return;
-  }
+  // ── Persist generated image ───────────────────────────────────────────────
+  // Coolify uses the same named durable volume as manual uploads. Other
+  // environments continue to use the configured private object store.
+  const localMediaDir = process.env.LOCAL_MEDIA_DIR?.trim();
+  const privateDir = process.env.PRIVATE_OBJECT_DIR?.trim() ?? "";
+  let storageKey: string;
+  let localDataPath: string | null = null;
+  let localMetadataPath: string | null = null;
+  let gcsLocation: { bucketName: string; objectPath: string } | null = null;
 
-  const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
-  const objectPath                   = makeObjectPath(bucketPrefix, imageId);
-  const storageKey                   = `generated-images/${imageId}.png`; // canonical; no bucket prefix
-
-  let gcsUploaded = false;
   try {
-    // [S13] Private object — no public ACL
-    const gcsFile = objectStorageClient.bucket(bucketName).file(objectPath);
-    await gcsFile.save(imageBuffer, { contentType: "image/png", resumable: false });
-    gcsUploaded = true;
+    if (localMediaDir) {
+      const uploadsDir = join(localMediaDir, "uploads");
+      await mkdir(uploadsDir, { recursive: true });
+      localDataPath = join(uploadsDir, imageId);
+      localMetadataPath = `${localDataPath}.json`;
+      await writeFile(localDataPath, imageBuffer, { flag: "wx" });
+      await writeFile(
+        localMetadataPath,
+        JSON.stringify({ contentType: "image/png", byteSize: imageBuffer.length }),
+        { encoding: "utf8", flag: "wx" },
+      );
+      storageKey = `uploads/${imageId}`;
+    } else {
+      if (!privateDir) throw new Error("Neither LOCAL_MEDIA_DIR nor PRIVATE_OBJECT_DIR is configured");
+      const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
+      const objectPath = makeObjectPath(bucketPrefix, imageId);
+      await objectStorageClient.bucket(bucketName).file(objectPath)
+        .save(imageBuffer, { contentType: "image/png", resumable: false });
+      gcsLocation = { bucketName, objectPath };
+      storageKey = `generated-images/${imageId}.png`;
+    }
   } catch (storageErr: any) {
+    if (localDataPath) await unlink(localDataPath).catch(() => {});
+    if (localMetadataPath) await unlink(localMetadataPath).catch(() => {});
     console.error("[auto-content/generate-image] storage error:", storageErr?.message);
-    await markFailed("storage_failure");
-    res.status(500).json({ error: "Failed to store generated image" });
+    await markFailed(`storage_failure:${sanitizeProviderDiagnostic(storageErr?.message ?? "unknown")}`);
+    res.status(500).json({
+      error: "Failed to store generated image",
+      message: "The image was generated, but durable media storage could not save it.",
+    });
     return;
   }
 
@@ -2083,9 +2104,12 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       [storageKey, imageId],
     );
   } catch (dbErr: any) {
-    // [S10] DB commit failed — delete orphaned GCS object to prevent data leak
-    if (gcsUploaded) {
-      objectStorageClient.bucket(bucketName).file(objectPath).delete({ ignoreNotFound: true }).catch(() => {});
+    // [S10] DB commit failed — delete the orphaned durable object.
+    if (localDataPath) await unlink(localDataPath).catch(() => {});
+    if (localMetadataPath) await unlink(localMetadataPath).catch(() => {});
+    if (gcsLocation) {
+      objectStorageClient.bucket(gcsLocation.bucketName).file(gcsLocation.objectPath)
+        .delete({ ignoreNotFound: true }).catch(() => {});
     }
     await markFailed("db_commit_failure");
     console.error("[auto-content/generate-image] DB update error:", dbErr?.message);
@@ -2097,7 +2121,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   // The object path stays private; publishing adapters resolve it through the
   // existing authenticated/public media URL boundary when delivery is approved.
   if (postId) {
-    const mediaPath = `/objects/generated-images/${imageId}.png`;
+    const mediaPath = `/objects/${storageKey}`;
     await pool.query(
       `UPDATE social_posts
           SET image_data = $1,
@@ -2155,6 +2179,17 @@ router.get("/auto-content/generate-image/:id/signed-url", async (req, res): Prom
 
   if (gen.status !== "completed" || !gen.storage_key) {
     res.status(409).json({ error: "Image not yet available", status: gen.status });
+    return;
+  }
+
+  if (gen.storage_key.startsWith("uploads/")) {
+    const objectPath = `/objects/${gen.storage_key}`;
+    const origin = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      ok: true,
+      signedUrl: `${origin}/api/storage/objects${objectPath}`,
+      expiresIn: SIGNED_URL_EXPIRY_SECONDS,
+    });
     return;
   }
 

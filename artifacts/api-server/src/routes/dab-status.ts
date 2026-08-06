@@ -274,15 +274,16 @@ router.get("/dab/repair-runtime", async (_req, res) => {
     `SELECT
        count(*) FILTER (
          WHERE task_type='execute_repair_plan'
-           AND status IN ('approved','queued')
+           AND status='approved'
+           AND resolution='approved'
        )::text AS queued,
        count(*) FILTER (
          WHERE task_type='execute_repair_plan'
-           AND status='running'
+           AND status='executing'
        )::text AS running,
        count(*) FILTER (
          WHERE task_type='execute_repair_plan'
-           AND status IN ('completed','succeeded','executed')
+           AND status='executed'
        )::text AS completed,
        count(*) FILTER (
          WHERE task_type='execute_repair_plan'

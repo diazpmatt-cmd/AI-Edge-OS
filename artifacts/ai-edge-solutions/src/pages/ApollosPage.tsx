@@ -110,6 +110,19 @@ interface RepairAdapterStatusResponse {
   adapters: RepairAdapterStatus[];
 }
 
+interface RepairRuntimeResponse {
+  operator: "Apollos";
+  checkedAt: string;
+  status: "disabled" | "blocked" | "misconfigured" | "uninitialized" | "ready";
+  reasonCode?: string;
+  enabled?: boolean;
+  killSwitch?: boolean;
+  runtimeId?: string;
+  limits?: { intervalMs: number; leaseMs: number; maxAttempts: number };
+  queue: { queued: number; running: number; completed: number; failed: number } | null;
+  latestActivityAt: string | null;
+}
+
 interface RepairHistoryResponse {
   operator: "Apollos";
   checkedAt: string;
@@ -529,6 +542,15 @@ export default function ApollosPage() {
     retry: 1,
   });
   const repairAdapterStatus = repairAdaptersQuery.data;
+  const repairRuntimeQuery = useQuery<RepairRuntimeResponse>({
+    queryKey: ["apollos-repair-runtime"],
+    queryFn: () =>
+      apiFetch("/dab/repair-runtime") as Promise<RepairRuntimeResponse>,
+    enabled: underHoodOpen,
+    refetchInterval: underHoodOpen ? 15_000 : false,
+    retry: 1,
+  });
+  const repairRuntime = repairRuntimeQuery.data;
   const repairHistoryQuery = useQuery<RepairHistoryResponse>({
     queryKey: ["apollos-repair-history"],
     queryFn: () =>
@@ -1659,6 +1681,40 @@ export default function ApollosPage() {
             background: "rgba(255,255,255,0.02)",
             border: "1px solid rgba(255,255,255,0.06)",
           }}>
+            <div style={{ marginBottom: 10, padding: "8px", borderRadius: 8, background: "rgba(0,174,239,.05)", border: "1px solid rgba(0,174,239,.13)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                  background: repairRuntime?.status === "ready"
+                    ? B.green
+                    : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured"
+                      ? "#F87171"
+                      : B.dim,
+                }} />
+                <span style={{ flex: 1, color: B.silver, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase" }}>
+                  Repair worker
+                </span>
+                <span style={{ color: repairRuntime?.status === "ready" ? B.green : repairRuntime?.status === "blocked" || repairRuntime?.status === "misconfigured" ? "#F87171" : B.dim, fontSize: 8, fontWeight: 900, textTransform: "uppercase" }}>
+                  {repairRuntimeQuery.isLoading ? "checking" : repairRuntime?.status ?? "unavailable"}
+                </span>
+              </div>
+              {repairRuntime?.queue && (
+                <div style={{ marginTop: 6, color: B.dim, fontSize: 8.5, lineHeight: 1.45 }}>
+                  {repairRuntime.queue.queued} queued · {repairRuntime.queue.running} running · {repairRuntime.queue.completed} executed · {repairRuntime.queue.failed} failed
+                </div>
+              )}
+              {repairRuntime?.reasonCode && repairRuntime.status !== "ready" && (
+                <div style={{ marginTop: 4, color: repairRuntime.status === "blocked" || repairRuntime.status === "misconfigured" ? "#F87171" : B.dim, fontSize: 8, lineHeight: 1.35 }}>
+                  {repairRuntime.reasonCode.replaceAll("_", " ").toLowerCase()}
+                </div>
+              )}
+              {repairRuntime?.latestActivityAt && (
+                <div style={{ marginTop: 3, color: B.dim, fontSize: 7.5 }}>
+                  Last task activity {new Date(repairRuntime.latestActivityAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+
             {repairAdaptersQuery.isLoading ? (
               <div style={{ color: B.dim, fontSize: 10 }}>Reading adapter registry…</div>
             ) : repairAdaptersQuery.isError || !repairAdapterStatus ? (
@@ -1795,18 +1851,19 @@ export default function ApollosPage() {
 
                 <button
                   onClick={() => {
+                    repairRuntimeQuery.refetch();
                     repairAdaptersQuery.refetch();
                     repairHistoryQuery.refetch();
                   }}
-                  disabled={repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching}
+                  disabled={repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching}
                   style={{
                     width: "100%", marginTop: 9, padding: "6px 8px",
                     background: "rgba(0,174,239,.07)", border: "1px solid rgba(0,174,239,.18)",
                     borderRadius: 7, color: B.blue, fontSize: 9.5, fontWeight: 800,
-                    cursor: repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "wait" : "pointer",
+                    cursor: repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "wait" : "pointer",
                   }}
                 >
-                  {repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
+                  {repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
                 </button>
               </>
             )}

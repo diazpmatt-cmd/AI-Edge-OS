@@ -25,11 +25,23 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+type WeeklyApprovalStatus = "pending" | "approved" | "rejected";
+
+interface WeeklyApproval {
+  taskId: string;
+  startDate: string;
+  endDate: string;
+  deliveryCount: number;
+  platforms: string[];
+  status: WeeklyApprovalStatus;
+}
+
 interface Message {
   id: string;
   role: "apollos" | "user";
   text: string;
   time: string;
+  weeklyApproval?: WeeklyApproval;
 }
 
 // ── Static data ───────────────────────────────────────────────────────────────
@@ -216,7 +228,15 @@ function ComingSoon() {
   );
 }
 
-function Bubble({ msg }: { msg: Message }) {
+function Bubble({
+  msg,
+  actionBusy,
+  onWeeklyDecision,
+}: {
+  msg: Message;
+  actionBusy: boolean;
+  onWeeklyDecision: (messageId: string, taskId: string, decision: "approve" | "reject") => void;
+}) {
   const isApollos = msg.role === "apollos";
   return (
     <div style={{
@@ -253,6 +273,34 @@ function Bubble({ msg }: { msg: Message }) {
             }}>Apollos</div>
           )}
           {msg.text}
+          {msg.weeklyApproval && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${B.border}` }}>
+              <div style={{ fontSize: 11, color: B.silver, marginBottom: 9 }}>
+                {msg.weeklyApproval.startDate} through {msg.weeklyApproval.endDate}
+                {" · "}{msg.weeklyApproval.deliveryCount} deliveries
+              </div>
+              {msg.weeklyApproval.status === "pending" ? (
+                <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => onWeeklyDecision(msg.id, msg.weeklyApproval!.taskId, "approve")}
+                    style={{ background: "rgba(34,197,94,.18)", border: "1px solid rgba(34,197,94,.55)", color: B.green, borderRadius: 9, padding: "9px 14px", fontWeight: 800, cursor: actionBusy ? "wait" : "pointer" }}
+                  >✓ Approve Week</button>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => onWeeklyDecision(msg.id, msg.weeklyApproval!.taskId, "reject")}
+                    style={{ background: "rgba(248,113,113,.14)", border: "1px solid rgba(248,113,113,.45)", color: "#F87171", borderRadius: 9, padding: "9px 14px", fontWeight: 800, cursor: actionBusy ? "wait" : "pointer" }}
+                  >✕ Reject</button>
+                </div>
+              ) : (
+                <div style={{ color: msg.weeklyApproval.status === "approved" ? B.green : "#F87171", fontWeight: 800 }}>
+                  {msg.weeklyApproval.status === "approved"
+                    ? "✓ Week approved — Apollos is generating the platform drafts."
+                    : "✕ Weekly campaign rejected. Nothing will be generated or published."}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ fontSize: 10, color: B.dim }}>{msg.time}</div>
       </div>
@@ -266,6 +314,7 @@ export default function ApollosPage() {
   const [messages, setMessages]     = useState<Message[]>([OPENING_MESSAGE]);
   const [input, setInput]           = useState("");
   const [responding, setResponding] = useState(false);
+  const [weeklyActionBusy, setWeeklyActionBusy] = useState<string | null>(null);
   const briefFiredRef               = useRef(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [recsOpen, setRecsOpen]         = useState(true);
@@ -638,6 +687,65 @@ export default function ApollosPage() {
     setResponding(true);
 
     const lower = trimmed.toLowerCase();
+    const weeklyCommand =
+      /\b(create|generate|build|prepare|schedule)\b/.test(lower) &&
+      (/\bweek(?:'s|s|ly)?\b/.test(lower) || /seven[- ]day|7[- ]day/.test(lower)) &&
+      (/all (four|4)|facebook|instagram|google business|\bgbp\b|youtube/.test(lower));
+
+    if (weeklyCommand) {
+      try {
+        const data = await apiFetch("/apollos/weekly-campaign/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: trimmed }),
+        }) as {
+          taskId: string;
+          duplicate?: boolean;
+          executionStatus: string;
+          plan: {
+            startDate: string;
+            endDate: string;
+            deliveryCount: number;
+            platforms: string[];
+          };
+        };
+        const status: WeeklyApprovalStatus =
+          data.executionStatus === "approved" ||
+          data.executionStatus === "executing" ||
+          data.executionStatus === "executed"
+            ? "approved"
+            : data.executionStatus === "rejected" || data.executionStatus === "failed"
+              ? "rejected"
+              : "pending";
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: "apollos",
+          text: data.duplicate
+            ? "I found the existing weekly campaign instead of creating a duplicate."
+            : "Your weekly campaign is ready for one batch decision: 5 Facebook posts, 5 Instagram posts, 2 Google Business Profile posts, and 1 YouTube video.",
+          time: nowTime(),
+          weeklyApproval: {
+            taskId: data.taskId,
+            startDate: data.plan.startDate,
+            endDate: data.plan.endDate,
+            deliveryCount: data.plan.deliveryCount,
+            platforms: data.plan.platforms,
+            status,
+          },
+        }]);
+      } catch (err: any) {
+        setMessages(prev => [...prev, {
+          id: uid(),
+          role: "apollos",
+          text: `I could not create the weekly campaign. ${err?.message ?? "Unknown error"}`,
+          time: nowTime(),
+        }]);
+      } finally {
+        setResponding(false);
+      }
+      return;
+    }
+
     const intent = NAV_INTENTS.find(i => i.patterns.some(p => lower.includes(p)));
 
     if (intent) {
@@ -675,6 +783,44 @@ export default function ApollosPage() {
       } finally {
         setResponding(false);
       }
+    }
+  }
+
+  async function decideWeeklyCampaign(
+    messageId: string,
+    taskId: string,
+    decision: "approve" | "reject",
+  ) {
+    if (weeklyActionBusy) return;
+    setWeeklyActionBusy(taskId);
+    try {
+      await apiFetch(`/agent-tasks/${taskId}/${decision}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: decision === "reject"
+          ? JSON.stringify({ note: "Rejected from Apollos weekly campaign review." })
+          : JSON.stringify({}),
+      });
+      setMessages(current => current.map(message =>
+        message.id === messageId && message.weeklyApproval
+          ? {
+              ...message,
+              weeklyApproval: {
+                ...message.weeklyApproval,
+                status: decision === "approve" ? "approved" : "rejected",
+              },
+            }
+          : message
+      ));
+    } catch (err: any) {
+      setMessages(current => [...current, {
+        id: uid(),
+        role: "apollos",
+        text: `The weekly decision was not recorded. ${err?.message ?? "Please try again."}`,
+        time: nowTime(),
+      }]);
+    } finally {
+      setWeeklyActionBusy(null);
     }
   }
 
@@ -997,7 +1143,14 @@ export default function ApollosPage() {
             </div>
           </div>
 
-          {messages.map(m => <Bubble key={m.id} msg={m} />)}
+          {messages.map(m => (
+            <Bubble
+              key={m.id}
+              msg={m}
+              actionBusy={weeklyActionBusy === m.weeklyApproval?.taskId}
+              onWeeklyDecision={decideWeeklyCampaign}
+            />
+          ))}
 
           {/* Typing indicator */}
           {responding && (

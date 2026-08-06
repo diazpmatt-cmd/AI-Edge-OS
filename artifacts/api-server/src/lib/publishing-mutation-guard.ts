@@ -1,5 +1,3 @@
-import { pool } from "@workspace/db";
-
 export const PUBLISHING_STATE_LOCKED_CODE = "PUBLISHING_STATE_LOCKED";
 
 export const PUBLISHING_RESULT_STATUSES = [
@@ -107,5 +105,6 @@ $trigger$;
 `;
 
 export async function bootstrapPublishingMutationGuard(): Promise<void> {
+  const { pool } = await import("@workspace/db");
   await pool.query(PUBLISHING_MUTATION_GUARD_DDL);
 }

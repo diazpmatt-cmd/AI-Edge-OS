@@ -110,6 +110,24 @@ interface RepairAdapterStatusResponse {
   adapters: RepairAdapterStatus[];
 }
 
+interface ApollosReadinessResponse {
+  operator: "Apollos";
+  checkedAt: string;
+  overallStatus: "ready" | "degraded" | "blocked";
+  checks: {
+    id: string;
+    status: "pass" | "warn" | "fail";
+    reasonCode: string;
+  }[];
+  capabilityCounts: {
+    ready: number;
+    degraded: number;
+    blocked: number;
+    disabled: number;
+  };
+  adapterCounts: { ready: number; disabled: number; blocked: number };
+}
+
 interface RepairRuntimeResponse {
   operator: "Apollos";
   checkedAt: string;
@@ -561,6 +579,15 @@ export default function ApollosPage() {
   const micSupported     = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();
+  const apollosReadinessQuery = useQuery<ApollosReadinessResponse>({
+    queryKey: ["apollos-readiness"],
+    queryFn: () =>
+      apiFetch("/dab/apollos-readiness") as Promise<ApollosReadinessResponse>,
+    enabled: underHoodOpen,
+    refetchInterval: underHoodOpen ? 15_000 : false,
+    retry: 1,
+  });
+  const apollosReadiness = apollosReadinessQuery.data;
   const repairAdaptersQuery = useQuery<RepairAdapterStatusResponse>({
     queryKey: ["apollos-repair-adapters"],
     queryFn: () =>
@@ -591,6 +618,14 @@ export default function ApollosPage() {
   async function copyRepairDiagnostics() {
     const bundle = {
       generatedAt: new Date().toISOString(),
+      readiness: apollosReadiness
+        ? {
+            overallStatus: apollosReadiness.overallStatus,
+            checks: apollosReadiness.checks,
+            capabilityCounts: apollosReadiness.capabilityCounts,
+            adapterCounts: apollosReadiness.adapterCounts,
+          }
+        : null,
       runtime: repairRuntime
         ? {
             status: repairRuntime.status,
@@ -1824,6 +1859,39 @@ export default function ApollosPage() {
             background: "rgba(255,255,255,0.02)",
             border: "1px solid rgba(255,255,255,0.06)",
           }}>
+            <div style={{ marginBottom: 10, padding: "8px", borderRadius: 8, background: "rgba(255,255,255,.025)", border: "1px solid rgba(255,255,255,.07)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ flex: 1, color: B.silver, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase" }}>
+                  Apollos readiness
+                </span>
+                <span style={{
+                  color: apollosReadiness?.overallStatus === "ready"
+                    ? B.green
+                    : apollosReadiness?.overallStatus === "blocked"
+                      ? "#F87171"
+                      : B.gold,
+                  fontSize: 8, fontWeight: 900, textTransform: "uppercase",
+                }}>
+                  {apollosReadinessQuery.isLoading
+                    ? "checking"
+                    : apollosReadiness?.overallStatus ?? "unavailable"}
+                </span>
+              </div>
+              {apollosReadiness && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {apollosReadiness.checks.map((check) => (
+                    <div key={check.id} style={{ display: "flex", gap: 5, color: B.dim, fontSize: 7.8 }}>
+                      <span style={{ color: check.status === "pass" ? B.green : check.status === "fail" ? "#F87171" : B.gold }}>
+                        {check.status === "pass" ? "●" : check.status === "fail" ? "✕" : "▲"}
+                      </span>
+                      <span style={{ flex: 1 }}>{check.id.replaceAll("-", " ")}</span>
+                      <span>{check.reasonCode.replace("APOLLOS_", "").replaceAll("_", " ").toLowerCase()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div style={{ marginBottom: 10, padding: "8px", borderRadius: 8, background: "rgba(0,174,239,.05)", border: "1px solid rgba(0,174,239,.13)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{
@@ -2092,19 +2160,20 @@ export default function ApollosPage() {
 
                 <button
                   onClick={() => {
+                    apollosReadinessQuery.refetch();
                     repairRuntimeQuery.refetch();
                     repairAdaptersQuery.refetch();
                     repairHistoryQuery.refetch();
                   }}
-                  disabled={repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching}
+                  disabled={apollosReadinessQuery.isFetching || repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching}
                   style={{
                     width: "100%", marginTop: 9, padding: "6px 8px",
                     background: "rgba(0,174,239,.07)", border: "1px solid rgba(0,174,239,.18)",
                     borderRadius: 7, color: B.blue, fontSize: 9.5, fontWeight: 800,
-                    cursor: repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "wait" : "pointer",
+                    cursor: apollosReadinessQuery.isFetching || repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "wait" : "pointer",
                   }}
                 >
-                  {repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
+                  {apollosReadinessQuery.isFetching || repairRuntimeQuery.isFetching || repairAdaptersQuery.isFetching || repairHistoryQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
                 </button>
               </>
             )}

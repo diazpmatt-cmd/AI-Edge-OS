@@ -2743,14 +2743,18 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
         WHERE id=$3`,
       [rendered.storageKey, rendered.durationSeconds, generationId],
     );
-    await pool.query(
+    const attachment = await pool.query(
       `UPDATE social_posts
           SET video_url=$1, youtube_title=$2, youtube_privacy='private',
               media_filename=$3, media_mime_type='video/mp4', media_file_size=$4,
               updated_at=NOW()
-        WHERE id=$5 AND user_id=$6`,
+        WHERE id=$5 AND user_id=$6
+        RETURNING id`,
       [rendered.videoPath, title, `youtube-${generationId}.mp4`, rendered.byteSize, postId, userId],
     );
+    if (attachment.rowCount !== 1) {
+      throw new Error("video_post_attachment_failed");
+    }
 
     res.json({ ok: true, generationId, ...rendered });
   } catch (error: unknown) {
@@ -2762,7 +2766,15 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       [reason.slice(0, 500), generationId],
     ).catch(() => {});
     console.error("[auto-content/generate-video] render failed:", reason);
-    res.status(502).json({ error: "video_render_failed", message: "The native video could not be rendered. The draft and image were preserved." });
+    const attachmentFailed = reason === "video_post_attachment_failed";
+    res.status(502).json({
+      error: attachmentFailed
+        ? "video_post_attachment_failed"
+        : "video_render_failed",
+      message: attachmentFailed
+        ? "The MP4 rendered, but it could not be attached to the draft."
+        : "The native video could not be rendered. The draft and image were preserved.",
+    });
   }
 });
 

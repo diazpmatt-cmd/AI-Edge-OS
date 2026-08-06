@@ -610,10 +610,24 @@ router.get("/dab/repair-history", async (req, res) => {
     };
   });
 
+  const receiptIntegrity = history.reduce(
+    (summary, task) => {
+      for (const step of task.steps) {
+        if (!step.receipt) continue;
+        summary.receipts += 1;
+        if (step.receipt.bindingVerified) summary.bound += 1;
+        else summary.mismatched += 1;
+      }
+      return summary;
+    },
+    { receipts: 0, bound: 0, mismatched: 0 },
+  );
+
   res.json({
     operator: "Apollos",
     checkedAt: new Date().toISOString(),
     count: history.length,
+    receiptIntegrity,
     history,
   });
 });

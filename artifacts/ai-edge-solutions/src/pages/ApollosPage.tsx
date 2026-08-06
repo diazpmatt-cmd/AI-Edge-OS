@@ -144,6 +144,7 @@ interface RepairHistoryResponse {
   operator: "Apollos";
   checkedAt: string;
   count: number;
+  receiptIntegrity: { receipts: number; bound: number; mismatched: number };
   history: {
     taskId: string;
     sourceTaskId: string | null;
@@ -1893,6 +1894,11 @@ export default function ApollosPage() {
                       <span style={{ color: B.dim, fontSize: 8 }}>{repairHistory.count}</span>
                     )}
                   </div>
+                  {repairHistory && repairHistory.receiptIntegrity.mismatched > 0 && (
+                    <div style={{ marginBottom: 7, padding: "6px", borderRadius: 6, color: "#F87171", background: "rgba(248,113,113,.07)", border: "1px solid rgba(248,113,113,.2)", fontSize: 8.5, lineHeight: 1.4 }}>
+                      Receipt integrity alert: {repairHistory.receiptIntegrity.mismatched} binding mismatch{repairHistory.receiptIntegrity.mismatched === 1 ? "" : "es"} detected. Approval controls remain fail-closed.
+                    </div>
+                  )}
                   {repairRetryMessage && (
                     <div style={{ marginBottom: 7, color: B.gold, fontSize: 8.5, lineHeight: 1.4 }}>
                       {repairRetryMessage}

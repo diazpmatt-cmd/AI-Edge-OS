@@ -105,6 +105,11 @@ export function sanitizeDeliveryDiagnostic(
   return sanitized.slice(0, 240);
 }
 
+function sanitizeDeliveryCode(value: string | null): string | null {
+  if (!value) return null;
+  return sanitizeDeliveryDiagnostic(value).slice(0, 80);
+}
+
 function isoOrNull(value: Date | string | null): string | null {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
@@ -156,10 +161,7 @@ function lifecycleFor(input: {
   ) {
     return "failed";
   }
-  if (
-    input.published > 0 &&
-    input.failed + input.skipped + input.receiptMissing > 0
-  ) {
+  if (input.published > 0 && input.published < input.expected) {
     return "partial";
   }
   if (input.attempted > 0) return "attempted";
@@ -228,7 +230,7 @@ export function buildWeeklyDeliverySummary(input: {
         platform: attempt.platform,
         status: "failed" as const,
         attemptNumber: attempt.attemptNumber,
-        errorCode: attempt.errorCode,
+        errorCode: sanitizeDeliveryCode(attempt.errorCode),
         message: sanitizeDeliveryDiagnostic(attempt.errorMessage),
         retryAllowed: attempt.retryAllowed,
       })),
@@ -237,7 +239,7 @@ export function buildWeeklyDeliverySummary(input: {
         platform: attempt.platform,
         status: "skipped" as const,
         attemptNumber: attempt.attemptNumber,
-        errorCode: attempt.errorCode,
+        errorCode: sanitizeDeliveryCode(attempt.errorCode),
         message: sanitizeDeliveryDiagnostic(attempt.errorMessage),
         retryAllowed: attempt.retryAllowed,
       })),
@@ -258,9 +260,13 @@ export function buildWeeklyDeliverySummary(input: {
       ["approved", "auto_approved"].includes(post.approvalStatus ?? ""),
     ).length;
     const scheduled = posts.filter((post) =>
-      ["scheduled", "publishing", "published", "published_with_warning"].includes(
-        post.status,
-      ),
+      [
+        "scheduled",
+        "publishing",
+        "published",
+        "published_with_warning",
+        "failed",
+      ].includes(post.status),
     ).length;
     const attempted = attempts.length;
     const published = receipts.length;

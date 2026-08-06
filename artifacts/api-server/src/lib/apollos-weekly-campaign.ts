@@ -176,6 +176,7 @@ export interface WeeklyGenerationJob {
   readonly platform: WeeklyCampaignPlatform;
   readonly generatorPlatform: "facebook" | "instagram" | "google" | "youtube";
   readonly count: number;
+  readonly scheduleDates: readonly string[];
   readonly weeklyPlanId: string;
   readonly schedulerMode: "weekly_plan";
   readonly approvalMode: "approval_required";
@@ -229,9 +230,11 @@ export function assertWeeklyGenerationContract(
     const expectedJobKey = `${batchKey}:${platform}`;
     const expectedGenerator =
       platform === "google_business" ? "google" : platform;
-    const expectedCount = plan.slots.filter(
+    const expectedSlots = plan.slots.filter(
       (slot) => slot.platform === platform,
-    ).length;
+    );
+    const expectedCount = expectedSlots.length;
+    const expectedScheduleDates = expectedSlots.map((slot) => slot.date);
     if (job.planFingerprint !== fingerprint) {
       throw new Error("APOLLOS_WEEKLY_PLAN_FINGERPRINT_MISMATCH");
     }
@@ -243,6 +246,13 @@ export function assertWeeklyGenerationContract(
     }
     if (job.count !== expectedCount || job.count < 1) {
       throw new Error("APOLLOS_WEEKLY_PLATFORM_DELIVERY_COUNT_MISMATCH");
+    }
+    if (
+      !Array.isArray(job.scheduleDates) ||
+      JSON.stringify(job.scheduleDates) !==
+        JSON.stringify(expectedScheduleDates)
+    ) {
+      throw new Error("APOLLOS_WEEKLY_SCHEDULE_DATES_MISMATCH");
     }
     if (
       job.schedulerMode !== "weekly_plan" ||
@@ -293,9 +303,13 @@ export function buildWeeklyGenerationJobs(
   }
 
   const jobs = plan.platforms.map((platform) => {
-    const count = plan.slots.filter(
+    const platformSlots = plan.slots.filter(
       (slot) => slot.platform === platform,
-    ).length;
+    );
+    const count = platformSlots.length;
+    const scheduleDates = Object.freeze(
+      platformSlots.map((slot) => slot.date),
+    );
     if (count < 1) {
       throw new Error("APOLLOS_WEEKLY_PLATFORM_WITHOUT_SLOTS");
     }
@@ -308,6 +322,7 @@ export function buildWeeklyGenerationJobs(
       platform,
       generatorPlatform,
       count,
+      scheduleDates,
       weeklyPlanId: stablePlatformKey,
       schedulerMode: "weekly_plan" as const,
       approvalMode: "approval_required" as const,

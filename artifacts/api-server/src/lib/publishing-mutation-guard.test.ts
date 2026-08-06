@@ -169,7 +169,7 @@ describe("publishing mutation guard policy", () => {
       `MESSAGE = '${PUBLISHING_STATE_LOCKED_CODE}'`,
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
-      "array_agg(DISTINCT value)",
+      "array_agg(DISTINCT btrim(value))",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "SELECT DISTINCT ON (platform)",
@@ -178,7 +178,7 @@ describe("publishing mutation guard policy", () => {
       "latest_delivery_count <> expected_platform_count",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
-      "OLD.published_by = 'scheduler'",
+      "COALESCE(OLD.published_by, '') = 'scheduler'",
     );
     expect(PUBLISHING_MUTATION_GUARD_DDL).toContain(
       "NEW.status := OLD.status",

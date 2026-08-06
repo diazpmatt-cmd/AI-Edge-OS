@@ -1288,6 +1288,31 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
 
   const command =
     typeof req.body?.command === "string" ? req.body.command.trim() : "";
+  const commandRoute = routeApollosCommand(command);
+  if (
+    commandRoute.reasonCode ===
+    "APOLLOS_ROUTE_FUTURE_PLATFORM_PREPARATION"
+  ) {
+    const normalized = command.toLowerCase();
+    const futurePlatforms = [
+      "tiktok",
+      "nextdoor",
+      "yelp",
+      "thumbtack",
+      "linkedin",
+      "pinterest",
+    ].filter((platform) => normalized.includes(platform));
+    res.status(409).json({
+      error: "APOLLOS_FUTURE_PLATFORM_ADAPTER_NOT_ACTIVE",
+      message:
+        "Content can be prepared, but weekly scheduling and publishing are not active for the requested future channels.",
+      platforms: futurePlatforms,
+      preparationAvailable: true,
+      schedulingAvailable: false,
+      publishingAvailable: false,
+    });
+    return;
+  }
   if (!isWeeklyCampaignCommand(command)) {
     res.status(400).json({
       error: "APOLLOS_WEEKLY_COMMAND_NOT_RECOGNIZED",

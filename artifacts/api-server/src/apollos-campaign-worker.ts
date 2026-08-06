@@ -282,6 +282,7 @@ async function claimOne() {
          FROM agent_tasks
         WHERE task_type='weekly_campaign'
           AND status='generation_queued'
+          AND decision='requires_review'
           AND resolution IS NULL
           AND execution_attempts < $1
         ORDER BY decision_at ASC NULLS LAST, created_at ASC

@@ -32,7 +32,7 @@ export interface ApollosCommandRoute {
 
 const WEEK_PATTERN = /\b(?:week(?:'s|s|ly)?|seven[- ]day|7[- ]day)\b/i;
 const PLATFORM_PATTERN =
-  /\b(?:all four|all 4|facebook|instagram|google business|gbp|youtube)\b/i;
+  /\b(?:all four|all 4|facebook|instagram|google business|gbp|youtube|tiktok|nextdoor|yelp|thumbtack|linkedin|pinterest)\b/i;
 const CREATE_PATTERN = /\b(?:create|generate|build|prepare|draft|make)\b/i;
 const DIAGNOSE_PATTERN =
   /\b(?:diagnose|debug|troubleshoot|root cause|why|error|failed|failing|broken|not working|under the hood)\b/i;

@@ -77,17 +77,38 @@ export function decideApollosRepairExecution(
 
   const verifiedByKey = new Map(
     input.receipts
-      .filter(
-        (receipt) =>
+      .filter((receipt) => {
+        const plannedStep = plan.steps.find((item) => item.key === receipt.stepKey);
+        return (
+          plannedStep !== undefined &&
           receipt.planId === plan.planId &&
           receipt.diagnosisId === plan.diagnosisId &&
-          receipt.status === "verified",
-      )
+          receipt.status === "verified" &&
+          receipt.effect === plannedStep.effect &&
+          receipt.verification === plannedStep.verification &&
+          /^[a-f0-9]{64}$/.test(receipt.evidenceDigest)
+        );
+      })
       .map((receipt) => [receipt.stepKey, receipt]),
   );
   const completedSteps = plan.steps.filter((item) =>
     verifiedByKey.has(item.key),
   ).length;
+
+  for (const completed of plan.steps.filter((item) => verifiedByKey.has(item.key))) {
+    const missingEarlier = plan.steps.some(
+      (item) => item.position < completed.position && !verifiedByKey.has(item.key),
+    );
+    if (missingEarlier) {
+      return freezeDecision(
+        "stop_unverified",
+        "APOLLOS_REPAIR_RECEIPT_SEQUENCE_INVALID",
+        null,
+        completedSteps,
+        totalSteps,
+      );
+    }
+  }
 
   if (plan.status === "not_required") {
     return freezeDecision(

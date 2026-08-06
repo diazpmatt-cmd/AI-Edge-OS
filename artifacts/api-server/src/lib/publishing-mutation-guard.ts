@@ -51,11 +51,16 @@ export function shouldDeferAdapterAggregateTransition(input: {
   readonly expectedPlatformCount: number;
   readonly latestDeliveryCount: number;
   readonly latestUnresolvedCount: number;
+  readonly publishedBy?: string | null;
   readonly errorMessage?: string | null;
 }): boolean {
+  const schedulerRecoveryAuthorized =
+    input.publishedBy === "scheduler" &&
+    isSchedulerAggregateRecoveryMessage(input.errorMessage);
+
   return (
     input.nextStatus !== "publishing" &&
-    !isSchedulerAggregateRecoveryMessage(input.errorMessage) &&
+    !schedulerRecoveryAuthorized &&
     (
       input.expectedPlatformCount === 0 ||
       input.latestDeliveryCount !== input.expectedPlatformCount ||
@@ -85,11 +90,11 @@ const schedulerRecoverySql = SCHEDULER_AGGREGATE_RECOVERY_PREFIXES
  * PublishingService finalizes the post. Its premature transition is held at
  * `publishing` until the latest tenant-scoped attempt for every expected
  * platform is terminal in the durable delivery ledger. Scheduler exception
- * reconciliation retains a narrow explicit bypass.
+ * reconciliation retains a narrow actor-and-message-bound bypass.
  */
 export const PUBLISHING_MUTATION_GUARD_DDL = `
 BEGIN;
-SELECT pg_advisory_xact_lock(hashtext('ai_edge_publishing_mutation_guard_v2'));
+SELECT pg_advisory_xact_lock(hashtext('ai_edge_publishing_mutation_guard_v1'));
 
 CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation()
 RETURNS trigger
@@ -177,7 +182,10 @@ BEGIN
         expected_platform_count = 0
         OR latest_delivery_count <> expected_platform_count
         OR latest_unresolved_count > 0
-      ) AND NOT (${schedulerRecoverySql}) THEN
+      ) AND NOT (
+        OLD.published_by = 'scheduler'
+        AND (${schedulerRecoverySql})
+      ) THEN
         NEW.status := OLD.status;
         NEW.published_at := OLD.published_at;
       END IF;

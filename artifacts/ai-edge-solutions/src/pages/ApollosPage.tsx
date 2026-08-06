@@ -48,7 +48,7 @@ interface RepairPlanSummary {
     position: number;
     title: string;
     action: string;
-    effect: "read_only" | "internal_change" | "deployment_change" | "credential_change" | "provider_change" | "external_publish";
+    effect: "read_only" | "checkpoint_resume" | "internal_change" | "deployment_change" | "credential_change" | "provider_change" | "external_publish";
     executableByApollos: boolean;
     requiresApproval: boolean;
     verification: string;

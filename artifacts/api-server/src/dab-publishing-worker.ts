@@ -64,6 +64,61 @@ async function claimOne() {
   } finally { client.release(); }
 }
 
+function assertPublishingPreflight(
+  post: typeof socialPostsTable.$inferSelect,
+  execution: {
+    platform: string;
+    scheduled_at: Date | string;
+    armed_by: string;
+  },
+): void {
+  if (post.status !== "scheduled") {
+    throw new Error("PREFLIGHT_POST_NOT_SCHEDULED");
+  }
+  if (
+    post.approvalStatus !== "approved" ||
+    post.approvedBy !== execution.armed_by ||
+    !post.approvedAt
+  ) {
+    throw new Error("PREFLIGHT_APPROVAL_BINDING_MISMATCH");
+  }
+  if (!post.caption?.trim()) {
+    throw new Error("PREFLIGHT_CAPTION_MISSING");
+  }
+  if (!post.scheduledAt) {
+    throw new Error("PREFLIGHT_SCHEDULE_MISSING");
+  }
+  const postScheduleMs = new Date(post.scheduledAt).getTime();
+  const executionScheduleMs = new Date(execution.scheduled_at).getTime();
+  if (
+    !Number.isFinite(postScheduleMs) ||
+    !Number.isFinite(executionScheduleMs) ||
+    postScheduleMs !== executionScheduleMs
+  ) {
+    throw new Error("PREFLIGHT_SCHEDULE_BINDING_MISMATCH");
+  }
+  const mediaUrl = post.imageData ?? "";
+  if (
+    (!mediaUrl.startsWith("/objects/") && !mediaUrl.startsWith("https://")) ||
+    !post.mediaMimeType?.startsWith("image/")
+  ) {
+    throw new Error("PREFLIGHT_MEDIA_NOT_READY");
+  }
+  let platforms: unknown;
+  try {
+    platforms = JSON.parse(post.platforms || "[]");
+  } catch {
+    throw new Error("PREFLIGHT_PLATFORM_BINDING_INVALID");
+  }
+  if (
+    !Array.isArray(platforms) ||
+    platforms.length !== 1 ||
+    platforms[0] !== execution.platform
+  ) {
+    throw new Error("PREFLIGHT_PLATFORM_BINDING_MISMATCH");
+  }
+}
+
 async function processOne() {
   const execution = await claimOne();
   if (!execution) return;
@@ -72,9 +127,7 @@ async function processOne() {
       .where(and(eq(socialPostsTable.id, execution.post_id), eq(socialPostsTable.userId, execution.user_id)))
       .then((rows) => rows[0]);
     if (!post) throw new Error("POST_NOT_FOUND");
-    const platforms = JSON.parse(post.platforms || "[]") as string[];
-    if (platforms.length !== 1 || platforms[0] !== execution.platform) throw new Error("PLATFORM_BINDING_MISMATCH");
-    if (post.approvalStatus !== "approved" || post.approvedBy !== execution.armed_by) throw new Error("APPROVAL_BINDING_MISMATCH");
+    assertPublishingPreflight(post, execution);
     const currentHash = stablePublishPayloadHash({
       postId: post.id,
       userId: execution.user_id,

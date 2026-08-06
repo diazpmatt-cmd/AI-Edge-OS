@@ -88,6 +88,7 @@ const schedulerRecoverySql = SCHEDULER_AGGREGATE_RECOVERY_PREFIXES
  * reconciliation retains a narrow explicit bypass.
  */
 export const PUBLISHING_MUTATION_GUARD_DDL = `
+BEGIN;
 SELECT pg_advisory_xact_lock(hashtext('ai_edge_publishing_mutation_guard_v2'));
 
 CREATE OR REPLACE FUNCTION ai_edge_guard_publishing_post_mutation()
@@ -203,6 +204,7 @@ BEGIN
   END IF;
 END;
 $trigger$;
+COMMIT;
 `;
 
 export async function bootstrapPublishingMutationGuard(): Promise<void> {

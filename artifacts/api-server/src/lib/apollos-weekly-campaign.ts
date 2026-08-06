@@ -95,7 +95,7 @@ export function parseWeeklyCampaignPlatforms(
 export function isWeeklyCampaignCommand(command: string): boolean {
   const normalized = command.trim().toLowerCase();
   return (
-    /\b(create|generate|build|prepare|schedule)\b/.test(normalized) &&
+    /\b(create|generate|build|prepare|schedule|publish|post|send)\b/.test(normalized) &&
     /\bweek(?:'s|s|ly)?\b|seven[- ]day|7[- ]day/.test(normalized) &&
     parseWeeklyCampaignPlatforms(command).length > 0
   );

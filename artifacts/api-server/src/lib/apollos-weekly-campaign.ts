@@ -207,5 +207,16 @@ export function buildWeeklyGenerationJobs(
     });
   });
 
+  if (jobs.length !== plan.platforms.length) {
+    throw new Error("APOLLOS_WEEKLY_JOB_COUNT_MISMATCH");
+  }
+  if (new Set(jobs.map((job) => job.jobKey)).size !== jobs.length) {
+    throw new Error("APOLLOS_WEEKLY_JOB_KEY_DUPLICATE");
+  }
+  const scheduledDeliveries = jobs.reduce((sum, job) => sum + job.count, 0);
+  if (scheduledDeliveries !== plan.deliveryCount) {
+    throw new Error("APOLLOS_WEEKLY_DELIVERY_COUNT_MISMATCH");
+  }
+
   return Object.freeze(jobs);
 }

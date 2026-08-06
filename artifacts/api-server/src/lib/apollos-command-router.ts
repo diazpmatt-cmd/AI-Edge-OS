@@ -33,6 +33,8 @@ export interface ApollosCommandRoute {
 const WEEK_PATTERN = /\b(?:week(?:'s|s|ly)?|seven[- ]day|7[- ]day)\b/i;
 const PLATFORM_PATTERN =
   /\b(?:all four|all 4|facebook|instagram|google business|gbp|youtube|tiktok|nextdoor|yelp|thumbtack|linkedin|pinterest)\b/i;
+const FUTURE_PLATFORM_PATTERN =
+  /\b(?:tiktok|nextdoor|yelp|thumbtack|linkedin|pinterest)\b/i;
 const CREATE_PATTERN = /\b(?:create|generate|build|prepare|draft|make)\b/i;
 const DIAGNOSE_PATTERN =
   /\b(?:diagnose|debug|troubleshoot|root cause|why|error|failed|failing|broken|not working|under the hood)\b/i;
@@ -59,6 +61,7 @@ export function routeApollosCommand(command: string): ApollosCommandRoute {
   const signals: string[] = [];
   const hasWeek = WEEK_PATTERN.test(normalized);
   const hasPlatform = PLATFORM_PATTERN.test(normalized);
+  const hasFuturePlatform = FUTURE_PLATFORM_PATTERN.test(normalized);
   const hasCreate = CREATE_PATTERN.test(normalized);
   const hasDiagnose = DIAGNOSE_PATTERN.test(normalized);
   const hasRecommend = RECOMMEND_PATTERN.test(normalized);
@@ -67,15 +70,31 @@ export function routeApollosCommand(command: string): ApollosCommandRoute {
 
   if (hasWeek) signals.push("weekly_scope");
   if (hasPlatform) signals.push("platform_scope");
+  if (hasFuturePlatform) signals.push("future_platform_scope");
   if (hasCreate) signals.push("creation_request");
   if (hasPublish) signals.push("external_effect_request");
   if (hasDiagnose) signals.push("diagnostic_request");
   if (hasRecommend) signals.push("recommendation_request");
   if (hasContent) signals.push("content_scope");
 
-  // A weekly command is an orchestrated preparation job even when the desired
-  // final outcome is publishing. Drafts and media are built first; one approval
-  // is requested only after the complete package is reviewable.
+  // Future channels are recognized but remain preparation-only until their
+  // generator and delivery adapters are active. Never silently drop them from
+  // a weekly request or imply that they can be scheduled.
+  if (hasWeek && hasFuturePlatform && (hasCreate || hasPublish)) {
+    return frozenRoute({
+      operation: "content_preparation",
+      capability: "prepare",
+      confidence: "high",
+      approvalBoundary: "before_external_effect",
+      requiresApprovalNow: false,
+      requestedExternalEffect: false,
+      reasonCode: "APOLLOS_ROUTE_FUTURE_PLATFORM_PREPARATION",
+      matchedSignals: signals,
+    });
+  }
+
+  // A pilot weekly command is an orchestrated preparation job even when the
+  // desired final outcome is publishing. Drafts and media are built first.
   if (hasWeek && hasPlatform && (hasCreate || hasPublish)) {
     return frozenRoute({
       operation: "weekly_campaign",

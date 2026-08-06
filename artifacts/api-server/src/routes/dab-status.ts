@@ -307,7 +307,7 @@ router.get("/dab/apollos-readiness", async (req, res) => {
       route: routeApollosCommand(
         "Prepare a week's content for Nextdoor, Yelp, and Thumbtack.",
       ),
-      expectedOperation: "weekly_campaign",
+      expectedOperation: "content_preparation",
       expectedApprovalBoundary: "before_external_effect",
       expectedCapability: "prepare",
     },

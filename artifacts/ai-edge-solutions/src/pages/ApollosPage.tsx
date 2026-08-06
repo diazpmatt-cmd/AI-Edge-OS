@@ -25,7 +25,14 @@ const B = {
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type WeeklyApprovalStatus = "pending" | "approved" | "executing" | "executed" | "failed" | "rejected";
+type WeeklyApprovalStatus = "generating" | "pending" | "approved" | "executed" | "failed" | "rejected";
+
+function normalizeWeeklyApprovalStatus(status?: string): WeeklyApprovalStatus | null {
+  if (status === "generation_queued" || status === "generating_drafts" || status === "executing") return "generating";
+  if (status === "pending_review" || status === "awaiting_batch_approval") return "pending";
+  if (status === "approved" || status === "executed" || status === "failed" || status === "rejected") return status;
+  return null;
+}
 
 interface WeeklyApproval {
   taskId: string;
@@ -304,22 +311,22 @@ function Bubble({
                         : B.blue,
                   fontWeight: 800,
                 }}>
+                  {msg.weeklyApproval.status === "generating" &&
+                    "⚙ Apollos is creating every caption, image, and YouTube video. Approval appears when the complete package is ready."}
                   {msg.weeklyApproval.status === "approved" &&
-                    "✓ Week approved — waiting for the guarded worker."}
-                  {msg.weeklyApproval.status === "executing" &&
-                    "⚙ Apollos is generating the isolated platform drafts."}
+                    "✓ Complete weekly package approved — ready for guarded scheduling and delivery."}
                   {msg.weeklyApproval.status === "executed" &&
-                    "✓ Drafts ready — review the complete weekly package before scheduling."}
+                    "✓ Approved weekly campaign completed."}
                   {msg.weeklyApproval.status === "failed" &&
                     "⚠ Weekly generation stopped after bounded retries. Open Under the Hood for the exact failure."}
                   {msg.weeklyApproval.status === "rejected" &&
-                    "✕ Weekly campaign rejected. Nothing will be generated or published."}
+                    "✕ Weekly package rejected. Its drafts remain unpublished."}
                 </div>
               )}
               {msg.weeklyApproval.status === "failed" && (
                 <div style={{ marginTop: 8, padding: 9, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
                   <strong style={{ color: "#F87171" }}>
-                    {msg.weeklyApproval.failureCode ?? "APOLLOS_WEEKLY_EXECUTION_FAILED"}
+                    {msg.weeklyApproval.failureCode ?? "APOLLOS_WEEKLY_GENERATION_FAILED"}
                   </strong>
                   {msg.weeklyApproval.failureDetail
                     ? ` · ${msg.weeklyApproval.failureDetail}`
@@ -362,8 +369,7 @@ export default function ApollosPage() {
   useEffect(() => {
     const active = messages.filter(
       (message) =>
-        message.weeklyApproval?.status === "approved" ||
-        message.weeklyApproval?.status === "executing",
+        message.weeklyApproval?.status === "generating",
     );
     if (active.length === 0) return;
 
@@ -397,12 +403,10 @@ export default function ApollosPage() {
       setMessages((current) =>
         current.map((message) => {
           const result = results.find((item) => item.messageId === message.id);
-          const status = result?.status;
+          const status = normalizeWeeklyApprovalStatus(result?.status);
           if (
             !message.weeklyApproval ||
-            !["approved", "executing", "executed", "failed", "rejected"].includes(
-              status ?? "",
-            ) ||
+            !status ||
             status === message.weeklyApproval.status
           ) {
             return message;
@@ -411,7 +415,7 @@ export default function ApollosPage() {
             ...message,
             weeklyApproval: {
               ...message.weeklyApproval,
-              status: status as WeeklyApprovalStatus,
+              status,
               failureCode: result?.failureCode ?? null,
               failureDetail: result?.failureDetail ?? null,
             },
@@ -805,18 +809,13 @@ export default function ApollosPage() {
             platforms: string[];
           };
         };
-        const status: WeeklyApprovalStatus =
-          ["approved", "executing", "executed", "failed", "rejected"].includes(
-            data.executionStatus,
-          )
-            ? data.executionStatus as WeeklyApprovalStatus
-            : "pending";
+        const status = normalizeWeeklyApprovalStatus(data.executionStatus) ?? "generating";
         setMessages(prev => [...prev, {
           id: uid(),
           role: "apollos",
           text: data.duplicate
             ? "I found the existing weekly campaign instead of creating a duplicate."
-            : "Your weekly campaign is ready for one batch decision: 5 Facebook posts, 5 Instagram posts, 2 Google Business Profile posts, and 1 YouTube video.",
+            : "I am building your complete weekly package now: 5 Facebook posts, 5 Instagram posts, 2 Google Business Profile posts, and 1 YouTube video. You will receive one approval decision after every caption and media asset is ready.",
           time: nowTime(),
           weeklyApproval: {
             taskId: data.taskId,

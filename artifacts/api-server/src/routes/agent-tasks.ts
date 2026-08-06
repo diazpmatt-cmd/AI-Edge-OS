@@ -293,6 +293,106 @@ router.get("/agent-tasks/:id/repair-plan", async (req, res) => {
   return res.json(buildApollosRepairPlan(diagnosis));
 });
 
+// ── POST /agent-tasks/:id/repair-plan/submit — durable guarded request ────────
+router.post("/agent-tasks/:id/repair-plan/submit", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const requestedPlanId =
+    typeof req.body?.planId === "string" ? req.body.planId : null;
+  const requestedDiagnosisId =
+    typeof req.body?.diagnosisId === "string" ? req.body.diagnosisId : null;
+  if (!requestedPlanId || !requestedDiagnosisId) {
+    return res.status(400).json({
+      error: "planId and diagnosisId are required",
+      code: "APOLLOS_REPAIR_BINDING_REQUIRED",
+    });
+  }
+
+  const [sourceTask] = await db
+    .select()
+    .from(agentTasksTable)
+    .where(and(eq(agentTasksTable.id, req.params.id), eq(agentTasksTable.userId, userId)));
+  if (!sourceTask) return res.status(404).json({ error: "Task not found" });
+
+  const sourceSteps = await db
+    .select()
+    .from(agentTaskStepsTable)
+    .where(eq(agentTaskStepsTable.taskId, sourceTask.id))
+    .orderBy(asc(agentTaskStepsTable.position));
+  const diagnosis = diagnoseApollosTask({
+    taskId: sourceTask.id,
+    taskStatus: sourceTask.status,
+    taskFailureCode: sourceTask.failureCode,
+    taskDetail: sourceTask.decisionNote,
+    taskUpdatedAt: sourceTask.updatedAt.toISOString(),
+    steps: sourceSteps.map((item) => ({
+      stepKey: item.stepKey,
+      status: item.status,
+      failureCode: item.failureCode,
+      updatedAt: item.updatedAt.toISOString(),
+    })),
+  });
+  const repairPlan = buildApollosRepairPlan(diagnosis);
+
+  if (
+    repairPlan.planId !== requestedPlanId ||
+    repairPlan.diagnosisId !== requestedDiagnosisId
+  ) {
+    return res.status(409).json({
+      error: "The diagnosis or repair plan changed. Review the current plan before approving it.",
+      code: "APOLLOS_REPAIR_EVIDENCE_CHANGED",
+      currentPlanId: repairPlan.planId,
+      currentDiagnosisId: repairPlan.diagnosisId,
+    });
+  }
+  if (
+    repairPlan.status === "not_required" ||
+    repairPlan.status === "manual_required" ||
+    repairPlan.status === "insufficient_evidence"
+  ) {
+    return res.status(422).json({
+      error: "This repair plan is not executable by Apollos.",
+      code: "APOLLOS_REPAIR_NOT_EXECUTABLE",
+      status: repairPlan.status,
+    });
+  }
+
+  const payload = {
+    sourceTaskId: sourceTask.id,
+    planId: repairPlan.planId,
+    diagnosisId: repairPlan.diagnosisId,
+    repairPlan,
+  };
+  const evaluation = evaluateTask("execute_repair_plan", payload);
+  if (evaluation.decision !== "requires_review") {
+    return res.status(500).json({
+      error: "Repair approval boundary rejected the request.",
+      code: "APOLLOS_REPAIR_APPROVAL_BOUNDARY_INVALID",
+    });
+  }
+
+  const [repairTask] = await db.insert(agentTasksTable).values({
+    userId,
+    taskType: "execute_repair_plan",
+    payload: JSON.stringify(payload),
+    status: "pending_review",
+    decision: evaluation.decision,
+    resolution: null,
+    decisionBy: null,
+    decisionAt: null,
+    decisionNote: null,
+    ruleId: evaluation.ruleId,
+    ruleSetVersion: RULE_SET_VERSION,
+  }).returning();
+
+  return res.status(201).json({
+    task: repairTask,
+    repairPlan,
+    approvalRequired: true,
+  });
+});
+
 // ── POST /agent-tasks/:id/approve — human approves a pending task ─────────────
 router.post("/agent-tasks/:id/approve", async (req, res) => {
   const { userId } = getAuth(req);

@@ -34,6 +34,7 @@ export const KNOWN_TASK_TYPES = [
   "update_client_settings",
   "pause_autopilot",
   "resume_autopilot",
+  "execute_repair_plan",
 ] as const;
 
 export type KnownTaskType = (typeof KNOWN_TASK_TYPES)[number];
@@ -59,6 +60,7 @@ export const ALWAYS_REVIEW_TYPES = new Set<string>([
   "update_client_settings",
   "pause_autopilot",
   "resume_autopilot",
+  "execute_repair_plan",
 ]);
 
 // ── Internal helpers (exported for testing) ───────────────────────────────────
@@ -134,6 +136,25 @@ function evaluateSchedulePost(
   };
 }
 
+function evaluateRepairPlan(
+  payload: Record<string, unknown>,
+): ApprovalResult {
+  for (const field of ["sourceTaskId", "planId", "diagnosisId"] as const) {
+    if (!isNonEmptyString(payload[field])) {
+      return {
+        decision: "rejected",
+        ruleId: "REPAIR_PLAN_BINDING_INVALID",
+        reason: `execute_repair_plan requires a non-empty ${field}`,
+      };
+    }
+  }
+  return {
+    decision: "requires_review",
+    ruleId: "REPAIR_PLAN_EXACT_BINDING_REVIEW",
+    reason: "Repair execution requires review of the exact diagnosis-bound plan",
+  };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -154,6 +175,17 @@ export function evaluateTask(
     };
   }
 
+  const safePayload: Record<string, unknown> =
+    payload !== null &&
+    typeof payload === "object" &&
+    !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  if (taskType === "execute_repair_plan") {
+    return evaluateRepairPlan(safePayload);
+  }
+
   if (ALWAYS_REVIEW_TYPES.has(taskType)) {
     return {
       decision: "requires_review",
@@ -161,13 +193,6 @@ export function evaluateTask(
       reason:   `${taskType} always requires human review before execution`,
     };
   }
-
-  const safePayload: Record<string, unknown> =
-    payload !== null &&
-    typeof payload === "object" &&
-    !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {};
 
   if (taskType === "generate_content") return evaluateGenerateContent(safePayload);
   if (taskType === "schedule_post")    return evaluateSchedulePost(safePayload);

@@ -204,6 +204,54 @@ async function claimCheckpoint(
   }
 }
 
+async function persistExecutionHeartbeat(
+  taskId: string,
+  stepKey: string,
+): Promise<void> {
+  const result = await pool.query(
+    `WITH renewed AS (
+       UPDATE agent_task_steps
+          SET lease_expires_at=now() + ($4::text || ' milliseconds')::interval,
+              updated_at=now()
+        WHERE task_id=$1
+          AND step_key=$2
+          AND status='running'
+          AND lease_owner=$3
+        RETURNING task_id
+     )
+     UPDATE agent_tasks
+        SET updated_at=now()
+      WHERE id=$1
+        AND status='executing'
+        AND EXISTS (SELECT 1 FROM renewed)
+      RETURNING id`,
+    [taskId, stepKey, runtimeId, leaseMs],
+  );
+  if (result.rowCount !== 1) {
+    throw new Error(`APOLLOS_CHECKPOINT_HEARTBEAT_CONFLICT:${stepKey}`);
+  }
+}
+
+function startExecutionHeartbeat(
+  taskId: string,
+  stepKey: string,
+): () => void {
+  const heartbeatMs = Math.max(
+    5_000,
+    Math.min(60_000, Math.floor(leaseMs / 3)),
+  );
+  const timer = setInterval(() => {
+    void persistExecutionHeartbeat(taskId, stepKey).catch((error) => {
+      logger.error(
+        { taskId, stepKey, error },
+        "[apollos-campaign] checkpoint heartbeat failed",
+      );
+    });
+  }, heartbeatMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 async function completeCheckpoint(
   taskId: string,
   stepKey: string,
@@ -751,7 +799,12 @@ async function processOne() {
         );
         continue;
       }
+      const stopHeartbeat = startExecutionHeartbeat(
+        task.id,
+        checkpoint.stepKey,
+      );
       try {
+        await persistExecutionHeartbeat(task.id, checkpoint.stepKey);
         const drafts = await runGenerationJob(task.id, task.user_id, job);
         const reusedMetaMedia =
           job.generatorPlatform === "instagram" && facebookJob
@@ -793,6 +846,8 @@ async function processOne() {
             : "APOLLOS_CHECKPOINT_EXECUTION_FAILED";
         await failCheckpoint(task.id, checkpoint.stepKey, code);
         throw error;
+      } finally {
+        stopHeartbeat();
       }
     }
     await verifyWeeklyPackageReady(

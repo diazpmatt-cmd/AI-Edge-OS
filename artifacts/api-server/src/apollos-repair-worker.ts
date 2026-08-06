@@ -298,6 +298,30 @@ function inspectionActions(
       },
     };
   };
+  const inspectLease: ApollosRepairAction = async ({ stepKey }) => {
+    const source = await readSource(sourceTaskId, userId);
+    const leased = source.steps.find(
+      (item) => item.lease_owner || item.lease_expires_at,
+    );
+    const now = Date.now();
+    return {
+      verified: Boolean(leased),
+      evidence: {
+        stepKey,
+        lease: leased
+          ? {
+              checkpoint: leased.step_key,
+              ownerPresent: Boolean(leased.lease_owner),
+              expiresAt: leased.lease_expires_at?.toISOString() ?? null,
+              expired:
+                leased.lease_expires_at !== null &&
+                leased.lease_expires_at.getTime() <= now,
+              observedAt: new Date(now).toISOString(),
+            }
+          : null,
+      },
+    };
+  };
   const earliestFailure: ApollosRepairAction = async ({ stepKey }) => {
     const source = await readSource(sourceTaskId, userId);
     const failed = source.steps.find((item) => item.failure_code);
@@ -320,6 +344,7 @@ function inspectionActions(
     "preserve-binding-evidence": snapshot,
     "find-earliest-failure": earliestFailure,
     "collect-causal-evidence": earliestFailure,
+    "inspect-lease-owner": inspectLease,
   });
 }
 

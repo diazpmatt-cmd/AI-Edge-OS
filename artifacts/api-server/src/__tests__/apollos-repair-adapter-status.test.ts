@@ -38,6 +38,20 @@ describe("buildApollosRepairAdapterStatus", () => {
     expect(JSON.stringify(renderer)).not.toContain("secret");
   });
 
+  it("publishes safe lease inspection as a default read-only adapter", () => {
+    const status = buildApollosRepairAdapterStatus(
+      {},
+      [...APOLLOS_REPAIR_INSPECTION_ADAPTER_KEYS],
+    );
+    expect(status.find((item) => item.stepKey === "inspect-lease-owner"))
+      .toMatchObject({
+        state: "ready",
+        reasonCode: "APOLLOS_REPAIR_ADAPTER_READY",
+        requiresApproval: false,
+        handlerRegistered: true,
+      });
+  });
+
   it("distinguishes a missing handler from a disabled adapter", () => {
     const status = buildApollosRepairAdapterStatus(
       { APOLLOS_REPAIR_ADAPTER_UPSTREAM_PROBE_ENABLED: "true" },

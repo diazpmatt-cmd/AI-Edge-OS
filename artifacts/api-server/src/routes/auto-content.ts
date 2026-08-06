@@ -584,6 +584,7 @@ router.post("/auto-content/generate", async (req, res) => {
           ? req.body.platforms
           : [];
         const requestedCount = req.body?.count;
+        const requestedScheduleDates = req.body?.scheduleDates;
         const boundJob = generationJobs.find(
           (job) => job.weeklyPlanId === requestedPlanId,
         );
@@ -592,7 +593,9 @@ router.post("/auto-content/generate", async (req, res) => {
           !boundJob ||
           requestedPlatforms.length !== 1 ||
           requestedPlatforms[0] !== boundJob.generatorPlatform ||
-          requestedCount !== boundJob.count
+          requestedCount !== boundJob.count ||
+          JSON.stringify(requestedScheduleDates) !==
+            JSON.stringify(boundJob.scheduleDates)
         ) {
           throw new Error("APOLLOS_WEEKLY_REQUEST_PAYLOAD_MISMATCH");
         }

@@ -1348,25 +1348,18 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
           hashtext(${`apollos-weekly:${batchKey}`})
         )`,
       );
-      const existing = await tx
+      const [duplicate] = await tx
         .select()
         .from(agentTasksTable)
         .where(
           and(
             eq(agentTasksTable.userId, userId),
             eq(agentTasksTable.taskType, "weekly_campaign"),
+            sql`${agentTasksTable.payload}::jsonb ->> 'batchKey' = ${batchKey}`,
           ),
         )
         .orderBy(desc(agentTasksTable.createdAt))
-        .limit(25);
-      const duplicate = existing.find((task) => {
-        try {
-          const payload = JSON.parse(task.payload) as { batchKey?: unknown };
-          return payload.batchKey === batchKey;
-        } catch {
-          return false;
-        }
-      });
+        .limit(1);
       if (duplicate) return { task: duplicate, duplicate: true };
 
       const [inserted] = await tx

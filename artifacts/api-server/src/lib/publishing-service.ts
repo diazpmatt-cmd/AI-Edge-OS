@@ -21,15 +21,14 @@
  * 3.  Validate at least one platform selected
  * 4.  For each platform: check connection exists and is not expired
  * 5.  For each platform: validate media requirements
- * 6.  Create or get platform_delivery records (one per platform)
+ * 6.  Atomically claim the unchanged post snapshot and create delivery attempts
  * 7.  Enforce idempotency via attempt_id
- * 8.  Mark deliveries as 'publishing' + post as 'publishing'
- * 9.  Call platform adapter via internal route (preserves full adapter logic)
- * 10. Parse per-platform results from adapter response
- * 11. Update delivery records (published / failed / skipped)
- * 12. Update post status (published / published_with_warning / failed)
- * 13. Record audit fields (publishedBy, publishedAt, externalPostId, externalPostUrl)
- * 14. Return sanitized PublishResult
+ * 8.  Call platform adapter via internal route (preserves full adapter logic)
+ * 9.  Parse per-platform results from adapter response
+ * 10. Update delivery records (published / failed / skipped)
+ * 11. Update post status (published / published_with_warning / failed)
+ * 12. Record audit fields (publishedBy, publishedAt, externalPostId, externalPostUrl)
+ * 13. Return sanitized PublishResult
  */
 
 import { createHash } from "node:crypto";
@@ -41,6 +40,11 @@ import type { PlatformDelivery } from "@workspace/db/schema";
 import { evaluateContentClaims } from "@workspace/db";
 import { parsePublishingPlatformBinding } from "./publishing-platform-binding.js";
 import { evaluateFullReplayReceiptGuard } from "./publishing-replay-safety.js";
+import {
+  PUBLISH_OWNERSHIP_CONFLICT_MESSAGE,
+  PUBLISH_SOURCE_STATE_INVALID_MESSAGE,
+  canClaimPublishingOwnership,
+} from "./publishing-ownership.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -424,7 +428,7 @@ export class PublishingService {
       return this.errorResult(postId, `Content blocked by claims policy: ${claimsDecision.violations.join(", ")}`);
     }
 
-    // ── Step 4: Check post isn't already published/publishing (idempotency) ──
+    // ── Step 4: Check aggregate state before attempting ownership ───────────
     if (post.status === "published") {
       return this.errorResult(postId, "Post is already published");
     }
@@ -437,43 +441,78 @@ export class PublishingService {
     if (post.status === "publishing") {
       return this.errorResult(postId, "Post is already being published — wait for the current attempt to complete");
     }
-
-    // ── Step 5: Create platform_delivery records ─────────────────────────────
-    const deliveries: PlatformDelivery[] = [];
-    for (const platform of platforms) {
-      // Find existing delivery for this platform (for retry flow)
-      const existing = await this.getLatestDelivery(postId, platform, userId);
-      const attemptNumber = existing ? existing.attemptNumber + 1 : 1;
-      const attemptId     = deriveAttemptId(postId, platform, attemptNumber);
-
-      // Check for idempotency hit on this exact attempt
-      if (existing?.attemptId === attemptId && existing.status === "published") {
-        deliveries.push(existing);
-        continue;
-      }
-
-      const [delivery] = await db.insert(platformDeliveriesTable).values({
-        postId,
-        userId,
-        platform,
-        status:        "publishing",
-        attemptNumber,
-        attemptId,
-        approvedBy:    post.approvedBy ?? null,
-        publishedBy:   triggeredBy,
-      }).returning();
-
-      deliveries.push(delivery);
+    if (!canClaimPublishingOwnership({
+      status: post.status,
+      approvalStatus: post.approvalStatus,
+    })) {
+      return this.errorResult(postId, PUBLISH_SOURCE_STATE_INVALID_MESSAGE);
     }
 
-    // ── Step 6: Mark post as publishing ─────────────────────────────────────
-    await db.update(socialPostsTable).set({
-      status:      "publishing",
-      publishedBy: triggeredBy,
-      updatedAt:   new Date(),
-    }).where(and(eq(socialPostsTable.id, postId), eq(socialPostsTable.userId, userId)));
+    // ── Step 5: Claim snapshot + create every attempt atomically ────────────
+    // The status, approval, platform binding, and updated timestamp must still
+    // match the exact row read above. A concurrent publish or edit therefore
+    // wins the compare-and-set and the losing request creates zero deliveries.
+    const deliveries = await db.transaction(async (tx) => {
+      const claimAt = new Date();
+      const claimed = await tx
+        .update(socialPostsTable)
+        .set({
+          status: "publishing",
+          publishedBy: triggeredBy,
+          updatedAt: claimAt,
+        })
+        .where(and(
+          eq(socialPostsTable.id, postId),
+          eq(socialPostsTable.userId, userId),
+          eq(socialPostsTable.status, post.status),
+          eq(socialPostsTable.approvalStatus, "approved"),
+          eq(socialPostsTable.platforms, post.platforms),
+          eq(socialPostsTable.updatedAt, post.updatedAt),
+        ))
+        .returning({ id: socialPostsTable.id });
 
-    // ── Step 7: Call platform adapters via internal publish route ────────────
+      if (claimed.length !== 1) return null;
+
+      const prepared: PlatformDelivery[] = [];
+      for (const platform of platforms) {
+        const rows = await tx
+          .select()
+          .from(platformDeliveriesTable)
+          .where(and(
+            eq(platformDeliveriesTable.postId, postId),
+            eq(platformDeliveriesTable.platform, platform),
+            eq(platformDeliveriesTable.userId, userId),
+          ))
+          .orderBy(platformDeliveriesTable.attemptNumber);
+        const existing = rows[rows.length - 1] ?? null;
+        const attemptNumber = existing ? existing.attemptNumber + 1 : 1;
+        const attemptId = deriveAttemptId(postId, platform, attemptNumber);
+
+        const [delivery] = await tx
+          .insert(platformDeliveriesTable)
+          .values({
+            postId,
+            userId,
+            platform,
+            status: "publishing",
+            attemptNumber,
+            attemptId,
+            approvedBy: post.approvedBy ?? null,
+            publishedBy: triggeredBy,
+          })
+          .returning();
+
+        prepared.push(delivery);
+      }
+
+      return prepared;
+    });
+
+    if (!deliveries) {
+      return this.errorResult(postId, PUBLISH_OWNERSHIP_CONFLICT_MESSAGE);
+    }
+
+    // ── Step 6: Call platform adapters via internal publish route ────────────
     //
     // We delegate to the existing /publish route which contains all the
     // platform adapter logic. This preserves backward compatibility while
@@ -505,7 +544,7 @@ export class PublishingService {
       console.error(`[PUBLISHING-SERVICE] adapter call failed for post=${postId}:`, msg);
     }
 
-    // ── Step 8: Map adapter results → delivery records ───────────────────────
+    // ── Step 7: Map adapter results → delivery records ───────────────────────
     const attemptResults: DeliveryAttemptResult[] = [];
     let publishedCount = 0;
     let failedCount    = 0;
@@ -578,7 +617,7 @@ export class PublishingService {
       });
     }
 
-    // ── Step 9: Compute final post status ────────────────────────────────────
+    // ── Step 8: Compute final post status ────────────────────────────────────
     let finalPostStatus: string;
     if (publishedCount > 0 && failedCount === 0 && skippedCount === 0) {
       finalPostStatus = "published";
@@ -600,7 +639,7 @@ export class PublishingService {
       updatedAt:   new Date(),
     }).where(and(eq(socialPostsTable.id, postId), eq(socialPostsTable.userId, userId)));
 
-    // ── Step 10: Build summary ───────────────────────────────────────────────
+    // ── Step 9: Build summary ───────────────────────────────────────────────
     const total = platforms.length;
     const parts: string[] = [];
     if (publishedCount > 0) parts.push(`${publishedCount} of ${total} published successfully`);
@@ -698,24 +737,6 @@ export class PublishingService {
     const result = await this.publishPost(existing.postId, userId, triggeredBy, internalBase, schedulerSecret);
     const deliveryResult = result.deliveries.find(d => d.platform === existing.platform);
     return deliveryResult ?? { platform: existing.platform, deliveryId, status: "failed", externalPostId: null, externalPostUrl: null, errorMessage: "Retry failed — no result returned", apiResponseStatus: null };
-  }
-
-  private async getLatestDelivery(
-    postId:   string,
-    platform: string,
-    userId:   string,
-  ): Promise<PlatformDelivery | null> {
-    const rows = await db
-      .select()
-      .from(platformDeliveriesTable)
-      .where(and(
-        eq(platformDeliveriesTable.postId, postId),
-        eq(platformDeliveriesTable.platform, platform),
-        eq(platformDeliveriesTable.userId, userId),
-      ))
-      .orderBy(platformDeliveriesTable.attemptNumber);
-
-    return rows[rows.length - 1] ?? null;
   }
 
   private errorResult(postId: string, message: string): PublishResult {

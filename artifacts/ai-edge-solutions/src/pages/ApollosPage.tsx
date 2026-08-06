@@ -90,6 +90,26 @@ interface Message {
   weeklyApproval?: WeeklyApproval;
 }
 
+interface RepairAdapterStatus {
+  stepKey: string;
+  effect: string;
+  state: "ready" | "disabled" | "blocked";
+  reasonCode: string;
+  requiresApproval: boolean;
+  handlerRegistered: boolean;
+  maxDurationMs: number;
+  enableEnvironmentVariable: string | null;
+  killSwitchEnvironmentVariable: string;
+}
+
+interface RepairAdapterStatusResponse {
+  operator: "Apollos";
+  checkedAt: string;
+  overallStatus: "ready" | "disabled" | "blocked";
+  counts: { ready: number; disabled: number; blocked: number };
+  adapters: RepairAdapterStatus[];
+}
+
 // ── Static data ───────────────────────────────────────────────────────────────
 const OPENING_MESSAGE: Message = {
   id: "opening",
@@ -455,6 +475,7 @@ export default function ApollosPage() {
   const [voicePlaying, setVoicePlaying] = useState(false);
   const [recsOpen, setRecsOpen]         = useState(true);
   const [timelineOpen, setTimelineOpen] = useState(true);
+  const [underHoodOpen, setUnderHoodOpen] = useState(false);
   const bottomRef                   = useRef<HTMLDivElement>(null);
   const voiceUtterRef               = useRef<SpeechSynthesisUtterance[]>([]);
   // ── Voice INPUT state (SpeechRecognition) ────────────────────────────────
@@ -467,6 +488,14 @@ export default function ApollosPage() {
   const micSupported     = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const apiFetch = useApiFetch();
+  const repairAdaptersQuery = useQuery<RepairAdapterStatusResponse>({
+    queryKey: ["apollos-repair-adapters"],
+    queryFn: () =>
+      apiFetch("/dab/repair-adapters") as Promise<RepairAdapterStatusResponse>,
+    refetchInterval: underHoodOpen ? 15_000 : false,
+    retry: 1,
+  });
+  const repairAdapterStatus = repairAdaptersQuery.data;
 
   useEffect(() => {
     const active = messages.filter(
@@ -1548,6 +1577,118 @@ export default function ApollosPage() {
         borderLeft: `1px solid ${B.border}`,
         padding: "20px 14px", overflowY: "auto",
       }}>
+        <button
+          onClick={() => setUnderHoodOpen((open) => !open)}
+          aria-expanded={underHoodOpen}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 11px", marginBottom: underHoodOpen ? 8 : 16,
+            background: "rgba(0,174,239,0.06)",
+            border: "1px solid rgba(0,174,239,0.22)", borderRadius: 10,
+            color: B.white, cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <span style={{ fontSize: 14 }}>🔎</span>
+          <span style={{ flex: 1 }}>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 800 }}>Under the Hood</span>
+            <span style={{ display: "block", fontSize: 9, color: B.dim, marginTop: 2 }}>
+              Repair adapter readiness
+            </span>
+          </span>
+          {repairAdapterStatus && (
+            <span style={{
+              width: 7, height: 7, borderRadius: "50%",
+              background: repairAdapterStatus.overallStatus === "ready"
+                ? B.green
+                : repairAdapterStatus.overallStatus === "blocked"
+                  ? "#F87171"
+                  : B.dim,
+              boxShadow: repairAdapterStatus.overallStatus === "ready"
+                ? "0 0 7px rgba(34,197,94,.7)"
+                : "none",
+            }} />
+          )}
+          <span style={{ color: B.dim, fontSize: 10 }}>{underHoodOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {underHoodOpen && (
+          <div style={{
+            marginBottom: 18, padding: "10px", borderRadius: 10,
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            {repairAdaptersQuery.isLoading ? (
+              <div style={{ color: B.dim, fontSize: 10 }}>Reading adapter registry…</div>
+            ) : repairAdaptersQuery.isError || !repairAdapterStatus ? (
+              <div style={{ color: "#F87171", fontSize: 10, lineHeight: 1.45 }}>
+                Adapter status could not be loaded. No repair permissions were changed.
+                <button
+                  onClick={() => repairAdaptersQuery.refetch()}
+                  style={{ display: "block", marginTop: 7, padding: 0, background: "none", border: "none", color: B.blue, fontSize: 10, fontWeight: 800, cursor: "pointer" }}
+                >Retry status →</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 5, marginBottom: 9 }}>
+                  {([
+                    ["ready", repairAdapterStatus.counts.ready, B.green],
+                    ["blocked", repairAdapterStatus.counts.blocked, "#F87171"],
+                    ["off", repairAdapterStatus.counts.disabled, B.dim],
+                  ] as const).map(([label, count, color]) => (
+                    <div key={label} style={{ flex: 1, borderRadius: 7, padding: "6px 3px", textAlign: "center", background: `${color}10`, border: `1px solid ${color}28` }}>
+                      <div style={{ color, fontSize: 12, fontWeight: 900 }}>{count}</div>
+                      <div style={{ color: B.dim, fontSize: 7.5, textTransform: "uppercase" }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {repairAdapterStatus.adapters.map((adapter) => {
+                    const color = adapter.state === "ready"
+                      ? B.green
+                      : adapter.state === "blocked"
+                        ? "#F87171"
+                        : B.dim;
+                    return (
+                      <div key={adapter.stepKey} title={adapter.reasonCode} style={{
+                        padding: "7px 8px", borderRadius: 7,
+                        background: `${color}08`, border: `1px solid ${color}20`,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                          <span style={{ flex: 1, color: B.silver, fontSize: 9.5, fontWeight: 700 }}>
+                            {adapter.stepKey.replaceAll("-", " ")}
+                          </span>
+                          <span style={{ color, fontSize: 7.5, fontWeight: 900, textTransform: "uppercase" }}>
+                            {adapter.state}
+                          </span>
+                        </div>
+                        {adapter.state !== "ready" && (
+                          <div style={{ marginTop: 3, paddingLeft: 12, color: B.dim, fontSize: 8, lineHeight: 1.35 }}>
+                            {adapter.reasonCode.replace("APOLLOS_REPAIR_ADAPTER_", "").replaceAll("_", " ").toLowerCase()}
+                            {adapter.requiresApproval ? " · approval required" : ""}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => repairAdaptersQuery.refetch()}
+                  disabled={repairAdaptersQuery.isFetching}
+                  style={{
+                    width: "100%", marginTop: 9, padding: "6px 8px",
+                    background: "rgba(0,174,239,.07)", border: "1px solid rgba(0,174,239,.18)",
+                    borderRadius: 7, color: B.blue, fontSize: 9.5, fontWeight: 800,
+                    cursor: repairAdaptersQuery.isFetching ? "wait" : "pointer",
+                  }}
+                >
+                  {repairAdaptersQuery.isFetching ? "Refreshing…" : "Refresh diagnostics"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div style={{ fontSize: 9, fontWeight: 700, color: B.dim, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 12 }}>
           Suggested Prompts
         </div>

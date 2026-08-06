@@ -1344,6 +1344,7 @@ router.post("/apollos/weekly-campaign/plan", async (req, res) => {
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
     Number.isNaN(startTime) ||
+    new Date(startTime).toISOString().slice(0, 10) !== startDate ||
     startTime < todayTime ||
     startTime > latestTime
   ) {

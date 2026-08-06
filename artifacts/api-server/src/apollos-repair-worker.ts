@@ -322,6 +322,40 @@ function inspectionActions(
       },
     };
   };
+  const recoverExpiredLease: ApollosRepairAction = async ({ stepKey }) => {
+    const recovered = await pool.query<{
+      step_key: string;
+      attempt_count: number;
+      max_attempts: number;
+    }>(
+      `UPDATE agent_task_steps AS step
+          SET status='pending',
+              lease_owner=NULL,
+              lease_expires_at=NULL,
+              failure_code=NULL,
+              updated_at=now()
+         FROM agent_tasks AS task
+        WHERE step.task_id=$1
+          AND task.id=step.task_id
+          AND task.user_id=$2
+          AND step.status='running'
+          AND step.lease_expires_at IS NOT NULL
+          AND step.lease_expires_at < now()
+          AND step.attempt_count < step.max_attempts
+      RETURNING step.step_key,step.attempt_count,step.max_attempts`,
+      [sourceTaskId, userId],
+    );
+    return {
+      verified: recovered.rowCount === 1,
+      evidence: {
+        stepKey,
+        recoveredCount: recovered.rowCount,
+        checkpoint: recovered.rows[0]?.step_key ?? null,
+        attemptCount: recovered.rows[0]?.attempt_count ?? null,
+        maxAttempts: recovered.rows[0]?.max_attempts ?? null,
+      },
+    };
+  };
   const earliestFailure: ApollosRepairAction = async ({ stepKey }) => {
     const source = await readSource(sourceTaskId, userId);
     const failed = source.steps.find((item) => item.failure_code);
@@ -345,6 +379,7 @@ function inspectionActions(
     "find-earliest-failure": earliestFailure,
     "collect-causal-evidence": earliestFailure,
     "inspect-lease-owner": inspectLease,
+    "recover-expired-lease": recoverExpiredLease,
   });
 }
 

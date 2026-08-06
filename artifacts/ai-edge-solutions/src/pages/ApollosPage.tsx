@@ -46,6 +46,18 @@ interface WeeklyApproval {
   completedSteps?: number;
   totalSteps?: number;
   currentStep?: string | null;
+  diagnosis?: {
+    diagnosisId: string;
+    confidence: "confirmed" | "probable" | "unknown";
+    component: string;
+    rootCauseCode: string;
+    rootCause: string;
+    repairAuthority: "apollos" | "operator" | "provider" | "deployment";
+    canApollosRepair: boolean;
+    requiresApproval: boolean;
+    recommendedRepair: string;
+    verification: string[];
+  } | null;
 }
 
 interface Message {
@@ -342,13 +354,36 @@ function Bubble({
                 </div>
               )}
               {msg.weeklyApproval.status === "failed" && (
-                <div style={{ marginTop: 8, padding: 9, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
+                <div style={{ marginTop: 8, padding: 10, borderRadius: 7, background: "rgba(248,113,113,.08)", color: B.silver, fontSize: 10.5 }}>
                   <strong style={{ color: "#F87171" }}>
                     {msg.weeklyApproval.failureCode ?? "APOLLOS_WEEKLY_GENERATION_FAILED"}
                   </strong>
                   {msg.weeklyApproval.failureDetail
                     ? ` · ${msg.weeklyApproval.failureDetail}`
                     : ""}
+                  {msg.weeklyApproval.diagnosis && (
+                    <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid rgba(248,113,113,.2)", lineHeight: 1.55 }}>
+                      <div style={{ color: B.blue, fontWeight: 900, marginBottom: 4 }}>
+                        🔎 Under the Hood · {msg.weeklyApproval.diagnosis.confidence.toUpperCase()}
+                      </div>
+                      <div><strong>Component:</strong> {msg.weeklyApproval.diagnosis.component}</div>
+                      <div><strong>Root cause:</strong> {msg.weeklyApproval.diagnosis.rootCause}</div>
+                      <div><strong>Repair:</strong> {msg.weeklyApproval.diagnosis.recommendedRepair}</div>
+                      <div>
+                        <strong>Who controls it:</strong>{" "}
+                        {msg.weeklyApproval.diagnosis.repairAuthority}
+                        {msg.weeklyApproval.diagnosis.canApollosRepair ? " · Apollos can prepare the repair" : ""}
+                        {msg.weeklyApproval.diagnosis.requiresApproval ? " · approval required" : ""}
+                      </div>
+                      <div style={{ marginTop: 5 }}>
+                        <strong>Verify:</strong>{" "}
+                        {msg.weeklyApproval.diagnosis.verification.join(" → ")}
+                      </div>
+                      <div style={{ color: B.dim, marginTop: 4 }}>
+                        {msg.weeklyApproval.diagnosis.rootCauseCode}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -405,6 +440,18 @@ export default function ApollosPage() {
                 totalSteps?: number;
                 currentStep?: string | null;
               };
+              diagnosis?: {
+                diagnosisId: string;
+                confidence: "confirmed" | "probable" | "unknown";
+                component: string;
+                rootCauseCode: string;
+                rootCause: string;
+                repairAuthority: "apollos" | "operator" | "provider" | "deployment";
+                canApollosRepair: boolean;
+                requiresApproval: boolean;
+                recommendedRepair: string;
+                verification: string[];
+              } | null;
             };
             return {
               messageId: message.id,
@@ -414,6 +461,7 @@ export default function ApollosPage() {
               completedSteps: task.progress?.completedSteps ?? 0,
               totalSteps: task.progress?.totalSteps ?? 0,
               currentStep: task.progress?.currentStep ?? null,
+              diagnosis: task.diagnosis ?? null,
             };
           } catch {
             return {
@@ -424,6 +472,7 @@ export default function ApollosPage() {
               completedSteps: undefined,
               totalSteps: undefined,
               currentStep: undefined,
+              diagnosis: null,
             };
           }
         }),
@@ -439,7 +488,8 @@ export default function ApollosPage() {
             status === message.weeklyApproval.status &&
             result?.completedSteps === message.weeklyApproval.completedSteps &&
             result?.totalSteps === message.weeklyApproval.totalSteps &&
-            result?.currentStep === message.weeklyApproval.currentStep
+            result?.currentStep === message.weeklyApproval.currentStep &&
+            result?.diagnosis?.diagnosisId === message.weeklyApproval.diagnosis?.diagnosisId
           ) {
             return message;
           }
@@ -453,6 +503,7 @@ export default function ApollosPage() {
               completedSteps: result?.completedSteps,
               totalSteps: result?.totalSteps,
               currentStep: result?.currentStep,
+              diagnosis: result?.diagnosis ?? null,
             },
           };
         }),

@@ -376,7 +376,10 @@ router.get("/dab/repair-runtime", async (_req, res) => {
                   ? "APOLLOS_REPAIR_BACKLOG_STALLED"
                   : heartbeat?.reason_code ?? "APOLLOS_REPAIR_WORKER_DEGRADED"
             : "APOLLOS_REPAIR_WORKER_READY";
-  const remediation = {
+  const remediationByReason: Record<
+    string,
+    { owner: string; nextStep: string }
+  > = {
     APOLLOS_REPAIR_WORKER_DISABLED: {
       owner: "deployment",
       nextStep: "Enable APOLLOS_REPAIR_WORKER_ENABLED and redeploy.",
@@ -409,7 +412,8 @@ router.get("/dab/repair-runtime", async (_req, res) => {
       owner: "apollos",
       nextStep: "No action required.",
     },
-  }[reasonCode] ?? {
+  };
+  const remediation = remediationByReason[reasonCode] ?? {
     owner: "engineering",
     nextStep: "Inspect the stable reason code and the latest tenant-scoped repair receipt.",
   };

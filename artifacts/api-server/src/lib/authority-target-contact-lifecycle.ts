@@ -78,6 +78,15 @@ export function validateAuthorityTargetContactExpectedVersion(value: unknown): n
   return Number(value);
 }
 
+export function verificationAfterAuthorityTargetContactEdit(
+  current: AuthorityTargetContactVerification,
+): AuthorityTargetContactVerification {
+  if (current === "invalid") {
+    throw new Error("authority_target_contact_invalid_must_reopen");
+  }
+  return "unverified";
+}
+
 export function nextAuthorityTargetContactVerification(
   action: AuthorityTargetContactAction,
   current: AuthorityTargetContactVerification,

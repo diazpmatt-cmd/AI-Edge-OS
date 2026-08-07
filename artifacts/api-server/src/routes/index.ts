@@ -47,6 +47,7 @@ import contactRouter from "./contact";
 import referralsRouter from "./referrals";
 import backlinkScheduledSafetyRouter from "./backlink-scheduled-safety";
 import backlinkOpportunityIntelligenceRouter from "./backlink-opportunity-intelligence";
+import backlinkWorkflowActionsRouter from "./backlink-workflow-actions";
 import backlinksRouter from "./backlinks";
 import dabStatusRouter from "./dab-status";
 import dabApprovalsRouter from "./dab-approvals";
@@ -107,6 +108,7 @@ router.use(contactRouter);
 router.use(referralsRouter);
 router.use(backlinkScheduledSafetyRouter);
 router.use(backlinkOpportunityIntelligenceRouter);
+router.use(backlinkWorkflowActionsRouter);
 router.use(backlinksRouter);
 
 export default router;

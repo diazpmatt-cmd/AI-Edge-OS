@@ -8,6 +8,15 @@ export interface BacklinkScheduledModeSchemaState {
 const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
 let bootstrapPromise: Promise<void> | null = null;
 
+export function isBacklinkScheduledModeConstraintReady(definition: string | null): boolean {
+  return Boolean(
+    definition &&
+    /mode/i.test(definition) &&
+    /manual/i.test(definition) &&
+    /scheduled/i.test(definition)
+  );
+}
+
 /**
  * Idempotently expands the persisted backlink ingestion mode contract from
  * manual-only to manual | scheduled.
@@ -56,12 +65,7 @@ export async function getBacklinkScheduledModeSchemaState(): Promise<BacklinkSch
   );
   const definition = result.rows[0]?.definition ?? null;
   return Object.freeze({
-    ready: Boolean(
-      definition &&
-      /mode/i.test(definition) &&
-      /manual/i.test(definition) &&
-      /scheduled/i.test(definition)
-    ),
+    ready: isBacklinkScheduledModeConstraintReady(definition),
     constraintDefinition: definition,
   });
 }

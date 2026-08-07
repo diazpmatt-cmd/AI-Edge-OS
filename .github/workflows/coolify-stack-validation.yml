@@ -45,6 +45,7 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
+      COMPOSE_PROJECT_NAME: ai-edge-os
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ai_edge_coolify_ci
       CLERK_PUBLISHABLE_KEY: pk_test_ci
       CLERK_SECRET_KEY: sk_test_ci
@@ -80,18 +81,50 @@ jobs:
         run: docker compose -f docker-compose.coolify.yml build
       - name: Apollos core runtime preflight
         run: |
-          api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
-          test -n "$api_image"
+          api_image="$(docker image inspect --format '{{.Id}}' ai-edge-os-api 2>/dev/null)" || {
+            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose-built API image ai-edge-os-api is unavailable' >&2
+            exit 1
+          }
+          if [ -z "$api_image" ]; then
+            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' 'Resolved API image ID is empty' >&2
+            exit 1
+          fi
           docker run --rm \
             --entrypoint sh \
+            --mount type=bind,src="$PWD/deploy/smoke",dst=/smoke,readonly \
             -e NODE_ENV=test \
             -e LOCAL_MEDIA_DIR=/tmp/apollos-media \
             -e SCHEDULER_ENABLED=false \
             -e REFERRAL_DELIVERY_EMERGENCY_STOP=true \
-            "$api_image" /app/deploy/smoke/apollos-core-runtime.sh
+            "$api_image" -c '
+              set -eu
+              if [ ! -r /smoke/apollos-core-runtime.sh ]; then
+                printf "APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_SMOKE_SCRIPT_UNREADABLE message=%s\n" "Mounted core smoke script is not readable" >&2
+                exit 1
+              fi
+              printf "APOLLOS_CORE_HARNESS_READY image_runtime=%s script=%s\n" "$(node --version 2>/dev/null || printf unavailable)" "/smoke/apollos-core-runtime.sh"
+              exec sh /smoke/apollos-core-runtime.sh
+            '
       - name: Apollos media runtime preflight
         run: |
-          api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
-          test -n "$api_image"
-          docker run --rm --entrypoint sh "$api_image" /app/deploy/smoke/apollos-media-runtime.sh
+          api_image="$(docker image inspect --format '{{.Id}}' ai-edge-os-api 2>/dev/null)" || {
+            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose-built API image ai-edge-os-api is unavailable' >&2
+            exit 1
+          }
+          if [ -z "$api_image" ]; then
+            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' 'Resolved API image ID is empty' >&2
+            exit 1
+          fi
+          docker run --rm \
+            --entrypoint sh \
+            --mount type=bind,src="$PWD/deploy/smoke",dst=/smoke,readonly \
+            "$api_image" -c '
+              set -eu
+              if [ ! -r /smoke/apollos-media-runtime.sh ]; then
+                printf "APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_SMOKE_SCRIPT_UNREADABLE message=%s\n" "Mounted media smoke script is not readable" >&2
+                exit 1
+              fi
+              printf "APOLLOS_MEDIA_HARNESS_READY script=%s\n" "/smoke/apollos-media-runtime.sh"
+              exec sh /smoke/apollos-media-runtime.sh
+            '
       - run: git diff --check

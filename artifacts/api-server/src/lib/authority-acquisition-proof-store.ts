@@ -45,6 +45,39 @@ export interface AuthorityAcquisitionProofRecord extends AuthorityAcquisitionPro
   updatedAt: string;
 }
 
+const lockIdentity = (clientId: string, opportunityId: string) =>
+  `authority-acquisition:${clientId}:${opportunityId}`;
+
+async function acquireTransactionOutcomeLock(
+  client: { query: (text: string, values?: unknown[]) => Promise<unknown> },
+  clientId: string,
+  opportunityId: string,
+): Promise<void> {
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext($1))",
+    [lockIdentity(clientId, opportunityId)],
+  );
+}
+
+export async function withAuthorityAcquisitionOutcomeLock<T>(
+  clientId: string,
+  opportunityId: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  const lockClient = await pool.connect();
+  const identity = lockIdentity(clientId, opportunityId);
+  try {
+    await lockClient.query("SELECT pg_advisory_lock(hashtext($1))", [identity]);
+    return await task();
+  } finally {
+    try {
+      await lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", [identity]);
+    } finally {
+      lockClient.release();
+    }
+  }
+}
+
 function mapRow(row: ProofRow): AuthorityAcquisitionProofRecord {
   return {
     id: row.id,
@@ -108,32 +141,44 @@ export async function createAuthorityAcquisitionProof(input: {
   proof: Record<string, unknown>;
 }): Promise<AuthorityAcquisitionProofRecord> {
   const proof = validateAuthorityAcquisitionProofInput(input.proof);
-  const result = await pool.query<ProofRow>(
-    `INSERT INTO authority_acquisition_proofs (
-       client_id, opportunity_id, prospect_id, workflow_id, proof_type,
-       source_url, target_url, notes, verification_status,
-       verified_at, verified_by, version, created_by, updated_by
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'unverified',NULL,NULL,1,$9,$9)
-     RETURNING *`,
-    [
-      input.clientId,
-      input.opportunityId,
-      input.prospectId,
-      input.workflowId,
-      proof.proofType,
-      proof.sourceUrl,
-      proof.targetUrl,
-      proof.notes,
-      input.actorId,
-    ],
-  );
-  if (!result.rows[0]) throw new Error("authority_acquisition_proof_create_failed");
-  return mapRow(result.rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
+    const result = await client.query<ProofRow>(
+      `INSERT INTO authority_acquisition_proofs (
+         client_id, opportunity_id, prospect_id, workflow_id, proof_type,
+         source_url, target_url, notes, verification_status,
+         verified_at, verified_by, version, created_by, updated_by
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'unverified',NULL,NULL,1,$9,$9)
+       RETURNING *`,
+      [
+        input.clientId,
+        input.opportunityId,
+        input.prospectId,
+        input.workflowId,
+        proof.proofType,
+        proof.sourceUrl,
+        proof.targetUrl,
+        proof.notes,
+        input.actorId,
+      ],
+    );
+    if (!result.rows[0]) throw new Error("authority_acquisition_proof_create_failed");
+    await client.query("COMMIT");
+    return mapRow(result.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateAuthorityAcquisitionProof(input: {
   id: string;
   clientId: string;
+  opportunityId: string;
   actorId: string;
   expectedVersion: unknown;
   proof: Record<string, unknown>;
@@ -143,11 +188,12 @@ export async function updateAuthorityAcquisitionProof(input: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
     const currentResult = await client.query<ProofRow>(
       `SELECT * FROM authority_acquisition_proofs
-       WHERE id = $1 AND client_id = $2
+       WHERE id = $1 AND client_id = $2 AND opportunity_id = $3
        FOR UPDATE`,
-      [input.id, input.clientId],
+      [input.id, input.clientId, input.opportunityId],
     );
     const current = currentResult.rows[0];
     if (!current) throw new Error("authority_acquisition_proof_not_found");
@@ -167,7 +213,7 @@ export async function updateAuthorityAcquisitionProof(input: {
            version = version + 1,
            updated_by = $6,
            updated_at = NOW()
-       WHERE id = $7 AND client_id = $8 AND version = $9
+       WHERE id = $7 AND client_id = $8 AND opportunity_id = $9 AND version = $10
        RETURNING *`,
       [
         proof.proofType,
@@ -178,6 +224,7 @@ export async function updateAuthorityAcquisitionProof(input: {
         input.actorId,
         input.id,
         input.clientId,
+        input.opportunityId,
         expectedVersion,
       ],
     );
@@ -195,6 +242,7 @@ export async function updateAuthorityAcquisitionProof(input: {
 export async function actOnAuthorityAcquisitionProof(input: {
   id: string;
   clientId: string;
+  opportunityId: string;
   actorId: string;
   expectedVersion: unknown;
   action: AuthorityAcquisitionProofAction;
@@ -203,11 +251,12 @@ export async function actOnAuthorityAcquisitionProof(input: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
     const currentResult = await client.query<ProofRow>(
       `SELECT * FROM authority_acquisition_proofs
-       WHERE id = $1 AND client_id = $2
+       WHERE id = $1 AND client_id = $2 AND opportunity_id = $3
        FOR UPDATE`,
-      [input.id, input.clientId],
+      [input.id, input.clientId, input.opportunityId],
     );
     const current = currentResult.rows[0];
     if (!current) throw new Error("authority_acquisition_proof_not_found");
@@ -225,7 +274,7 @@ export async function actOnAuthorityAcquisitionProof(input: {
            version = version + 1,
            updated_by = $4,
            updated_at = NOW()
-       WHERE id = $5 AND client_id = $6 AND version = $7
+       WHERE id = $5 AND client_id = $6 AND opportunity_id = $7 AND version = $8
        RETURNING *`,
       [
         next,
@@ -234,6 +283,7 @@ export async function actOnAuthorityAcquisitionProof(input: {
         input.actorId,
         input.id,
         input.clientId,
+        input.opportunityId,
         expectedVersion,
       ],
     );

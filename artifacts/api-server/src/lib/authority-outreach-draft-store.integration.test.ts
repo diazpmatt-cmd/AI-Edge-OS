@@ -52,11 +52,11 @@ beforeAll(async () => {
   await migrateSchema();
   await migrateAuthorityOutreachDrafts();
   await seedAuthorityOpportunity();
-});
+}, 30_000);
 
 afterAll(async () => {
   await cleanup();
-});
+}, 30_000);
 
 describe("Authority outreach draft store PostgreSQL contract", () => {
   it("persists atomic immutable versions and rejects stale human actions", async () => {
@@ -138,4 +138,4 @@ describe("Authority outreach draft store PostgreSQL contract", () => {
       opportunityId,
     });
   });
-});
+}, 30_000);

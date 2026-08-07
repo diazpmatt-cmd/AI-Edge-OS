@@ -15,6 +15,8 @@ describe("authority profile policy", () => {
     const result = validateAuthorityProfileInput({
       primaryDomain: "Example.com",
       primaryWebsite: "https://example.com/",
+      primaryCity: "Foley",
+      primaryRegion: "Baldwin County, Alabama",
       geography: ["Foley", " Foley ", "Baldwin County"],
       serviceIds: ["bed_bugs", "bed_bugs", "roaches"],
       discoveryEnabled: true,
@@ -22,14 +24,18 @@ describe("authority profile policy", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.primaryDomain).toBe("example.com");
+      expect(result.value.primaryCity).toBe("Foley");
+      expect(result.value.primaryRegion).toBe("Baldwin County, Alabama");
       expect(result.value.geography).toEqual(["Foley", "Baldwin County"]);
       expect(result.value.serviceIds).toEqual(["bed_bugs", "roaches"]);
     }
   });
 
-  it("refuses to enable discovery without geography and services", () => {
+  it("refuses to enable discovery without explicit city, region, geography, and services", () => {
     const result = validateAuthorityProfileInput({
       primaryDomain: "example.com",
+      primaryCity: null,
+      primaryRegion: null,
       geography: [],
       serviceIds: [],
       discoveryEnabled: true,
@@ -44,6 +50,8 @@ describe("authority profile policy", () => {
     const result = validateAuthorityProfileInput({
       primaryDomain: "example.com",
       primaryWebsite: "https://other.example.org/",
+      primaryCity: "Foley",
+      primaryRegion: "Baldwin County, Alabama",
       geography: ["Foley"],
       serviceIds: ["bed_bugs"],
       discoveryEnabled: false,

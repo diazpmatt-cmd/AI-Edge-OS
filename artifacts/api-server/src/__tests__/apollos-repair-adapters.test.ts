@@ -207,8 +207,11 @@ describe("buildApollosRepairAdapterRegistry", () => {
         stepKey: "preserve-render-inputs",
         signal: new AbortController().signal,
       });
+      const rejection = expect(pending).rejects.toThrow(
+        "APOLLOS_REPAIR_ADAPTER_TIMEOUT",
+      );
       await vi.advanceTimersByTimeAsync(10_001);
-      await expect(pending).rejects.toThrow("APOLLOS_REPAIR_ADAPTER_TIMEOUT");
+      await rejection;
     } finally {
       vi.useRealTimers();
     }

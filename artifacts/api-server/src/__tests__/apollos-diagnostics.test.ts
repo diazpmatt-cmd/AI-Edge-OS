@@ -90,7 +90,15 @@ describe("diagnoseApollosTask", () => {
   });
 
   it("admits insufficient evidence while work is still running", () => {
-    expect(diagnose(null)).toMatchObject({
+    const result = diagnoseApollosTask({
+      taskId: "task-running",
+      taskStatus: "executing",
+      taskFailureCode: null,
+      taskDetail: null,
+      taskUpdatedAt: new Date().toISOString(),
+      steps: [],
+    });
+    expect(result).toMatchObject({
       status: "incomplete",
       confidence: "unknown",
       rootCauseCode: "APOLLOS_INSUFFICIENT_FAILURE_EVIDENCE",

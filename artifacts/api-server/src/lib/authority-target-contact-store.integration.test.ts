@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pool } from "@workspace/db";
-import { migrateSchema } from "./schema-migrate.js";
+import { migrateAuthorityTestBaseSchema } from "./authority-test-schema-bootstrap.js";
 import { migrateAuthorityTargetContacts } from "./authority-target-contact-migrate.js";
 import {
   actOnAuthorityTargetContact,
@@ -48,7 +48,7 @@ async function cleanup() {
 }
 
 beforeAll(async () => {
-  await migrateSchema();
+  await migrateAuthorityTestBaseSchema();
   await migrateAuthorityTargetContacts();
   await seedAuthorityOpportunity();
 }, 30_000);

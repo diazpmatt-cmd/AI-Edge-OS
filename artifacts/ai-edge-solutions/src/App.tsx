@@ -70,6 +70,7 @@ const SecretsPage = lazy(() => import("./pages/SecretsPage"));
 const DemoPage = lazy(() => import("./pages/DemoPage"));
 const CompetitorIntelligencePage = lazy(() => import("./pages/CompetitorIntelligencePage"));
 const AuthorityEnginePage = lazy(() => import("./pages/AuthorityEnginePage"));
+const AuthorityActionPlanPage = lazy(() => import("./pages/AuthorityActionPlanPage"));
 const EdgeOpportunitiesPage = lazy(() => import("./pages/EdgeOpportunitiesPage"));
 const ReferralProgramPage = lazy(() => import("./pages/ReferralProgramPage"));
 const WebLeadsPage = lazy(() => import("./pages/WebLeadsPage"));
@@ -130,6 +131,7 @@ function AppRouter() {
     <Route path="/admin/secrets"><Authenticated><SecretsPage /></Authenticated></Route>
     <Route path="/admin/competitor-intelligence"><Authenticated><CompetitorIntelligencePage /></Authenticated></Route>
     <Route path="/admin/authority-engine"><Authenticated><AuthorityEnginePage /></Authenticated></Route>
+    <Route path="/admin/authority-action-plan"><Authenticated><AuthorityActionPlanPage /></Authenticated></Route>
     <Route path="/admin/edge-opportunities"><Authenticated><EdgeOpportunitiesPage /></Authenticated></Route>
     <Route path="/admin/web-leads"><Authenticated><WebLeadsPage /></Authenticated></Route>
     <Route path="/admin/referrals"><Authenticated><ReferralProgramPage /></Authenticated></Route>

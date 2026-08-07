@@ -6,6 +6,7 @@ import type { PublishingLaneDiagnostic } from "./publishing-unresolved-diagnosti
 function lane(overrides: Partial<PublishingLaneDiagnostic> = {}): PublishingLaneDiagnostic {
   return {
     platform: "facebook",
+    deliveryId: "delivery-1",
     state: "terminal_failure",
     attemptNumber: 1,
     status: "failed",

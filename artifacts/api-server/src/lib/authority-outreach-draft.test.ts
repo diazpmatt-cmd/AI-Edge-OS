@@ -4,6 +4,7 @@ import type { BacklinkEvidencePreview } from "./backlink-opportunity-intelligenc
 import {
   buildAuthorityOutreachDraft,
   classifyAuthorityOutreachDraftType,
+  isAuthorityOutreachDraftWorkflowEligible,
 } from "./authority-outreach-draft.js";
 
 const evidence = (overrides: Partial<BacklinkEvidencePreview> = {}): BacklinkEvidencePreview => ({
@@ -37,6 +38,17 @@ const categories: Array<[BacklinkOpportunityCategory, string]> = [
 describe("Authority outreach draft foundation", () => {
   it.each(categories)("maps %s to %s", (category, expected) => {
     expect(classifyAuthorityOutreachDraftType(category)).toBe(expected);
+  });
+
+  it("allows drafting only after explicit human approval or pursuit", () => {
+    expect(isAuthorityOutreachDraftWorkflowEligible("approved")).toBe(true);
+    expect(isAuthorityOutreachDraftWorkflowEligible("pursuing")).toBe(true);
+    expect(isAuthorityOutreachDraftWorkflowEligible("discovered")).toBe(false);
+    expect(isAuthorityOutreachDraftWorkflowEligible("reviewing")).toBe(false);
+    expect(isAuthorityOutreachDraftWorkflowEligible("won")).toBe(false);
+    expect(isAuthorityOutreachDraftWorkflowEligible("rejected")).toBe(false);
+    expect(isAuthorityOutreachDraftWorkflowEligible("expired")).toBe(false);
+    expect(isAuthorityOutreachDraftWorkflowEligible(null)).toBe(false);
   });
 
   it("requires persisted evidence before producing a draft", () => {
@@ -75,6 +87,7 @@ describe("Authority outreach draft foundation", () => {
     expect(draft.body).toContain("publisher.example");
     expect(draft.body).toContain("Emergency Plumbing");
     expect(draft.body).toContain("another provider in this space");
+    expect(draft.body).not.toContain(",.");
     expect(draft.provenance.evidence[0]).toEqual({
       id: "evidence-1",
       sourceDomain: "publisher.example",

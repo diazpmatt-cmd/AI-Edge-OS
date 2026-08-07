@@ -1,4 +1,5 @@
 import {
+  BACKLINK_CAPABILITY_VALUES,
   deriveBacklinkIngestionFingerprint,
   deriveBacklinkIngestionRunId,
   normalizeBacklinkProviderId,
@@ -30,6 +31,8 @@ export type AuthorityScheduledExecutionPlanResult =
   | { readonly ok: true; readonly plan: AuthorityScheduledExecutionPlan }
   | { readonly ok: false; readonly code: string; readonly message: string };
 
+const CANONICAL_CAPABILITIES = new Set<BacklinkCapability>(BACKLINK_CAPABILITY_VALUES);
+
 export function buildAuthorityScheduledExecutionPlan(input: {
   readonly discovery: BacklinkDiscoveryInput;
   readonly provider: AuthorityScheduledProviderPlanInput;
@@ -52,11 +55,15 @@ export function buildAuthorityScheduledExecutionPlan(input: {
   }
 
   const capabilities = [...new Set(input.provider.capabilities)].sort();
-  if (capabilities.length === 0 || capabilities.length > 8) {
+  if (
+    capabilities.length === 0 ||
+    capabilities.length > 8 ||
+    capabilities.some((capability) => !CANONICAL_CAPABILITIES.has(capability))
+  ) {
     return Object.freeze({
       ok: false,
       code: "AUTHORITY_SCHEDULED_CAPABILITIES_INVALID",
-      message: "Scheduled Authority execution requires a bounded provider capability set.",
+      message: "Scheduled Authority execution requires a bounded canonical provider capability set.",
     });
   }
 

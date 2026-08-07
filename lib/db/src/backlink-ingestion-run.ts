@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { BacklinkCapability } from "./backlink-types";
 
 export type BacklinkIngestionRunStatus = "running" | "succeeded" | "failed";
-export type BacklinkIngestionMode = "manual";
+export type BacklinkIngestionMode = "manual" | "scheduled";
 export type BacklinkIngestionFailureStage = "provider" | "preparation" | "prospect" | "evidence" | "opportunity" | "workflow" | "initial_event" | "finalization";
 export type BacklinkIngestionFailureCode = "provider_failed" | "validation_failed" | "persistence_failed" | "finalization_failed";
 
@@ -12,6 +12,7 @@ export const BACKLINK_CAPABILITY_VALUES: readonly BacklinkCapability[] = Object.
 ]);
 export const BACKLINK_REPLAY_ID_LIMIT = 100;
 const CAPABILITY_SET = new Set<string>(BACKLINK_CAPABILITY_VALUES);
+const INGESTION_MODE_SET = new Set<BacklinkIngestionMode>(["manual", "scheduled"]);
 
 export interface BacklinkIngestionCounts {
   observed: number;
@@ -121,18 +122,18 @@ const arrayEquals = (a: readonly string[], b: readonly string[]) => a.length ===
 
 export function validateBacklinkIngestionClaim<T extends {
   id: string; clientId: string; providerId: string; providerRevision: string; mode: string; capabilities: readonly string[]; inputFingerprint: string; now: Date;
-}>(input: T): T & { capabilities: readonly BacklinkCapability[]; mode: "manual" } {
+}>(input: T): T & { capabilities: readonly BacklinkCapability[]; mode: BacklinkIngestionMode } {
   if (!input.clientId.trim()) throw new Error("clientId is required");
   if (input.providerId !== normalizeBacklinkProviderId(input.providerId) || input.providerId.length < 1 || input.providerId.length > 100) throw new Error("invalid providerId");
   if (input.providerRevision !== normalizeBacklinkProviderRevision(input.providerRevision) || input.providerRevision.length < 1 || input.providerRevision.length > 100) throw new Error("invalid providerRevision");
-  if (input.mode !== "manual") throw new Error("invalid ingestion mode");
+  if (!INGESTION_MODE_SET.has(input.mode as BacklinkIngestionMode)) throw new Error("invalid ingestion mode");
   if (!/^[0-9a-f]{64}$/.test(input.inputFingerprint)) throw new Error("invalid input fingerprint");
   if (input.id !== deriveBacklinkIngestionRunId(input.inputFingerprint)) throw new Error("invalid ingestion run ID");
   if (!Array.isArray(input.capabilities) || input.capabilities.length > 8 || input.capabilities.some(value => !CAPABILITY_SET.has(value))) throw new Error("invalid capabilities");
   const canonical = [...new Set(input.capabilities)].sort();
   if (!arrayEquals(canonical, input.capabilities)) throw new Error("capabilities must be sorted and unique");
   assertFiniteDate(input.now, "now");
-  return { ...input, capabilities: canonical as BacklinkCapability[], mode: "manual" };
+  return { ...input, capabilities: canonical as BacklinkCapability[], mode: input.mode as BacklinkIngestionMode };
 }
 
 export function validateBacklinkRunChronology(startedAt: Date, attemptStartedAt: Date, completedAt: Date | null): void {

@@ -35,7 +35,7 @@ export const backlinkOpportunitiesTable = pgTable("backlink_opportunities", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   unique("uq_backlink_opportunities_id_client").on(table.id, table.clientId),
-  uniqueIndex("uq_backlink_opportunities_client_prospect_category_service").on(table.clientId, table.domain, table.pageUrl),
+  uniqueIndex("uq_backlink_opportunities_client_prospect_category_service").on(table.clientId, table.prospectId, table.category, table.serviceId),
   index("idx_backlink_opportunities_client_rank").on(table.clientId, table.attainability, table.potentialValue, table.id),
   index("idx_backlink_opportunities_client_category").on(table.clientId, table.category),
   foreignKey({ name: "fk_backlink_opportunity_prospect_tenant", columns: [table.prospectId, table.clientId], foreignColumns: [backlinkProspectsTable.id, backlinkProspectsTable.clientId] }),

@@ -51,27 +51,37 @@ router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
       listed.items.map(({ opportunity }) => [opportunity.id, opportunity] as const),
     );
     const selected = ranked.slice(0, limit);
-    const items = await Promise.all(
-      selected.map(async (item) => {
-        if (!item.reasonCodes.includes("competitor_gap")) {
-          return { ...item, evidencePreview: [] };
-        }
-
-        const opportunity = opportunityById.get(item.opportunityId);
-        if (!opportunity) {
-          return { ...item, evidencePreview: [] };
-        }
-
-        const evidence = await repo.listEvidenceForProspect(
-          item.prospectId,
-          resolved.client.id,
-        );
-        return {
-          ...item,
-          evidencePreview: selectBacklinkEvidencePreview(opportunity, evidence, 3),
-        };
-      }),
+    const competitorProspectIds = [
+      ...new Set(
+        selected
+          .filter((item) => item.reasonCodes.includes("competitor_gap"))
+          .map((item) => item.prospectId),
+      ),
+    ];
+    const evidenceByProspect = new Map(
+      await Promise.all(
+        competitorProspectIds.map(async (prospectId) => [
+          prospectId,
+          await repo.listEvidenceForProspect(prospectId, resolved.client.id),
+        ] as const),
+      ),
     );
+    const items = selected.map((item) => {
+      if (!item.reasonCodes.includes("competitor_gap")) {
+        return { ...item, evidencePreview: [] };
+      }
+
+      const opportunity = opportunityById.get(item.opportunityId);
+      const evidence = evidenceByProspect.get(item.prospectId);
+      if (!opportunity || !evidence) {
+        return { ...item, evidencePreview: [] };
+      }
+
+      return {
+        ...item,
+        evidencePreview: selectBacklinkEvidencePreview(opportunity, evidence, 3),
+      };
+    });
     const summary = {
       totalActionable: ranked.length,
       topPriority: ranked.filter((item) => item.priorityTier === "top").length,

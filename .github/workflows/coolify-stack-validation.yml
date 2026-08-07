@@ -89,7 +89,15 @@ jobs:
             -e LOCAL_MEDIA_DIR=/tmp/apollos-media \
             -e SCHEDULER_ENABLED=false \
             -e REFERRAL_DELIVERY_EMERGENCY_STOP=true \
-            "$api_image" /smoke/apollos-core-runtime.sh
+            "$api_image" -c '
+              set -eu
+              if [ ! -r /smoke/apollos-core-runtime.sh ]; then
+                printf "APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_SMOKE_SCRIPT_UNREADABLE message=%s\n" "Mounted core smoke script is not readable" >&2
+                exit 1
+              fi
+              printf "APOLLOS_CORE_HARNESS_READY image_runtime=%s script=%s\n" "$(node --version 2>/dev/null || printf unavailable)" "/smoke/apollos-core-runtime.sh"
+              exec sh /smoke/apollos-core-runtime.sh
+            '
       - name: Apollos media runtime preflight
         run: |
           api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
@@ -97,5 +105,13 @@ jobs:
           docker run --rm \
             --entrypoint sh \
             --mount type=bind,src="$PWD/deploy/smoke",dst=/smoke,readonly \
-            "$api_image" /smoke/apollos-media-runtime.sh
+            "$api_image" -c '
+              set -eu
+              if [ ! -r /smoke/apollos-media-runtime.sh ]; then
+                printf "APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_SMOKE_SCRIPT_UNREADABLE message=%s\n" "Mounted media smoke script is not readable" >&2
+                exit 1
+              fi
+              printf "APOLLOS_MEDIA_HARNESS_READY script=%s\n" "/smoke/apollos-media-runtime.sh"
+              exec sh /smoke/apollos-media-runtime.sh
+            '
       - run: git diff --check

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import {
+  DataForSEOBacklinkAdapter,
   getDataForSEOBacklinkHealthState,
   parseDataForSEOBacklinkConfig,
   pool,
@@ -15,6 +16,10 @@ import {
   getBacklinkScheduledModeSchemaState,
 } from "../lib/backlink-scheduled-mode-schema.js";
 import { readAuthorityScheduledExecutionAuthorization } from "../lib/authority-scheduled-execution-authorization.js";
+import {
+  buildAuthorityScheduledExecutionPlan,
+  DATAFORSEO_BACKLINK_PROVIDER_REVISION,
+} from "../lib/authority-scheduled-execution-plan.js";
 
 const router = Router();
 
@@ -45,10 +50,9 @@ router.post("/api/backlinks/ingest/fixture", (req, res) => {
  * Fail-closed readiness boundary for scheduled backlink discovery.
  *
  * This route intentionally stops before provider execution. It proves that the
- * scheduler can resolve a complete tenant-owned Authority context, truthful
- * scheduled-mode persistence, a truly configured live provider, and the
- * independent spend-authorization state without falling through to fixtures.
- * Actual provider execution remains disabled in this release.
+ * scheduler can resolve the same tenant context, provider identity, deterministic
+ * run fingerprint, and authorization state shown to operators. Actual provider
+ * execution remains disabled in this release.
  */
 router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
   if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
@@ -99,9 +103,8 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       competitorDomains: competitors.rows.map((row) => row.domain),
       activeServiceIds: services.rows.map((row) => row.service_key),
     });
-    const providerHealth = getDataForSEOBacklinkHealthState(
-      parseDataForSEOBacklinkConfig(),
-    );
+    const providerConfig = parseDataForSEOBacklinkConfig();
+    const providerHealth = getDataForSEOBacklinkHealthState(providerConfig);
     const authorization = readAuthorityScheduledExecutionAuthorization();
     const readiness = evaluateAuthorityScheduledReadiness({
       clientActive,
@@ -110,6 +113,41 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       scheduledModeSchemaReady: scheduledModeSchema.ready,
       executionAuthorized: authorization.authorized,
     });
+
+    let executionPlan = null;
+    if (readiness.ready && discoveryContext.ok && providerConfig) {
+      const provider = new DataForSEOBacklinkAdapter(providerConfig);
+      const planned = buildAuthorityScheduledExecutionPlan({
+        discovery: discoveryContext.discovery,
+        provider: {
+          providerId: provider.name,
+          providerRevision: DATAFORSEO_BACKLINK_PROVIDER_REVISION,
+          capabilities: [...provider.capabilities],
+        },
+      });
+      if (!planned.ok) {
+        res.setHeader("Cache-Control", "no-store");
+        res.status(409).json({
+          ok: false,
+          outcome: "skipped",
+          ready: false,
+          executionAuthorized: authorization.authorized,
+          executionActivated: false,
+          code: planned.code,
+          message: planned.message,
+          authorization,
+          provider: {
+            name: providerHealth.provider,
+            status: providerHealth.status,
+          },
+          contextReady: discoveryContext.ok,
+          scheduledModeSchemaReady: scheduledModeSchema.ready,
+          executionPlan: null,
+        });
+        return;
+      }
+      executionPlan = planned.plan;
+    }
 
     res.setHeader("Cache-Control", "no-store");
     res.status(409).json({
@@ -123,6 +161,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       },
       contextReady: discoveryContext.ok,
       scheduledModeSchemaReady: scheduledModeSchema.ready,
+      executionPlan,
     });
   } catch (error) {
     console.error("[AUTHORITY-SCHEDULED-READINESS] failed:", error);

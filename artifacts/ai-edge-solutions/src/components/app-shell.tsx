@@ -44,7 +44,7 @@ function BusinessTabs() {
             key={b.id}
             role="tab"
             aria-selected={isActive}
-            onClick={() => handleSelect(id)}
+            onClick={() => handleSelect(b.id)}
             style={{
               display: "flex", flexDirection: "column", justifyContent: "center", gap: 4,
               padding: "10px 22px", borderRadius: 10, cursor: "pointer",

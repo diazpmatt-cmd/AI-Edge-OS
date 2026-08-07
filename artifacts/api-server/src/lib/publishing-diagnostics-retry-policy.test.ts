@@ -30,14 +30,15 @@ describe("applyPublishingDiagnosticsRetryPolicy", () => {
     expect(result[0].retryAllowed).toBe(true);
   });
 
-  it("disables retry for a failed lane on a multi-platform source", () => {
+  it("preserves isolated retry eligibility for a failed lane on a multi-platform source", () => {
+    const original = lane({ platform: "instagram" });
     const result = applyPublishingDiagnosticsRetryPolicy({
       expectedPlatforms: ["facebook", "instagram"],
-      lanes: [lane()],
+      lanes: [original],
     });
 
-    expect(result[0].retryAllowed).toBe(false);
-    expect(result[0].message).toContain("multi-platform source post");
+    expect(result[0]).toBe(original);
+    expect(result[0].retryAllowed).toBe(true);
   });
 
   it("does not alter verified or already non-retryable lanes", () => {

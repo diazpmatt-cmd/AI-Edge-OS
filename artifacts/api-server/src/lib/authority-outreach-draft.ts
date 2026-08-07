@@ -8,6 +8,8 @@ export type AuthorityOutreachDraftType =
   | "citation_request"
   | "guest_post_pitch";
 
+export type AuthorityOutreachDraftEligibleWorkflowStatus = "approved" | "pursuing";
+
 export interface AuthorityOutreachDraftInput {
   opportunityId: string;
   category: BacklinkOpportunityCategory;
@@ -47,6 +49,12 @@ export interface AuthorityOutreachDraft {
       targetUrl: string | null;
     }>;
   };
+}
+
+export function isAuthorityOutreachDraftWorkflowEligible(
+  status: string | null | undefined,
+): status is AuthorityOutreachDraftEligibleWorkflowStatus {
+  return status === "approved" || status === "pursuing";
 }
 
 export function classifyAuthorityOutreachDraftType(

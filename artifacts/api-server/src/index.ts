@@ -3,6 +3,7 @@ import { startScheduler } from "./lib/scheduler";
 import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
+import { migrateAuthorityOutreachDrafts } from "./lib/authority-outreach-draft-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
 import { startPublishingInterruptionRecoveryMonitor } from "./lib/publishing-interruption-recovery.js";
 import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard.js";
@@ -24,6 +25,7 @@ if (Number.isNaN(port) || port <= 0) {
 migrateSchema()
   .then(() => migrateLeadAuditEvents())
   .then(() => migrateAgentTasks())
+  .then(() => migrateAuthorityOutreachDrafts())
   .then(() => bootstrapPublishingMutationGuard())
   .then(() => import("./app.js"))
   .then(({ default: app }) => {

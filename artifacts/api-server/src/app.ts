@@ -16,6 +16,7 @@ import backlinkOpportunityIntelligenceRouter from "./routes/backlink-opportunity
 import authorityOutreachDraftRouter from "./routes/authority-outreach-draft";
 import authorityOutreachReadinessRouter from "./routes/authority-outreach-readiness";
 import authorityTargetContactsRouter from "./routes/authority-target-contacts";
+import authorityBacklinkWinEvidenceRouter from "./routes/authority-backlink-win-evidence";
 import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-safe";
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
@@ -137,6 +138,7 @@ app.use(backlinkOpportunityIntelligenceRouter);
 app.use(authorityOutreachDraftRouter);
 app.use(authorityOutreachReadinessRouter);
 app.use(authorityTargetContactsRouter);
+app.use(authorityBacklinkWinEvidenceRouter);
 app.use(backlinkWorkflowPatchSafeRouter);
 app.use(backlinkWorkflowActionsRouter);
 app.use(backlinksRouter);

@@ -9,6 +9,11 @@ import router from "./routes";
 import oauthCallbacksRouter from "./routes/oauth-callbacks";
 import leadDeliveryWebhooksRouter from "./routes/lead-delivery-webhooks";
 import telnyxRouter from "./routes/telnyx";
+import competitorIntelligenceRouter from "./routes/competitor-intelligence";
+import authorityProfileRouter from "./routes/authority-profile";
+import backlinkScheduledSafetyRouter from "./routes/backlink-scheduled-safety";
+import backlinkOpportunityIntelligenceRouter from "./routes/backlink-opportunity-intelligence";
+import backlinksRouter from "./routes/backlinks";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -115,6 +120,16 @@ for (const pathSuffix of [
     rejectPublishingPostMutation,
   );
 }
+
+// These Authority/backlink routers were authored with canonical `/api/...`
+// paths already included. Mount them once at the app root after Clerk so their
+// public contract remains `/api/...` rather than the accidental `/api/api/...`
+// produced when they are nested under the shared API router.
+app.use(competitorIntelligenceRouter);
+app.use(authorityProfileRouter);
+app.use(backlinkScheduledSafetyRouter);
+app.use(backlinkOpportunityIntelligenceRouter);
+app.use(backlinksRouter);
 
 app.use("/api", router);
 

@@ -6,6 +6,7 @@ import { type ReactNode } from "react";
 import { useTheme } from "@/contexts/theme-context";
 import { useActiveBusiness } from "@/contexts/business-context";
 import { PublishingLaneDiagnosticsPanel } from "@/components/PublishingLaneDiagnosticsPanel";
+import { AuthorityReadinessPanel } from "@/components/AuthorityReadinessPanel";
 
 const logoSrc = `${import.meta.env.BASE_URL}logo-transparent.png`;
 const TOP_NAV_H = 70;
@@ -43,7 +44,7 @@ function BusinessTabs() {
             key={b.id}
             role="tab"
             aria-selected={isActive}
-            onClick={() => handleSelect(b.id)}
+            onClick={() => handleSelect(id)}
             style={{
               display: "flex", flexDirection: "column", justifyContent: "center", gap: 4,
               padding: "10px 22px", borderRadius: 10, cursor: "pointer",
@@ -148,6 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { setTheme, isDark } = useTheme();
   const showPublishingLaneDiagnostics = location.startsWith("/admin/diagnostics");
+  const showAuthorityReadiness = location.startsWith("/admin/authority-engine");
 
   return (
     <div style={{ minHeight: "100vh", background: isDark ? "#030612" : "#F1F5F9", transition: "background 0.25s" }}>
@@ -199,6 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div style={{ maxWidth: 1200, width: "100%", boxSizing: "border-box", margin: "0 auto", padding: "32px 24px 48px" }}>
           {showPublishingLaneDiagnostics && <PublishingLaneDiagnosticsPanel />}
+          {showAuthorityReadiness && <AuthorityReadinessPanel />}
           {children}
         </div>
       </main>

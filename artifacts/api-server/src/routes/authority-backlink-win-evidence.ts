@@ -23,7 +23,7 @@ async function resolveWorkspace(userId: string, opportunityId: string) {
 function mapError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (/required|invalid|too_long/.test(message)) return { status: 400, error: message };
-  if (/version_conflict|must_reopen|already_invalid|reopen_requires_invalid|duplicate key/i.test(message)) return { status: 409, error: message };
+  if (/version_conflict|must_reopen|already_invalid|reopen_requires_invalid|duplicate key|won_evidence_immutable/i.test(message)) return { status: 409, error: message };
   if (/not_found/.test(message)) return { status: 404, error: message };
   return null;
 }

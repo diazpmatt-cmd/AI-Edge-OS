@@ -209,8 +209,10 @@ export function buildWeeklyDeliverySummary(input: {
       (post) => post.weeklyPlanId === job.weeklyPlanId,
     );
     const postIds = new Set(posts.map((post) => post.id));
-    const attempts = [...latest.values()].filter((attempt) =>
-      postIds.has(attempt.postId),
+    const attempts = [...latest.values()].filter(
+      (attempt) =>
+        postIds.has(attempt.postId) &&
+        attempt.platform === job.generatorPlatform,
     );
 
     const receipts = attempts

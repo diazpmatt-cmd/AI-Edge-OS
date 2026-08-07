@@ -284,7 +284,7 @@ export function AuthorityActionPlanPanel({ onViewBacklinks }: { onViewBacklinks:
                         )}
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
                           <span style={{ fontSize: 8.5, color: "#CBD5E1" }}>Authority {evidence.authority}</span>
-                          <span style={{ fontSize: 8.5, color: "#CBD5E1" }}>Seen on {evidence.competitorFrequency} competitor{evidence.competitorFrequency === 1 ? "" : "s"}</span>
+                          <span style={{ fontSize: 8.5, color: "#CBD5E1" }}>Competitor Signal {evidence.competitorFrequency}</span>
                           <span style={{ fontSize: 8.5, color: "#22C55E" }}>Access {evidence.relationshipAccessibility}</span>
                           <span style={{ fontSize: 8.5, color: "#F59E0B" }}>Effort {evidence.estimatedEffort}</span>
                         </div>

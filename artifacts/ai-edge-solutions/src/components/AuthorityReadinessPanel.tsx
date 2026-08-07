@@ -33,6 +33,7 @@ interface ScheduledReadinessResponse {
     reason: string | null;
   };
   contextReady: boolean;
+  scheduledModeSchemaReady: boolean;
   competitorCount: number;
 }
 
@@ -86,6 +87,7 @@ export function AuthorityReadinessPanel() {
     { label: "Location scope", ok: Boolean(p?.primaryCity && p?.primaryRegion && p.geography.length), detail: p?.primaryCity && p?.primaryRegion ? `${p.primaryCity} · ${p.primaryRegion}` : "City / region incomplete" },
     { label: "Service scope", ok: Boolean(p?.serviceIds.length), detail: p?.serviceIds.length ? `${p.serviceIds.length} canonical service${p.serviceIds.length === 1 ? "" : "s"}` : "No services selected" },
     { label: "Competitor set", ok: readiness.competitorCount > 0, detail: `${readiness.competitorCount} active competitor${readiness.competitorCount === 1 ? "" : "s"}` },
+    { label: "Scheduled-mode ledger", ok: readiness.scheduledModeSchemaReady, detail: readiness.scheduledModeSchemaReady ? "manual + scheduled" : "manual-only" },
     { label: "Live backlink provider", ok: readiness.provider.status === "configured", detail: readiness.provider.status.replaceAll("_", " ") },
     { label: "Scheduled execution", ok: readiness.executionActivated, detail: readiness.executionActivated ? "Activated" : "Not activated" },
   ];

@@ -95,6 +95,12 @@ const SECRET_PATTERNS = [
   /\b[A-Za-z0-9]{40,}\b/g,
 ];
 
+const VERIFIED_RECEIPT_STATUSES = new Set([
+  "published",
+  "published_with_warning",
+  "idempotency_hit",
+]);
+
 export function sanitizeDeliveryDiagnostic(
   value: string | null | undefined,
 ): string {
@@ -114,6 +120,19 @@ function isoOrNull(value: Date | string | null): string | null {
   if (!value) return null;
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function isReceiptClassifiedStatus(status: string): boolean {
+  return VERIFIED_RECEIPT_STATUSES.has(status);
+}
+
+function hasVerifiedExternalReceipt(
+  attempt: WeeklyDeliveryAttemptInput,
+): boolean {
+  return (
+    isReceiptClassifiedStatus(attempt.status) &&
+    Boolean(attempt.externalPostId || attempt.externalPostUrl)
+  );
 }
 
 function latestAttempts(
@@ -195,11 +214,7 @@ export function buildWeeklyDeliverySummary(input: {
     );
 
     const receipts = attempts
-      .filter(
-        (attempt) =>
-          attempt.status === "published" &&
-          Boolean(attempt.externalPostId || attempt.externalPostUrl),
-      )
+      .filter(hasVerifiedExternalReceipt)
       .map((attempt) =>
         Object.freeze({
           postId: attempt.postId,
@@ -213,7 +228,7 @@ export function buildWeeklyDeliverySummary(input: {
 
     const receiptMissingAttempts = attempts.filter(
       (attempt) =>
-        attempt.status === "published" &&
+        isReceiptClassifiedStatus(attempt.status) &&
         !attempt.externalPostId &&
         !attempt.externalPostUrl,
     );
@@ -250,7 +265,7 @@ export function buildWeeklyDeliverySummary(input: {
         attemptNumber: attempt.attemptNumber,
         errorCode: "PROVIDER_RECEIPT_MISSING",
         message:
-          "Provider status was published, but no external post ID or URL was recorded.",
+          "Provider status was receipt-classified, but no external post ID or URL was recorded.",
         retryAllowed: attempt.retryAllowed,
       })),
     ];

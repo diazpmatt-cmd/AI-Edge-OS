@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthorityActionPlanPanel } from "@/components/authority-action-plan-panel";
+import { AuthorityAcquisitionProofWorkspace } from "@/components/authority-acquisition-proof-workspace";
 import { AuthorityOutreachDraftReview } from "@/components/authority-outreach-draft-review";
 import { AuthorityOutreachReadinessCard } from "@/components/authority-outreach-readiness-card";
 import { AuthorityTargetContactWorkspace } from "@/components/authority-target-contact-workspace";
@@ -9,8 +10,10 @@ import { AuthorityWorkflowQueue } from "@/components/authority-workflow-queue";
 export default function AuthorityActionPlanPage() {
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [draftOpportunityId, setDraftOpportunityId] = useState<string | null>(null);
+  const [proofOpportunityId, setProofOpportunityId] = useState<string | null>(null);
   const refresh = () => {
     setDraftOpportunityId(null);
+    setProofOpportunityId(null);
     setRefreshVersion((version) => version + 1);
   };
 
@@ -38,7 +41,14 @@ export default function AuthorityActionPlanPage() {
           <AuthorityWorkflowQueue
             key={`workflow-${refreshVersion}`}
             onChanged={refresh}
-            onDraft={setDraftOpportunityId}
+            onDraft={(opportunityId) => {
+              setProofOpportunityId(null);
+              setDraftOpportunityId(opportunityId);
+            }}
+            onProof={(opportunityId) => {
+              setDraftOpportunityId(null);
+              setProofOpportunityId(opportunityId);
+            }}
           />
           {draftOpportunityId && (
             <>
@@ -49,6 +59,9 @@ export default function AuthorityActionPlanPage() {
               />
               <AuthorityTargetContactWorkspace opportunityId={draftOpportunityId} />
             </>
+          )}
+          {proofOpportunityId && (
+            <AuthorityAcquisitionProofWorkspace opportunityId={proofOpportunityId} />
           )}
           <AuthorityActionPlanPanel
             key={`plan-${refreshVersion}`}

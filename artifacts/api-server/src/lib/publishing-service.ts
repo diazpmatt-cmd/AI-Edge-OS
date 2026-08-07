@@ -26,7 +26,7 @@
  * 8.  Call platform adapter via internal route (preserves full adapter logic)
  * 9.  Parse per-platform results from adapter response
  * 10. Update delivery records (published / failed / skipped)
- * 11. Update post status (published / published_with_warning / failed)
+ * 11. Compare-and-set aggregate status only while canonical publish still owns it
  * 12. Record audit fields (publishedBy, publishedAt, externalPostId, externalPostUrl)
  * 13. Return sanitized PublishResult
  */
@@ -40,6 +40,10 @@ import type { PlatformDelivery } from "@workspace/db/schema";
 import { evaluateContentClaims } from "@workspace/db";
 import { parsePublishingPlatformBinding } from "./publishing-platform-binding.js";
 import { evaluateFullReplayReceiptGuard } from "./publishing-replay-safety.js";
+import {
+  PUBLISH_FINALIZATION_OWNED_STATUS,
+  buildPublishFinalizationConflictSummary,
+} from "./publishing-lifecycle-policy.js";
 import {
   PUBLISH_OWNERSHIP_CONFLICT_MESSAGE,
   PUBLISH_SESSION_OWNERSHIP_CONFLICT_MESSAGE,
@@ -637,14 +641,6 @@ export class PublishingService {
         }
 
         const publishedAt = publishedCount > 0 ? new Date() : null;
-
-        await db.update(socialPostsTable).set({
-          status:      finalPostStatus,
-          publishedAt: publishedAt ?? undefined,
-          updatedAt:   new Date(),
-        }).where(and(eq(socialPostsTable.id, postId), eq(socialPostsTable.userId, userId)));
-
-        // ── Step 9: Build summary ───────────────────────────────────────────
         const total = platforms.length;
         const parts: string[] = [];
         if (publishedCount > 0) parts.push(`${publishedCount} of ${total} published successfully`);
@@ -652,17 +648,55 @@ export class PublishingService {
         if (skippedCount > 0)   parts.push(`${skippedCount} skipped (media requirement not met)`);
 
         const failedPlatforms = attemptResults.filter(r => r.status === "failed").map(r => r.platform);
-        const summary = parts.join(". ") +
+        const deliverySummary = parts.join(". ") +
           (failedPlatforms.length > 0 ? `. ${failedPlatforms.map(p => formatPlatform(p)).join(", ")} ${failedPlatforms.length === 1 ? "requires" : "require"} attention.` : ".");
+        const youtubeVideoId = attemptResults.find(
+          result => result.platform === "youtube" && result.status === "published" && !!result.externalPostId,
+        )?.externalPostId ?? null;
+        const aggregateErrorMessage = finalPostStatus === "published"
+          ? null
+          : sanitizeError(deliverySummary);
+
+        const finalized = await db.update(socialPostsTable).set({
+          status:      finalPostStatus,
+          publishedAt: publishedAt ?? undefined,
+          errorMessage: aggregateErrorMessage,
+          ...(youtubeVideoId ? { youtubeVideoId } : {}),
+          updatedAt:   new Date(),
+        }).where(and(
+          eq(socialPostsTable.id, postId),
+          eq(socialPostsTable.userId, userId),
+          eq(socialPostsTable.status, PUBLISH_FINALIZATION_OWNED_STATUS),
+        )).returning({ status: socialPostsTable.status });
+
+        let aggregatePostStatus = finalPostStatus;
+        let summary = deliverySummary;
+        let finalWarningCount = warningCount;
+
+        if (finalized.length !== 1) {
+          const [currentPost] = await db
+            .select({ status: socialPostsTable.status })
+            .from(socialPostsTable)
+            .where(and(
+              eq(socialPostsTable.id, postId),
+              eq(socialPostsTable.userId, userId),
+            ));
+          aggregatePostStatus = currentPost?.status ?? "unknown";
+          finalWarningCount += 1;
+          summary = buildPublishFinalizationConflictSummary({
+            deliverySummary,
+            currentStatus: currentPost?.status ?? null,
+          });
+        }
 
         return {
           postId,
-          postStatus:     finalPostStatus,
+          postStatus:     aggregatePostStatus,
           totalPlatforms: total,
           published:      publishedCount,
           failed:         failedCount,
           skipped:        skippedCount,
-          warnings:       warningCount,
+          warnings:       finalWarningCount,
           deliveries:     attemptResults,
           summary,
         };

@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { socialPostsTable, socialConnectionsTable, imageAssetsTable, platformDeliveriesTable } from "@workspace/db/schema";
-import { eq, and, desc, isNotNull, isNull } from "drizzle-orm";
+import { eq, and, desc, isNotNull, isNull, inArray } from "drizzle-orm";
 import { bootstrapPlatformDeliveries, publishingService } from "../lib/publishing-service";
 import { getAuth } from "@clerk/express";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
+import {
+  CANCELLABLE_PRE_DELIVERY_STATUSES,
+  FULL_RETRY_SOURCE_STATUSES,
+  IMMEDIATE_PUBLISH_APPROVAL_SOURCE_STATUSES,
+  MANUAL_APPROVAL_SOURCE_STATUSES,
+} from "../lib/publishing-lifecycle-policy.js";
 import {
   INTERNAL_PUBLISH_PLATFORM_HEADER,
   resolveInternalPublishPlatformSelection,
@@ -54,14 +60,19 @@ router.post("/social-posts/bulk/publish", async (req, res) => {
 
   const results = [];
   for (const id of postIds) {
-    // Auto-approve: clicking "Confirm & Publish" constitutes approval
+    // Auto-approve only while the post is still in a pre-delivery state.
+    // Never reset publishing, delivered, or cancelled lifecycle states.
     await db.update(socialPostsTable).set({
       approvalStatus: "approved",
       approvedAt:     new Date(),
       approvedBy:     userId,
       status:         "approved",
       updatedAt:      new Date(),
-    }).where(and(eq(socialPostsTable.id, id), eq(socialPostsTable.userId, userId)));
+    }).where(and(
+      eq(socialPostsTable.id, id),
+      eq(socialPostsTable.userId, userId),
+      inArray(socialPostsTable.status, [...IMMEDIATE_PUBLISH_APPROVAL_SOURCE_STATUSES]),
+    ));
 
     const result = await publishingService.publishPost(id, userId, userId, internalBase, SCHEDULER_SECRET);
     results.push(result);
@@ -236,6 +247,16 @@ router.post("/social-posts", async (req, res) => {
 router.patch("/social-posts/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [existing] = await db.select({ status: socialPostsTable.status })
+    .from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+  if (!existing) { res.status(404).send(); return; }
+  if (existing.status === "publishing") {
+    res.status(409).json({ error: "Post cannot be edited while publishing is in progress." });
+    return;
+  }
+
   const b = req.body as any;
   const mediaMetadata = normalizePersistedMediaMetadata({
     filename: b.mediaFilename,
@@ -262,8 +283,12 @@ router.patch("/social-posts/:id", async (req, res) => {
     ...(b.scheduledAt     !== undefined && { scheduledAt:     b.scheduledAt ? new Date(b.scheduledAt) : null }),
     ...(b.status          !== undefined && { status:          b.status }),
     updatedAt: new Date(),
-  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
-  if (!row) { res.status(404).send(); return; }
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    eq(socialPostsTable.status, existing.status),
+  )).returning();
+  if (!row) { res.status(409).json({ error: "Post state changed; refresh and try again." }); return; }
   res.json(rowToDto(row));
 });
 
@@ -323,10 +348,25 @@ router.post("/social-posts/:id/restore", async (req, res) => {
 router.delete("/social-posts/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [existing] = await db.select({ status: socialPostsTable.status })
+    .from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+  if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+  if (existing.status === "publishing") {
+    res.status(409).json({ error: "Post cannot be deleted while publishing is in progress." });
+    return;
+  }
+
   const [deleted] = await db.delete(socialPostsTable)
-    .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)))
+    .where(and(
+      eq(socialPostsTable.id, req.params.id),
+      eq(socialPostsTable.userId, userId),
+      eq(socialPostsTable.status, existing.status),
+    ))
     .returning();
-  if (deleted?.imageData && deleted.imageData.startsWith("/api/uploads/")) {
+  if (!deleted) { res.status(409).json({ error: "Post state changed; refresh and try again." }); return; }
+  if (deleted.imageData && deleted.imageData.startsWith("/api/uploads/")) {
     const filePath = path.join(process.cwd(), deleted.imageData.replace("/api/", ""));
     fs.unlink(filePath, () => {});
   }
@@ -335,8 +375,9 @@ router.delete("/social-posts/:id", async (req, res) => {
 
 // ── Publish ───────────────────────────────────────────────────────────────────
 router.post("/social-posts/:id/publish", async (req, res) => {
-  // Internal scheduler bypass — lets the scheduler call this route without a
-  // Clerk session. Validated via the shared in-process SCHEDULER_SECRET.
+  // Internal scheduler/canonical-service bypass — lets the canonical publisher
+  // call this adapter route without a Clerk session. Validated via the shared
+  // in-process SCHEDULER_SECRET.
   const isScheduler =
     !!SCHEDULER_SECRET && req.headers["x-scheduler-secret"] === SCHEDULER_SECRET;
 
@@ -807,18 +848,72 @@ router.post("/social-posts/:id/publish", async (req, res) => {
   const anyOk = platforms.some(p => results[p]?.ok === true);
   const newStatus = allOk ? "published" : anyOk ? "published_with_warning" : "failed";
 
+  // Canonical service calls own aggregate lifecycle finalization. This adapter
+  // route only returns provider results for those calls so it cannot overwrite
+  // a newer operator/lifecycle state while provider requests are in flight.
+  if (isScheduler) {
+    res.json({
+      ok: allOk,
+      results,
+      status: post.status,
+      deliveryStatus: newStatus,
+      aggregateStateConflict: false,
+      post: rowToDto(post),
+    });
+    return;
+  }
+
   const [updated] = await db.update(socialPostsTable).set({
     status:       newStatus,
     publishedAt:  anyOk ? new Date() : null,
     errorMessage: errors.length ? errors.join("; ") : null,
     ...(capturedYoutubeVideoId ? { youtubeVideoId: capturedYoutubeVideoId } : {}),
     updatedAt:    new Date(),
-  }).where(eq(socialPostsTable.id, post.id)).returning();
+  }).where(and(
+    eq(socialPostsTable.id, post.id),
+    eq(socialPostsTable.userId, userId),
+    eq(socialPostsTable.status, post.status),
+    eq(socialPostsTable.updatedAt, post.updatedAt),
+  )).returning();
 
-  res.json({ ok: allOk, results, status: newStatus, post: rowToDto(updated) });
+  if (updated) {
+    res.json({
+      ok: allOk,
+      results,
+      status: updated.status,
+      deliveryStatus: newStatus,
+      aggregateStateConflict: false,
+      post: rowToDto(updated),
+    });
+    return;
+  }
+
+  const [current] = await db.select().from(socialPostsTable)
+    .where(and(eq(socialPostsTable.id, post.id), eq(socialPostsTable.userId, userId)));
+  if (!current) {
+    res.status(409).json({
+      ok: false,
+      results,
+      status: "unknown",
+      deliveryStatus: newStatus,
+      aggregateStateConflict: true,
+      error: "Provider delivery completed but the aggregate post no longer exists.",
+    });
+    return;
+  }
+
+  res.status(409).json({
+    ok: false,
+    results,
+    status: current.status,
+    deliveryStatus: newStatus,
+    aggregateStateConflict: true,
+    error: "Provider delivery completed but a newer post state was preserved.",
+    post: rowToDto(current),
+  });
 });
 
-// ── Google Business Profile ───────────────────────────────────────────────────
+// ── Google Business Profile ──
 
 
 /** Extract diagnostically useful headers from a Google API error response. */
@@ -1210,8 +1305,19 @@ router.post("/social-posts/:id/approve", async (req, res) => {
     approvedBy:     userId,
     status:         "approved",
     updatedAt:      new Date(),
-  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
-  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, [...MANUAL_APPROVAL_SOURCE_STATUSES]),
+  )).returning();
+  if (!row) {
+    const [existing] = await db.select({ status: socialPostsTable.status })
+      .from(socialPostsTable)
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+    if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+    res.status(409).json({ error: `Post cannot be approved from status ${existing.status}.` });
+    return;
+  }
   res.json({ ok: true, post: rowToDto(row) });
 });
 
@@ -1222,8 +1328,19 @@ router.post("/social-posts/:id/queue", async (req, res) => {
   const [row] = await db.update(socialPostsTable).set({
     status:    "queued",
     updatedAt: new Date(),
-  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
-  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, [...CANCELLABLE_PRE_DELIVERY_STATUSES]),
+  )).returning();
+  if (!row) {
+    const [existing] = await db.select({ status: socialPostsTable.status })
+      .from(socialPostsTable)
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+    if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+    res.status(409).json({ error: `Post cannot be queued from status ${existing.status}.` });
+    return;
+  }
   res.json({ ok: true, post: rowToDto(row) });
 });
 
@@ -1238,8 +1355,23 @@ router.post("/social-posts/:id/cancel", async (req, res) => {
     cancelledBy:  userId,
     cancelReason: b.reason ?? null,
     updatedAt:    new Date(),
-  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId))).returning();
-  if (!row) { res.status(404).json({ error: "Post not found" }); return; }
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, [...CANCELLABLE_PRE_DELIVERY_STATUSES]),
+  )).returning();
+  if (!row) {
+    const [existing] = await db.select({ status: socialPostsTable.status })
+      .from(socialPostsTable)
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+    if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+    res.status(409).json({
+      error: existing.status === "publishing"
+        ? "Publishing has already started; cancellation cannot guarantee external delivery will stop."
+        : `Post cannot be cancelled from status ${existing.status}.`,
+    });
+    return;
+  }
   res.json({ ok: true, post: rowToDto(row) });
 });
 
@@ -1269,14 +1401,28 @@ router.post("/social-posts/:id/retry", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  // Re-approve for retry
-  await db.update(socialPostsTable).set({
+  // Re-approve only a genuinely failed aggregate. Never reset publishing or a
+  // delivered partial/success state into the full-post retry path.
+  const [retryable] = await db.update(socialPostsTable).set({
     approvalStatus: "approved",
     approvedAt:     new Date(),
     approvedBy:     userId,
     status:         "approved",
     updatedAt:      new Date(),
-  }).where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+  }).where(and(
+    eq(socialPostsTable.id, req.params.id),
+    eq(socialPostsTable.userId, userId),
+    inArray(socialPostsTable.status, [...FULL_RETRY_SOURCE_STATUSES]),
+  )).returning({ id: socialPostsTable.id });
+
+  if (!retryable) {
+    const [existing] = await db.select({ status: socialPostsTable.status })
+      .from(socialPostsTable)
+      .where(and(eq(socialPostsTable.id, req.params.id), eq(socialPostsTable.userId, userId)));
+    if (!existing) { res.status(404).json({ error: "Post not found" }); return; }
+    res.status(409).json({ error: `Full-post retry requires failed status; current status is ${existing.status}.` });
+    return;
+  }
 
   const port         = parseInt(process.env.PORT ?? "8080", 10);
   const internalBase = `http://127.0.0.1:${port}`;

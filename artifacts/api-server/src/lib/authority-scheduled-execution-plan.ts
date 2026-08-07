@@ -8,6 +8,9 @@ import {
   type BacklinkDiscoveryInput,
 } from "@workspace/db";
 
+/** Stable revision for the current DataForSEO backlink request/normalization contract. */
+export const DATAFORSEO_BACKLINK_PROVIDER_REVISION = "dataforseo-backlinks-v1";
+
 export interface AuthorityScheduledProviderPlanInput {
   readonly providerId: string;
   readonly providerRevision: string;

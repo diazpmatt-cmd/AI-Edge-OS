@@ -96,6 +96,7 @@ describe("buildWeeklyDeliverySummary", () => {
     });
     expect(summary.channels[0]!.receipts).toHaveLength(1);
     expect(summary.channels[0]!.failures[0]!.message).toContain("[REDACTED]");
+    expect(summary.channels[0]!.failures[0]!.retryAllowed).toBe(true);
     expect(summary.channels[1]).toMatchObject({
       platform: "google",
       expected: 1,
@@ -106,7 +107,7 @@ describe("buildWeeklyDeliverySummary", () => {
     });
   });
 
-  it("does not count receipt-less published states as verified delivery", () => {
+  it("does not count receipt-less published states as verified delivery or retryable", () => {
     const summary = buildWeeklyDeliverySummary({
       expectedDeliveries: 1,
       jobs: [
@@ -145,6 +146,61 @@ describe("buildWeeklyDeliverySummary", () => {
     expect(summary.channels[0]!.failures[0]).toMatchObject({
       status: "receipt_missing",
       errorCode: "PROVIDER_RECEIPT_MISSING",
+      retryAllowed: false,
+    });
+  });
+
+  it("does not advertise retry when an older attempt already has a verified receipt", () => {
+    const summary = buildWeeklyDeliverySummary({
+      expectedDeliveries: 1,
+      jobs: [
+        { generatorPlatform: "facebook", weeklyPlanId: "weekly:facebook", count: 1 },
+      ],
+      posts: [
+        {
+          id: "post-fb-1",
+          weeklyPlanId: "weekly:facebook",
+          status: "failed",
+          approvalStatus: "approved",
+          scheduledAt: "2026-08-10T13:00:00.000Z",
+          publishedAt: "2026-08-10T13:01:00.000Z",
+        },
+      ],
+      attempts: [
+        {
+          postId: "post-fb-1",
+          platform: "facebook",
+          status: "published",
+          attemptNumber: 1,
+          externalPostId: "fb_receipt_1",
+          externalPostUrl: null,
+          errorCode: null,
+          errorMessage: null,
+          retryAllowed: false,
+          publishedAt: "2026-08-10T13:01:00.000Z",
+          updatedAt: "2026-08-10T13:01:00.000Z",
+        },
+        {
+          postId: "post-fb-1",
+          platform: "facebook",
+          status: "failed",
+          attemptNumber: 2,
+          externalPostId: null,
+          externalPostUrl: null,
+          errorCode: "LATE_FAILURE",
+          errorMessage: "later failed attempt",
+          retryAllowed: true,
+          publishedAt: null,
+          updatedAt: "2026-08-10T13:02:00.000Z",
+        },
+      ],
+    });
+
+    expect(summary.failedDeliveries).toBe(1);
+    expect(summary.channels[0]!.failures[0]).toMatchObject({
+      status: "failed",
+      attemptNumber: 2,
+      retryAllowed: false,
     });
   });
 });

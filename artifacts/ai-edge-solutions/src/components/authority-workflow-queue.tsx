@@ -48,7 +48,13 @@ function categoryLabel(category: string): string {
     .join(" ");
 }
 
-export function AuthorityWorkflowQueue({ onChanged }: { onChanged: () => void }) {
+export function AuthorityWorkflowQueue({
+  onChanged,
+  onDraft,
+}: {
+  onChanged: () => void;
+  onDraft?: (opportunityId: string) => void;
+}) {
   const apiFetch = useApiFetch();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +169,7 @@ export function AuthorityWorkflowQueue({ onChanged }: { onChanged: () => void })
             const primary = PRIMARY_ACTION[item.workflowStatus];
             const busy = transitioningId === item.opportunityId;
             const statusColor = STATUS_COLOR[item.workflowStatus];
+            const draftEligible = item.workflowStatus === "approved" || item.workflowStatus === "pursuing";
             return (
               <div key={item.opportunityId} style={{
                 display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center",
@@ -191,6 +198,20 @@ export function AuthorityWorkflowQueue({ onChanged }: { onChanged: () => void })
                 </div>
 
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {draftEligible && onDraft && (
+                    <button
+                      disabled={Boolean(transitioningId)}
+                      onClick={() => onDraft(item.opportunityId)}
+                      style={{
+                        padding: "5px 9px", borderRadius: 7, fontSize: 9, fontWeight: 800,
+                        cursor: transitioningId ? "default" : "pointer", color: "#C4B5FD",
+                        background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.24)",
+                        opacity: transitioningId ? 0.45 : 1,
+                      }}
+                    >
+                      Draft Outreach
+                    </button>
+                  )}
                   <button
                     disabled={busy || Boolean(transitioningId && !busy)}
                     onClick={() => void act(item, primary.action)}

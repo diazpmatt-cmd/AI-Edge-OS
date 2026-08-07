@@ -46,8 +46,21 @@ async function resolveProofWorkspace(userId: string, opportunityId: string) {
     clientId: resolved.client.id,
     prospectId: opportunity.prospectId,
     workflowId: workflow.id,
-    workflowStatus: workflow.status,
+    workflowStatus: workflow.status as "pursuing" | "won",
   };
+}
+
+function requireMutableProofWorkspace(workspace: { workflowStatus: "pursuing" | "won" }) {
+  if (workspace.workflowStatus === "won") {
+    return {
+      status: 409,
+      body: {
+        error: "authority_acquisition_proof_read_only_after_won",
+        message: "Acquisition proof is immutable after the Authority opportunity is marked won.",
+      },
+    };
+  }
+  return null;
 }
 
 function mapError(error: unknown) {
@@ -70,7 +83,13 @@ router.get("/api/backlinks/opportunities/:opportunityId/acquisition-proofs", asy
     if (!workspace.ok) { res.status(workspace.status).json(workspace.body); return; }
     const proofs = await listAuthorityAcquisitionProofs(opportunityId, workspace.clientId);
     res.setHeader("Cache-Control", "no-store");
-    res.status(200).json({ workflowStatus: workspace.workflowStatus, proofs, externalVerificationAvailable: false, sendAvailable: false });
+    res.status(200).json({
+      workflowStatus: workspace.workflowStatus,
+      proofs,
+      mutable: workspace.workflowStatus === "pursuing",
+      externalVerificationAvailable: false,
+      sendAvailable: false,
+    });
   } catch (error) {
     console.error("[AUTHORITY-ACQUISITION-PROOF] list failed:", error);
     res.status(500).json({ error: "AUTHORITY_ACQUISITION_PROOF_LIST_FAILED" });
@@ -85,6 +104,8 @@ router.post("/api/backlinks/opportunities/:opportunityId/acquisition-proofs", as
   try {
     const workspace = await resolveProofWorkspace(userId, opportunityId);
     if (!workspace.ok) { res.status(workspace.status).json(workspace.body); return; }
+    const immutable = requireMutableProofWorkspace(workspace);
+    if (immutable) { res.status(immutable.status).json(immutable.body); return; }
     const proof = await createAuthorityAcquisitionProof({
       clientId: workspace.clientId,
       opportunityId,
@@ -112,6 +133,8 @@ router.patch("/api/backlinks/opportunities/:opportunityId/acquisition-proofs/:pr
   try {
     const workspace = await resolveProofWorkspace(userId, opportunityId);
     if (!workspace.ok) { res.status(workspace.status).json(workspace.body); return; }
+    const immutable = requireMutableProofWorkspace(workspace);
+    if (immutable) { res.status(immutable.status).json(immutable.body); return; }
     const proofs = await listAuthorityAcquisitionProofs(opportunityId, workspace.clientId);
     if (!proofs.some((proof) => proof.id === proofId)) {
       res.status(404).json({ error: "authority_acquisition_proof_not_found" });
@@ -120,6 +143,7 @@ router.patch("/api/backlinks/opportunities/:opportunityId/acquisition-proofs/:pr
     const proof = await updateAuthorityAcquisitionProof({
       id: proofId,
       clientId: workspace.clientId,
+      opportunityId,
       actorId: userId,
       expectedVersion: req.body?.expectedVersion,
       proof: req.body ?? {},
@@ -148,6 +172,8 @@ router.post("/api/backlinks/opportunities/:opportunityId/acquisition-proofs/:pro
   try {
     const workspace = await resolveProofWorkspace(userId, opportunityId);
     if (!workspace.ok) { res.status(workspace.status).json(workspace.body); return; }
+    const immutable = requireMutableProofWorkspace(workspace);
+    if (immutable) { res.status(immutable.status).json(immutable.body); return; }
     const proofs = await listAuthorityAcquisitionProofs(opportunityId, workspace.clientId);
     if (!proofs.some((proof) => proof.id === proofId)) {
       res.status(404).json({ error: "authority_acquisition_proof_not_found" });
@@ -156,6 +182,7 @@ router.post("/api/backlinks/opportunities/:opportunityId/acquisition-proofs/:pro
     const proof = await actOnAuthorityAcquisitionProof({
       id: proofId,
       clientId: workspace.clientId,
+      opportunityId,
       actorId: userId,
       expectedVersion: req.body?.expectedVersion,
       action,

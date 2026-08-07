@@ -56,6 +56,7 @@ router.get("/social-posts/:id/publishing-diagnostics", async (req, res) => {
       externalPostUrl: platformDeliveriesTable.externalPostUrl,
       errorCode: platformDeliveriesTable.errorCode,
       errorMessage: platformDeliveriesTable.errorMessage,
+      retryAllowed: platformDeliveriesTable.retryAllowed,
       updatedAt: platformDeliveriesTable.updatedAt,
     })
     .from(platformDeliveriesTable)

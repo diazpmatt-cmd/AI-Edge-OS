@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   diagnosePublishingLanes,
   selectLatestPublishingAttempts,
+  selectLatestVerifiedPublishingReceipts,
   summarizePublishingDiagnostics,
 } from "./publishing-unresolved-diagnostics";
 
@@ -16,6 +17,7 @@ const row = (
     externalPostUrl: string | null;
     errorCode: string | null;
     errorMessage: string | null;
+    retryAllowed: boolean | null;
     updatedAt: string;
   }> = {},
 ) => ({
@@ -27,6 +29,7 @@ const row = (
   externalPostUrl: options.externalPostUrl ?? null,
   errorCode: options.errorCode ?? null,
   errorMessage: options.errorMessage ?? null,
+  retryAllowed: options.retryAllowed ?? true,
   updatedAt: options.updatedAt ?? "2026-08-07T00:00:00.000Z",
 });
 
@@ -39,6 +42,16 @@ describe("publishing unresolved diagnostics", () => {
     ]);
     expect(latest.get("facebook")?.attemptNumber).toBe(2);
     expect(latest.get("google")?.status).toBe("publishing");
+  });
+
+  it("tracks durable historical receipts independently from the latest attempt", () => {
+    const verified = selectLatestVerifiedPublishingReceipts([
+      row("facebook", "published", 1, { externalPostId: "fb-1" }),
+      row("facebook", "failed", 2),
+      row("google", "published", 1),
+    ]);
+    expect(verified.get("facebook")?.attemptNumber).toBe(1);
+    expect(verified.has("google")).toBe(false);
   });
 
   it("distinguishes verified, failed, missing-receipt, in-flight, and missing lanes", () => {
@@ -68,6 +81,50 @@ describe("publishing unresolved diagnostics", () => {
       inFlight: 1,
       missingAttempts: 1,
       unresolved: 3,
+    });
+  });
+
+  it("treats any historical verified receipt as authoritative after a later failure", () => {
+    const [lane] = diagnosePublishingLanes({
+      expectedPlatforms: ["facebook"],
+      deliveries: [
+        row("facebook", "published", 1, {
+          id: "facebook-published-1",
+          externalPostId: "fb-existing",
+        }),
+        row("facebook", "failed", 2, {
+          id: "facebook-failed-2",
+          errorMessage: "Later replay attempt failed",
+        }),
+      ],
+    });
+
+    expect(lane).toMatchObject({
+      deliveryId: "facebook-published-1",
+      state: "verified_published",
+      receiptVerified: true,
+      retryAllowed: false,
+      attemptNumber: 1,
+      diagnosticCode: "PUBLISHING_RECEIPT_VERIFIED",
+    });
+  });
+
+  it("honors a persisted non-retryable terminal delivery", () => {
+    const [lane] = diagnosePublishingLanes({
+      expectedPlatforms: ["google"],
+      deliveries: [
+        row("google", "failed", 1, {
+          retryAllowed: false,
+          errorMessage: "Manual review required",
+        }),
+      ],
+    });
+
+    expect(lane).toMatchObject({
+      state: "terminal_failure",
+      status: "failed",
+      receiptVerified: false,
+      retryAllowed: false,
     });
   });
 

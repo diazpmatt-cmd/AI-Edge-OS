@@ -14,6 +14,7 @@ import {
   ensureBacklinkScheduledModeSchemaReady,
   getBacklinkScheduledModeSchemaState,
 } from "../lib/backlink-scheduled-mode-schema.js";
+import { readAuthorityScheduledExecutionAuthorization } from "../lib/authority-scheduled-execution-authorization.js";
 
 const router = Router();
 
@@ -45,9 +46,9 @@ router.post("/api/backlinks/ingest/fixture", (req, res) => {
  *
  * This route intentionally stops before provider execution. It proves that the
  * scheduler can resolve a complete tenant-owned Authority context, truthful
- * scheduled-mode persistence, and a truly configured live provider without
- * falling through to BB&B constants or fixture observations. Paid/live execution
- * remains a separate activation decision.
+ * scheduled-mode persistence, a truly configured live provider, and the
+ * independent spend-authorization state without falling through to fixtures.
+ * Actual provider execution remains disabled in this release.
  */
 router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
   if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
@@ -101,11 +102,13 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
     const providerHealth = getDataForSEOBacklinkHealthState(
       parseDataForSEOBacklinkConfig(),
     );
+    const authorization = readAuthorityScheduledExecutionAuthorization();
     const readiness = evaluateAuthorityScheduledReadiness({
       clientActive,
       discoveryContext,
       liveProviderHealth: providerHealth,
       scheduledModeSchemaReady: scheduledModeSchema.ready,
+      executionAuthorized: authorization.authorized,
     });
 
     res.setHeader("Cache-Control", "no-store");
@@ -113,6 +116,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       ok: false,
       outcome: "skipped",
       ...readiness,
+      authorization,
       provider: {
         name: providerHealth.provider,
         status: providerHealth.status,
@@ -127,6 +131,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       ok: false,
       outcome: "skipped",
       ready: false,
+      executionAuthorized: false,
       executionActivated: false,
       code: "AUTHORITY_SCHEDULED_READINESS_UNAVAILABLE",
       message: "Scheduled Authority readiness could not be evaluated safely.",

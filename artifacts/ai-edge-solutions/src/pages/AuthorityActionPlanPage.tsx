@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthorityActionPlanPanel } from "@/components/authority-action-plan-panel";
+import { AuthorityOutreachDraftReview } from "@/components/authority-outreach-draft-review";
 import { AuthorityWorkflowQueue } from "@/components/authority-workflow-queue";
 
 export default function AuthorityActionPlanPage() {
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const refresh = () => setRefreshVersion((version) => version + 1);
+  const [draftOpportunityId, setDraftOpportunityId] = useState<string | null>(null);
+  const refresh = () => {
+    setDraftOpportunityId(null);
+    setRefreshVersion((version) => version + 1);
+  };
 
   return (
     <AppShell>
@@ -31,7 +36,14 @@ export default function AuthorityActionPlanPage() {
           <AuthorityWorkflowQueue
             key={`workflow-${refreshVersion}`}
             onChanged={refresh}
+            onDraft={setDraftOpportunityId}
           />
+          {draftOpportunityId && (
+            <AuthorityOutreachDraftReview
+              opportunityId={draftOpportunityId}
+              onClose={() => setDraftOpportunityId(null)}
+            />
+          )}
           <AuthorityActionPlanPanel
             key={`plan-${refreshVersion}`}
             onViewBacklinks={() => {

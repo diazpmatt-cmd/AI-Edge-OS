@@ -6,19 +6,24 @@ import type { CanonicalBacklinkEvidence, BacklinkOpportunityCategory } from "./b
 import type { BacklinkIngestionPersistencePlan, BacklinkOpportunity, BacklinkProspect, BacklinkProspectType, BacklinkRepository, BacklinkWorkflow, BacklinkWorkflowEvent } from "./backlink-persistence-types";
 import { deriveBacklinkOpportunityId, deriveBacklinkProspectId, deriveBacklinkWorkflowEventId, deriveBacklinkWorkflowId } from "./backlink-repository";
 import { BacklinkIngestionPersistenceError, deriveBacklinkIngestionFingerprint, deriveBacklinkIngestionRunId, normalizeBacklinkProviderId, normalizeBacklinkProviderRevision } from "./backlink-ingestion-run";
-import type { BacklinkIngestionCounts, BacklinkIngestionFailureStage } from "./backlink-ingestion-run";
+import type { BacklinkIngestionCounts, BacklinkIngestionFailureStage, BacklinkIngestionMode } from "./backlink-ingestion-run";
 
-export interface ManualBacklinkIngestionInput {
+export interface BacklinkIngestionInput {
   trustedClientId: string;
   provider: BacklinkDataProvider;
   discovery: BacklinkDiscoveryInput;
   normalizationPolicy: BacklinkNormalizationPolicy;
   repository: BacklinkRepository;
   now: Date;
-  providerRevision?: string;
+  mode: BacklinkIngestionMode;
+  providerRevision: string;
 }
 
-export interface ManualBacklinkIngestionSummary {
+export type ManualBacklinkIngestionInput = Omit<BacklinkIngestionInput, "mode" | "providerRevision"> & {
+  providerRevision?: string;
+};
+
+export interface BacklinkIngestionSummary {
   clientId: string;
   provider: string;
   observed: number;
@@ -31,18 +36,23 @@ export interface ManualBacklinkIngestionSummary {
   workflowIds: readonly string[];
 }
 
-export interface ManualBacklinkIngestionInProgress {
+export type ManualBacklinkIngestionSummary = BacklinkIngestionSummary;
+
+export interface BacklinkIngestionInProgress {
   outcome: "in_progress";
   runId: string;
   clientId: string;
   provider: string;
 }
 
+export type ManualBacklinkIngestionInProgress = BacklinkIngestionInProgress;
+
 /**
- * Repository calls are individually idempotent, but a complete ingestion run is not transactional.
- * A repository failure can leave earlier deterministic writes persisted; retrying safely converges
- * for this manual fixture-only phase. Live-provider or scheduled ingestion requires a repository-level
- * transactional unit of work rather than bypassing the repository abstraction here.
+ * Provider discovery happens before persistence. Once canonical evidence and the
+ * persistence plan are prepared, repository.commitIngestionRun() is the atomic
+ * persistence boundary in the production Drizzle repository: prospects,
+ * evidence, opportunities, workflows, initial events, and successful run
+ * finalization commit together or roll back together.
  */
 
 const prospectTypeFor = (evidence: CanonicalBacklinkEvidence): BacklinkProspectType => {
@@ -73,18 +83,18 @@ const opportunityTemplate = (category: BacklinkOpportunityCategory): { rationale
 const groupKey = (clientId: string, prospectId: string, category: string, serviceId: string | null) =>
   `${clientId}|${prospectId}|${category}|${serviceId ?? ""}`;
 
-export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput): Promise<ManualBacklinkIngestionSummary | ManualBacklinkIngestionInProgress> {
+export async function ingestBacklinks(input: BacklinkIngestionInput): Promise<BacklinkIngestionSummary | BacklinkIngestionInProgress> {
   if (!input.trustedClientId.trim()) throw new Error("trustedClientId is required");
   if (input.discovery.clientId !== input.trustedClientId) throw new Error("discovery tenant does not match trusted client");
   const providerId = normalizeBacklinkProviderId(input.provider.name);
-  const providerRevision = normalizeBacklinkProviderRevision(input.providerRevision ?? "c8r3-fixture-v1");
+  const providerRevision = normalizeBacklinkProviderRevision(input.providerRevision);
   if (!providerId || providerId.length > 100 || !providerRevision || providerRevision.length > 100) throw new Error("invalid provider identity");
-  const fingerprint = deriveBacklinkIngestionFingerprint({ trustedClientId: input.trustedClientId, providerId, providerRevision, mode: "manual",
+  const fingerprint = deriveBacklinkIngestionFingerprint({ trustedClientId: input.trustedClientId, providerId, providerRevision, mode: input.mode,
     capabilities: [...input.provider.capabilities], clientDomain: input.discovery.clientDomain, competitorDomains: input.discovery.competitorDomains,
     serviceIds: input.discovery.serviceIds, city: input.discovery.city, region: input.discovery.region, limit: input.discovery.limit,
     allowedServiceIds: input.normalizationPolicy.allowedServiceIds, blockedPhrases: input.normalizationPolicy.blockedPhrases });
   const runId = deriveBacklinkIngestionRunId(fingerprint);
-  const claim = await input.repository.claimIngestionRun({ id: runId, clientId: input.trustedClientId, providerId, providerRevision, mode: "manual",
+  const claim = await input.repository.claimIngestionRun({ id: runId, clientId: input.trustedClientId, providerId, providerRevision, mode: input.mode,
     capabilities: [...input.provider.capabilities].sort(), inputFingerprint: fingerprint, now: input.now });
   if (claim.outcome === "in_progress") return { outcome: "in_progress", runId, clientId: input.trustedClientId, provider: providerId };
   if (claim.outcome === "replayed") {
@@ -171,4 +181,12 @@ export async function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput
     catch { throw new Error(`backlink ingestion failed at ${failureStage}; failed run could not be recorded and may remain running`); }
     throw new Error(`backlink ingestion failed at ${failureStage}`);
   }
+}
+
+export function ingestFixtureBacklinks(input: ManualBacklinkIngestionInput): Promise<ManualBacklinkIngestionSummary | ManualBacklinkIngestionInProgress> {
+  return ingestBacklinks({
+    ...input,
+    mode: "manual",
+    providerRevision: input.providerRevision ?? "c8r3-fixture-v1",
+  });
 }

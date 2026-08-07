@@ -2,8 +2,7 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, DrizzleBacklinkRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
-import { hasVerifiedAuthorityBacklinkWinEvidence } from "../lib/authority-backlink-win-evidence-store.js";
-import { blockerForBacklinkWorkflowWinEvidence } from "../lib/backlink-workflow-win-evidence-policy.js";
+import { withVerifiedAuthorityBacklinkWinEvidenceGate } from "../lib/authority-backlink-win-evidence-gate.js";
 import {
   auditReasonForBacklinkWorkflowHumanAction,
   isBacklinkWorkflowHumanAction,
@@ -41,19 +40,7 @@ router.post(
     }
 
     try {
-      const hasVerifiedWinEvidence = action === "mark_won"
-        ? await hasVerifiedAuthorityBacklinkWinEvidence(opportunityId, resolved.client.id)
-        : false;
-      const winEvidenceBlocker = blockerForBacklinkWorkflowWinEvidence(action, hasVerifiedWinEvidence);
-      if (winEvidenceBlocker) {
-        res.status(409).json({
-          error: winEvidenceBlocker,
-          message: "Mark Won requires current human-verified backlink acquisition evidence.",
-        });
-        return;
-      }
-
-      const workflow = await repo.transitionWorkflow(
+      const transition = () => repo.transitionWorkflow(
         opportunityId,
         resolved.client.id,
         {
@@ -63,12 +50,27 @@ router.post(
         },
       );
 
+      const workflow = action === "mark_won"
+        ? await withVerifiedAuthorityBacklinkWinEvidenceGate(
+            opportunityId,
+            resolved.client.id,
+            transition,
+          )
+        : await transition();
+
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ workflow });
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       if (/workflow not found|cross-tenant/i.test(message)) {
         res.status(404).json({ error: "workflow_not_found" });
+        return;
+      }
+      if (/acquisition_proof_missing/i.test(message)) {
+        res.status(409).json({
+          error: "acquisition_proof_missing",
+          message: "Mark Won requires current human-verified backlink acquisition evidence.",
+        });
         return;
       }
       if (/invalid backlink workflow transition/i.test(message)) {

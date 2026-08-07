@@ -4,6 +4,7 @@ import { db, pool, DrizzleBacklinkRepository, deriveBacklinkWorkflowId } from "@
 import { migrateAuthorityTestBaseSchema } from "./authority-test-schema-bootstrap.js";
 import { migrateAuthorityBacklinkWinEvidence } from "./authority-backlink-win-evidence-migrate.js";
 import { withVerifiedAuthorityBacklinkWinEvidenceGate } from "./authority-backlink-win-evidence-gate.js";
+import { countVerifiedAuthorityWins } from "./authority-verified-win-measurement.js";
 import {
   actOnAuthorityBacklinkWinEvidence,
   createAuthorityBacklinkWinEvidence,
@@ -74,6 +75,7 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
     evidenceId = created.id;
     expect(created.verificationStatus).toBe("unverified");
     expect(await hasVerifiedAuthorityBacklinkWinEvidence(opportunityId, clientId)).toBe(false);
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(0);
 
     const verified = await actOnAuthorityBacklinkWinEvidence({
       id: created.id,
@@ -85,6 +87,7 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
     expect(verified.verificationStatus).toBe("human_verified");
     expect(verified.verifiedBy).toBe("user-verify");
     expect(await hasVerifiedAuthorityBacklinkWinEvidence(opportunityId, clientId)).toBe(true);
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(0);
 
     await expect(actOnAuthorityBacklinkWinEvidence({
       id: created.id,
@@ -109,6 +112,7 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
     expect(edited.verifiedAt).toBeNull();
     expect(edited.verifiedBy).toBeNull();
     expect(await hasVerifiedAuthorityBacklinkWinEvidence(opportunityId, clientId)).toBe(false);
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(0);
   });
 
   it("serializes proof revocation with Mark Won and freezes verified evidence after Won", async () => {
@@ -121,6 +125,7 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
     });
     expect(verified.version).toBe(4);
     expect(verified.verificationStatus).toBe("human_verified");
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(0);
 
     let gateEnteredResolve!: () => void;
     const gateEntered = new Promise<void>((resolve) => { gateEnteredResolve = resolve; });
@@ -161,6 +166,7 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
     releaseMarkWon();
     const workflow = await markWon;
     expect(workflow.status).toBe("won");
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(1);
 
     const revocationOutcome = await revocation;
     expect(revocationOutcome.ok).toBe(false);
@@ -180,5 +186,6 @@ describe("Authority backlink win evidence PostgreSQL contract", () => {
         notes: "This must not rewrite the proof behind a completed win.",
       },
     })).rejects.toThrow("won_evidence_immutable");
+    expect(await countVerifiedAuthorityWins(clientId)).toBe(1);
   });
 }, 30_000);

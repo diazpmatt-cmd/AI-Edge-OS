@@ -9,6 +9,7 @@ import {
   diagnosePublishingLanes,
   summarizePublishingDiagnostics,
 } from "../lib/publishing-unresolved-diagnostics.js";
+import { applyPublishingDiagnosticsRetryPolicy } from "../lib/publishing-diagnostics-retry-policy.js";
 
 const router = Router();
 
@@ -62,9 +63,13 @@ router.get("/social-posts/:id/publishing-diagnostics", async (req, res) => {
       eq(platformDeliveriesTable.userId, userId),
     ));
 
-  const lanes = diagnosePublishingLanes({
+  const diagnosedLanes = diagnosePublishingLanes({
     expectedPlatforms: binding.platforms,
     deliveries,
+  });
+  const lanes = applyPublishingDiagnosticsRetryPolicy({
+    expectedPlatforms: binding.platforms,
+    lanes: diagnosedLanes,
   });
 
   res.setHeader("Cache-Control", "no-store");

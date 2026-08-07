@@ -122,6 +122,15 @@ export async function updateAuthorityBacklinkWinEvidence(input: {
     const current = currentResult.rows[0];
     if (!current) throw new Error("win_evidence_not_found");
     if (current.version !== expectedVersion) throw new Error("version_conflict");
+    const workflowResult = await client.query<{ status: string }>(
+      `SELECT status FROM backlink_workflows
+       WHERE opportunity_id = $1 AND client_id = $2
+       FOR SHARE`,
+      [current.opportunity_id, input.clientId],
+    );
+    if (workflowResult.rows[0]?.status === "won" && current.verification_status === "human_verified") {
+      throw new Error("won_evidence_immutable");
+    }
     const nextVerification = verificationAfterAuthorityBacklinkWinEvidenceEdit(current.verification_status as AuthorityBacklinkWinEvidenceVerification);
     const updated = await client.query<WinEvidenceRow>(
       `UPDATE authority_backlink_win_evidence
@@ -161,6 +170,15 @@ export async function actOnAuthorityBacklinkWinEvidence(input: {
     const current = currentResult.rows[0];
     if (!current) throw new Error("win_evidence_not_found");
     if (current.version !== expectedVersion) throw new Error("version_conflict");
+    const workflowResult = await client.query<{ status: string }>(
+      `SELECT status FROM backlink_workflows
+       WHERE opportunity_id = $1 AND client_id = $2
+       FOR SHARE`,
+      [current.opportunity_id, input.clientId],
+    );
+    if (workflowResult.rows[0]?.status === "won" && current.verification_status === "human_verified") {
+      throw new Error("won_evidence_immutable");
+    }
     const nextVerification = nextAuthorityBacklinkWinEvidenceVerification(
       current.verification_status as AuthorityBacklinkWinEvidenceVerification,
       input.action,

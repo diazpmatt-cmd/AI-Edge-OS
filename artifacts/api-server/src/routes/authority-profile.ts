@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { pool } from "@workspace/db";
+import {
+  getDataForSEOBacklinkHealthState,
+  parseDataForSEOBacklinkConfig,
+  pool,
+} from "@workspace/db";
 
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 import {
@@ -9,6 +13,7 @@ import {
 } from "../lib/authority-profile-store.js";
 import { validateAuthorityProfileInput } from "../lib/authority-profile-policy.js";
 import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-context.js";
+import { evaluateAuthorityScheduledReadiness } from "../lib/authority-scheduled-readiness.js";
 
 const router = Router();
 
@@ -169,6 +174,48 @@ router.get("/api/authority/discovery-context", async (req, res) => {
   } catch (error) {
     console.error("[AUTHORITY-PROFILE] discovery context failed:", error);
     res.status(500).json({ error: "AUTHORITY_DISCOVERY_CONTEXT_FAILED" });
+  }
+});
+
+router.get("/api/authority/scheduled-readiness", async (req, res) => {
+  const tenant = await resolveTenant(req, res);
+  if (!tenant) return;
+
+  try {
+    const [profile, context] = await Promise.all([
+      getAuthorityProfile(tenant.clientId),
+      readAuthorityContext(tenant.clientId),
+    ]);
+    const discoveryContext = buildAuthorityDiscoveryContext({
+      profile,
+      competitorDomains: context.competitors.map((competitor) => competitor.domain),
+      activeServiceIds: context.availableServiceIds,
+    });
+    const providerHealth = getDataForSEOBacklinkHealthState(
+      parseDataForSEOBacklinkConfig(),
+    );
+    const readiness = evaluateAuthorityScheduledReadiness({
+      clientActive: true,
+      discoveryContext,
+      liveProviderHealth: providerHealth,
+    });
+
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({
+      ...readiness,
+      provider: {
+        name: providerHealth.provider,
+        status: providerHealth.status,
+        reason: providerHealth.reason,
+      },
+      contextReady: discoveryContext.ok,
+      competitorCount: discoveryContext.ok
+        ? discoveryContext.discovery.competitorDomains.length
+        : 0,
+    });
+  } catch (error) {
+    console.error("[AUTHORITY-PROFILE] scheduled readiness failed:", error);
+    res.status(500).json({ error: "AUTHORITY_SCHEDULED_READINESS_FAILED" });
   }
 });
 

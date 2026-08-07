@@ -28,7 +28,8 @@ export function createInternalPublishReceiptMiddleware(
   persist: PersistInternalPublishReceipts = persistAdapterReceiptEnvelope,
 ): RequestHandler {
   return (req, res, next) => {
-    const routeId = req.params.id;
+    const rawRouteId = req.params.id;
+    const routeId = Array.isArray(rawRouteId) ? rawRouteId[0] : rawRouteId;
     if (!shouldCaptureInternalPublishReceipt(routeId)) {
       next();
       return;

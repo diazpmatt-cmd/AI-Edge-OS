@@ -56,6 +56,7 @@ const _fixtureHealth: BacklinkProviderHealthState = {
   provider: "fixture_backlinks",
   status:   "configured",
   reason:   null,
+  login:    null,
 };
 
 const _backlinkRegistry = new BacklinkProviderRegistry();

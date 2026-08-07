@@ -6,6 +6,7 @@ export type PublishingLaneState =
   | "missing_attempt";
 
 export interface PublishingDiagnosticDelivery {
+  readonly id?: string | null;
   readonly platform: string;
   readonly status: string;
   readonly attemptNumber: number;
@@ -18,6 +19,7 @@ export interface PublishingDiagnosticDelivery {
 
 export interface PublishingLaneDiagnostic {
   readonly platform: string;
+  readonly deliveryId: string | null;
   readonly state: PublishingLaneState;
   readonly attemptNumber: number | null;
   readonly status: string | null;
@@ -81,6 +83,7 @@ export function diagnosePublishingLanes(input: {
     if (!delivery) {
       return Object.freeze({
         platform,
+        deliveryId: null,
         state: "missing_attempt" as const,
         attemptNumber: null,
         status: null,
@@ -92,6 +95,7 @@ export function diagnosePublishingLanes(input: {
       });
     }
 
+    const deliveryId = delivery.id ?? null;
     const hasReceipt = Boolean(delivery.externalPostId || delivery.externalPostUrl);
     const publishedStatus = [
       "published",
@@ -102,6 +106,7 @@ export function diagnosePublishingLanes(input: {
     if (publishedStatus && hasReceipt) {
       return Object.freeze({
         platform,
+        deliveryId,
         state: "verified_published" as const,
         attemptNumber: delivery.attemptNumber,
         status: delivery.status,
@@ -116,6 +121,7 @@ export function diagnosePublishingLanes(input: {
     if (publishedStatus && !hasReceipt) {
       return Object.freeze({
         platform,
+        deliveryId,
         state: "receipt_missing" as const,
         attemptNumber: delivery.attemptNumber,
         status: delivery.status,
@@ -131,6 +137,7 @@ export function diagnosePublishingLanes(input: {
       const detail = sanitize(delivery.errorMessage);
       return Object.freeze({
         platform,
+        deliveryId,
         state: "terminal_failure" as const,
         attemptNumber: delivery.attemptNumber,
         status: delivery.status,
@@ -144,6 +151,7 @@ export function diagnosePublishingLanes(input: {
 
     return Object.freeze({
       platform,
+      deliveryId,
       state: "in_flight" as const,
       attemptNumber: delivery.attemptNumber,
       status: delivery.status,

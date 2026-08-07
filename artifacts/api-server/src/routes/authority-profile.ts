@@ -20,6 +20,7 @@ import {
   getBacklinkScheduledModeSchemaState,
 } from "../lib/backlink-scheduled-mode-schema.js";
 import { buildAuthorityScheduledExecutionPlan } from "../lib/authority-scheduled-execution-plan.js";
+import { readAuthorityScheduledExecutionAuthorization } from "../lib/authority-scheduled-execution-authorization.js";
 
 const router = Router();
 const DATAFORSEO_BACKLINK_PROVIDER_REVISION = "dataforseo-backlinks-v1";
@@ -202,11 +203,13 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
     });
     const providerConfig = parseDataForSEOBacklinkConfig();
     const providerHealth = getDataForSEOBacklinkHealthState(providerConfig);
+    const authorization = readAuthorityScheduledExecutionAuthorization();
     const readiness = evaluateAuthorityScheduledReadiness({
       clientActive: true,
       discoveryContext,
       liveProviderHealth: providerHealth,
       scheduledModeSchemaReady: scheduledModeSchema.ready,
+      executionAuthorized: authorization.authorized,
     });
 
     let executionPlan = null;
@@ -224,9 +227,11 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
         res.setHeader("Cache-Control", "no-store");
         res.status(409).json({
           ready: false,
+          executionAuthorized: authorization.authorized,
           executionActivated: false,
           code: planned.code,
           message: planned.message,
+          authorization,
           provider: {
             name: providerHealth.provider,
             status: providerHealth.status,
@@ -245,6 +250,7 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json({
       ...readiness,
+      authorization,
       provider: {
         name: providerHealth.provider,
         status: providerHealth.status,

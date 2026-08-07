@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import {
+  DataForSEOBacklinkAdapter,
   getDataForSEOBacklinkHealthState,
   parseDataForSEOBacklinkConfig,
   pool,
@@ -18,8 +19,10 @@ import {
   ensureBacklinkScheduledModeSchemaReady,
   getBacklinkScheduledModeSchemaState,
 } from "../lib/backlink-scheduled-mode-schema.js";
+import { buildAuthorityScheduledExecutionPlan } from "../lib/authority-scheduled-execution-plan.js";
 
 const router = Router();
+const DATAFORSEO_BACKLINK_PROVIDER_REVISION = "dataforseo-backlinks-v1";
 
 async function resolveTenant(req: any, res: any) {
   const { userId } = getAuth(req);
@@ -197,15 +200,47 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
       competitorDomains: context.competitors.map((competitor) => competitor.domain),
       activeServiceIds: context.availableServiceIds,
     });
-    const providerHealth = getDataForSEOBacklinkHealthState(
-      parseDataForSEOBacklinkConfig(),
-    );
+    const providerConfig = parseDataForSEOBacklinkConfig();
+    const providerHealth = getDataForSEOBacklinkHealthState(providerConfig);
     const readiness = evaluateAuthorityScheduledReadiness({
       clientActive: true,
       discoveryContext,
       liveProviderHealth: providerHealth,
       scheduledModeSchemaReady: scheduledModeSchema.ready,
     });
+
+    let executionPlan = null;
+    if (readiness.ready && discoveryContext.ok && providerConfig) {
+      const provider = new DataForSEOBacklinkAdapter(providerConfig);
+      const planned = buildAuthorityScheduledExecutionPlan({
+        discovery: discoveryContext.discovery,
+        provider: {
+          providerId: provider.name,
+          providerRevision: DATAFORSEO_BACKLINK_PROVIDER_REVISION,
+          capabilities: [...provider.capabilities],
+        },
+      });
+      if (!planned.ok) {
+        res.setHeader("Cache-Control", "no-store");
+        res.status(409).json({
+          ready: false,
+          executionActivated: false,
+          code: planned.code,
+          message: planned.message,
+          provider: {
+            name: providerHealth.provider,
+            status: providerHealth.status,
+            reason: providerHealth.reason,
+          },
+          contextReady: discoveryContext.ok,
+          scheduledModeSchemaReady: scheduledModeSchema.ready,
+          competitorCount: discoveryContext.discovery.competitorDomains.length,
+          executionPlan: null,
+        });
+        return;
+      }
+      executionPlan = planned.plan;
+    }
 
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json({
@@ -220,6 +255,7 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
       competitorCount: discoveryContext.ok
         ? discoveryContext.discovery.competitorDomains.length
         : 0,
+      executionPlan,
     });
   } catch (error) {
     console.error("[AUTHORITY-PROFILE] scheduled readiness failed:", error);

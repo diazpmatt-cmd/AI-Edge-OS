@@ -26,7 +26,13 @@ interface ScheduledReadinessResponse {
   ready: boolean;
   code: string;
   message: string;
+  executionAuthorized: boolean;
   executionActivated: false;
+  authorization: {
+    authorized: boolean;
+    code: string;
+    message: string;
+  };
   provider: {
     name: string;
     status: "configured" | "disabled" | "unconfigured";
@@ -102,6 +108,7 @@ export function AuthorityReadinessPanel() {
     { label: "Scheduled-mode ledger", ok: readiness.scheduledModeSchemaReady, detail: readiness.scheduledModeSchemaReady ? "manual + scheduled" : "manual-only" },
     { label: "Live backlink provider", ok: readiness.provider.status === "configured", detail: readiness.provider.status.replaceAll("_", " ") },
     { label: "Execution plan", ok: Boolean(readiness.executionPlan), detail: readiness.executionPlan ? readiness.executionPlan.runId : "Not yet derivable" },
+    { label: "Spend authorization", ok: readiness.executionAuthorized, detail: readiness.executionAuthorized ? "Explicitly authorized" : "Not authorized" },
     { label: "Scheduled execution", ok: readiness.executionActivated, detail: readiness.executionActivated ? "Activated" : "Not activated" },
   ];
 
@@ -116,7 +123,7 @@ export function AuthorityReadinessPanel() {
           <div style={{ marginTop: 4, maxWidth: 700, fontSize: 10.5, color: "#64748B", lineHeight: 1.45 }}>{readiness.message}</div>
         </div>
         <div style={{ borderRadius: 999, padding: "5px 10px", border: `1px solid ${headlineColor}40`, background: `${headlineColor}12`, color: headlineColor, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-          {readiness.ready ? "Ready · activation off" : "Setup required"}
+          {readiness.ready ? "Ready · execution off" : "Setup required"}
         </div>
       </div>
 
@@ -139,12 +146,12 @@ export function AuthorityReadinessPanel() {
         <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 8.8, color: "#64748B" }}>
           <span>Provider revision: <strong style={{ color: "#94A3B8" }}>{readiness.executionPlan.providerRevision}</strong></span>
           <span>Request limit: <strong style={{ color: "#94A3B8" }}>{readiness.executionPlan.discovery.limit}</strong></span>
-          <span>Execution allowed: <strong style={{ color: "#F59E0B" }}>No</strong></span>
+          <span>Provider execution allowed by plan: <strong style={{ color: "#F59E0B" }}>No</strong></span>
         </div>
       )}
 
       <div style={{ marginTop: 10, fontSize: 8.8, color: "#475569" }}>
-        Live scheduled backlink execution is intentionally off. Demo/fixture ingestion is disabled on the authenticated Authority surface, and no provider call is made by this readiness panel.
+        Provider readiness, spend authorization, and actual execution are separate gates. This release never performs a scheduled provider call from the readiness path.
       </div>
     </section>
   );

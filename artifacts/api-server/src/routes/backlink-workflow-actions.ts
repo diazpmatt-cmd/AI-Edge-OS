@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { db, DrizzleBacklinkRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { hasVerifiedAuthorityBacklinkWinEvidence } from "../lib/authority-backlink-win-evidence-store.js";
+import { blockerForBacklinkWorkflowWinEvidence } from "../lib/backlink-workflow-win-evidence-policy.js";
 import {
   auditReasonForBacklinkWorkflowHumanAction,
   isBacklinkWorkflowHumanAction,
@@ -40,18 +41,16 @@ router.post(
     }
 
     try {
-      if (action === "mark_won") {
-        const verified = await hasVerifiedAuthorityBacklinkWinEvidence(
-          opportunityId,
-          resolved.client.id,
-        );
-        if (!verified) {
-          res.status(409).json({
-            error: "verified_win_evidence_required",
-            message: "Mark Won requires current human-verified backlink acquisition evidence.",
-          });
-          return;
-        }
+      const hasVerifiedWinEvidence = action === "mark_won"
+        ? await hasVerifiedAuthorityBacklinkWinEvidence(opportunityId, resolved.client.id)
+        : false;
+      const winEvidenceBlocker = blockerForBacklinkWorkflowWinEvidence(action, hasVerifiedWinEvidence);
+      if (winEvidenceBlocker) {
+        res.status(409).json({
+          error: winEvidenceBlocker,
+          message: "Mark Won requires current human-verified backlink acquisition evidence.",
+        });
+        return;
       }
 
       const workflow = await repo.transitionWorkflow(

@@ -5,6 +5,8 @@ export interface StoredAuthorityProfile {
   readonly clientId: string;
   readonly primaryDomain: string;
   readonly primaryWebsite: string | null;
+  readonly primaryCity: string | null;
+  readonly primaryRegion: string | null;
   readonly geography: readonly string[];
   readonly serviceIds: readonly string[];
   readonly discoveryEnabled: boolean;
@@ -19,6 +21,8 @@ CREATE TABLE IF NOT EXISTS authority_profiles (
   client_id TEXT NOT NULL UNIQUE,
   primary_domain TEXT NOT NULL,
   primary_website TEXT,
+  primary_city TEXT,
+  primary_region TEXT,
   geography_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   service_ids_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   discovery_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -28,6 +32,9 @@ CREATE TABLE IF NOT EXISTS authority_profiles (
   CONSTRAINT authority_profiles_geography_array CHECK (jsonb_typeof(geography_json) = 'array'),
   CONSTRAINT authority_profiles_services_array CHECK (jsonb_typeof(service_ids_json) = 'array')
 );
+ALTER TABLE authority_profiles
+  ADD COLUMN IF NOT EXISTS primary_city TEXT,
+  ADD COLUMN IF NOT EXISTS primary_region TEXT;
 CREATE INDEX IF NOT EXISTS authority_profiles_domain_idx
   ON authority_profiles(primary_domain);
 `;
@@ -56,6 +63,8 @@ function mapRow(row: any): StoredAuthorityProfile {
     clientId: row.client_id,
     primaryDomain: row.primary_domain,
     primaryWebsite: row.primary_website ?? null,
+    primaryCity: row.primary_city ?? null,
+    primaryRegion: row.primary_region ?? null,
     geography: strings(row.geography_json),
     serviceIds: strings(row.service_ids_json),
     discoveryEnabled: row.discovery_enabled === true,
@@ -71,8 +80,8 @@ export async function getAuthorityProfile(
   await ensureAuthorityProfilesReady();
   const result = await pool.query(
     `SELECT id, client_id, primary_domain, primary_website,
-            geography_json, service_ids_json, discovery_enabled, source,
-            created_at, updated_at
+            primary_city, primary_region, geography_json, service_ids_json,
+            discovery_enabled, source, created_at, updated_at
        FROM authority_profiles
       WHERE client_id = $1
       LIMIT 1`,
@@ -85,6 +94,8 @@ export async function upsertAuthorityProfile(input: {
   readonly clientId: string;
   readonly primaryDomain: string;
   readonly primaryWebsite: string | null;
+  readonly primaryCity: string | null;
+  readonly primaryRegion: string | null;
   readonly geography: readonly string[];
   readonly serviceIds: readonly string[];
   readonly discoveryEnabled: boolean;
@@ -93,24 +104,28 @@ export async function upsertAuthorityProfile(input: {
   await ensureAuthorityProfilesReady();
   const result = await pool.query(
     `INSERT INTO authority_profiles (
-       client_id, primary_domain, primary_website, geography_json,
-       service_ids_json, discovery_enabled, source, updated_at
-     ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, NOW())
+       client_id, primary_domain, primary_website, primary_city, primary_region,
+       geography_json, service_ids_json, discovery_enabled, source, updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, NOW())
      ON CONFLICT (client_id) DO UPDATE SET
        primary_domain = EXCLUDED.primary_domain,
        primary_website = EXCLUDED.primary_website,
+       primary_city = EXCLUDED.primary_city,
+       primary_region = EXCLUDED.primary_region,
        geography_json = EXCLUDED.geography_json,
        service_ids_json = EXCLUDED.service_ids_json,
        discovery_enabled = EXCLUDED.discovery_enabled,
        source = EXCLUDED.source,
        updated_at = NOW()
      RETURNING id, client_id, primary_domain, primary_website,
-               geography_json, service_ids_json, discovery_enabled, source,
-               created_at, updated_at`,
+               primary_city, primary_region, geography_json, service_ids_json,
+               discovery_enabled, source, created_at, updated_at`,
     [
       input.clientId,
       input.primaryDomain,
       input.primaryWebsite,
+      input.primaryCity,
+      input.primaryRegion,
       JSON.stringify(input.geography),
       JSON.stringify(input.serviceIds),
       input.discoveryEnabled,

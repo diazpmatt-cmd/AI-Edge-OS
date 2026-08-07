@@ -20,6 +20,7 @@ import {
  * - one profile per client_id
  * - discovery is disabled by default
  * - primary_domain is the normalized bare domain owned by the client
+ * - primary_city / primary_region map explicitly to provider discovery inputs
  * - geography/service scopes are explicit arrays; scheduled authority work must
  *   fail closed when required scope is missing
  */
@@ -30,6 +31,8 @@ export const authorityProfilesTable = pgTable(
     clientId: text("client_id").notNull(),
     primaryDomain: text("primary_domain").notNull(),
     primaryWebsite: text("primary_website"),
+    primaryCity: text("primary_city"),
+    primaryRegion: text("primary_region"),
     geographyJson: jsonb("geography_json").notNull().default([]),
     serviceIdsJson: jsonb("service_ids_json").notNull().default([]),
     discoveryEnabled: boolean("discovery_enabled").notNull().default(false),

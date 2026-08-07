@@ -1,6 +1,8 @@
 export interface AuthorityProfileInput {
   readonly primaryDomain?: unknown;
   readonly primaryWebsite?: unknown;
+  readonly primaryCity?: unknown;
+  readonly primaryRegion?: unknown;
   readonly geography?: unknown;
   readonly serviceIds?: unknown;
   readonly discoveryEnabled?: unknown;
@@ -12,6 +14,8 @@ export type AuthorityProfileValidation =
       readonly value: {
         readonly primaryDomain: string;
         readonly primaryWebsite: string | null;
+        readonly primaryCity: string | null;
+        readonly primaryRegion: string | null;
         readonly geography: readonly string[];
         readonly serviceIds: readonly string[];
         readonly discoveryEnabled: boolean;
@@ -22,6 +26,14 @@ export type AuthorityProfileValidation =
       readonly code: string;
       readonly message: string;
     };
+
+function normalizeOptionalLabel(value: unknown, maxLength: number): string | null | undefined {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) return undefined;
+  return normalized;
+}
 
 function normalizeStringArray(value: unknown, maxItems: number): string[] | null {
   if (!Array.isArray(value)) return null;
@@ -90,6 +102,24 @@ export function validateAuthorityProfileInput(
     };
   }
 
+  const primaryCity = normalizeOptionalLabel(input.primaryCity, 120);
+  if (primaryCity === undefined) {
+    return {
+      ok: false,
+      code: "AUTHORITY_PROFILE_CITY_INVALID",
+      message: "primaryCity must be a non-empty string up to 120 characters when supplied.",
+    };
+  }
+
+  const primaryRegion = normalizeOptionalLabel(input.primaryRegion, 160);
+  if (primaryRegion === undefined) {
+    return {
+      ok: false,
+      code: "AUTHORITY_PROFILE_REGION_INVALID",
+      message: "primaryRegion must be a non-empty string up to 160 characters when supplied.",
+    };
+  }
+
   const geography = normalizeStringArray(input.geography, 50);
   if (!geography) {
     return {
@@ -116,11 +146,14 @@ export function validateAuthorityProfileInput(
     };
   }
 
-  if (input.discoveryEnabled && (geography.length === 0 || serviceIds.length === 0)) {
+  if (
+    input.discoveryEnabled &&
+    (!primaryCity || !primaryRegion || geography.length === 0 || serviceIds.length === 0)
+  ) {
     return {
       ok: false,
       code: "AUTHORITY_PROFILE_SCOPE_INCOMPLETE",
-      message: "Authority discovery cannot be enabled until geography and service scope are both configured.",
+      message: "Authority discovery cannot be enabled until city, region, geography, and service scope are configured.",
     };
   }
 
@@ -129,6 +162,8 @@ export function validateAuthorityProfileInput(
     value: Object.freeze({
       primaryDomain,
       primaryWebsite,
+      primaryCity,
+      primaryRegion,
       geography: Object.freeze(geography),
       serviceIds: Object.freeze(serviceIds),
       discoveryEnabled: input.discoveryEnabled,

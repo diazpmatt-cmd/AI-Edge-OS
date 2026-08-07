@@ -135,6 +135,33 @@ function hasVerifiedExternalReceipt(
   );
 }
 
+function laneHasHistoricalVerifiedReceipt(
+  attempts: readonly WeeklyDeliveryAttemptInput[],
+  postId: string,
+  platform: string,
+): boolean {
+  return attempts.some(
+    (attempt) =>
+      attempt.postId === postId &&
+      attempt.platform === platform &&
+      hasVerifiedExternalReceipt(attempt),
+  );
+}
+
+function retryAllowedForTerminalAttempt(
+  attempt: WeeklyDeliveryAttemptInput,
+  allAttempts: readonly WeeklyDeliveryAttemptInput[],
+): boolean {
+  return (
+    attempt.retryAllowed &&
+    !laneHasHistoricalVerifiedReceipt(
+      allAttempts,
+      attempt.postId,
+      attempt.platform,
+    )
+  );
+}
+
 function latestAttempts(
   attempts: readonly WeeklyDeliveryAttemptInput[],
 ): ReadonlyMap<string, WeeklyDeliveryAttemptInput> {
@@ -249,7 +276,7 @@ export function buildWeeklyDeliverySummary(input: {
         attemptNumber: attempt.attemptNumber,
         errorCode: sanitizeDeliveryCode(attempt.errorCode),
         message: sanitizeDeliveryDiagnostic(attempt.errorMessage),
-        retryAllowed: attempt.retryAllowed,
+        retryAllowed: retryAllowedForTerminalAttempt(attempt, input.attempts),
       })),
       ...skippedAttempts.map((attempt) => ({
         postId: attempt.postId,
@@ -258,7 +285,7 @@ export function buildWeeklyDeliverySummary(input: {
         attemptNumber: attempt.attemptNumber,
         errorCode: sanitizeDeliveryCode(attempt.errorCode),
         message: sanitizeDeliveryDiagnostic(attempt.errorMessage),
-        retryAllowed: attempt.retryAllowed,
+        retryAllowed: retryAllowedForTerminalAttempt(attempt, input.attempts),
       })),
       ...receiptMissingAttempts.map((attempt) => ({
         postId: attempt.postId,
@@ -268,7 +295,7 @@ export function buildWeeklyDeliverySummary(input: {
         errorCode: "PROVIDER_RECEIPT_MISSING",
         message:
           "Provider status was receipt-classified, but no external post ID or URL was recorded.",
-        retryAllowed: attempt.retryAllowed,
+        retryAllowed: false,
       })),
     ];
 

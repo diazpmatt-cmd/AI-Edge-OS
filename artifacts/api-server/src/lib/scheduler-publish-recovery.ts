@@ -45,7 +45,11 @@ const SECRET_PATTERNS = [
   /eyJ[A-Za-z0-9._\-]+/g,
   /\b[A-Za-z0-9]{40,}\b/g,
 ];
-const RECEIPT_STATUSES = new Set(["published", "published_with_warning"]);
+const RECEIPT_STATUSES = new Set([
+  "published",
+  "published_with_warning",
+  "idempotency_hit",
+]);
 
 function sanitizeSchedulerError(value: string): string {
   let sanitized = value || "Unknown scheduler error";

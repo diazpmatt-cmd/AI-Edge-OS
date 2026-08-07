@@ -59,6 +59,22 @@ async function acquireTransactionOutcomeLock(
   );
 }
 
+async function assertPursuingWorkflow(
+  client: { query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ status: string }> }> },
+  clientId: string,
+  opportunityId: string,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT status FROM backlink_workflows
+     WHERE opportunity_id = $1 AND client_id = $2
+     LIMIT 1`,
+    [opportunityId, clientId],
+  );
+  if (result.rows[0]?.status !== "pursuing") {
+    throw new Error("authority_acquisition_proof_workflow_not_pursuing");
+  }
+}
+
 export async function withAuthorityAcquisitionOutcomeLock<T>(
   clientId: string,
   opportunityId: string,
@@ -145,6 +161,7 @@ export async function createAuthorityAcquisitionProof(input: {
   try {
     await client.query("BEGIN");
     await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
+    await assertPursuingWorkflow(client, input.clientId, input.opportunityId);
     const result = await client.query<ProofRow>(
       `INSERT INTO authority_acquisition_proofs (
          client_id, opportunity_id, prospect_id, workflow_id, proof_type,
@@ -189,6 +206,7 @@ export async function updateAuthorityAcquisitionProof(input: {
   try {
     await client.query("BEGIN");
     await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
+    await assertPursuingWorkflow(client, input.clientId, input.opportunityId);
     const currentResult = await client.query<ProofRow>(
       `SELECT * FROM authority_acquisition_proofs
        WHERE id = $1 AND client_id = $2 AND opportunity_id = $3
@@ -252,6 +270,7 @@ export async function actOnAuthorityAcquisitionProof(input: {
   try {
     await client.query("BEGIN");
     await acquireTransactionOutcomeLock(client, input.clientId, input.opportunityId);
+    await assertPursuingWorkflow(client, input.clientId, input.opportunityId);
     const currentResult = await client.query<ProofRow>(
       `SELECT * FROM authority_acquisition_proofs
        WHERE id = $1 AND client_id = $2 AND opportunity_id = $3

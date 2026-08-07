@@ -12,6 +12,7 @@ export function evaluateAuthorityScheduledReadiness(input: {
   readonly clientActive: boolean;
   readonly discoveryContext: AuthorityDiscoveryContextResult;
   readonly liveProviderHealth: BacklinkProviderHealthState;
+  readonly scheduledModeSchemaReady: boolean;
 }): AuthorityScheduledReadiness {
   if (!input.clientActive) {
     return Object.freeze({
@@ -31,6 +32,15 @@ export function evaluateAuthorityScheduledReadiness(input: {
     });
   }
 
+  if (!input.scheduledModeSchemaReady) {
+    return Object.freeze({
+      ready: false,
+      code: "AUTHORITY_SCHEDULED_MODE_SCHEMA_NOT_READY",
+      message: "The backlink ingestion ledger still enforces manual-only runs and must be upgraded before scheduled execution can be represented truthfully.",
+      executionActivated: false,
+    });
+  }
+
   if (input.liveProviderHealth.status !== "configured") {
     return Object.freeze({
       ready: false,
@@ -43,7 +53,7 @@ export function evaluateAuthorityScheduledReadiness(input: {
   return Object.freeze({
     ready: true,
     code: "AUTHORITY_SCHEDULED_READY_NOT_ACTIVATED",
-    message: "Tenant context and the live backlink provider are ready. Scheduled provider execution remains intentionally disabled until activation is explicitly authorized.",
+    message: "Tenant context, scheduled-mode persistence, and the live backlink provider are ready. Scheduled provider execution remains intentionally disabled until activation is explicitly authorized.",
     executionActivated: false,
   });
 }

@@ -1,0 +1,76 @@
+import { pool } from "@workspace/db";
+
+export interface BacklinkScheduledModeSchemaState {
+  readonly ready: boolean;
+  readonly constraintDefinition: string | null;
+}
+
+const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
+const MODE_MIGRATION_LOCK_KEY = "ai_edge_backlink_scheduled_mode_v1";
+let bootstrapPromise: Promise<void> | null = null;
+
+export function isBacklinkScheduledModeConstraintReady(definition: string | null): boolean {
+  return Boolean(
+    definition &&
+    /mode/i.test(definition) &&
+    /manual/i.test(definition) &&
+    /scheduled/i.test(definition)
+  );
+}
+
+/**
+ * Idempotently expands the persisted backlink ingestion mode contract from
+ * manual-only to manual | scheduled.
+ *
+ * This does NOT activate scheduled execution. The ingestion validator and
+ * scheduler execution boundary remain fail-closed until separately wired.
+ */
+export function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
+  if (bootstrapPromise) return bootstrapPromise;
+
+  bootstrapPromise = (async () => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [MODE_MIGRATION_LOCK_KEY],
+      );
+      await client.query(`
+        ALTER TABLE backlink_ingestion_runs
+          DROP CONSTRAINT IF EXISTS ${MODE_CONSTRAINT};
+        ALTER TABLE backlink_ingestion_runs
+          ADD CONSTRAINT ${MODE_CONSTRAINT}
+          CHECK (mode IN ('manual','scheduled')) NOT VALID;
+        ALTER TABLE backlink_ingestion_runs
+          VALIDATE CONSTRAINT ${MODE_CONSTRAINT};
+      `);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      bootstrapPromise = null;
+      throw error;
+    } finally {
+      client.release();
+    }
+  })();
+
+  return bootstrapPromise;
+}
+
+export async function getBacklinkScheduledModeSchemaState(): Promise<BacklinkScheduledModeSchemaState> {
+  const result = await pool.query<{ definition: string }>(
+    `SELECT pg_get_constraintdef(c.oid) AS definition
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'backlink_ingestion_runs'
+        AND c.conname = $1
+      LIMIT 1`,
+    [MODE_CONSTRAINT],
+  );
+  const definition = result.rows[0]?.definition ?? null;
+  return Object.freeze({
+    ready: isBacklinkScheduledModeConstraintReady(definition),
+    constraintDefinition: definition,
+  });
+}

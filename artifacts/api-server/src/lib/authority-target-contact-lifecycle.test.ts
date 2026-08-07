@@ -3,6 +3,7 @@ import {
   nextAuthorityTargetContactVerification,
   validateAuthorityTargetContactExpectedVersion,
   validateAuthorityTargetContactInput,
+  verificationAfterAuthorityTargetContactEdit,
 } from "./authority-target-contact-lifecycle.js";
 
 describe("Authority target contact policy", () => {
@@ -57,6 +58,12 @@ describe("Authority target contact policy", () => {
       .toThrow("verification_source_required");
     expect(nextAuthorityTargetContactVerification("verify", "unverified", "https://example.org/staff"))
       .toBe("human_verified");
+  });
+
+  it("editing a human-verified contact requires fresh verification", () => {
+    expect(verificationAfterAuthorityTargetContactEdit("unverified")).toBe("unverified");
+    expect(verificationAfterAuthorityTargetContactEdit("human_verified")).toBe("unverified");
+    expect(() => verificationAfterAuthorityTargetContactEdit("invalid")).toThrow("invalid_must_reopen");
   });
 
   it("preserves invalid contacts until a human explicitly reopens them", () => {

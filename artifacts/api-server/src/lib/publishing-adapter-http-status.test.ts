@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { readAdapterResultsEnvelope } from "./publishing-adapter-result";
 import {
   INTERNAL_PARTIAL_ADAPTER_STATUS,
   resolveInternalAdapterResponseStatus,
-} from "../middlewares/internalPublishReceiptMiddleware";
+} from "./publishing-adapter-http-status";
+import { readAdapterResultsEnvelope } from "./publishing-adapter-result";
 
 describe("internal adapter partial-result status contract", () => {
   it("keeps a valid partial result envelope consumable by PublishingService", () => {

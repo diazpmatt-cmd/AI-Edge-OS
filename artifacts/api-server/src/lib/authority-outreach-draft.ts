@@ -72,7 +72,7 @@ export function classifyAuthorityOutreachDraftType(
 }
 
 function servicePhrase(serviceName: string | null): string {
-  return serviceName ? `, including ${serviceName},` : "";
+  return serviceName ? `, with services including ${serviceName}` : "";
 }
 
 function buildSubject(

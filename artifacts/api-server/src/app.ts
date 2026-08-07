@@ -16,6 +16,7 @@ import backlinkOpportunityIntelligenceRouter from "./routes/backlink-opportunity
 import authorityOutreachDraftRouter from "./routes/authority-outreach-draft";
 import authorityOutreachReadinessRouter from "./routes/authority-outreach-readiness";
 import authorityTargetContactsRouter from "./routes/authority-target-contacts";
+import authorityBacklinkWinEvidenceRouter from "./routes/authority-backlink-win-evidence";
 import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-safe";
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
@@ -80,16 +81,10 @@ app.get("/api/version", (_req, res) => {
   });
 });
 
-// PUBLIC routes — mounted before Clerk middleware (no auth required).
-// Lifecycle correlation runs before the existing Telnyx handlers and always
-// calls next(), preserving the current call-control and inbound intake flow.
 app.use("/api", oauthCallbacksRouter);
 app.use("/api", leadDeliveryWebhooksRouter);
 app.use("/api", telnyxRouter);
 
-// Provider adapters are an internal implementation detail of PublishingService.
-// Block direct calls and persist their provider receipts before releasing the
-// internal response to the canonical publishing pipeline.
 app.use(
   "/api/social-posts/:id/publish",
   requireInternalPublishAdapter,
@@ -105,9 +100,6 @@ app.use(
   })),
 );
 
-// Friendly API boundary for every known user mutation that could alter or
-// remove an approved payload while provider delivery is in flight. PostgreSQL's
-// trigger remains the atomic authority if state changes after this read check.
 app.patch("/api/social-posts/:id", rejectPublishingPostMutation);
 app.delete("/api/social-posts/:id", rejectPublishingPostMutation);
 app.post("/api/social-posts/bulk/publish", rejectPublishingPostMutation);
@@ -126,10 +118,6 @@ for (const pathSuffix of [
   );
 }
 
-// These Authority/backlink routers were authored with canonical `/api/...`
-// paths already included. Mount them once at the app root after Clerk so their
-// public contract remains `/api/...` rather than the accidental `/api/api/...`
-// produced when they are nested under the shared API router.
 app.use(competitorIntelligenceRouter);
 app.use(authorityProfileRouter);
 app.use(backlinkScheduledSafetyRouter);
@@ -137,6 +125,7 @@ app.use(backlinkOpportunityIntelligenceRouter);
 app.use(authorityOutreachDraftRouter);
 app.use(authorityOutreachReadinessRouter);
 app.use(authorityTargetContactsRouter);
+app.use(authorityBacklinkWinEvidenceRouter);
 app.use(backlinkWorkflowPatchSafeRouter);
 app.use(backlinkWorkflowActionsRouter);
 app.use(backlinksRouter);

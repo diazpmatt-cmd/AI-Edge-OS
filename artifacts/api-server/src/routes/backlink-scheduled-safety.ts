@@ -1,33 +1,103 @@
 import { Router } from "express";
+import {
+  getDataForSEOBacklinkHealthState,
+  parseDataForSEOBacklinkConfig,
+  pool,
+} from "@workspace/db";
 
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
+import { getAuthorityProfile } from "../lib/authority-profile-store.js";
+import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-context.js";
+import { evaluateAuthorityScheduledReadiness } from "../lib/authority-scheduled-readiness.js";
 
 const router = Router();
 
 /**
- * Temporary fail-closed boundary for scheduled backlink discovery.
+ * Fail-closed readiness boundary for scheduled backlink discovery.
  *
- * The legacy scheduled ingestion route still builds discovery input from
- * BB&B-specific constants (domain, geography, and service allowlists), while
- * the canonical tenant record does not yet own a website/domain field. It is
- * therefore unsafe to let the scheduler execute that path for arbitrary
- * tenants. Mount this router before backlinksRouter until a tenant-owned
- * authority/discovery profile supplies the complete discovery context.
+ * This route intentionally stops before provider execution. It proves that the
+ * scheduler can resolve a complete tenant-owned Authority context and a truly
+ * configured live provider without falling through to BB&B constants or fixture
+ * observations. Paid/live execution remains a separate activation decision.
  */
-router.post("/api/backlinks/ingest/scheduled", (req, res) => {
+router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
   if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  res.setHeader("Cache-Control", "no-store");
-  res.status(409).json({
-    ok: false,
-    outcome: "skipped",
-    error: "BACKLINK_SCHEDULED_CONTEXT_NOT_TENANT_SAFE",
-    message:
-      "Scheduled backlink discovery is paused until domain, competitor, geography, and service scope come from a canonical tenant-owned authority profile.",
-  });
+  const clientId = req.headers["x-scheduler-client-id"];
+  if (!clientId || typeof clientId !== "string" || !clientId.trim()) {
+    res.status(400).json({ error: "x-scheduler-client-id header required" });
+    return;
+  }
+
+  try {
+    const trustedClientId = clientId.trim();
+    const [clientResult, profile, services, competitors] = await Promise.all([
+      pool.query<{ id: string; is_active: boolean }>(
+        `SELECT id, is_active FROM clients WHERE id = $1 LIMIT 1`,
+        [trustedClientId],
+      ),
+      getAuthorityProfile(trustedClientId),
+      pool.query<{ service_key: string }>(
+        `SELECT service_key
+           FROM client_services
+          WHERE client_id = $1
+            AND is_active = TRUE
+            AND status = 'active'
+          ORDER BY sort_order, service_key`,
+        [trustedClientId],
+      ),
+      pool.query<{ domain: string }>(
+        `SELECT domain
+           FROM competitors
+          WHERE client_id = $1
+            AND canonical_status = 'active'
+          ORDER BY opportunity_score DESC, last_seen_at DESC
+          LIMIT 100`,
+        [trustedClientId],
+      ),
+    ]);
+
+    const clientActive = Boolean(clientResult.rows[0]?.is_active);
+    const discoveryContext = buildAuthorityDiscoveryContext({
+      profile,
+      competitorDomains: competitors.rows.map((row) => row.domain),
+      activeServiceIds: services.rows.map((row) => row.service_key),
+    });
+    const providerHealth = getDataForSEOBacklinkHealthState(
+      parseDataForSEOBacklinkConfig(),
+    );
+    const readiness = evaluateAuthorityScheduledReadiness({
+      clientActive,
+      discoveryContext,
+      liveProviderHealth: providerHealth,
+    });
+
+    res.setHeader("Cache-Control", "no-store");
+    res.status(409).json({
+      ok: false,
+      outcome: "skipped",
+      ...readiness,
+      provider: {
+        name: providerHealth.provider,
+        status: providerHealth.status,
+      },
+      contextReady: discoveryContext.ok,
+    });
+  } catch (error) {
+    console.error("[AUTHORITY-SCHEDULED-READINESS] failed:", error);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({
+      ok: false,
+      outcome: "skipped",
+      ready: false,
+      executionActivated: false,
+      code: "AUTHORITY_SCHEDULED_READINESS_UNAVAILABLE",
+      message: "Scheduled Authority readiness could not be evaluated safely.",
+    });
+  }
 });
 
 export default router;

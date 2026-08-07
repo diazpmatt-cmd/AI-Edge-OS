@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import {
   getDataForSEOBacklinkHealthState,
   parseDataForSEOBacklinkConfig,
@@ -11,6 +12,29 @@ import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-conte
 import { evaluateAuthorityScheduledReadiness } from "../lib/authority-scheduled-readiness.js";
 
 const router = Router();
+
+/**
+ * Fixture ingestion is test/demo-only and is intentionally unavailable through
+ * the authenticated production Authority surface. The legacy handler below this
+ * router still contains BB&B-specific fixture observations and must never write
+ * those observations into an arbitrary tenant.
+ */
+router.post("/api/backlinks/ingest/fixture", (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  res.status(409).json({
+    ok: false,
+    outcome: "skipped",
+    error: "BACKLINK_FIXTURE_INGEST_DISABLED",
+    message:
+      "Fixture backlink ingestion is disabled on the authenticated Authority surface because fixture evidence is not tenant-owned production data.",
+  });
+});
 
 /**
  * Fail-closed readiness boundary for scheduled backlink discovery.

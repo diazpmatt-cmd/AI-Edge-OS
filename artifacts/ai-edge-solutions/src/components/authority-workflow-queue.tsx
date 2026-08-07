@@ -51,9 +51,11 @@ function categoryLabel(category: string): string {
 export function AuthorityWorkflowQueue({
   onChanged,
   onDraft,
+  onProof,
 }: {
   onChanged: () => void;
   onDraft?: (opportunityId: string) => void;
+  onProof?: (opportunityId: string) => void;
 }) {
   const apiFetch = useApiFetch();
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -86,7 +88,7 @@ export function AuthorityWorkflowQueue({
     if (action === "reject" && !window.confirm("Reject this authority opportunity? This makes the workflow terminal.")) {
       return;
     }
-    if (action === "mark_won" && !window.confirm("Mark this authority opportunity as won?")) {
+    if (action === "mark_won" && !window.confirm("Mark this authority opportunity as won? A human-verified acquisition proof is required.")) {
       return;
     }
 
@@ -170,6 +172,7 @@ export function AuthorityWorkflowQueue({
             const busy = transitioningId === item.opportunityId;
             const statusColor = STATUS_COLOR[item.workflowStatus];
             const draftEligible = item.workflowStatus === "approved" || item.workflowStatus === "pursuing";
+            const proofEligible = item.workflowStatus === "pursuing";
             return (
               <div key={item.opportunityId} style={{
                 display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, alignItems: "center",
@@ -210,6 +213,20 @@ export function AuthorityWorkflowQueue({
                       }}
                     >
                       Draft Outreach
+                    </button>
+                  )}
+                  {proofEligible && onProof && (
+                    <button
+                      disabled={Boolean(transitioningId)}
+                      onClick={() => onProof(item.opportunityId)}
+                      style={{
+                        padding: "5px 9px", borderRadius: 7, fontSize: 9, fontWeight: 800,
+                        cursor: transitioningId ? "default" : "pointer", color: "#86EFAC",
+                        background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.22)",
+                        opacity: transitioningId ? 0.45 : 1,
+                      }}
+                    >
+                      Acquisition Proof
                     </button>
                   )}
                   <button

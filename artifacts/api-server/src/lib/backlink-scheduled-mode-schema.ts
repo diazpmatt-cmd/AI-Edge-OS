@@ -6,6 +6,7 @@ export interface BacklinkScheduledModeSchemaState {
 }
 
 const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
+const MODE_MIGRATION_LOCK_KEY = "ai_edge_backlink_scheduled_mode_v1";
 let bootstrapPromise: Promise<void> | null = null;
 
 export function isBacklinkScheduledModeConstraintReady(definition: string | null): boolean {
@@ -31,6 +32,10 @@ export function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [MODE_MIGRATION_LOCK_KEY],
+      );
       await client.query(`
         ALTER TABLE backlink_ingestion_runs
           DROP CONSTRAINT IF EXISTS ${MODE_CONSTRAINT};

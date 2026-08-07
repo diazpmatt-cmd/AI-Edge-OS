@@ -27,6 +27,7 @@ export * from "./discovery-schedules";
 export * from "./backlinks";
 export * from "./authority-outreach-drafts";
 export * from "./authority-target-contacts";
+export * from "./authority-acquisition-proofs";
 export * from "./authority-profiles";
 export * from "./platform-deliveries";
 export * from "./agent-tasks";

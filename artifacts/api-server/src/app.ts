@@ -13,6 +13,7 @@ import competitorIntelligenceRouter from "./routes/competitor-intelligence";
 import authorityProfileRouter from "./routes/authority-profile";
 import backlinkScheduledSafetyRouter from "./routes/backlink-scheduled-safety";
 import backlinkOpportunityIntelligenceRouter from "./routes/backlink-opportunity-intelligence";
+import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-safe";
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
 import { logger } from "./lib/logger";
@@ -130,6 +131,7 @@ app.use(competitorIntelligenceRouter);
 app.use(authorityProfileRouter);
 app.use(backlinkScheduledSafetyRouter);
 app.use(backlinkOpportunityIntelligenceRouter);
+app.use(backlinkWorkflowPatchSafeRouter);
 app.use(backlinkWorkflowActionsRouter);
 app.use(backlinksRouter);
 

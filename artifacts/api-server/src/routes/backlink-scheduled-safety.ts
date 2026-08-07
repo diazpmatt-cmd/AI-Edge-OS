@@ -10,6 +10,10 @@ import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
 import { getAuthorityProfile } from "../lib/authority-profile-store.js";
 import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-context.js";
 import { evaluateAuthorityScheduledReadiness } from "../lib/authority-scheduled-readiness.js";
+import {
+  ensureBacklinkScheduledModeSchemaReady,
+  getBacklinkScheduledModeSchemaState,
+} from "../lib/backlink-scheduled-mode-schema.js";
 
 const router = Router();
 
@@ -40,9 +44,10 @@ router.post("/api/backlinks/ingest/fixture", (req, res) => {
  * Fail-closed readiness boundary for scheduled backlink discovery.
  *
  * This route intentionally stops before provider execution. It proves that the
- * scheduler can resolve a complete tenant-owned Authority context and a truly
- * configured live provider without falling through to BB&B constants or fixture
- * observations. Paid/live execution remains a separate activation decision.
+ * scheduler can resolve a complete tenant-owned Authority context, truthful
+ * scheduled-mode persistence, and a truly configured live provider without
+ * falling through to BB&B constants or fixture observations. Paid/live execution
+ * remains a separate activation decision.
  */
 router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
   if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
@@ -58,7 +63,9 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
 
   try {
     const trustedClientId = clientId.trim();
-    const [clientResult, profile, services, competitors] = await Promise.all([
+    await ensureBacklinkScheduledModeSchemaReady();
+
+    const [clientResult, profile, services, competitors, scheduledModeSchema] = await Promise.all([
       pool.query<{ id: string; is_active: boolean }>(
         `SELECT id, is_active FROM clients WHERE id = $1 LIMIT 1`,
         [trustedClientId],
@@ -82,6 +89,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
           LIMIT 100`,
         [trustedClientId],
       ),
+      getBacklinkScheduledModeSchemaState(),
     ]);
 
     const clientActive = Boolean(clientResult.rows[0]?.is_active);
@@ -97,6 +105,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
       clientActive,
       discoveryContext,
       liveProviderHealth: providerHealth,
+      scheduledModeSchemaReady: scheduledModeSchema.ready,
     });
 
     res.setHeader("Cache-Control", "no-store");
@@ -109,6 +118,7 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res) => {
         status: providerHealth.status,
       },
       contextReady: discoveryContext.ok,
+      scheduledModeSchemaReady: scheduledModeSchema.ready,
     });
   } catch (error) {
     console.error("[AUTHORITY-SCHEDULED-READINESS] failed:", error);

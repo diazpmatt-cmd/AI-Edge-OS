@@ -73,7 +73,7 @@ function evidence(overrides: Partial<BacklinkEvidenceRecord> = {}): BacklinkEvid
     sourceUrl: "https://publisher.example/resources",
     targetUrl: "https://client.example/service",
     competitorUrl: "https://competitor.example/service",
-    category: "competitor_link_gap",
+    category: "link_intersection",
     serviceId: "bed-bugs",
     providers: ["provider-z", "provider-a"],
     discoveredAt: now,

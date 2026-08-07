@@ -4,6 +4,7 @@ import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
 import { migrateAuthorityOutreachDrafts } from "./lib/authority-outreach-draft-migrate.js";
+import { migrateAuthorityTargetContacts } from "./lib/authority-target-contact-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
 import { startPublishingInterruptionRecoveryMonitor } from "./lib/publishing-interruption-recovery.js";
 import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard.js";
@@ -26,6 +27,7 @@ migrateSchema()
   .then(() => migrateLeadAuditEvents())
   .then(() => migrateAgentTasks())
   .then(() => migrateAuthorityOutreachDrafts())
+  .then(() => migrateAuthorityTargetContacts())
   .then(() => bootstrapPublishingMutationGuard())
   .then(() => import("./app.js"))
   .then(({ default: app }) => {

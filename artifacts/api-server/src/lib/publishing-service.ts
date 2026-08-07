@@ -42,8 +42,11 @@ import { parsePublishingPlatformBinding } from "./publishing-platform-binding.js
 import { evaluateFullReplayReceiptGuard } from "./publishing-replay-safety.js";
 import {
   PUBLISH_OWNERSHIP_CONFLICT_MESSAGE,
+  PUBLISH_SESSION_OWNERSHIP_CONFLICT_MESSAGE,
   PUBLISH_SOURCE_STATE_INVALID_MESSAGE,
+  PublishSessionOwnershipConflictError,
   canClaimPublishingOwnership,
+  withPostPublishSessionOwnership,
 } from "./publishing-ownership.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -448,219 +451,228 @@ export class PublishingService {
       return this.errorResult(postId, PUBLISH_SOURCE_STATE_INVALID_MESSAGE);
     }
 
-    // ── Step 5: Claim snapshot + create every attempt atomically ────────────
-    // The status, approval, platform binding, and updated timestamp must still
-    // match the exact row read above. A concurrent publish or edit therefore
-    // wins the compare-and-set and the losing request creates zero deliveries.
-    const deliveries = await db.transaction(async (tx) => {
-      const claimAt = new Date();
-      const claimed = await tx
-        .update(socialPostsTable)
-        .set({
-          status: "publishing",
-          publishedBy: triggeredBy,
-          updatedAt: claimAt,
-        })
-        .where(and(
-          eq(socialPostsTable.id, postId),
-          eq(socialPostsTable.userId, userId),
-          eq(socialPostsTable.status, post.status),
-          eq(socialPostsTable.approvalStatus, "approved"),
-          eq(socialPostsTable.platforms, post.platforms),
-          eq(socialPostsTable.updatedAt, post.updatedAt),
-        ))
-        .returning({ id: socialPostsTable.id });
-
-      if (claimed.length !== 1) return null;
-
-      const prepared: PlatformDelivery[] = [];
-      for (const platform of platforms) {
-        const rows = await tx
-          .select()
-          .from(platformDeliveriesTable)
-          .where(and(
-            eq(platformDeliveriesTable.postId, postId),
-            eq(platformDeliveriesTable.platform, platform),
-            eq(platformDeliveriesTable.userId, userId),
-          ))
-          .orderBy(platformDeliveriesTable.attemptNumber);
-        const existing = rows[rows.length - 1] ?? null;
-        const attemptNumber = existing ? existing.attemptNumber + 1 : 1;
-        const attemptId = deriveAttemptId(postId, platform, attemptNumber);
-
-        const [delivery] = await tx
-          .insert(platformDeliveriesTable)
-          .values({
-            postId,
-            userId,
-            platform,
-            status: "publishing",
-            attemptNumber,
-            attemptId,
-            approvedBy: post.approvedBy ?? null,
-            publishedBy: triggeredBy,
-          })
-          .returning();
-
-        prepared.push(delivery);
-      }
-
-      return prepared;
-    });
-
-    if (!deliveries) {
-      return this.errorResult(postId, PUBLISH_OWNERSHIP_CONFLICT_MESSAGE);
-    }
-
-    // ── Step 6: Call platform adapters via internal publish route ────────────
-    //
-    // We delegate to the existing /publish route which contains all the
-    // platform adapter logic. This preserves backward compatibility while
-    // the service layer adds delivery tracking and idempotency.
-    let adapterResults: Record<string, { ok: boolean; error?: string; postId?: string; postUrl?: string }> = {};
-
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (schedulerSecret) {
-        headers["x-scheduler-secret"] = schedulerSecret;
-      } else {
-        // For user-triggered publishes, the userId is injected via body
-        headers["x-internal-user-id"] = userId;
-      }
+      return await withPostPublishSessionOwnership(pool, userId, postId, async () => {
+        // ── Step 5: Claim snapshot + create every attempt atomically ────────
+        // The status, approval, platform binding, and updated timestamp must still
+        // match the exact row read above. A concurrent publish or edit therefore
+        // wins the compare-and-set and the losing request creates zero deliveries.
+        const deliveries = await db.transaction(async (tx) => {
+          const claimAt = new Date();
+          const claimed = await tx
+            .update(socialPostsTable)
+            .set({
+              status: "publishing",
+              publishedBy: triggeredBy,
+              updatedAt: claimAt,
+            })
+            .where(and(
+              eq(socialPostsTable.id, postId),
+              eq(socialPostsTable.userId, userId),
+              eq(socialPostsTable.status, post.status),
+              eq(socialPostsTable.approvalStatus, "approved"),
+              eq(socialPostsTable.platforms, post.platforms),
+              eq(socialPostsTable.updatedAt, post.updatedAt),
+            ))
+            .returning({ id: socialPostsTable.id });
 
-      const res = await fetch(`${internalBase}/api/social-posts/${postId}/publish`, {
-        method: "POST",
-        headers,
-      });
+          if (claimed.length !== 1) return null;
 
-      if (res.ok || res.status < 500) {
-        const data = await res.json() as any;
-        adapterResults = data.results ?? {};
-      }
-    } catch (e: unknown) {
-      const msg = sanitizeError(e instanceof Error ? e.message : String(e));
-      console.error(`[PUBLISHING-SERVICE] adapter call failed for post=${postId}:`, msg);
-    }
+          const prepared: PlatformDelivery[] = [];
+          for (const platform of platforms) {
+            const rows = await tx
+              .select()
+              .from(platformDeliveriesTable)
+              .where(and(
+                eq(platformDeliveriesTable.postId, postId),
+                eq(platformDeliveriesTable.platform, platform),
+                eq(platformDeliveriesTable.userId, userId),
+              ))
+              .orderBy(platformDeliveriesTable.attemptNumber);
+            const existing = rows[rows.length - 1] ?? null;
+            const attemptNumber = existing ? existing.attemptNumber + 1 : 1;
+            const attemptId = deriveAttemptId(postId, platform, attemptNumber);
 
-    // ── Step 7: Map adapter results → delivery records ───────────────────────
-    const attemptResults: DeliveryAttemptResult[] = [];
-    let publishedCount = 0;
-    let failedCount    = 0;
-    let skippedCount   = 0;
-    let warningCount   = 0;
+            const [delivery] = await tx
+              .insert(platformDeliveriesTable)
+              .values({
+                postId,
+                userId,
+                platform,
+                status: "publishing",
+                attemptNumber,
+                attemptId,
+                approvedBy: post.approvedBy ?? null,
+                publishedBy: triggeredBy,
+              })
+              .returning();
 
-    for (const delivery of deliveries) {
-      const adapterResult = adapterResults[delivery.platform];
+            prepared.push(delivery);
+          }
 
-      let newStatus: string;
-      let externalPostId:  string | null = null;
-      let externalPostUrl: string | null = null;
-      let errorMessage:    string | null = null;
-      let publishedAt:     Date | null   = null;
-      let failedAt:        Date | null   = null;
+          return prepared;
+        });
 
-      if (!adapterResult) {
-        // Platform was not reached — mark as failed
-        newStatus    = "failed";
-        errorMessage = "Platform adapter did not return a result";
-        failedAt     = new Date();
-        failedCount++;
-      } else if (
-        adapterResult.ok &&
-        (adapterResult.postId || adapterResult.postUrl)
-      ) {
-        newStatus       = "published";
-        externalPostId  = adapterResult.postId ?? null;
-        externalPostUrl = adapterResult.postUrl ?? null;
-        publishedAt     = new Date();
-        publishedCount++;
-      } else if (adapterResult.ok) {
-        newStatus    = "failed";
-        errorMessage = "Provider reported success without an external post receipt";
-        failedAt     = new Date();
-        failedCount++;
-      } else {
-        const sanitized = sanitizeError(adapterResult.error ?? "Unknown error");
-        // Distinguish skipped (media validation) from hard failures
-        if (sanitized.includes("requires video") || sanitized.includes("requires image") || sanitized.includes("Skipped")) {
-          newStatus    = "skipped";
-          errorMessage = sanitized;
-          skippedCount++;
-        } else {
-          newStatus    = "failed";
-          errorMessage = sanitized;
-          failedAt     = new Date();
-          failedCount++;
+        if (!deliveries) {
+          return this.errorResult(postId, PUBLISH_OWNERSHIP_CONFLICT_MESSAGE);
         }
-      }
 
-      await db.update(platformDeliveriesTable).set({
-        status:          newStatus,
-        externalPostId,
-        externalPostUrl,
-        errorMessage,
-        publishedAt:     publishedAt ?? undefined,
-        failedAt:        failedAt ?? undefined,
-        updatedAt:       new Date(),
-      }).where(eq(platformDeliveriesTable.id, delivery.id));
+        // ── Step 6: Call platform adapters via internal publish route ────────
+        //
+        // We delegate to the existing /publish route which contains all the
+        // platform adapter logic. This preserves backward compatibility while
+        // the service layer adds delivery tracking and idempotency.
+        let adapterResults: Record<string, { ok: boolean; error?: string; postId?: string; postUrl?: string }> = {};
 
-      attemptResults.push({
-        platform:        delivery.platform,
-        deliveryId:      delivery.id,
-        status:          newStatus as DeliveryAttemptResult["status"],
-        externalPostId,
-        externalPostUrl,
-        errorMessage,
-        apiResponseStatus: null,
+        try {
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          if (schedulerSecret) {
+            headers["x-scheduler-secret"] = schedulerSecret;
+          } else {
+            // For user-triggered publishes, the userId is injected via body
+            headers["x-internal-user-id"] = userId;
+          }
+
+          const res = await fetch(`${internalBase}/api/social-posts/${postId}/publish`, {
+            method: "POST",
+            headers,
+          });
+
+          if (res.ok || res.status < 500) {
+            const data = await res.json() as any;
+            adapterResults = data.results ?? {};
+          }
+        } catch (e: unknown) {
+          const msg = sanitizeError(e instanceof Error ? e.message : String(e));
+          console.error(`[PUBLISHING-SERVICE] adapter call failed for post=${postId}:`, msg);
+        }
+
+        // ── Step 7: Map adapter results → delivery records ───────────────────
+        const attemptResults: DeliveryAttemptResult[] = [];
+        let publishedCount = 0;
+        let failedCount    = 0;
+        let skippedCount   = 0;
+        let warningCount   = 0;
+
+        for (const delivery of deliveries) {
+          const adapterResult = adapterResults[delivery.platform];
+
+          let newStatus: string;
+          let externalPostId:  string | null = null;
+          let externalPostUrl: string | null = null;
+          let errorMessage:    string | null = null;
+          let publishedAt:     Date | null   = null;
+          let failedAt:        Date | null   = null;
+
+          if (!adapterResult) {
+            // Platform was not reached — mark as failed
+            newStatus    = "failed";
+            errorMessage = "Platform adapter did not return a result";
+            failedAt     = new Date();
+            failedCount++;
+          } else if (
+            adapterResult.ok &&
+            (adapterResult.postId || adapterResult.postUrl)
+          ) {
+            newStatus       = "published";
+            externalPostId  = adapterResult.postId ?? null;
+            externalPostUrl = adapterResult.postUrl ?? null;
+            publishedAt     = new Date();
+            publishedCount++;
+          } else if (adapterResult.ok) {
+            newStatus    = "failed";
+            errorMessage = "Provider reported success without an external post receipt";
+            failedAt     = new Date();
+            failedCount++;
+          } else {
+            const sanitized = sanitizeError(adapterResult.error ?? "Unknown error");
+            // Distinguish skipped (media validation) from hard failures
+            if (sanitized.includes("requires video") || sanitized.includes("requires image") || sanitized.includes("Skipped")) {
+              newStatus    = "skipped";
+              errorMessage = sanitized;
+              skippedCount++;
+            } else {
+              newStatus    = "failed";
+              errorMessage = sanitized;
+              failedAt     = new Date();
+              failedCount++;
+            }
+          }
+
+          await db.update(platformDeliveriesTable).set({
+            status:          newStatus,
+            externalPostId,
+            externalPostUrl,
+            errorMessage,
+            publishedAt:     publishedAt ?? undefined,
+            failedAt:        failedAt ?? undefined,
+            updatedAt:       new Date(),
+          }).where(eq(platformDeliveriesTable.id, delivery.id));
+
+          attemptResults.push({
+            platform:        delivery.platform,
+            deliveryId:      delivery.id,
+            status:          newStatus as DeliveryAttemptResult["status"],
+            externalPostId,
+            externalPostUrl,
+            errorMessage,
+            apiResponseStatus: null,
+          });
+        }
+
+        // ── Step 8: Compute final post status ────────────────────────────────
+        let finalPostStatus: string;
+        if (publishedCount > 0 && failedCount === 0 && skippedCount === 0) {
+          finalPostStatus = "published";
+        } else if (publishedCount > 0 && (failedCount > 0 || warningCount > 0)) {
+          finalPostStatus = "published_with_warning";
+        } else if (publishedCount === 0 && skippedCount === platforms.length) {
+          finalPostStatus = "failed"; // All skipped = validation failure
+        } else if (publishedCount === 0) {
+          finalPostStatus = "failed";
+        } else {
+          finalPostStatus = "published_with_warning";
+        }
+
+        const publishedAt = publishedCount > 0 ? new Date() : null;
+
+        await db.update(socialPostsTable).set({
+          status:      finalPostStatus,
+          publishedAt: publishedAt ?? undefined,
+          updatedAt:   new Date(),
+        }).where(and(eq(socialPostsTable.id, postId), eq(socialPostsTable.userId, userId)));
+
+        // ── Step 9: Build summary ───────────────────────────────────────────
+        const total = platforms.length;
+        const parts: string[] = [];
+        if (publishedCount > 0) parts.push(`${publishedCount} of ${total} published successfully`);
+        if (failedCount > 0)    parts.push(`${failedCount} failed`);
+        if (skippedCount > 0)   parts.push(`${skippedCount} skipped (media requirement not met)`);
+
+        const failedPlatforms = attemptResults.filter(r => r.status === "failed").map(r => r.platform);
+        const summary = parts.join(". ") +
+          (failedPlatforms.length > 0 ? `. ${failedPlatforms.map(p => formatPlatform(p)).join(", ")} ${failedPlatforms.length === 1 ? "requires" : "require"} attention.` : ".");
+
+        return {
+          postId,
+          postStatus:     finalPostStatus,
+          totalPlatforms: total,
+          published:      publishedCount,
+          failed:         failedCount,
+          skipped:        skippedCount,
+          warnings:       warningCount,
+          deliveries:     attemptResults,
+          summary,
+        };
       });
+    } catch (error: unknown) {
+      if (error instanceof PublishSessionOwnershipConflictError) {
+        return this.errorResult(postId, PUBLISH_SESSION_OWNERSHIP_CONFLICT_MESSAGE);
+      }
+      throw error;
     }
-
-    // ── Step 8: Compute final post status ────────────────────────────────────
-    let finalPostStatus: string;
-    if (publishedCount > 0 && failedCount === 0 && skippedCount === 0) {
-      finalPostStatus = "published";
-    } else if (publishedCount > 0 && (failedCount > 0 || warningCount > 0)) {
-      finalPostStatus = "published_with_warning";
-    } else if (publishedCount === 0 && skippedCount === platforms.length) {
-      finalPostStatus = "failed"; // All skipped = validation failure
-    } else if (publishedCount === 0) {
-      finalPostStatus = "failed";
-    } else {
-      finalPostStatus = "published_with_warning";
-    }
-
-    const publishedAt = publishedCount > 0 ? new Date() : null;
-
-    await db.update(socialPostsTable).set({
-      status:      finalPostStatus,
-      publishedAt: publishedAt ?? undefined,
-      updatedAt:   new Date(),
-    }).where(and(eq(socialPostsTable.id, postId), eq(socialPostsTable.userId, userId)));
-
-    // ── Step 9: Build summary ───────────────────────────────────────────────
-    const total = platforms.length;
-    const parts: string[] = [];
-    if (publishedCount > 0) parts.push(`${publishedCount} of ${total} published successfully`);
-    if (failedCount > 0)    parts.push(`${failedCount} failed`);
-    if (skippedCount > 0)   parts.push(`${skippedCount} skipped (media requirement not met)`);
-
-    const failedPlatforms = attemptResults.filter(r => r.status === "failed").map(r => r.platform);
-    const summary = parts.join(". ") +
-      (failedPlatforms.length > 0 ? `. ${failedPlatforms.map(p => formatPlatform(p)).join(", ")} ${failedPlatforms.length === 1 ? "requires" : "require"} attention.` : ".");
-
-    return {
-      postId,
-      postStatus:     finalPostStatus,
-      totalPlatforms: total,
-      published:      publishedCount,
-      failed:         failedCount,
-      skipped:        skippedCount,
-      warnings:       warningCount,
-      deliveries:     attemptResults,
-      summary,
-    };
   }
 
   /**

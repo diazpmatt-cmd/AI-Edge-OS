@@ -7,6 +7,7 @@ import {
   actOnAuthorityAcquisitionProof,
   createAuthorityAcquisitionProof,
   hasVerifiedAuthorityAcquisitionProof,
+  withAuthorityAcquisitionOutcomeLock,
 } from "./authority-acquisition-proof-store.js";
 
 const repo = new DrizzleBacklinkRepository(db);
@@ -81,6 +82,7 @@ describe("Authority acquisition proof PostgreSQL contract", () => {
     const verified = await actOnAuthorityAcquisitionProof({
       id: proof.id,
       clientId,
+      opportunityId,
       actorId: "user-verify",
       expectedVersion: 1,
       action: "verify",
@@ -91,19 +93,25 @@ describe("Authority acquisition proof PostgreSQL contract", () => {
     await expect(actOnAuthorityAcquisitionProof({
       id: proof.id,
       clientId,
+      opportunityId,
       actorId: "stale-user",
       expectedVersion: 1,
       action: "invalidate",
     })).rejects.toThrow("version_conflict");
 
-    const gate = await hasVerifiedAuthorityAcquisitionProof(opportunityId, clientId);
-    expect(gate).toEqual({ ready: true, proofId: proof.id });
-
-    const won = await repo.transitionWorkflow(opportunityId, clientId, {
-      toStatus: "won",
-      actorId: "user-mark-won",
-      reason: `authority_human_action:mark_won;proof_id:${proof.id}`,
-    });
+    const won = await withAuthorityAcquisitionOutcomeLock(
+      clientId,
+      opportunityId,
+      async () => {
+        const gate = await hasVerifiedAuthorityAcquisitionProof(opportunityId, clientId);
+        expect(gate).toEqual({ ready: true, proofId: proof.id });
+        return repo.transitionWorkflow(opportunityId, clientId, {
+          toStatus: "won",
+          actorId: "user-mark-won",
+          reason: `authority_human_action:mark_won;proof_id:${proof.id}`,
+        });
+      },
+    );
     expect(won.status).toBe("won");
 
     const events = await repo.listWorkflowEvents(workflowId, clientId);

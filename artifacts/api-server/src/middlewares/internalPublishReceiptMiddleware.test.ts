@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { INTERNAL_PARTIAL_ADAPTER_STATUS } from "../lib/publishing-adapter-http-status";
 import {
-  INTERNAL_PARTIAL_ADAPTER_STATUS,
   createInternalPublishReceiptMiddleware,
-  resolveInternalAdapterResponseStatus,
   shouldCaptureInternalPublishReceipt,
 } from "./internalPublishReceiptMiddleware";
 
@@ -12,26 +11,6 @@ describe("shouldCaptureInternalPublishReceipt", () => {
     expect(shouldCaptureInternalPublishReceipt("post-123")).toBe(true);
     expect(shouldCaptureInternalPublishReceipt("bulk")).toBe(false);
     expect(shouldCaptureInternalPublishReceipt(undefined)).toBe(false);
-  });
-});
-
-describe("resolveInternalAdapterResponseStatus", () => {
-  const partialBody = {
-    results: {
-      facebook: { ok: true, postId: "fb-1" },
-      google: { ok: false, error: "Google failed" },
-    },
-  };
-
-  it("normalizes a valid 5xx result envelope to internal multi-status", () => {
-    expect(resolveInternalAdapterResponseStatus(500, partialBody)).toBe(
-      INTERNAL_PARTIAL_ADAPTER_STATUS,
-    );
-  });
-
-  it("preserves non-5xx and malformed adapter responses", () => {
-    expect(resolveInternalAdapterResponseStatus(400, partialBody)).toBe(400);
-    expect(resolveInternalAdapterResponseStatus(500, { error: "failed" })).toBe(500);
   });
 });
 

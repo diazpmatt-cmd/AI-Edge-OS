@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthorityActionPlanPanel } from "@/components/authority-action-plan-panel";
 import { AuthorityOutreachDraftReview } from "@/components/authority-outreach-draft-review";
+import { AuthorityOutreachReadinessCard } from "@/components/authority-outreach-readiness-card";
 import { AuthorityTargetContactWorkspace } from "@/components/authority-target-contact-workspace";
 import { AuthorityWorkflowQueue } from "@/components/authority-workflow-queue";
 
@@ -41,6 +42,7 @@ export default function AuthorityActionPlanPage() {
           />
           {draftOpportunityId && (
             <>
+              <AuthorityOutreachReadinessCard opportunityId={draftOpportunityId} />
               <AuthorityOutreachDraftReview
                 opportunityId={draftOpportunityId}
                 onClose={() => setDraftOpportunityId(null)}

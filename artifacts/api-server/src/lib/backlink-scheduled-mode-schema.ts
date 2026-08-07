@@ -15,9 +15,10 @@ const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
  * scheduler execution boundary remain fail-closed until separately wired.
  */
 export async function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
-  await pool.query("BEGIN");
+  const client = await pool.connect();
   try {
-    await pool.query(`
+    await client.query("BEGIN");
+    await client.query(`
       ALTER TABLE backlink_ingestion_runs
         DROP CONSTRAINT IF EXISTS ${MODE_CONSTRAINT};
       ALTER TABLE backlink_ingestion_runs
@@ -26,10 +27,12 @@ export async function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
       ALTER TABLE backlink_ingestion_runs
         VALIDATE CONSTRAINT ${MODE_CONSTRAINT};
     `);
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
   } catch (error) {
-    await pool.query("ROLLBACK");
+    await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
   }
 }
 

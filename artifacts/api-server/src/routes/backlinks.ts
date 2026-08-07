@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
+import { countVerifiedAuthorityWins } from "../lib/authority-verified-win-measurement.js";
 
 const router = Router();
 const repo   = new DrizzleBacklinkRepository(db);
@@ -55,7 +56,6 @@ const _fixtureHealth: BacklinkProviderHealthState = {
   provider: "fixture_backlinks",
   status:   "configured",
   reason:   null,
-  login:    null,
 };
 
 const _backlinkRegistry = new BacklinkProviderRegistry();
@@ -241,41 +241,49 @@ router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> =
     const summary = "outcome" in result && result.outcome === "in_progress" ? null : result as import("@workspace/db").ManualBacklinkIngestionSummary;
     const snapshotDate = now.toISOString().slice(0, 10);
     if (summary) {
-      // Compute AI Edge Authority Score from real provider data.
-      // Returns null when backlinkCount=0 AND referringDomainCount=0 (fail-closed).
-      const edgeScore = computeEdgeAuthorityScore({
-        backlinkCount:        summary.prospectIds.length,
-        referringDomainCount: 0, // v1: live DA provider required for real value
-        opportunityCount:     summary.opportunityIds.length,
-        wonCount:             summary.workflowIds.length,
-      });
-      pool.query(
-        `INSERT INTO backlink_score_history
-           (client_id, snapshot_date, authority_score, backlink_count, opportunity_count,
-            won_count, new_count, lost_count, referring_domain_count, edge_authority_score)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
-           authority_score         = EXCLUDED.authority_score,
-           backlink_count          = EXCLUDED.backlink_count,
-           opportunity_count       = EXCLUDED.opportunity_count,
-           won_count               = EXCLUDED.won_count,
-           new_count               = EXCLUDED.new_count,
-           lost_count              = EXCLUDED.lost_count,
-           referring_domain_count  = EXCLUDED.referring_domain_count,
-           edge_authority_score    = EXCLUDED.edge_authority_score`,
-        [
-          clientId.trim(),
-          snapshotDate,
-          0, // authority_score: v1 placeholder (third-party DA requires live DA provider)
-          summary.prospectIds.length,
-          summary.opportunityIds.length,
-          summary.workflowIds.length,
-          0, // new_count: v1 placeholder (requires live provider delta tracking)
-          0, // lost_count: v1 placeholder (requires live provider delta tracking)
-          0, // referring_domain_count: v1 placeholder (requires live DA provider)
-          edgeScore, // null when no qualifying backlink evidence — honest, not fabricated
-        ],
-      ).catch(e => console.error("[backlinks] score snapshot insert error:", e));
+      void (async () => {
+        try {
+          const verifiedWonCount = await countVerifiedAuthorityWins(clientId.trim());
+          // Compute AI Edge Authority Score from real provider data. Only durable,
+          // human-verified acquisitions are allowed into the win component.
+          // Returns null when backlinkCount=0 AND referringDomainCount=0 (fail-closed).
+          const edgeScore = computeEdgeAuthorityScore({
+            backlinkCount:        summary.prospectIds.length,
+            referringDomainCount: 0, // v1: live DA provider required for real value
+            opportunityCount:     summary.opportunityIds.length,
+            wonCount:             verifiedWonCount,
+          });
+          await pool.query(
+            `INSERT INTO backlink_score_history
+               (client_id, snapshot_date, authority_score, backlink_count, opportunity_count,
+                won_count, new_count, lost_count, referring_domain_count, edge_authority_score)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
+               authority_score         = EXCLUDED.authority_score,
+               backlink_count          = EXCLUDED.backlink_count,
+               opportunity_count       = EXCLUDED.opportunity_count,
+               won_count               = EXCLUDED.won_count,
+               new_count               = EXCLUDED.new_count,
+               lost_count              = EXCLUDED.lost_count,
+               referring_domain_count  = EXCLUDED.referring_domain_count,
+               edge_authority_score    = EXCLUDED.edge_authority_score`,
+            [
+              clientId.trim(),
+              snapshotDate,
+              0, // authority_score: v1 placeholder (third-party DA requires live DA provider)
+              summary.prospectIds.length,
+              summary.opportunityIds.length,
+              verifiedWonCount,
+              0, // new_count: v1 placeholder (requires live provider delta tracking)
+              0, // lost_count: v1 placeholder (requires live provider delta tracking)
+              0, // referring_domain_count: v1 placeholder (requires live DA provider)
+              edgeScore, // null when no qualifying backlink evidence — honest, not fabricated
+            ],
+          );
+        } catch (e) {
+          console.error("[backlinks] score snapshot insert error:", e);
+        }
+      })();
     }
 
     res.json({ ok: true, providerStatus: providerHealth, ...result });

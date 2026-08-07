@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AuthorityActionPlanPanel } from "@/components/authority-action-plan-panel";
+import { AuthorityWorkflowQueue } from "@/components/authority-workflow-queue";
 
 export default function AuthorityActionPlanPage() {
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const refresh = () => setRefreshVersion((version) => version + 1);
+
   return (
     <AppShell>
       <div style={{ minHeight: "100vh", background: "#030612", padding: "28px 24px 48px" }}>
@@ -23,9 +28,16 @@ export default function AuthorityActionPlanPage() {
             </p>
           </div>
 
-          <AuthorityActionPlanPanel onViewBacklinks={() => {
-            window.location.href = "/admin/authority-engine";
-          }} />
+          <AuthorityWorkflowQueue
+            key={`workflow-${refreshVersion}`}
+            onChanged={refresh}
+          />
+          <AuthorityActionPlanPanel
+            key={`plan-${refreshVersion}`}
+            onViewBacklinks={() => {
+              window.location.href = "/admin/authority-engine";
+            }}
+          />
         </div>
       </div>
     </AppShell>

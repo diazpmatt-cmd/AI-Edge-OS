@@ -43,13 +43,14 @@ router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
       })),
     );
 
-    const items = rankBacklinkOpportunities(hydrated, limit);
+    const ranked = rankBacklinkOpportunities(hydrated, BACKLINK_MAX_PAGE_SIZE);
+    const items = ranked.slice(0, limit);
     const summary = {
-      totalActionable: items.length,
-      topPriority: items.filter((item) => item.priorityTier === "top").length,
-      highPriority: items.filter((item) => item.priorityTier === "high").length,
-      competitorGaps: items.filter((item) => item.reasonCodes.includes("competitor_gap")).length,
-      easyWins: items.filter((item) => item.reasonCodes.includes("easy_win")).length,
+      totalActionable: ranked.length,
+      topPriority: ranked.filter((item) => item.priorityTier === "top").length,
+      highPriority: ranked.filter((item) => item.priorityTier === "high").length,
+      competitorGaps: ranked.filter((item) => item.reasonCodes.includes("competitor_gap")).length,
+      easyWins: ranked.filter((item) => item.reasonCodes.includes("easy_win")).length,
     };
 
     res.setHeader("Cache-Control", "no-store");

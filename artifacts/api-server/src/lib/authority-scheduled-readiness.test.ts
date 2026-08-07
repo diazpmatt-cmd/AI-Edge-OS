@@ -22,7 +22,7 @@ describe("evaluateAuthorityScheduledReadiness", () => {
       discoveryContext: readyContext,
       scheduledModeSchemaReady: true,
       liveProviderHealth: { provider: "dataforseo_backlinks", status: "configured", reason: null, login: "configured@example.com" },
-    })).toMatchObject({ ready: false, code: "AUTHORITY_SCHEDULED_CLIENT_UNAVAILABLE" });
+    })).toMatchObject({ ready: false, code: "AUTHORITY_SCHEDULED_CLIENT_UNAVAILABLE", executionAuthorized: false });
   });
 
   it("preserves the discovery-context failure code", () => {
@@ -52,7 +52,7 @@ describe("evaluateAuthorityScheduledReadiness", () => {
     })).toMatchObject({ ready: false, code: "AUTHORITY_LIVE_BACKLINK_PROVIDER_NOT_READY" });
   });
 
-  it("reports ready without activating execution", () => {
+  it("reports technically ready but unauthorized by default", () => {
     expect(evaluateAuthorityScheduledReadiness({
       clientActive: true,
       discoveryContext: readyContext,
@@ -60,8 +60,25 @@ describe("evaluateAuthorityScheduledReadiness", () => {
       liveProviderHealth: { provider: "dataforseo_backlinks", status: "configured", reason: null, login: "configured@example.com" },
     })).toEqual({
       ready: true,
-      code: "AUTHORITY_SCHEDULED_READY_NOT_ACTIVATED",
-      message: "Tenant context, scheduled-mode persistence, and the live backlink provider are ready. Scheduled provider execution remains intentionally disabled until activation is explicitly authorized.",
+      code: "AUTHORITY_SCHEDULED_READY_NOT_AUTHORIZED",
+      message: "Tenant context, scheduled-mode persistence, and the live backlink provider are ready. Paid scheduled execution remains unauthorized and inactive.",
+      executionAuthorized: false,
+      executionActivated: false,
+    });
+  });
+
+  it("keeps explicit authorization separate from activation", () => {
+    expect(evaluateAuthorityScheduledReadiness({
+      clientActive: true,
+      discoveryContext: readyContext,
+      scheduledModeSchemaReady: true,
+      executionAuthorized: true,
+      liveProviderHealth: { provider: "dataforseo_backlinks", status: "configured", reason: null, login: "configured@example.com" },
+    })).toEqual({
+      ready: true,
+      code: "AUTHORITY_SCHEDULED_AUTHORIZED_NOT_ACTIVATED",
+      message: "Tenant context, scheduled-mode persistence, the live backlink provider, and explicit execution authorization are ready. This release still does not activate provider execution.",
+      executionAuthorized: true,
       executionActivated: false,
     });
   });

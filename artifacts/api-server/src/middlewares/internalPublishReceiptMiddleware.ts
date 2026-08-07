@@ -1,10 +1,10 @@
 import type { RequestHandler } from "express";
 
 import { logger } from "../lib/logger.js";
-import { readAdapterResultsEnvelope } from "../lib/publishing-adapter-result.js";
+import {
+  resolveInternalAdapterResponseStatus,
+} from "../lib/publishing-adapter-http-status.js";
 import { persistAdapterReceiptEnvelope } from "../lib/publishing-adapter-receipts.js";
-
-export const INTERNAL_PARTIAL_ADAPTER_STATUS = 207;
 
 export type PersistInternalPublishReceipts =
   typeof persistAdapterReceiptEnvelope;
@@ -13,15 +13,6 @@ export function shouldCaptureInternalPublishReceipt(
   routeId: string | undefined,
 ): routeId is string {
   return Boolean(routeId && routeId !== "bulk");
-}
-
-export function resolveInternalAdapterResponseStatus(
-  currentStatus: number,
-  body: unknown,
-): number {
-  return currentStatus >= 500 && readAdapterResultsEnvelope(body)
-    ? INTERNAL_PARTIAL_ADAPTER_STATUS
-    : currentStatus;
 }
 
 export function createInternalPublishReceiptMiddleware(

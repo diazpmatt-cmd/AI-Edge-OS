@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { useApiFetch } from "@/lib/api";
 
 interface AuthorityProfileResponse {
@@ -122,8 +123,20 @@ export function AuthorityReadinessPanel() {
           <div style={{ marginTop: 4, fontSize: 14, fontWeight: 900, color: "#E2E8F0" }}>{profile.clientName}</div>
           <div style={{ marginTop: 4, maxWidth: 700, fontSize: 10.5, color: "#64748B", lineHeight: 1.45 }}>{readiness.message}</div>
         </div>
-        <div style={{ borderRadius: 999, padding: "5px 10px", border: `1px solid ${headlineColor}40`, background: `${headlineColor}12`, color: headlineColor, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-          {readiness.ready ? "Ready · execution off" : "Setup required"}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link
+            to="/admin/authority-action-plan"
+            style={{
+              borderRadius: 999, padding: "6px 11px", textDecoration: "none",
+              border: "1px solid rgba(56,189,248,.30)", background: "rgba(56,189,248,.10)",
+              color: "#38BDF8", fontSize: 9.5, fontWeight: 900, whiteSpace: "nowrap",
+            }}
+          >
+            ⚡ Open Live Action Plan
+          </Link>
+          <div style={{ borderRadius: 999, padding: "5px 10px", border: `1px solid ${headlineColor}40`, background: `${headlineColor}12`, color: headlineColor, fontSize: 9.5, fontWeight: 900, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+            {readiness.ready ? "Ready · execution off" : "Setup required"}
+          </div>
         </div>
       </div>
 

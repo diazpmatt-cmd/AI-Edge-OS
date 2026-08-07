@@ -14,6 +14,10 @@ import {
 import { validateAuthorityProfileInput } from "../lib/authority-profile-policy.js";
 import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-context.js";
 import { evaluateAuthorityScheduledReadiness } from "../lib/authority-scheduled-readiness.js";
+import {
+  ensureBacklinkScheduledModeSchemaReady,
+  getBacklinkScheduledModeSchemaState,
+} from "../lib/backlink-scheduled-mode-schema.js";
 
 const router = Router();
 
@@ -182,9 +186,11 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
   if (!tenant) return;
 
   try {
-    const [profile, context] = await Promise.all([
+    await ensureBacklinkScheduledModeSchemaReady();
+    const [profile, context, scheduledModeSchema] = await Promise.all([
       getAuthorityProfile(tenant.clientId),
       readAuthorityContext(tenant.clientId),
+      getBacklinkScheduledModeSchemaState(),
     ]);
     const discoveryContext = buildAuthorityDiscoveryContext({
       profile,
@@ -198,6 +204,7 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
       clientActive: true,
       discoveryContext,
       liveProviderHealth: providerHealth,
+      scheduledModeSchemaReady: scheduledModeSchema.ready,
     });
 
     res.setHeader("Cache-Control", "no-store");
@@ -209,6 +216,7 @@ router.get("/api/authority/scheduled-readiness", async (req, res) => {
         reason: providerHealth.reason,
       },
       contextReady: discoveryContext.ok,
+      scheduledModeSchemaReady: scheduledModeSchema.ready,
       competitorCount: discoveryContext.ok
         ? discoveryContext.discovery.competitorDomains.length
         : 0,

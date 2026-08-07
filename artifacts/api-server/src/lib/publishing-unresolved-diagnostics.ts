@@ -14,6 +14,7 @@ export interface PublishingDiagnosticDelivery {
   readonly externalPostUrl: string | null;
   readonly errorCode?: string | null;
   readonly errorMessage?: string | null;
+  readonly retryAllowed?: boolean | null;
   readonly updatedAt: Date | string | null;
 }
 
@@ -29,6 +30,12 @@ export interface PublishingLaneDiagnostic {
   readonly message: string;
   readonly updatedAt: string | null;
 }
+
+const VERIFIED_PUBLISH_STATUSES = new Set([
+  "published",
+  "published_with_warning",
+  "idempotency_hit",
+]);
 
 function timeValue(value: Date | string | null): number {
   if (!value) return Number.NEGATIVE_INFINITY;
@@ -53,22 +60,45 @@ function sanitize(value: string | null | undefined): string | null {
     .slice(0, 300);
 }
 
+function hasVerifiedReceipt(delivery: PublishingDiagnosticDelivery): boolean {
+  return VERIFIED_PUBLISH_STATUSES.has(delivery.status) &&
+    Boolean(delivery.externalPostId || delivery.externalPostUrl);
+}
+
+function isNewerAttempt(
+  candidate: PublishingDiagnosticDelivery,
+  current: PublishingDiagnosticDelivery,
+): boolean {
+  return candidate.attemptNumber > current.attemptNumber ||
+    (candidate.attemptNumber === current.attemptNumber &&
+      timeValue(candidate.updatedAt) > timeValue(current.updatedAt));
+}
+
 export function selectLatestPublishingAttempts(
   deliveries: readonly PublishingDiagnosticDelivery[],
 ): ReadonlyMap<string, PublishingDiagnosticDelivery> {
   const latest = new Map<string, PublishingDiagnosticDelivery>();
   for (const delivery of deliveries) {
     const current = latest.get(delivery.platform);
-    if (
-      !current ||
-      delivery.attemptNumber > current.attemptNumber ||
-      (delivery.attemptNumber === current.attemptNumber &&
-        timeValue(delivery.updatedAt) > timeValue(current.updatedAt))
-    ) {
+    if (!current || isNewerAttempt(delivery, current)) {
       latest.set(delivery.platform, delivery);
     }
   }
   return latest;
+}
+
+export function selectLatestVerifiedPublishingReceipts(
+  deliveries: readonly PublishingDiagnosticDelivery[],
+): ReadonlyMap<string, PublishingDiagnosticDelivery> {
+  const latestVerified = new Map<string, PublishingDiagnosticDelivery>();
+  for (const delivery of deliveries) {
+    if (!hasVerifiedReceipt(delivery)) continue;
+    const current = latestVerified.get(delivery.platform);
+    if (!current || isNewerAttempt(delivery, current)) {
+      latestVerified.set(delivery.platform, delivery);
+    }
+  }
+  return latestVerified;
 }
 
 export function diagnosePublishingLanes(input: {
@@ -77,8 +107,29 @@ export function diagnosePublishingLanes(input: {
 }): readonly PublishingLaneDiagnostic[] {
   const expected = [...new Set(input.expectedPlatforms.map((p) => p.trim()).filter(Boolean))];
   const latest = selectLatestPublishingAttempts(input.deliveries);
+  const verifiedHistory = selectLatestVerifiedPublishingReceipts(input.deliveries);
 
   return expected.map((platform) => {
+    // Any durable historical external receipt is authoritative. A later failed
+    // attempt cannot erase evidence that content already exists at the provider,
+    // and diagnostics must not advertise a replay that the executable retry
+    // boundary will correctly reject.
+    const verified = verifiedHistory.get(platform);
+    if (verified) {
+      return Object.freeze({
+        platform,
+        deliveryId: verified.id ?? null,
+        state: "verified_published" as const,
+        attemptNumber: verified.attemptNumber,
+        status: verified.status,
+        receiptVerified: true,
+        retryAllowed: false,
+        diagnosticCode: "PUBLISHING_RECEIPT_VERIFIED",
+        message: "External provider receipt is verified.",
+        updatedAt: iso(verified.updatedAt),
+      });
+    }
+
     const delivery = latest.get(platform);
     if (!delivery) {
       return Object.freeze({
@@ -97,26 +148,7 @@ export function diagnosePublishingLanes(input: {
 
     const deliveryId = delivery.id ?? null;
     const hasReceipt = Boolean(delivery.externalPostId || delivery.externalPostUrl);
-    const publishedStatus = [
-      "published",
-      "published_with_warning",
-      "idempotency_hit",
-    ].includes(delivery.status);
-
-    if (publishedStatus && hasReceipt) {
-      return Object.freeze({
-        platform,
-        deliveryId,
-        state: "verified_published" as const,
-        attemptNumber: delivery.attemptNumber,
-        status: delivery.status,
-        receiptVerified: true,
-        retryAllowed: false,
-        diagnosticCode: "PUBLISHING_RECEIPT_VERIFIED",
-        message: "External provider receipt is verified.",
-        updatedAt: iso(delivery.updatedAt),
-      });
-    }
+    const publishedStatus = VERIFIED_PUBLISH_STATUSES.has(delivery.status);
 
     if (publishedStatus && !hasReceipt) {
       return Object.freeze({
@@ -142,7 +174,8 @@ export function diagnosePublishingLanes(input: {
         attemptNumber: delivery.attemptNumber,
         status: delivery.status,
         receiptVerified: false,
-        retryAllowed: delivery.status !== "cancelled",
+        retryAllowed:
+          delivery.status !== "cancelled" && delivery.retryAllowed !== false,
         diagnosticCode: sanitize(delivery.errorCode) ?? "PUBLISHING_TERMINAL_FAILURE",
         message: detail ?? `Latest delivery ended as ${delivery.status}.`,
         updatedAt: iso(delivery.updatedAt),

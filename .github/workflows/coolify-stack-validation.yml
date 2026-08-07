@@ -84,14 +84,18 @@ jobs:
           test -n "$api_image"
           docker run --rm \
             --entrypoint sh \
+            --mount type=bind,src="$PWD/deploy/smoke",dst=/smoke,readonly \
             -e NODE_ENV=test \
             -e LOCAL_MEDIA_DIR=/tmp/apollos-media \
             -e SCHEDULER_ENABLED=false \
             -e REFERRAL_DELIVERY_EMERGENCY_STOP=true \
-            "$api_image" /app/deploy/smoke/apollos-core-runtime.sh
+            "$api_image" /smoke/apollos-core-runtime.sh
       - name: Apollos media runtime preflight
         run: |
           api_image="$(docker compose -f docker-compose.coolify.yml images -q api)"
           test -n "$api_image"
-          docker run --rm --entrypoint sh "$api_image" /app/deploy/smoke/apollos-media-runtime.sh
+          docker run --rm \
+            --entrypoint sh \
+            --mount type=bind,src="$PWD/deploy/smoke",dst=/smoke,readonly \
+            "$api_image" /smoke/apollos-media-runtime.sh
       - run: git diff --check

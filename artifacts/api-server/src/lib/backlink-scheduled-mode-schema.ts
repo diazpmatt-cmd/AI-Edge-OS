@@ -6,6 +6,7 @@ export interface BacklinkScheduledModeSchemaState {
 }
 
 const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
+let bootstrapPromise: Promise<void> | null = null;
 
 /**
  * Idempotently expands the persisted backlink ingestion mode contract from
@@ -14,26 +15,33 @@ const MODE_CONSTRAINT = "ck_backlink_ingestion_mode";
  * This does NOT activate scheduled execution. The ingestion validator and
  * scheduler execution boundary remain fail-closed until separately wired.
  */
-export async function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(`
-      ALTER TABLE backlink_ingestion_runs
-        DROP CONSTRAINT IF EXISTS ${MODE_CONSTRAINT};
-      ALTER TABLE backlink_ingestion_runs
-        ADD CONSTRAINT ${MODE_CONSTRAINT}
-        CHECK (mode IN ('manual','scheduled')) NOT VALID;
-      ALTER TABLE backlink_ingestion_runs
-        VALIDATE CONSTRAINT ${MODE_CONSTRAINT};
-    `);
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+export function ensureBacklinkScheduledModeSchemaReady(): Promise<void> {
+  if (bootstrapPromise) return bootstrapPromise;
+
+  bootstrapPromise = (async () => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`
+        ALTER TABLE backlink_ingestion_runs
+          DROP CONSTRAINT IF EXISTS ${MODE_CONSTRAINT};
+        ALTER TABLE backlink_ingestion_runs
+          ADD CONSTRAINT ${MODE_CONSTRAINT}
+          CHECK (mode IN ('manual','scheduled')) NOT VALID;
+        ALTER TABLE backlink_ingestion_runs
+          VALIDATE CONSTRAINT ${MODE_CONSTRAINT};
+      `);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      bootstrapPromise = null;
+      throw error;
+    } finally {
+      client.release();
+    }
+  })();
+
+  return bootstrapPromise;
 }
 
 export async function getBacklinkScheduledModeSchemaState(): Promise<BacklinkScheduledModeSchemaState> {

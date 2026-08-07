@@ -3,11 +3,13 @@ import { getAuth } from "@clerk/express";
 import { db, pool, DrizzleBacklinkRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { selectBacklinkEvidencePreview } from "../lib/backlink-opportunity-intelligence.js";
-import { buildAuthorityOutreachDraft } from "../lib/authority-outreach-draft.js";
+import {
+  buildAuthorityOutreachDraft,
+  isAuthorityOutreachDraftWorkflowEligible,
+} from "../lib/authority-outreach-draft.js";
 
 const router = Router();
 const repo = new DrizzleBacklinkRepository(db);
-const DRAFT_ELIGIBLE_STATUSES = new Set(["approved", "pursuing"]);
 
 router.get(
   "/api/backlinks/opportunities/:opportunityId/outreach-draft-preview",
@@ -52,7 +54,7 @@ router.get(
         res.status(404).json({ error: "workflow_not_found" });
         return;
       }
-      if (!DRAFT_ELIGIBLE_STATUSES.has(workflowStatus)) {
+      if (!isAuthorityOutreachDraftWorkflowEligible(workflowStatus)) {
         res.status(409).json({
           error: "outreach_draft_not_approved",
           message: "Outreach drafts require an approved or pursuing opportunity.",

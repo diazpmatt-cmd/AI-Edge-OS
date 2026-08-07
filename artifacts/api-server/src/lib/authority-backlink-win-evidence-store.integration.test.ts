@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { db, pool, DrizzleBacklinkRepository } from "@workspace/db";
+import { db, pool, DrizzleBacklinkRepository, deriveBacklinkWorkflowId } from "@workspace/db";
 import { migrateAuthorityTestBaseSchema } from "./authority-test-schema-bootstrap.js";
 import { migrateAuthorityBacklinkWinEvidence } from "./authority-backlink-win-evidence-migrate.js";
 import { withVerifiedAuthorityBacklinkWinEvidenceGate } from "./authority-backlink-win-evidence-gate.js";
@@ -15,7 +15,7 @@ const suffix = randomUUID().replace(/-/g, "");
 const clientId = `win-test-${suffix}`;
 const prospectId = `blpr::${suffix.slice(0, 8)}`;
 const opportunityId = `blop::${suffix.slice(8, 16)}`;
-const workflowId = `blwf::${suffix.slice(16, 24)}`;
+const workflowId = deriveBacklinkWorkflowId(clientId, opportunityId);
 const repo = new DrizzleBacklinkRepository(db);
 let evidenceId: string;
 

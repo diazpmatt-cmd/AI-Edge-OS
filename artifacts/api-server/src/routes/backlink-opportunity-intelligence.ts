@@ -6,7 +6,10 @@ import {
   BACKLINK_MAX_PAGE_SIZE,
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
-import { rankBacklinkOpportunities } from "../lib/backlink-opportunity-intelligence.js";
+import {
+  rankBacklinkOpportunities,
+  selectBacklinkEvidencePreview,
+} from "../lib/backlink-opportunity-intelligence.js";
 
 const router = Router();
 const repo = new DrizzleBacklinkRepository(db);
@@ -44,7 +47,41 @@ router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
     );
 
     const ranked = rankBacklinkOpportunities(hydrated, BACKLINK_MAX_PAGE_SIZE);
-    const items = ranked.slice(0, limit);
+    const opportunityById = new Map(
+      listed.items.map(({ opportunity }) => [opportunity.id, opportunity] as const),
+    );
+    const selected = ranked.slice(0, limit);
+    const competitorProspectIds = [
+      ...new Set(
+        selected
+          .filter((item) => item.reasonCodes.includes("competitor_gap"))
+          .map((item) => item.prospectId),
+      ),
+    ];
+    const evidenceByProspect = new Map(
+      await Promise.all(
+        competitorProspectIds.map(async (prospectId) => [
+          prospectId,
+          await repo.listEvidenceForProspect(prospectId, resolved.client.id),
+        ] as const),
+      ),
+    );
+    const items = selected.map((item) => {
+      if (!item.reasonCodes.includes("competitor_gap")) {
+        return { ...item, evidencePreview: [] };
+      }
+
+      const opportunity = opportunityById.get(item.opportunityId);
+      const evidence = evidenceByProspect.get(item.prospectId);
+      if (!opportunity || !evidence) {
+        return { ...item, evidencePreview: [] };
+      }
+
+      return {
+        ...item,
+        evidencePreview: selectBacklinkEvidencePreview(opportunity, evidence, 3),
+      };
+    });
     const summary = {
       totalActionable: ranked.length,
       topPriority: ranked.filter((item) => item.priorityTier === "top").length,

@@ -11,6 +11,20 @@ type ReasonCode =
   | "already_approved"
   | "already_pursuing";
 
+interface EvidencePreview {
+  id: string;
+  sourceDomain: string;
+  sourceUrl: string;
+  competitorUrl: string | null;
+  targetUrl: string | null;
+  authority: number;
+  competitorFrequency: number;
+  relationshipAccessibility: number;
+  estimatedEffort: number;
+  discoveredAt: string;
+  providers: string[];
+}
+
 interface IntelligenceItem {
   opportunityId: string;
   prospectId: string;
@@ -27,6 +41,7 @@ interface IntelligenceItem {
   rationale: string;
   recommendedAction: string;
   evidenceCount: number;
+  evidencePreview: EvidencePreview[];
 }
 
 interface IntelligenceResponse {
@@ -68,6 +83,16 @@ function categoryLabel(category: string): string {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function linkLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname === "/" ? "" : parsed.pathname;
+    return `${parsed.hostname}${path}`;
+  } catch {
+    return url;
+  }
 }
 
 export function AuthorityActionPlanPanel({ onViewBacklinks }: { onViewBacklinks: () => void }) {
@@ -223,6 +248,56 @@ export function AuthorityActionPlanPanel({ onViewBacklinks }: { onViewBacklinks:
               <div style={{ fontSize: 11, color: "#94A3B8", lineHeight: 1.55, marginBottom: 10 }}>
                 {item.rationale || "Opportunity supported by persisted discovery evidence."}
               </div>
+
+              {item.reasonCodes.includes("competitor_gap") && item.evidencePreview.length > 0 && (
+                <div style={{
+                  background: "rgba(167,139,250,0.05)", border: "1px solid rgba(167,139,250,0.16)",
+                  borderRadius: 9, padding: "10px", marginBottom: 10,
+                }}>
+                  <div style={{ fontSize: 8.5, color: "#A78BFA", fontWeight: 900, letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: 7 }}>
+                    Competitor Link Evidence
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {item.evidencePreview.map((evidence) => (
+                      <div key={evidence.id} style={{
+                        background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: 7, padding: "8px 9px",
+                      }}>
+                        <a
+                          href={evidence.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ display: "block", fontSize: 10.5, fontWeight: 800, color: "#C4B5FD", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {evidence.sourceDomain}
+                        </a>
+                        <div style={{ fontSize: 9, color: "#475569", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={evidence.sourceUrl}>
+                          {linkLabel(evidence.sourceUrl)}
+                        </div>
+                        {evidence.competitorUrl && (
+                          <div style={{ fontSize: 9.5, color: "#94A3B8", marginTop: 6, lineHeight: 1.4 }}>
+                            Competitor placement:{" "}
+                            <a href={evidence.competitorUrl} target="_blank" rel="noreferrer" style={{ color: "#A78BFA", textDecoration: "none" }}>
+                              {linkLabel(evidence.competitorUrl)}
+                            </a>
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                          <span style={{ fontSize: 8.5, color: "#CBD5E1" }}>Authority {evidence.authority}</span>
+                          <span style={{ fontSize: 8.5, color: "#CBD5E1" }}>Competitor Signal {evidence.competitorFrequency}</span>
+                          <span style={{ fontSize: 8.5, color: "#22C55E" }}>Access {evidence.relationshipAccessibility}</span>
+                          <span style={{ fontSize: 8.5, color: "#F59E0B" }}>Effort {evidence.estimatedEffort}</span>
+                        </div>
+                        {evidence.providers.length > 0 && (
+                          <div style={{ fontSize: 8, color: "#475569", marginTop: 5 }}>
+                            Evidence via {evidence.providers.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div style={{
                 background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.13)",

@@ -1,4 +1,5 @@
 import type {
+  BacklinkEvidenceRecord,
   BacklinkOpportunity,
   BacklinkProspect,
   BacklinkWorkflow,
@@ -18,6 +19,20 @@ export interface BacklinkOpportunityIntelligenceInput {
   readonly opportunity: BacklinkOpportunity;
   readonly workflow: BacklinkWorkflow;
   readonly prospect: BacklinkProspect | null;
+}
+
+export interface BacklinkEvidencePreview {
+  readonly id: string;
+  readonly sourceDomain: string;
+  readonly sourceUrl: string;
+  readonly competitorUrl: string | null;
+  readonly targetUrl: string | null;
+  readonly authority: number;
+  readonly competitorFrequency: number;
+  readonly relationshipAccessibility: number;
+  readonly estimatedEffort: number;
+  readonly discoveredAt: string;
+  readonly providers: readonly string[];
 }
 
 export interface BacklinkOpportunityIntelligenceItem {
@@ -80,6 +95,37 @@ export function explainBacklinkOpportunity(
   if (workflow.status === "approved") reasons.push("already_approved");
   if (workflow.status === "pursuing") reasons.push("already_pursuing");
   return Object.freeze(reasons);
+}
+
+export function selectBacklinkEvidencePreview(
+  opportunity: Pick<BacklinkOpportunity, "evidenceIds">,
+  evidence: readonly BacklinkEvidenceRecord[],
+  limit = 3,
+): readonly BacklinkEvidencePreview[] {
+  const allowedIds = new Set(opportunity.evidenceIds);
+  const boundedLimit = Math.max(1, Math.min(5, Math.floor(limit)));
+
+  return Object.freeze(
+    evidence
+      .filter((record) => allowedIds.has(record.id))
+      .sort((a, b) =>
+        b.discoveredAt.getTime() - a.discoveredAt.getTime() || a.id.localeCompare(b.id),
+      )
+      .slice(0, boundedLimit)
+      .map((record) => Object.freeze({
+        id: record.id,
+        sourceDomain: record.sourceDomain,
+        sourceUrl: record.sourceUrl,
+        competitorUrl: record.competitorUrl,
+        targetUrl: record.targetUrl,
+        authority: record.authority,
+        competitorFrequency: record.competitorFrequency,
+        relationshipAccessibility: record.relationshipAccessibility,
+        estimatedEffort: record.estimatedEffort,
+        discoveredAt: record.discoveredAt.toISOString(),
+        providers: Object.freeze([...record.providers].sort()),
+      })),
+  );
 }
 
 export function rankBacklinkOpportunities(

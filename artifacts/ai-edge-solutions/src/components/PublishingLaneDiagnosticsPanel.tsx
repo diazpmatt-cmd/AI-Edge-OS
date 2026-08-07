@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApiFetch } from "@/lib/api";
 
 interface DiagnosticsHealthPost {
@@ -21,6 +21,7 @@ type LaneState = "verified_published" | "terminal_failure" | "receipt_missing" |
 
 interface PublishingLane {
   platform: string;
+  deliveryId: string | null;
   state: LaneState;
   attemptNumber: number | null;
   status: string | null;
@@ -54,6 +55,33 @@ interface PostDiagnosticResult {
   loadError: string | null;
 }
 
+interface RetryRequest {
+  postId: string;
+  deliveryId: string;
+  platform: string;
+}
+
+interface RetryResponse {
+  ok: boolean;
+  postId: string;
+  platform: string;
+  retriedDeliveryId: string;
+  delivery: {
+    id: string;
+    attemptNumber: number;
+    status: string;
+    externalPostId: string | null;
+    externalPostUrl: string | null;
+    errorMessage: string | null;
+    apiResponseStatus: number | null;
+  };
+  post: {
+    status: string;
+    publishedAt: string | null;
+    errorMessage: string | null;
+  };
+}
+
 const STATE_STYLE: Record<LaneState, { label: string; color: string; icon: string; action: string }> = {
   verified_published: { label: "Verified", color: "#22C55E", icon: "✓", action: "No action" },
   terminal_failure: { label: "Failed", color: "#EF4444", icon: "✕", action: "Review failed lane only" },
@@ -73,10 +101,23 @@ function candidateStatus(status: string): boolean {
   return ["publishing", "published_with_warning", "failed"].includes(status);
 }
 
+function platformLabel(platform: string): string {
+  const labels: Record<string, string> = {
+    facebook: "Facebook",
+    instagram: "Instagram",
+    google: "Google Business Profile",
+    youtube: "YouTube",
+    tiktok: "TikTok",
+  };
+  return labels[platform] ?? platform;
+}
+
 export function PublishingLaneDiagnosticsPanel() {
   const apiFetch = useApiFetch();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [retryNotice, setRetryNotice] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   const healthQuery = useQuery<DiagnosticsHealthResponse>({
     queryKey: ["publishing-lane-diagnostics-health"],
@@ -105,6 +146,37 @@ export function PublishingLaneDiagnosticsPanel() {
     })),
   });
 
+  const retryMutation = useMutation<RetryResponse, Error, RetryRequest>({
+    mutationFn: ({ postId, deliveryId }) => apiFetch<RetryResponse>(
+      `/social-posts/${postId}/deliveries/${deliveryId}/retry`,
+      { method: "POST" },
+    ),
+    onSuccess: (response, request) => {
+      const key = `${request.postId}:${request.deliveryId}`;
+      const succeeded = response.delivery.status === "published";
+      setRetryNotice((current) => ({
+        ...current,
+        [key]: {
+          ok: succeeded,
+          message: succeeded
+            ? `${platformLabel(request.platform)} retry published and receipt was recorded.`
+            : `${platformLabel(request.platform)} retry finished as ${response.delivery.status.replaceAll("_", " ")}. Review the lane details.`,
+        },
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["publishing-lane-diagnostics"] });
+      void queryClient.invalidateQueries({ queryKey: ["publishing-lane-diagnostics-health"] });
+    },
+    onError: (error, request) => {
+      const key = `${request.postId}:${request.deliveryId}`;
+      setRetryNotice((current) => ({
+        ...current,
+        [key]: { ok: false, message: error.message },
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["publishing-lane-diagnostics"] });
+      void queryClient.invalidateQueries({ queryKey: ["publishing-lane-diagnostics-health"] });
+    },
+  });
+
   const results = diagnosticsQuery.data ?? [];
   const totals = results.reduce((sum, result) => {
     if (!result.diagnostics) {
@@ -130,7 +202,7 @@ export function PublishingLaneDiagnosticsPanel() {
         <span style={{ fontSize: 16 }}>🧾</span>
         <span style={{ flex: 1 }}>
           <span style={{ display: "block", fontSize: 12, fontWeight: 900, letterSpacing: ".6px", textTransform: "uppercase", color: "#00AEEF" }}>Publishing Lane Diagnostics</span>
-          <span style={{ display: "block", marginTop: 2, fontSize: 10.5, color: "#64748B" }}>Receipt-verified platform truth · read only · latest attempt per expected lane</span>
+          <span style={{ display: "block", marginTop: 2, fontSize: 10.5, color: "#64748B" }}>Receipt-verified platform truth · latest attempt per expected lane · isolated retries only</span>
         </span>
         {healthQuery.isLoading || diagnosticsQuery.isLoading ? (
           <span style={{ fontSize: 10, color: "#F59E0B" }}>checking…</span>
@@ -174,16 +246,49 @@ export function PublishingLaneDiagnosticsPanel() {
                         <div style={{ borderTop: "1px solid rgba(255,255,255,.05)", padding: "7px 10px 9px", display: "grid", gap: 5 }}>
                           {diagnostics.lanes.map((lane) => {
                             const style = STATE_STYLE[lane.state];
+                            const retryKey = lane.deliveryId ? `${result.post.id}:${lane.deliveryId}` : "";
+                            const isRetrying = retryMutation.isPending && retryMutation.variables?.postId === result.post.id && retryMutation.variables?.deliveryId === lane.deliveryId;
+                            const notice = retryKey ? retryNotice[retryKey] : undefined;
+                            const canRetry = lane.state === "terminal_failure" && lane.retryAllowed && Boolean(lane.deliveryId);
                             return (
-                              <div key={lane.platform} style={{ display: "grid", gridTemplateColumns: "20px 110px 125px minmax(0,1fr)", gap: 7, alignItems: "start", padding: "6px 7px", borderRadius: 7, background: "rgba(255,255,255,.018)", border: "1px solid rgba(255,255,255,.045)" }}>
+                              <div key={lane.platform} style={{ display: "grid", gridTemplateColumns: "20px 110px 125px minmax(0,1fr) auto", gap: 7, alignItems: "start", padding: "6px 7px", borderRadius: 7, background: "rgba(255,255,255,.018)", border: "1px solid rgba(255,255,255,.045)" }}>
                                 <span style={{ color: style.color, fontWeight: 900 }}>{style.icon}</span>
                                 <span style={{ fontSize: 9.5, color: "#CBD5E1", fontWeight: 800 }}>{lane.platform}</span>
                                 <span style={{ fontSize: 8.5, color: style.color, fontWeight: 900, textTransform: "uppercase" }}>{style.label}</span>
-                                <span style={{ fontSize: 8.8, color: "#64748B", lineHeight: 1.4 }}>{lane.message} <strong style={{ color: "#94A3B8" }}>{style.action}.</strong>{lane.attemptNumber ? ` Attempt ${lane.attemptNumber}.` : ""}{lane.updatedAt ? ` ${fmtTime(lane.updatedAt)}.` : ""}</span>
+                                <span style={{ fontSize: 8.8, color: "#64748B", lineHeight: 1.4 }}>
+                                  {lane.message} <strong style={{ color: "#94A3B8" }}>{canRetry ? "Isolated retry available" : style.action}.</strong>{lane.attemptNumber ? ` Attempt ${lane.attemptNumber}.` : ""}{lane.updatedAt ? ` ${fmtTime(lane.updatedAt)}.` : ""}
+                                  {notice && <span style={{ display: "block", marginTop: 4, color: notice.ok ? "#22C55E" : "#F59E0B", fontWeight: 800 }}>{notice.message}</span>}
+                                </span>
+                                {canRetry ? (
+                                  <button
+                                    type="button"
+                                    disabled={retryMutation.isPending}
+                                    onClick={() => {
+                                      if (!lane.deliveryId) return;
+                                      const confirmed = window.confirm(`Retry ${platformLabel(lane.platform)} only? Successful platforms will not be replayed.`);
+                                      if (!confirmed) return;
+                                      setRetryNotice((current) => {
+                                        const next = { ...current };
+                                        delete next[`${result.post.id}:${lane.deliveryId}`];
+                                        return next;
+                                      });
+                                      retryMutation.mutate({
+                                        postId: result.post.id,
+                                        deliveryId: lane.deliveryId,
+                                        platform: lane.platform,
+                                      });
+                                    }}
+                                    style={{ borderRadius: 7, border: "1px solid rgba(239,68,68,.35)", background: "rgba(239,68,68,.10)", color: "#FCA5A5", padding: "5px 8px", fontSize: 8.5, fontWeight: 900, cursor: retryMutation.isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap", opacity: retryMutation.isPending && !isRetrying ? 0.55 : 1 }}
+                                  >
+                                    {isRetrying ? "Retrying…" : "Retry this platform"}
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: 8.2, color: "#334155", whiteSpace: "nowrap" }}>No retry</span>
+                                )}
                               </div>
                             );
                           })}
-                          <div style={{ marginTop: 2, fontSize: 8.5, color: "#334155" }}>Verified publication requires an external provider post ID or URL. This panel never retries or publishes content.</div>
+                          <div style={{ marginTop: 2, fontSize: 8.5, color: "#334155" }}>Verified publication requires an external provider post ID or URL. Retry actions are limited to the selected failed platform lane and require confirmation.</div>
                         </div>
                       )}
                     </div>

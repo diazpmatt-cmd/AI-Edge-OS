@@ -8,6 +8,7 @@ import {
   upsertAuthorityProfile,
 } from "../lib/authority-profile-store.js";
 import { validateAuthorityProfileInput } from "../lib/authority-profile-policy.js";
+import { buildAuthorityDiscoveryContext } from "../lib/authority-discovery-context.js";
 
 const router = Router();
 
@@ -59,6 +60,17 @@ async function readAuthorityContext(clientId: string) {
   };
 }
 
+function profileReadyForDiscovery(profile: Awaited<ReturnType<typeof getAuthorityProfile>>): boolean {
+  return Boolean(
+    profile?.discoveryEnabled &&
+    profile.primaryDomain &&
+    profile.primaryCity &&
+    profile.primaryRegion &&
+    profile.geography.length > 0 &&
+    profile.serviceIds.length > 0
+  );
+}
+
 router.get("/api/authority/profile", async (req, res) => {
   const tenant = await resolveTenant(req, res);
   if (!tenant) return;
@@ -74,12 +86,7 @@ router.get("/api/authority/profile", async (req, res) => {
       clientName: tenant.clientName,
       profile,
       ...context,
-      readyForDiscovery: Boolean(
-        profile?.discoveryEnabled &&
-        profile.primaryDomain &&
-        profile.geography.length > 0 &&
-        profile.serviceIds.length > 0
-      ),
+      readyForDiscovery: profileReadyForDiscovery(profile),
     });
   } catch (error) {
     console.error("[AUTHORITY-PROFILE] read failed:", error);
@@ -122,16 +129,46 @@ router.put("/api/authority/profile", async (req, res) => {
       clientName: tenant.clientName,
       profile,
       ...context,
-      readyForDiscovery: Boolean(
-        profile.discoveryEnabled &&
-        profile.primaryDomain &&
-        profile.geography.length > 0 &&
-        profile.serviceIds.length > 0
-      ),
+      readyForDiscovery: profileReadyForDiscovery(profile),
     });
   } catch (error) {
     console.error("[AUTHORITY-PROFILE] write failed:", error);
     res.status(500).json({ error: "AUTHORITY_PROFILE_WRITE_FAILED" });
+  }
+});
+
+router.get("/api/authority/discovery-context", async (req, res) => {
+  const tenant = await resolveTenant(req, res);
+  if (!tenant) return;
+
+  try {
+    const [profile, context] = await Promise.all([
+      getAuthorityProfile(tenant.clientId),
+      readAuthorityContext(tenant.clientId),
+    ]);
+    const result = buildAuthorityDiscoveryContext({
+      profile,
+      competitorDomains: context.competitors.map((competitor) => competitor.domain),
+      activeServiceIds: context.availableServiceIds,
+    });
+    res.setHeader("Cache-Control", "no-store");
+    if (!result.ok) {
+      res.status(409).json({
+        ready: false,
+        code: result.code,
+        message: result.message,
+      });
+      return;
+    }
+    res.status(200).json({
+      ready: true,
+      discovery: result.discovery,
+      competitorCount: result.discovery.competitorDomains.length,
+      source: "tenant_authority_profile",
+    });
+  } catch (error) {
+    console.error("[AUTHORITY-PROFILE] discovery context failed:", error);
+    res.status(500).json({ error: "AUTHORITY_DISCOVERY_CONTEXT_FAILED" });
   }
 });
 

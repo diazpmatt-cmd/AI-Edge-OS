@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { BacklinkOpportunity, BacklinkProspect, BacklinkWorkflow } from "@workspace/db";
+import type {
+  BacklinkEvidenceRecord,
+  BacklinkOpportunity,
+  BacklinkProspect,
+  BacklinkWorkflow,
+} from "@workspace/db";
 import {
   classifyBacklinkOpportunityPriority,
   computeBacklinkOpportunityPriority,
   rankBacklinkOpportunities,
+  selectBacklinkEvidencePreview,
 } from "./backlink-opportunity-intelligence.js";
 
 const now = new Date("2026-08-07T00:00:00.000Z");
@@ -58,6 +64,32 @@ function prospect(overrides: Partial<BacklinkProspect> = {}): BacklinkProspect {
   };
 }
 
+function evidence(overrides: Partial<BacklinkEvidenceRecord> = {}): BacklinkEvidenceRecord {
+  return {
+    id: "e-1",
+    clientId: "client-1",
+    prospectId: "prospect-1",
+    sourceDomain: "publisher.example",
+    sourceUrl: "https://publisher.example/resources",
+    targetUrl: "https://client.example/service",
+    competitorUrl: "https://competitor.example/service",
+    category: "competitor_link_gap",
+    serviceId: "bed-bugs",
+    providers: ["provider-z", "provider-a"],
+    discoveredAt: now,
+    freshnessDays: 2,
+    localRelevance: 80,
+    serviceRelevance: 90,
+    competitorFrequency: 3,
+    relationshipAccessibility: 75,
+    editorialRequirements: 40,
+    estimatedEffort: 35,
+    authority: 82,
+    createdAt: now,
+    ...overrides,
+  };
+}
+
 describe("backlink opportunity intelligence", () => {
   it("uses a transparent 55/45 value-to-attainability priority score", () => {
     expect(computeBacklinkOpportunityPriority({ potentialValue: 80, attainability: 70 })).toBe(75.5);
@@ -90,5 +122,50 @@ describe("backlink opportunity intelligence", () => {
       { opportunity: opportunity({ id: "open" }), workflow: workflow({ id: "wf-open", opportunityId: "open", status: "discovered" }), prospect: prospect() },
     ];
     expect(rankBacklinkOpportunities(items, 1).map((item) => item.opportunityId)).toEqual(["open"]);
+  });
+
+  it("selects only evidence referenced by the opportunity", () => {
+    const preview = selectBacklinkEvidencePreview(
+      opportunity({ evidenceIds: ["e-1", "e-2"] }),
+      [
+        evidence({ id: "unrelated", sourceDomain: "ignore.example" }),
+        evidence({ id: "e-1", sourceDomain: "one.example" }),
+        evidence({ id: "e-2", sourceDomain: "two.example" }),
+      ],
+    );
+
+    expect(preview.map((item) => item.id).sort()).toEqual(["e-1", "e-2"]);
+    expect(preview.some((item) => item.sourceDomain === "ignore.example")).toBe(false);
+  });
+
+  it("keeps competitor acquisition evidence bounded, deterministic, and safe", () => {
+    const preview = selectBacklinkEvidencePreview(
+      opportunity({ evidenceIds: ["e-1", "e-2", "e-3", "e-4"] }),
+      [
+        evidence({ id: "e-4", discoveredAt: new Date("2026-08-04T00:00:00.000Z") }),
+        evidence({ id: "e-2", discoveredAt: new Date("2026-08-06T00:00:00.000Z") }),
+        evidence({ id: "e-1", discoveredAt: new Date("2026-08-07T00:00:00.000Z") }),
+        evidence({ id: "e-3", discoveredAt: new Date("2026-08-05T00:00:00.000Z") }),
+      ],
+      3,
+    );
+
+    expect(preview.map((item) => item.id)).toEqual(["e-1", "e-2", "e-3"]);
+    expect(preview[0]).toEqual({
+      id: "e-1",
+      sourceDomain: "publisher.example",
+      sourceUrl: "https://publisher.example/resources",
+      competitorUrl: "https://competitor.example/service",
+      targetUrl: "https://client.example/service",
+      authority: 82,
+      competitorFrequency: 3,
+      relationshipAccessibility: 75,
+      estimatedEffort: 35,
+      discoveredAt: "2026-08-07T00:00:00.000Z",
+      providers: ["provider-a", "provider-z"],
+    });
+    expect("clientId" in preview[0]).toBe(false);
+    expect("prospectId" in preview[0]).toBe(false);
+    expect("providerMetadata" in preview[0]).toBe(false);
   });
 });

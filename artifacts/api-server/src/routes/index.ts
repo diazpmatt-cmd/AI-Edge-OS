@@ -44,6 +44,7 @@ import gbpAiRouter from "./gbp-ai";
 import competitorIntelligenceRouter from "./competitor-intelligence";
 import contactRouter from "./contact";
 import referralsRouter from "./referrals";
+import backlinkScheduledSafetyRouter from "./backlink-scheduled-safety";
 import backlinksRouter from "./backlinks";
 import dabStatusRouter from "./dab-status";
 import dabApprovalsRouter from "./dab-approvals";
@@ -101,6 +102,7 @@ router.use(gbpAiRouter);
 router.use(competitorIntelligenceRouter);
 router.use(contactRouter);
 router.use(referralsRouter);
+router.use(backlinkScheduledSafetyRouter);
 router.use(backlinksRouter);
 
 export default router;

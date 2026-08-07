@@ -93,7 +93,7 @@ export const backlinkIngestionRunsTable = pgTable("backlink_ingestion_runs", {
   index("idx_backlink_ingestion_runs_client_status").on(table.clientId, table.status, table.startedAt),
   check("ck_backlink_ingestion_provider_id", sql`char_length(${table.providerId}) BETWEEN 1 AND 100`),
   check("ck_backlink_ingestion_provider_revision", sql`char_length(${table.providerRevision}) BETWEEN 1 AND 100`),
-  check("ck_backlink_ingestion_mode", sql`${table.mode} = 'manual'`),
+  check("ck_backlink_ingestion_mode", sql`${table.mode} IN ('manual','scheduled')`),
   check("ck_backlink_ingestion_status", sql`${table.status} IN ('running','succeeded','failed')`),
   check("ck_backlink_ingestion_capabilities", sql`jsonb_typeof(${table.capabilities}) = 'array' AND jsonb_array_length(${table.capabilities}) <= 8 AND
     ${table.capabilities} <@ '["referring_domains","link_intersections","brand_mentions","broken_links","authority_metrics","resource_page_discovery","citation_directory_discovery","partnership_organization_discovery"]'::jsonb`),

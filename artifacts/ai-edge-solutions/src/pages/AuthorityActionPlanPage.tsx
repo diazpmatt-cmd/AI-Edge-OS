@@ -24,7 +24,7 @@ export default function AuthorityActionPlanPage() {
           </div>
 
           <AuthorityActionPlanPanel onViewBacklinks={() => {
-            window.location.href = "/admin/authority-engine?tab=backlinks";
+            window.location.href = "/admin/authority-engine";
           }} />
         </div>
       </div>

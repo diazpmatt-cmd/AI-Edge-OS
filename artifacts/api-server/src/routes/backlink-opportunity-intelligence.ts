@@ -6,7 +6,10 @@ import {
   BACKLINK_MAX_PAGE_SIZE,
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
-import { rankBacklinkOpportunities } from "../lib/backlink-opportunity-intelligence.js";
+import {
+  rankBacklinkOpportunities,
+  selectBacklinkEvidencePreview,
+} from "../lib/backlink-opportunity-intelligence.js";
 
 const router = Router();
 const repo = new DrizzleBacklinkRepository(db);
@@ -44,7 +47,31 @@ router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
     );
 
     const ranked = rankBacklinkOpportunities(hydrated, BACKLINK_MAX_PAGE_SIZE);
-    const items = ranked.slice(0, limit);
+    const opportunityById = new Map(
+      listed.items.map(({ opportunity }) => [opportunity.id, opportunity] as const),
+    );
+    const selected = ranked.slice(0, limit);
+    const items = await Promise.all(
+      selected.map(async (item) => {
+        if (!item.reasonCodes.includes("competitor_gap")) {
+          return { ...item, evidencePreview: [] };
+        }
+
+        const opportunity = opportunityById.get(item.opportunityId);
+        if (!opportunity) {
+          return { ...item, evidencePreview: [] };
+        }
+
+        const evidence = await repo.listEvidenceForProspect(
+          item.prospectId,
+          resolved.client.id,
+        );
+        return {
+          ...item,
+          evidencePreview: selectBacklinkEvidencePreview(opportunity, evidence, 3),
+        };
+      }),
+    );
     const summary = {
       totalActionable: ranked.length,
       topPriority: ranked.filter((item) => item.priorityTier === "top").length,

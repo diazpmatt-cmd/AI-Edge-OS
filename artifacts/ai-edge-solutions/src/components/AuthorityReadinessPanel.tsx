@@ -35,6 +35,18 @@ interface ScheduledReadinessResponse {
   contextReady: boolean;
   scheduledModeSchemaReady: boolean;
   competitorCount: number;
+  executionPlan: null | {
+    mode: "scheduled";
+    providerId: string;
+    providerRevision: string;
+    capabilities: string[];
+    fingerprint: string;
+    runId: string;
+    providerExecutionAllowed: false;
+    discovery: {
+      limit: number;
+    };
+  };
 }
 
 function stateColor(ok: boolean): string {
@@ -89,6 +101,7 @@ export function AuthorityReadinessPanel() {
     { label: "Competitor set", ok: readiness.competitorCount > 0, detail: `${readiness.competitorCount} active competitor${readiness.competitorCount === 1 ? "" : "s"}` },
     { label: "Scheduled-mode ledger", ok: readiness.scheduledModeSchemaReady, detail: readiness.scheduledModeSchemaReady ? "manual + scheduled" : "manual-only" },
     { label: "Live backlink provider", ok: readiness.provider.status === "configured", detail: readiness.provider.status.replaceAll("_", " ") },
+    { label: "Execution plan", ok: Boolean(readiness.executionPlan), detail: readiness.executionPlan ? readiness.executionPlan.runId : "Not yet derivable" },
     { label: "Scheduled execution", ok: readiness.executionActivated, detail: readiness.executionActivated ? "Activated" : "Not activated" },
   ];
 
@@ -121,6 +134,14 @@ export function AuthorityReadinessPanel() {
           );
         })}
       </div>
+
+      {readiness.executionPlan && (
+        <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 8.8, color: "#64748B" }}>
+          <span>Provider revision: <strong style={{ color: "#94A3B8" }}>{readiness.executionPlan.providerRevision}</strong></span>
+          <span>Request limit: <strong style={{ color: "#94A3B8" }}>{readiness.executionPlan.discovery.limit}</strong></span>
+          <span>Execution allowed: <strong style={{ color: "#F59E0B" }}>No</strong></span>
+        </div>
+      )}
 
       <div style={{ marginTop: 10, fontSize: 8.8, color: "#475569" }}>
         Live scheduled backlink execution is intentionally off. Demo/fixture ingestion is disabled on the authenticated Authority surface, and no provider call is made by this readiness panel.

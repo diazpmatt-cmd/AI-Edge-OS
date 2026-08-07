@@ -6,6 +6,10 @@ import { bootstrapPlatformDeliveries, publishingService } from "../lib/publishin
 import { getAuth } from "@clerk/express";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret";
 import {
+  INTERNAL_PUBLISH_PLATFORM_HEADER,
+  resolveInternalPublishPlatformSelection,
+} from "../lib/publishing-platform-override.js";
+import {
   readGbpCooldown, buildGbpCooldownRecord,
   stripLegacyCooldownFields,
 } from "../lib/gbp-cooldown.js";
@@ -125,7 +129,7 @@ function rowToDto(r: typeof socialPostsTable.$inferSelect) {
     impressions:     r.impressions ? parseInt(r.impressions, 10) : null,
     reach:           r.reach      ? parseInt(r.reach,       10) : null,
     clicks:          r.clicks     ? parseInt(r.clicks,      10) : null,
-    likes:           r.likes      ? parseInt(r.likes,       10) : null,
+    likes:           r.likes      ? parseInt(r.likes,      10) : null,
     comments:        r.comments   ? parseInt(r.comments,    10) : null,
     shares:          r.shares     ? parseInt(r.shares,      10) : null,
     engagementScore: r.engagementScore ? parseFloat(r.engagementScore) : null,
@@ -355,7 +359,20 @@ router.post("/social-posts/:id/publish", async (req, res) => {
     .then(r => r[0]);
   if (!post) { res.status(404).json({ error: "Post not found" }); return; }
 
-  const platforms: string[] = JSON.parse(post.platforms || "[]");
+  const boundPlatforms: string[] = JSON.parse(post.platforms || "[]");
+  const platformSelection = resolveInternalPublishPlatformSelection({
+    boundPlatforms,
+    rawHeader: req.headers[INTERNAL_PUBLISH_PLATFORM_HEADER],
+    internalAuthorized: isScheduler,
+  });
+  if (!platformSelection.ok) {
+    res.status(platformSelection.status ?? 400).json({
+      error: platformSelection.message,
+      code: platformSelection.code,
+    });
+    return;
+  }
+  const platforms = [...platformSelection.platforms];
   const results: Record<string, { ok: boolean; error?: string; postId?: string }> = {};
   const errors: string[] = [];
 

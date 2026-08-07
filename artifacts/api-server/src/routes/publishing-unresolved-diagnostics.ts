@@ -48,6 +48,7 @@ router.get("/social-posts/:id/publishing-diagnostics", async (req, res) => {
 
   const deliveries = await db
     .select({
+      id: platformDeliveriesTable.id,
       platform: platformDeliveriesTable.platform,
       status: platformDeliveriesTable.status,
       attemptNumber: platformDeliveriesTable.attemptNumber,

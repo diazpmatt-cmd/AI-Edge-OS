@@ -11,6 +11,7 @@ const row = (
   status: string,
   attemptNumber: number,
   options: Partial<{
+    id: string;
     externalPostId: string | null;
     externalPostUrl: string | null;
     errorCode: string | null;
@@ -18,6 +19,7 @@ const row = (
     updatedAt: string;
   }> = {},
 ) => ({
+  id: options.id ?? `${platform}-${attemptNumber}`,
   platform,
   status,
   attemptNumber,
@@ -44,7 +46,7 @@ describe("publishing unresolved diagnostics", () => {
       expectedPlatforms: ["facebook", "google", "youtube", "instagram", "tiktok"],
       deliveries: [
         row("facebook", "published", 1, { externalPostId: "fb-1" }),
-        row("google", "failed", 1, { errorCode: "GBP_FAILED", errorMessage: "Google failed" }),
+        row("google", "failed", 1, { id: "google-failed-1", errorCode: "GBP_FAILED", errorMessage: "Google failed" }),
         row("youtube", "published", 1),
         row("instagram", "publishing", 1),
       ],
@@ -56,6 +58,8 @@ describe("publishing unresolved diagnostics", () => {
       "in_flight",
       "missing_attempt",
     ]);
+    expect(lanes[1].deliveryId).toBe("google-failed-1");
+    expect(lanes[4].deliveryId).toBeNull();
     expect(summarizePublishingDiagnostics(lanes)).toEqual({
       total: 5,
       verified: 1,

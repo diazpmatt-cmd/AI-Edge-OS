@@ -1,28 +1,17 @@
 import type { PublishingLaneDiagnostic } from "./publishing-unresolved-diagnostics.js";
 
 /**
- * Align read-only diagnostics with the retry contract that actually exists.
+ * Keep the diagnostics surface aligned with the executable retry contract.
  *
- * PublishingService.retryDelivery() only permits an isolated single-platform
- * source post. Until a dedicated multi-platform failed-lane retry boundary is
- * implemented, diagnostics must not advertise retry for a lane belonging to a
- * multi-platform source post.
+ * A dedicated isolated-lane retry boundary now supports both single-platform
+ * posts and one failed lane inside a multi-platform partial publish. The base
+ * lane classifier remains the source of truth for whether a terminal failure is
+ * retryable; this adapter intentionally preserves that decision.
  */
 export function applyPublishingDiagnosticsRetryPolicy(input: {
   readonly expectedPlatforms: readonly string[];
   readonly lanes: readonly PublishingLaneDiagnostic[];
 }): readonly PublishingLaneDiagnostic[] {
-  const isolatedSource = input.expectedPlatforms.length === 1;
-  if (isolatedSource) return input.lanes;
-
-  return input.lanes.map((lane) => {
-    if (lane.state !== "terminal_failure" || !lane.retryAllowed) return lane;
-
-    return Object.freeze({
-      ...lane,
-      retryAllowed: false,
-      message:
-        `${lane.message} Safe isolated retry is not available for a multi-platform source post yet; review this lane manually.`,
-    });
-  });
+  void input.expectedPlatforms;
+  return input.lanes;
 }

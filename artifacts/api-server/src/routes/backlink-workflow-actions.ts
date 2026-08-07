@@ -2,7 +2,10 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, DrizzleBacklinkRepository } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
-import { hasVerifiedAuthorityAcquisitionProof } from "../lib/authority-acquisition-proof-store.js";
+import {
+  hasVerifiedAuthorityAcquisitionProof,
+  withAuthorityAcquisitionOutcomeLock,
+} from "../lib/authority-acquisition-proof-store.js";
 import {
   auditReasonForBacklinkWorkflowHumanAction,
   isBacklinkWorkflowHumanAction,
@@ -40,36 +43,49 @@ router.post(
     }
 
     try {
-      let reason = auditReasonForBacklinkWorkflowHumanAction(action);
-      if (action === "mark_won") {
-        const proofGate = await hasVerifiedAuthorityAcquisitionProof(
+      const transition = async () => {
+        let reason = auditReasonForBacklinkWorkflowHumanAction(action);
+        if (action === "mark_won") {
+          const proofGate = await hasVerifiedAuthorityAcquisitionProof(
+            opportunityId,
+            resolved.client.id,
+          );
+          if (!proofGate.ready || !proofGate.proofId) {
+            throw new Error("verified_acquisition_proof_required");
+          }
+          reason = `${reason};proof_id:${proofGate.proofId}`;
+        }
+
+        return repo.transitionWorkflow(
           opportunityId,
           resolved.client.id,
+          {
+            toStatus: statusForBacklinkWorkflowHumanAction(action),
+            actorId: userId,
+            reason,
+          },
         );
-        if (!proofGate.ready || !proofGate.proofId) {
-          res.status(409).json({
-            error: "verified_acquisition_proof_required",
-            message: "Mark Won requires a human-verified acquisition proof for this opportunity.",
-          });
-          return;
-        }
-        reason = `${reason};proof_id:${proofGate.proofId}`;
-      }
+      };
 
-      const workflow = await repo.transitionWorkflow(
-        opportunityId,
-        resolved.client.id,
-        {
-          toStatus: statusForBacklinkWorkflowHumanAction(action),
-          actorId: userId,
-          reason,
-        },
-      );
+      const workflow = action === "mark_won"
+        ? await withAuthorityAcquisitionOutcomeLock(
+            resolved.client.id,
+            opportunityId,
+            transition,
+          )
+        : await transition();
 
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ workflow });
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
+      if (message === "verified_acquisition_proof_required") {
+        res.status(409).json({
+          error: "verified_acquisition_proof_required",
+          message: "Mark Won requires a human-verified acquisition proof for this opportunity.",
+        });
+        return;
+      }
       if (/workflow not found|cross-tenant/i.test(message)) {
         res.status(404).json({ error: "workflow_not_found" });
         return;

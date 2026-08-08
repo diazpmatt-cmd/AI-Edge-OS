@@ -1,0 +1,277 @@
+services:
+  api:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      APP_COMMIT_SHA: ${IMAGE_TAG:?IMAGE_TAG is required}
+      COOLIFY_BRANCH: $COOLIFY_BRANCH
+      COOLIFY_RESOURCE_UUID: $COOLIFY_RESOURCE_UUID
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:?CLERK_PUBLISHABLE_KEY is required}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?CLERK_SECRET_KEY is required}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:?SCHEDULER_SECRET is required}
+      GORILLADESK_API_KEY: ${GORILLADESK_API_KEY:?GORILLADESK_API_KEY is required}
+      OBJECT_STORAGE_PROVIDER: gcs-wif
+      PRIVATE_OBJECT_DIR: /ai-edge-os-media-prod-bbb-4827/private
+      LOCAL_MEDIA_DIR: /data/media
+      GOOGLE_CLOUD_PROJECT: project-4978b26c-b88e-454b-875
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp/workload-identity-credential.json
+      SCHEDULER_ENABLED: "false"
+      REFERRAL_SCHEDULER_ENABLED: "false"
+      AI_VISIBILITY_SCHEDULER_ENABLED: "false"
+      REFERRAL_DELIVERY_ENABLED: "false"
+      REFERRAL_DELIVERY_MODE: dry_run
+      REFERRAL_DELIVERY_EMERGENCY_STOP: "true"
+      REFERRAL_DELIVERY_ALLOWLIST: ""
+      DAB_PLANNER_WORKER_ENABLED: "true"
+      DAB_PLANNER_INTERVAL_MS: "60000"
+      DAB_AGENT_WORKER_ENABLED: "true"
+      DAB_AGENT_PROVIDER_ENABLED: "true"
+      DAB_AGENT_KILL_SWITCH: "false"
+      DAB_AGENT_DAILY_REQUEST_LIMIT: "12"
+      DAB_AGENT_DAILY_TOKEN_LIMIT: "24000"
+      DAB_PREPARATION_WORKER_ENABLED: "true"
+      DAB_PREPARATION_KILL_SWITCH: "false"
+      AI_INTEGRATIONS_OPENAI_API_KEY: ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - type: volume
+        source: media_uploads
+        target: /data/media
+      - type: bind
+        source: ./secrets/gcp/workload-identity-credential.json
+        target: /run/secrets/gcp/workload-identity-credential.json
+        read_only: true
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  dab-planner-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DAB_PLANNER_WORKER_ENABLED: "true"
+      DAB_PLANNER_KILL_SWITCH: "false"
+      DAB_PLANNER_RUNTIME_ID: dab-planner-production-1
+      DAB_PLANNER_SCHEDULE_ID: dab-planner
+      DAB_PLANNER_INTERVAL_MS: "60000"
+      DAB_PLANNER_LEASE_MS: "120000"
+      DAB_PLANNER_ACTIVATION_AUTHORIZATION_REF: github:diazpmatt-cmd/AI-Edge-OS/issues/94
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dab-agent-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DAB_AGENT_WORKER_ENABLED: "true"
+      DAB_AGENT_PROVIDER_ENABLED: "true"
+      DAB_AGENT_KILL_SWITCH: "false"
+      DAB_AGENT_RUNTIME_ID: dab-agent-production-1
+      DAB_AGENT_INTERVAL_MS: "60000"
+      DAB_AGENT_TIMEOUT_MS: "45000"
+      DAB_AGENT_MAX_OUTPUT_TOKENS: "700"
+      DAB_AGENT_MAX_CONTEXT_BYTES: "16384"
+      DAB_AGENT_MAX_ATTEMPTS: "2"
+      DAB_AGENT_DAILY_REQUEST_LIMIT: "12"
+      DAB_AGENT_DAILY_TOKEN_LIMIT: "24000"
+      DAB_AGENT_MODEL: ${DAB_AGENT_MODEL:-gpt-4o-mini}
+      AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
+      AI_INTEGRATIONS_OPENAI_API_KEY: ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dab-preparation-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DAB_PREPARATION_WORKER_ENABLED: "true"
+      DAB_PREPARATION_KILL_SWITCH: "false"
+      DAB_PREPARATION_RUNTIME_ID: dab-preparation-production-1
+      DAB_PREPARATION_INTERVAL_MS: "60000"
+      DAB_PREPARATION_TIMEOUT_MS: "60000"
+      DAB_PREPARATION_MAX_ATTEMPTS: "2"
+      DAB_PREPARATION_MODEL: ${DAB_PREPARATION_MODEL:-gpt-4o-mini}
+      DAB_PREPARATION_SOURCE_ROOT: /app/preparation-source
+      DAB_PREPARATION_SANDBOX_ROOT: /tmp/dab-preparation
+      AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
+      AI_INTEGRATIONS_OPENAI_API_KEY: ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    tmpfs:
+      - /tmp/dab-preparation:size=128m,mode=0700
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dab-git-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DAB_GIT_WORKER_ENABLED: ${DAB_GIT_WORKER_ENABLED:-false}
+      DAB_GIT_WORKER_KILL_SWITCH: ${DAB_GIT_WORKER_KILL_SWITCH:-true}
+      DAB_GIT_WORKER_RUNTIME_ID: dab-git-production-1
+      DAB_GIT_REPOSITORY_ID: "1293944511"
+      DAB_GIT_REPOSITORY: diazpmatt-cmd/AI-Edge-OS
+      DAB_GIT_WORKSPACE_ROOT: /tmp/dab-git-workspace
+      DAB_GIT_GITHUB_TOKEN: ${DAB_GIT_GITHUB_TOKEN:-}
+    read_only: true
+    tmpfs:
+      - /tmp/dab-git-workspace:size=256m,mode=0700
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dab-publishing-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-publishing-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:?SCHEDULER_SECRET is required}
+      DAB_PUBLISHING_WORKER_ENABLED: "true"
+      DAB_PUBLISHING_KILL_SWITCH: "false"
+      DAB_PUBLISHING_RUNTIME_ID: dab-publishing-production-1
+      DAB_PUBLISHING_INTERVAL_MS: "15000"
+      DAB_PUBLISHING_LEASE_MS: "120000"
+      DAB_PUBLISHING_INTERNAL_BASE_URL: http://api:3000
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  apollos-campaign-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/apollos-campaign-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:?SCHEDULER_SECRET is required}
+      APOLLOS_CAMPAIGN_WORKER_ENABLED: "true"
+      APOLLOS_CAMPAIGN_KILL_SWITCH: "false"
+      APOLLOS_CAMPAIGN_RUNTIME_ID: apollos-campaign-production-1
+      APOLLOS_CAMPAIGN_INTERVAL_MS: "15000"
+      APOLLOS_CAMPAIGN_TIMEOUT_MS: "900000"
+      APOLLOS_CAMPAIGN_MAX_ATTEMPTS: "3"
+      APOLLOS_CAMPAIGN_LEASE_MS: "1200000"
+      APOLLOS_CAMPAIGN_INTERNAL_BASE_URL: http://api:3000
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  apollos-repair-worker:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: "on-failure:3"
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/apollos-repair-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      APOLLOS_REPAIR_WORKER_ENABLED: "true"
+      APOLLOS_REPAIR_KILL_SWITCH: "false"
+      APOLLOS_REPAIR_RUNTIME_ID: apollos-repair-production-1
+      APOLLOS_REPAIR_INTERVAL_MS: "15000"
+      APOLLOS_REPAIR_LEASE_MS: "120000"
+      APOLLOS_REPAIR_MAX_ATTEMPTS: "1"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  web:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-web:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  media_uploads:
+    name: ai-edge-os-media-uploads

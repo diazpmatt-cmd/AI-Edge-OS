@@ -16,39 +16,23 @@ const REMOTE_URL = `https://github.com/${DAB_GIT_ALLOWED_REPOSITORY}.git`;
 const SHA = /^[a-f0-9]{40}$/;
 const TRUSTED_WORKFLOWS = Object.freeze(["Lead Intelligence CI", "Coolify stack validation"] as const);
 
-export interface DabGitHubHttpClient {
-  request<T>(input: {
-    method: "GET" | "POST" | "PUT";
-    path: string;
-    body?: unknown;
-  }): Promise<{ status: number; body: T }>;
-}
+type DabGitHubHttpRequest = Readonly<{ method: "GET" | "POST" | "PUT"; path: string; body?: unknown }>;
+export interface DabGitHubHttpClient { request<T>(input: DabGitHubHttpRequest): Promise<{ status: number; body: T }>; }
+export type DabGitHubTransportOptions = Readonly<{ config: DabGitWorkerConfig; git: DabGitCommandRunner; http?: DabGitHubHttpClient }>;
 
-export type DabGitHubTransportOptions = Readonly<{
-  config: DabGitWorkerConfig;
-  git: DabGitCommandRunner;
-  http?: DabGitHubHttpClient;
-}>;
-
-function assertRepository(repositoryId: string): void {
-  if (repositoryId !== DAB_GIT_ALLOWED_REPOSITORY_ID) throw new Error("DAB_GITHUB_TRANSPORT_REPOSITORY_MISMATCH");
-}
+function assertRepository(repositoryId: string): void { if (repositoryId !== DAB_GIT_ALLOWED_REPOSITORY_ID) throw new Error("DAB_GITHUB_TRANSPORT_REPOSITORY_MISMATCH"); }
 function assertSha(value: string, code: string): void { if (!SHA.test(value)) throw new Error(code); }
 function assertMain(branch: string): void { if (branch !== "main") throw new Error("DAB_GITHUB_TRANSPORT_BASE_BRANCH_INVALID"); }
 
 function realHttp(config: DabGitWorkerConfig): DabGitHubHttpClient {
   return {
-    async request<T>({ method, path, body }) {
+    async request<T>(input: DabGitHubHttpRequest) {
+      const { method, path, body } = input;
       if (!config.credential) throw new Error("DAB_GIT_WORKER_CREDENTIAL_MISSING");
       if (!path.startsWith("/") || path.includes("..") || path.includes("\\") || path.includes("://")) throw new Error("DAB_GITHUB_TRANSPORT_PATH_INVALID");
       const response = await fetch(`${API_ROOT}${path}`, {
         method,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${config.credential}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        },
+        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${config.credential}`, "X-GitHub-Api-Version": "2022-11-28", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(15_000),
       });

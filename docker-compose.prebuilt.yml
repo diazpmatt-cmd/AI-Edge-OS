@@ -1,0 +1,67 @@
+services:
+  api:
+    extends:
+      file: docker-compose.coolify.yml
+      service: api
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  dab-planner-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: dab-planner-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  dab-agent-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: dab-agent-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  dab-preparation-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: dab-preparation-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  dab-git-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: dab-git-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  dab-publishing-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: dab-publishing-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  apollos-campaign-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: apollos-campaign-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  apollos-repair-worker:
+    extends:
+      file: docker-compose.coolify.yml
+      service: apollos-repair-worker
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+  web:
+    extends:
+      file: docker-compose.coolify.yml
+      service: web
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-web:${IMAGE_TAG:?IMAGE_TAG is required}
+    build: null
+
+volumes:
+  media_uploads:
+    name: ai-edge-os-media-uploads

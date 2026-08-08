@@ -7,6 +7,8 @@ import {
   type DabGitCommandRunner,
   type DabGitWorkspaceFileSystem,
 } from "../lib/dab-git-workspace-adapter.js";
+import { createDabGitReceiptStores, type DabDurableGitReceiptRepositoryLike } from "../lib/dab-git-durable-receipt-store.js";
+import type { DabGitApplyReceipt } from "../lib/dab-git-apply-handler.js";
 
 const baseSha = "a".repeat(40);
 const commitSha = "b".repeat(40);
@@ -117,5 +119,55 @@ describe("DAB fixed semantic Git workspace adapter", () => {
     const adapter = new DabGitWorkspaceAdapter({ config: readyConfig(), runner: widened.runner, fileSystem: fs });
     await expect(adapter.observeBaseSha("1")).rejects.toThrow("DAB_GIT_WORKSPACE_REPOSITORY_MISMATCH");
     await expect(adapter.createExactCommit({ repositoryId: "1293944511", branchName: "feature/dab-7c9b-test", parentSha: baseSha, files: [{ path: "artifacts/api-server/src/lib/bounded.ts", sha256: "0".repeat(64), bytes: 1 }], idempotencyKey: `dab-git-commit:${"f".repeat(64)}` })).rejects.toThrow("DAB_GIT_WORKSPACE_COMMIT_STATE_DRIFT");
+  });
+});
+
+describe("DAB durable Git receipt store wiring", () => {
+  it("binds handler receipts to task + operation and replays the durable result", async () => {
+    const rows = new Map<string, unknown>();
+    const puts: unknown[] = [];
+    const repository: DabDurableGitReceiptRepositoryLike = {
+      get: async ({ taskId, operation, idempotencyKey }) => (rows.get(`${taskId}|${operation}|${idempotencyKey}`) as any) ?? null,
+      put: async (input) => {
+        puts.push(input);
+        const key = `${input.taskId}|${input.operation}|${input.idempotencyKey}`;
+        const existing = rows.get(key) as any;
+        if (existing) return existing;
+        const record = { receipt: input.receipt };
+        rows.set(key, record);
+        return record;
+      },
+    };
+    const stores = createDabGitReceiptStores(repository, "DAB-SUPERMAN-1");
+    const receipt: DabGitApplyReceipt = Object.freeze({
+      operation: "apply_prepared_artifact",
+      outcome: "verified",
+      requestFingerprint: "1".repeat(64),
+      idempotencyKey: `dab-git-apply:${"2".repeat(64)}`,
+      repositoryId: "1293944511",
+      preparationJobId: "job-1",
+      proposalId: "proposal-1",
+      expectedBaseSha: "3".repeat(40),
+      branchName: "feature/durable-receipt-test",
+      editingAuthorizationRef: "github:issue/343/editing",
+      actorId: "apollos:test",
+      workloadIdentity: "dab-git-worker:test",
+      files: [],
+      repositoryReceiptRef: "workspace:fixture",
+      verifiedAt: "2026-08-08T01:00:00.000Z",
+    });
+    await stores.apply.save(receipt);
+    expect(await stores.apply.getByIdempotencyKey(receipt.idempotencyKey)).toEqual(receipt);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]).toMatchObject({ taskId: "DAB-SUPERMAN-1", operation: "apply", idempotencyKey: receipt.idempotencyKey });
+  });
+
+  it("fails closed when durable storage returns a mismatched receipt", async () => {
+    const repository: DabDurableGitReceiptRepositoryLike = {
+      get: async () => ({ receipt: { idempotencyKey: "wrong", requestFingerprint: "wrong" } as any }),
+      put: async (input) => ({ receipt: input.receipt }),
+    };
+    const stores = createDabGitReceiptStores(repository, "DAB-SUPERMAN-1");
+    await expect(stores.apply.getByIdempotencyKey(`dab-git-apply:${"4".repeat(64)}`)).rejects.toThrow("DAB_GIT_RECEIPT_REPOSITORY_MISMATCH");
   });
 });

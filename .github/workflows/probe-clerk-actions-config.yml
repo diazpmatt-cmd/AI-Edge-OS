@@ -1,0 +1,26 @@
+name: Probe Clerk Actions configuration
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-clerk-actions-config.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe-secret:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check repository secret presence
+        env:
+          VALUE: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: test -n "$VALUE"
+
+  probe-variable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check repository variable presence
+        env:
+          VALUE: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: test -n "$VALUE"

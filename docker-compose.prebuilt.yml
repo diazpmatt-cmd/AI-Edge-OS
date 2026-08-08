@@ -44,6 +44,22 @@ services:
         source: ./secrets/gcp/workload-identity-credential.json
         target: /run/secrets/gcp/workload-identity-credential.json
         read_only: true
+      - type: bind
+        source: ./secrets/gcp/certificate-config.json
+        target: /run/secrets/gcp/certificate-config.json
+        read_only: true
+      - type: bind
+        source: ./secrets/gcp/client-cert.pem
+        target: /run/secrets/gcp/client-cert.pem
+        read_only: true
+      - type: bind
+        source: ./secrets/gcp/client-key.pem
+        target: /run/secrets/gcp/client-key.pem
+        read_only: true
+      - type: bind
+        source: ./secrets/gcp/trust-chain.pem
+        target: /run/secrets/gcp/trust-chain.pem
+        read_only: true
     expose:
       - "3000"
     healthcheck:

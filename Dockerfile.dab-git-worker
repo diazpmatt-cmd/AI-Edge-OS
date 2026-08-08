@@ -17,8 +17,10 @@ RUN apt-get update \
 
 COPY --from=builder /deploy/node_modules ./node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
-
-RUN mkdir -p /tmp/dab-git-workspace && chmod 0700 /tmp/dab-git-workspace
+COPY --from=builder /app/deploy/dab-git-askpass.sh /usr/local/bin/dab-git-askpass
+RUN chmod 0555 /usr/local/bin/dab-git-askpass \
+  && mkdir -p /tmp/dab-git-workspace \
+  && chmod 0700 /tmp/dab-git-workspace
 
 ENV NODE_ENV=production
 ENV DAB_GIT_WORKSPACE_ROOT=/tmp/dab-git-workspace

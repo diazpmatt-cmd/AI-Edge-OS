@@ -144,3 +144,22 @@ jobs:
             VITE_CLERK_PROXY_URL=${{ secrets.VITE_CLERK_PROXY_URL }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+
+  verify-published-images:
+    if: github.event_name != 'pull_request'
+    needs: [validate-compose, build-runtime, build-git-worker, build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify immutable production image tags exist
+        run: |
+          set -eu
+          for image in "$RUNTIME_IMAGE" "$GIT_WORKER_IMAGE" "$WEB_IMAGE"; do
+            docker buildx imagetools inspect "$image:$GITHUB_SHA" >/dev/null
+          done

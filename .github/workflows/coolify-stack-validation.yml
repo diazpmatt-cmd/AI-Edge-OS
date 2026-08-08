@@ -82,8 +82,8 @@ jobs:
         run: docker compose -f docker-compose.coolify.yml build
       - name: Apollos core runtime preflight
         run: |
-          api_image="$(docker image inspect --format '{{.Id}}' ai-edge-os-api 2>/dev/null)" || {
-            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose-built API image ai-edge-os-api is unavailable' >&2
+          api_image="$(docker compose -f docker-compose.coolify.yml images -q api 2>/dev/null)" || {
+            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose API service image is unavailable' >&2
             exit 1
           }
           if [ -z "$api_image" ]; then
@@ -108,8 +108,8 @@ jobs:
             '
       - name: Apollos media runtime preflight
         run: |
-          api_image="$(docker image inspect --format '{{.Id}}' ai-edge-os-api 2>/dev/null)" || {
-            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose-built API image ai-edge-os-api is unavailable' >&2
+          api_image="$(docker compose -f docker-compose.coolify.yml images -q api 2>/dev/null)" || {
+            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose API service image is unavailable' >&2
             exit 1
           }
           if [ -z "$api_image" ]; then

@@ -98,6 +98,48 @@ export const BRIDGE_OPERATION_CATALOG: Readonly<
     "editing",
     "Model an editing-authorized review request.",
   ),
+  apply_prepared_artifact: policy(
+    "apply_prepared_artifact",
+    "modeled_write",
+    "editing",
+    "Apply only a verified prepared artifact through the bounded repository adapter.",
+  ),
+  commit_applied_artifact: policy(
+    "commit_applied_artifact",
+    "modeled_write",
+    "committing",
+    "Create one exact commit from a verified apply receipt.",
+  ),
+  push_committed_artifact: policy(
+    "push_committed_artifact",
+    "modeled_write",
+    "pushing",
+    "Push one exact verified commit to its bound non-default branch.",
+  ),
+  create_pull_request: policy(
+    "create_pull_request",
+    "modeled_write",
+    "pull_request_creation",
+    "Create one pull request bound to the verified push receipt and base SHA.",
+  ),
+  reconcile_trusted_ci: policy(
+    "reconcile_trusted_ci",
+    "read_only",
+    "scope",
+    "Reconcile exact trusted CI evidence for the bound pull request.",
+  ),
+  merge_pull_request: policy(
+    "merge_pull_request",
+    "modeled_write",
+    "merging",
+    "Merge only the exact pull request under independent merge authorization and green trusted CI.",
+  ),
+  verify_post_merge: policy(
+    "verify_post_merge",
+    "read_only",
+    "scope",
+    "Verify the exact merged SHA and approved file digest set on the default branch.",
+  ),
   submit_completion_report: policy(
     "submit_completion_report",
     "modeled_write",
@@ -120,7 +162,7 @@ export const BRIDGE_OPERATION_CATALOG: Readonly<
     "record_milestone",
     "deferred",
     "scope",
-    "Milestone recording remains deferred until factual adapters are approved.",
+    "Generic milestone recording remains deferred; factual engineering adapters own receipts.",
   ),
   record_authorization_decision: policy(
     "record_authorization_decision",

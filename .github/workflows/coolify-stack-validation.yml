@@ -82,12 +82,13 @@ jobs:
         run: docker compose -f docker-compose.coolify.yml build
       - name: Apollos core runtime preflight
         run: |
-          api_image="$(docker compose -f docker-compose.coolify.yml images -q api 2>/dev/null)" || {
-            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose API service image is unavailable' >&2
+          runtime_image="ai-edge-os-runtime:${SOURCE_COMMIT:-latest}"
+          api_image="$(docker image inspect --format '{{.Id}}' "$runtime_image" 2>/dev/null)" || {
+            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' "Shared runtime image $runtime_image is unavailable" >&2
             exit 1
           }
           if [ -z "$api_image" ]; then
-            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' 'Resolved API image ID is empty' >&2
+            printf 'APOLLOS_CORE_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' "Resolved shared runtime image ID for $runtime_image is empty" >&2
             exit 1
           fi
           docker run --rm \
@@ -108,12 +109,13 @@ jobs:
             '
       - name: Apollos media runtime preflight
         run: |
-          api_image="$(docker compose -f docker-compose.coolify.yml images -q api 2>/dev/null)" || {
-            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' 'Compose API service image is unavailable' >&2
+          runtime_image="ai-edge-os-runtime:${SOURCE_COMMIT:-latest}"
+          api_image="$(docker image inspect --format '{{.Id}}' "$runtime_image" 2>/dev/null)" || {
+            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_FAILED message=%s\n' "Shared runtime image $runtime_image is unavailable" >&2
             exit 1
           }
           if [ -z "$api_image" ]; then
-            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' 'Resolved API image ID is empty' >&2
+            printf 'APOLLOS_MEDIA_PREFLIGHT_FAILED code=APOLLOS_API_IMAGE_RESOLUTION_EMPTY message=%s\n' "Resolved shared runtime image ID for $runtime_image is empty" >&2
             exit 1
           fi
           docker run --rm \

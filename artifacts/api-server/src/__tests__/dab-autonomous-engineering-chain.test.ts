@@ -75,7 +75,7 @@ function applyBinding() {
     manifestSha256: sha256(manifestContent),
     expectedBaseSha: baseSha,
     branchName: "feature/dab7c8-proof",
-    editingAuthorizationRef: "github:issue/337#editing",
+    editingAuthorizationRef: "github:issue/337/editing",
   });
 }
 
@@ -126,7 +126,7 @@ describe("DAB-7C8 autonomous engineering proof", () => {
     const commitBinding = buildDabGitCommitBinding({
       applyReceipt,
       parentSha: baseSha,
-      committingAuthorizationRef: "github:issue/337#committing",
+      committingAuthorizationRef: "github:issue/337/committing",
     });
     const commitAdapter: DabGitCommitAdapter = {
       observeBranch: async () => ({ headSha: baseSha, files: binding.files }),
@@ -178,7 +178,7 @@ describe("DAB-7C8 autonomous engineering proof", () => {
       commitReceipt,
       expectedRemoteSha: null,
       defaultBranch: "main",
-      pushAuthorizationRef: "github:issue/337#pushing",
+      pushAuthorizationRef: "github:issue/337/pushing",
       authorizationUsable: true,
       killSwitch: false,
       adapterEnabled: true,
@@ -196,7 +196,7 @@ describe("DAB-7C8 autonomous engineering proof", () => {
       pushReceipt,
       baseBranch: "main",
       expectedBaseSha: baseSha,
-      prAuthorizationRef: "github:issue/337#pull_request_creation",
+      prAuthorizationRef: "github:issue/337/pull_request_creation",
       authorizationUsable: true,
       killSwitch: false,
       adapterEnabled: true,
@@ -241,7 +241,7 @@ describe("DAB-7C8 autonomous engineering proof", () => {
       prReceipt,
       ciReceipt,
       mergeMethod: "squash" as const,
-      mergeAuthorizationRef: "github:issue/337#merging",
+      mergeAuthorizationRef: "github:issue/337/merging",
       authorizationUsable: true,
       killSwitch: false,
       adapterEnabled: true,
@@ -306,7 +306,7 @@ describe("DAB-7C8 autonomous engineering proof", () => {
     const commitBinding = buildDabGitCommitBinding({
       applyReceipt,
       parentSha: baseSha,
-      committingAuthorizationRef: "github:issue/337#committing",
+      committingAuthorizationRef: "github:issue/337/committing",
     });
     await expect(
       commitAppliedArtifact({

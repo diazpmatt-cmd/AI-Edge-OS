@@ -83,6 +83,27 @@ interface AgentResponse {
   };
 }
 
+interface EngineeringResponse {
+  source: "canonical_development_control";
+  sourceAvailable: boolean;
+  status: "unavailable" | "idle" | "queued" | "active" | "blocked" | "awaiting_approval" | "complete";
+  blocker: string | null;
+  humanNeeded: boolean;
+  note?: string;
+  task: null | {
+    taskId: string;
+    title: string;
+    state: string;
+    version: number;
+    updatedAt: string;
+    currentLeaseOwner: string | null;
+    lastVerifiedMilestone: string | null;
+    milestones: Array<{ kind: string; status: string; evidence: string | null; recordedAt: string }>;
+    issueRef: string | null;
+    prRef: string | null;
+  };
+}
+
 const palette = {
   navy: "#030612",
   panel: "#080E1F",
@@ -96,8 +117,9 @@ const palette = {
 };
 
 function colorFor(status: string): string {
-  if (["healthy", "ready", "completed", "succeeded", "available"].includes(status)) return palette.green;
-  if (["stale", "blocked", "budget_exhausted", "failed", "unavailable"].includes(status)) return status === "failed" ? palette.red : palette.gold;
+  if (["healthy", "ready", "completed", "succeeded", "available", "complete"].includes(status)) return palette.green;
+  if (["stale", "blocked", "budget_exhausted", "failed", "unavailable", "awaiting_approval"].includes(status)) return status === "failed" ? palette.red : palette.gold;
+  if (status === "active") return palette.blue;
   return palette.silver;
 }
 
@@ -124,11 +146,12 @@ export default function MissionBoardPage() {
   const apiFetch = useApiFetch();
   const planner = useQuery({ queryKey: ["dab", "planner-status"], queryFn: () => apiFetch<PlannerResponse>("/dab/status"), refetchInterval: 30_000, retry: 1 });
   const agent = useQuery({ queryKey: ["dab", "agent-status"], queryFn: () => apiFetch<AgentResponse>("/dab/agent-status"), refetchInterval: 30_000, retry: 1 });
-  const refreshing = planner.isFetching || agent.isFetching;
-  const refresh = () => Promise.all([planner.refetch(), agent.refetch()]);
+  const engineering = useQuery({ queryKey: ["dab", "engineering-status"], queryFn: () => apiFetch<EngineeringResponse>("/dab/engineering-status"), refetchInterval: 30_000, retry: 1 });
+  const refreshing = planner.isFetching || agent.isFetching || engineering.isFetching;
+  const refresh = () => Promise.all([planner.refetch(), agent.refetch(), engineering.refetch()]);
   const recommendation = agent.data?.latestResult?.recommendation;
   const coverage = agent.data?.contextCoverage;
-  const error = planner.error || agent.error;
+  const error = planner.error || agent.error || engineering.error;
 
   return <main style={{ minHeight: "100vh", background: palette.navy, color: palette.white, padding: "28px 32px", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
     <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 24 }}>
@@ -136,7 +159,7 @@ export default function MissionBoardPage() {
         <Link href="/admin/mission-control" style={{ color: palette.blue, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", marginBottom: 12 }}><ArrowLeft size={14}/> Mission Control</Link>
         <div style={{ color: palette.blue, fontSize: 10, letterSpacing: "3px", fontWeight: 800, textTransform: "uppercase" }}>AI Edge OS · Development Autonomy</div>
         <h1 style={{ margin: "6px 0", fontSize: 30 }}>🧭 Mission Board</h1>
-        <p style={{ margin: 0, color: palette.silver, fontSize: 13 }}>Read-only proof of when the system woke, what it understood, and what it recommends.</p>
+        <p style={{ margin: 0, color: palette.silver, fontSize: 13 }}>Read-only proof of durable runtime and canonical engineering mission state.</p>
       </div>
       <button onClick={refresh} disabled={refreshing} style={{ background: `${palette.blue}18`, color: palette.blue, border: `1px solid ${palette.blue}55`, borderRadius: 10, padding: "10px 14px", fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}><RefreshCw size={15} style={{ animation: refreshing ? "spin 1s linear infinite" : undefined }}/>{refreshing ? "Refreshing" : "Refresh"}</button>
     </header>
@@ -174,6 +197,27 @@ export default function MissionBoardPage() {
         </> : <p style={{ color: palette.silver }}>No agent status is available.</p>}
       </Card>
     </div>
+
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <div><div style={{ fontWeight: 900, fontSize: 18 }}>Autonomous Engineering Mission</div><div style={{ color: palette.silver, fontSize: 12, marginTop: 4 }}>Canonical DAB state only. No chat history, planner guesses, or fabricated completion percentages.</div></div>
+        {engineering.data && <StatusPill value={engineering.data.status}/>} 
+      </div>
+      {engineering.isLoading ? <div style={{ color: palette.silver }}>Reading canonical development-control state…</div> : engineering.data?.sourceAvailable ? engineering.data.task ? <>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14 }}>
+          <Metric label="Task" value={engineering.data.task.taskId}/>
+          <Metric label="State" value={engineering.data.task.state.replaceAll("_", " ")}/>
+          <Metric label="Last milestone" value={engineering.data.task.lastVerifiedMilestone?.replaceAll("_", " ") ?? "None"}/>
+          <Metric label="Lease owner" value={engineering.data.task.currentLeaseOwner ?? "None"}/>
+        </div>
+        <div style={{ marginTop: 14, fontWeight: 800 }}>{engineering.data.task.title}</div>
+        <div style={{ color: palette.silver, fontSize: 12, marginTop: 5 }}>Updated {formatTime(engineering.data.task.updatedAt)} · Version {engineering.data.task.version}</div>
+        {engineering.data.blocker && <div style={{ marginTop: 10, color: palette.gold }}>Blocked by: {engineering.data.blocker}</div>}
+        {engineering.data.task.milestones.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>{engineering.data.task.milestones.map(item => <StatusPill key={item.kind} value={`${item.kind}:${item.status}`}/>)}</div>}
+      </> : <div style={{ color: palette.silver }}>Canonical engineering ledger is connected and currently idle.</div> : <div style={{ color: palette.gold }}><TriangleAlert size={18} style={{ verticalAlign: "middle", marginRight: 8 }}/>Canonical engineering ledger is not connected to this API runtime. The board refuses to infer mission progress from another source.</div>}
+    </Card>
+
+    <div style={{ height: 16 }}/>
 
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>

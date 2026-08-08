@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { TaskRecord } from "@workspace/development-control";
 import type { DabGitMergeReceipt } from "./dab-git-merge-handler.js";
 
 export type DabPostMergeReceipt = Readonly<{
@@ -13,6 +12,13 @@ export type DabPostMergeReceipt = Readonly<{
   observedTreeDigest: string;
   verifiedAt: string;
   evidenceDigest: string;
+}>;
+
+export type DabEngineeringTaskProjection = Readonly<{
+  specification: Readonly<{ taskId: string; title: string }>;
+  state: string;
+  claim: null | Readonly<{ owner: Readonly<{ displayName: string }> }>;
+  milestones: readonly Readonly<{ kind: "committed" | "pushed" | "pull_request_opened" | "merged" | "deployed"; status: "verified" | "not_verified" | "not_applicable" }>[];
 }>;
 
 function digest(value: unknown): string {
@@ -42,7 +48,7 @@ export function verifyDabPostMerge(input: {
 }
 
 export function projectDabEngineeringMission(input: {
-  task: TaskRecord;
+  task: DabEngineeringTaskProjection;
   issueUrl: string | null;
   prUrl: string | null;
   heartbeatAt: string | null;
@@ -52,9 +58,8 @@ export function projectDabEngineeringMission(input: {
   nextEligibleAction: string | null;
 }) {
   const verifiedMilestones = input.task.milestones.filter(item => item.status === "verified").map(item => item.kind);
-  const lastVerifiedMilestone = input.postMerge
-    ? "post_merge_verified"
-    : (["merged", "pull_request_opened", "pushed", "committed"].find(kind => verifiedMilestones.includes(kind as never)) ?? null);
+  const order = ["merged", "pull_request_opened", "pushed", "committed"] as const;
+  const lastVerifiedMilestone = input.postMerge ? "post_merge_verified" : (order.find(kind => verifiedMilestones.includes(kind)) ?? null);
   const status = input.postMerge
     ? "complete"
     : input.blocker || input.task.state === "blocked"

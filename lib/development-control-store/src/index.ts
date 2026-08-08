@@ -8,12 +8,14 @@ import {
 import { PostgresDevelopmentCoordinationStore } from "./postgres-coordination-store.js";
 import { PostgresBridgeRuntimeRepository } from "./bridge-runtime-repository.js";
 import { PostgresBridgeRateLimitRepository } from "./bridge-rate-limit-repository.js";
+import { PostgresDevelopmentGitReceiptRepository } from "./development-git-receipt-repository.js";
 import * as schema from "./schema.js";
 
 const { Pool } = pg;
 
 export interface DevelopmentControlStoreRuntime {
   readonly store: PostgresDevelopmentCoordinationStore;
+  readonly gitReceipts: PostgresDevelopmentGitReceiptRepository;
   close(): Promise<void>;
 }
 
@@ -42,6 +44,7 @@ export function createDevelopmentControlStoreRuntime(input: {
       database,
       input.authorityPolicy,
     ),
+    gitReceipts: new PostgresDevelopmentGitReceiptRepository(database),
     close: () => pool.end(),
   });
 }
@@ -65,6 +68,7 @@ export function createDevelopmentControlBridgeStoreRuntime(input: {
       database,
       input.authorityPolicy,
     ),
+    gitReceipts: new PostgresDevelopmentGitReceiptRepository(database),
     bridge: new PostgresBridgeRuntimeRepository(database),
     rateLimits: new PostgresBridgeRateLimitRepository(database),
     close: () => pool.end(),
@@ -79,3 +83,4 @@ export * from "./postgres-coordination-store.js";
 export * from "./github-reconciliation-repository.js";
 export * from "./bridge-runtime-repository.js";
 export * from "./bridge-rate-limit-repository.js";
+export * from "./development-git-receipt-repository.js";

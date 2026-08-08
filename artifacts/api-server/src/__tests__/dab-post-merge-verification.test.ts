@@ -1,21 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { verifyDabPostMerge, projectDabEngineeringMission } from "../lib/dab-post-merge-verification.js";
+import { verifyDabPostMerge, projectDabEngineeringMission, type DabEngineeringTaskProjection } from "../lib/dab-post-merge-verification.js";
 import type { DabGitMergeReceipt } from "../lib/dab-git-merge-handler.js";
-import type { TaskRecord } from "@workspace/development-control";
 
 const merge: DabGitMergeReceipt = { outcome: "verified", repositoryId: "1293944511", prNumber: 12, headSha: "a".repeat(40), baseSha: "b".repeat(40), mergeSha: "c".repeat(40), mergeMethod: "squash", mergeAuthorizationRef: "auth", actorId: "h", workloadIdentity: "w", requestFingerprint: "f", idempotencyKey: "k", mergedAt: "x", ciEvidenceDigest: "d".repeat(64) };
 const files = [{ path: "a.ts", sha256: "e".repeat(64) }];
-const task: TaskRecord = {
-  specification: { taskId: "t", title: "Superman proof", taskType: "implementation", revision: 1, expectedOriginMainSha: "a".repeat(40), branchMode: "dedicated_branch", intendedBranch: "feature/x", priority: "high", dependencies: [], origin: "issue", proposedAgent: "apollos", authorizedScope: ["bounded"], authorizedFiles: ["a.ts"], explicitExclusions: [], acceptanceCriteria: ["verified"], verificationRequirements: ["tests"], documentationRequirements: [], references: [], specificationHash: "f".repeat(64) },
+const task: DabEngineeringTaskProjection = {
+  specification: { taskId: "t", title: "Superman proof" },
   state: "in_progress",
-  version: 4,
   claim: null,
   milestones: [
-    { kind: "committed", status: "verified", evidence: "commit:a", verifiedBy: null, recordedAt: "2026-08-08T00:00:00.000Z" },
-    { kind: "pushed", status: "not_verified", evidence: null, verifiedBy: null, recordedAt: "2026-08-08T00:00:00.000Z" },
-    { kind: "pull_request_opened", status: "not_verified", evidence: null, verifiedBy: null, recordedAt: "2026-08-08T00:00:00.000Z" },
-    { kind: "merged", status: "not_verified", evidence: null, verifiedBy: null, recordedAt: "2026-08-08T00:00:00.000Z" },
-    { kind: "deployed", status: "not_verified", evidence: null, verifiedBy: null, recordedAt: "2026-08-08T00:00:00.000Z" },
+    { kind: "committed", status: "verified" },
+    { kind: "pushed", status: "not_verified" },
+    { kind: "pull_request_opened", status: "not_verified" },
+    { kind: "merged", status: "not_verified" },
+    { kind: "deployed", status: "not_verified" },
   ],
 };
 

@@ -20,6 +20,7 @@ import authorityBacklinkWinEvidenceRouter from "./routes/authority-backlink-win-
 import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-safe";
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
+import dabEngineeringStatusRouter from "./routes/dab-engineering-status";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -143,6 +144,10 @@ app.use(backlinkWorkflowPatchSafeRouter);
 app.use(backlinkWorkflowActionsRouter);
 app.use(backlinksRouter);
 
+// Read-only engineering mission projection. It reports unavailable rather than
+// inferring state when the canonical development-control tables are not exposed
+// to this API runtime.
+app.use("/api", dabEngineeringStatusRouter);
 app.use("/api", router);
 
 export default app;

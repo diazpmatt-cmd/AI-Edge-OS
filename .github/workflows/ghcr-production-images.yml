@@ -131,7 +131,7 @@ jobs:
       - name: Require web build configuration on publish
         if: github.event_name != 'pull_request'
         env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
         run: test -n "$VITE_CLERK_PUBLISHABLE_KEY"
       - name: Build web image off production
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
@@ -141,8 +141,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.WEB_IMAGE }}:${{ github.sha }}
           build-args: |
-            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-            VITE_CLERK_PROXY_URL=${{ secrets.VITE_CLERK_PROXY_URL }}
+            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
+            VITE_CLERK_PROXY_URL=${{ secrets.VITE_CLERK_PROXY_URL || vars.VITE_CLERK_PROXY_URL }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 

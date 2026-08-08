@@ -1,0 +1,28 @@
+name: Probe GHCR production publication
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-ghcr-publication-0900.yml
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify runtime image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null
+      - name: Verify Git worker image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null
+      - name: Verify web image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-web:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null

@@ -8,12 +8,8 @@ RUN pnpm exec tsc --build lib/db/tsconfig.json lib/api-zod/tsconfig.json
 RUN pnpm --filter @workspace/api-server run build
 RUN pnpm deploy --filter @workspace/api-server --prod --legacy /deploy
 
-FROM node:24-slim AS runner
+FROM node:24 AS runner
 WORKDIR /app
-
-RUN apt-get -o Acquire::Retries=5 update \
-  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends git ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /deploy/node_modules ./node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist

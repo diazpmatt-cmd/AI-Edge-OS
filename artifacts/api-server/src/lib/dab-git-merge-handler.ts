@@ -1,0 +1,78 @@
+import { createHash } from "node:crypto";
+import type { DabGitPrReceipt, ReceiptStore } from "./dab-git-push-pr-handler.js";
+import type { DabCiReceipt } from "./dab-ci-reconciliation.js";
+
+export type DabGitMergeReceipt = Readonly<{
+  outcome: "verified";
+  repositoryId: string;
+  prNumber: number;
+  headSha: string;
+  baseSha: string;
+  mergeSha: string;
+  mergeMethod: "squash" | "merge" | "rebase";
+  mergeAuthorizationRef: string;
+  actorId: string;
+  workloadIdentity: string;
+  requestFingerprint: string;
+  idempotencyKey: string;
+  mergedAt: string;
+  ciEvidenceDigest: string;
+}>;
+
+export interface DabGitMergeAdapter {
+  observePullRequest(input: { repositoryId: string; prNumber: number }): Promise<{ headSha: string; baseSha: string; mergeable: boolean }>;
+  mergeExact(input: { repositoryId: string; prNumber: number; expectedHeadSha: string; mergeMethod: "squash" | "merge" | "rebase"; idempotencyKey: string }): Promise<{ merged: boolean; mergeSha: string; headSha: string }>;
+}
+
+const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+export async function mergeBoundPullRequest(input: {
+  prReceipt: DabGitPrReceipt;
+  ciReceipt: DabCiReceipt;
+  mergeMethod: "squash" | "merge" | "rebase";
+  mergeAuthorizationRef: string;
+  authorizationUsable: boolean;
+  killSwitch: boolean;
+  adapterEnabled: boolean;
+  handlerRegistered: boolean;
+  actorId: string;
+  workloadIdentity: string;
+  adapter: DabGitMergeAdapter;
+  receipts: ReceiptStore<DabGitMergeReceipt>;
+  now?: () => Date;
+}): Promise<DabGitMergeReceipt> {
+  if (input.ciReceipt.outcome !== "green") throw new Error("DAB_GIT_MERGE_TRUSTED_CI_NOT_GREEN");
+  if (input.ciReceipt.prNumber !== input.prReceipt.prNumber || input.ciReceipt.headSha !== input.prReceipt.headSha || input.ciReceipt.baseSha !== input.prReceipt.baseSha) throw new Error("DAB_GIT_MERGE_CI_EVIDENCE_MISMATCH");
+  if (!input.mergeAuthorizationRef.trim()) throw new Error("DAB_GIT_MERGE_AUTHORIZATION_REQUIRED");
+
+  const material = {
+    repositoryId: input.prReceipt.repositoryId,
+    prNumber: input.prReceipt.prNumber,
+    headSha: input.prReceipt.headSha,
+    baseSha: input.prReceipt.baseSha,
+    mergeMethod: input.mergeMethod,
+    mergeAuthorizationRef: input.mergeAuthorizationRef.trim(),
+    ciEvidenceDigest: input.ciReceipt.evidenceDigest,
+  };
+  const requestFingerprint = hash(material);
+  const idempotencyKey = `dab-git-merge:${requestFingerprint}`;
+  const prior = await input.receipts.getByIdempotencyKey(idempotencyKey);
+  if (prior) return prior;
+
+  if (!input.authorizationUsable) throw new Error("DAB_GIT_MERGE_AUTHORIZATION_UNUSABLE");
+  if (input.killSwitch) throw new Error("DAB_GIT_MERGE_KILL_SWITCH");
+  if (!input.adapterEnabled) throw new Error("DAB_GIT_MERGE_ADAPTER_DISABLED");
+  if (!input.handlerRegistered) throw new Error("DAB_GIT_MERGE_HANDLER_MISSING");
+
+  const observed = await input.adapter.observePullRequest({ repositoryId: material.repositoryId, prNumber: material.prNumber });
+  if (observed.headSha !== material.headSha) throw new Error("DAB_GIT_MERGE_HEAD_SHA_STALE");
+  if (observed.baseSha !== material.baseSha) throw new Error("DAB_GIT_MERGE_BASE_SHA_STALE");
+  if (!observed.mergeable) throw new Error("DAB_GIT_MERGE_CONFLICT");
+
+  const merged = await input.adapter.mergeExact({ repositoryId: material.repositoryId, prNumber: material.prNumber, expectedHeadSha: material.headSha, mergeMethod: material.mergeMethod, idempotencyKey });
+  if (!merged.merged || merged.headSha !== material.headSha || !/^[a-f0-9]{40}$/.test(merged.mergeSha)) throw new Error("DAB_GIT_MERGE_VERIFICATION_FAILED");
+
+  const receipt = Object.freeze({ outcome: "verified" as const, ...material, mergeSha: merged.mergeSha, actorId: input.actorId.trim(), workloadIdentity: input.workloadIdentity.trim(), requestFingerprint, idempotencyKey, mergedAt: (input.now ?? (() => new Date()))().toISOString() });
+  await input.receipts.save(receipt);
+  return receipt;
+}

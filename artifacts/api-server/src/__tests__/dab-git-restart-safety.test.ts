@@ -7,7 +7,7 @@ const commitSha = "b".repeat(40);
 const treeSha = "c".repeat(40);
 const filePath = "artifacts/api-server/src/lib/restart-safe.ts";
 const content = "export const restartSafe = true;\n";
-const digest = "8a0afe7e68e58c1c1852afde0c47fb129c6a17033b19b2b82916985ade074c4f";
+const digest = "0ee2bd8287a5828bb019d4ffc56ce1d18f941dbb86866f8bbdb3443da7ce390c";
 
 function config() {
   return readDabGitWorkerConfig({ DAB_GIT_WORKER_ENABLED: "true", DAB_GIT_WORKER_KILL_SWITCH: "false", DAB_GIT_GITHUB_TOKEN: "fixture", DAB_GIT_WORKSPACE_ROOT: "/workspace" });

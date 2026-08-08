@@ -1,19 +1,29 @@
-import type {
-  DevelopmentCoordinationStore,
-  MilestoneKind,
-  TaskRecord,
-  TrustedDevelopmentActor,
-} from "@workspace/development-control";
+export type DabEngineeringMilestoneKind = "committed" | "pushed" | "pull_request_opened" | "merged";
+export type DabTrustedActorLike = Readonly<{ actorId: string; displayName: string; actorType: string; verified: boolean; developmentControl: true }>;
+export type DabTaskLike = Readonly<{ specification: Readonly<{ taskId: string }>; version: number }>;
+export interface DabCanonicalMilestoneStoreLike<TTask extends DabTaskLike = DabTaskLike> {
+  recordMilestone(input: {
+    taskId: string;
+    kind: DabEngineeringMilestoneKind;
+    status: "verified";
+    evidence: string;
+    actor: DabTrustedActorLike;
+    expectedTaskVersion: number;
+    recordedAt: string;
+    idempotencyKey: string;
+  }): TTask | Promise<TTask>;
+}
 
-export async function recordVerifiedDabEngineeringMilestone(input: {
-  store: DevelopmentCoordinationStore;
-  task: TaskRecord;
-  kind: Extract<MilestoneKind, "committed" | "pushed" | "pull_request_opened" | "merged">;
+/** Structural adapter for the canonical DevelopmentCoordinationStore.recordMilestone contract. */
+export async function recordVerifiedDabEngineeringMilestone<TTask extends DabTaskLike>(input: {
+  store: DabCanonicalMilestoneStoreLike<TTask>;
+  task: TTask;
+  kind: DabEngineeringMilestoneKind;
   evidenceRef: string;
-  actor: TrustedDevelopmentActor;
+  actor: DabTrustedActorLike;
   recordedAt: string;
   idempotencyKey: string;
-}): Promise<TaskRecord> {
+}): Promise<TTask> {
   const evidence = input.evidenceRef.trim();
   if (!evidence || evidence.length > 500) throw new Error("DAB_ENGINEERING_MILESTONE_EVIDENCE_INVALID");
   if (!input.actor.verified || !input.actor.developmentControl) throw new Error("DAB_ENGINEERING_MILESTONE_ACTOR_UNVERIFIED");

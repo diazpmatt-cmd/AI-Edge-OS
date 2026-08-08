@@ -158,8 +158,9 @@ services:
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]
     environment:
       NODE_ENV: production
-      DAB_GIT_WORKER_ENABLED: "false"
-      DAB_GIT_WORKER_KILL_SWITCH: "true"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DAB_GIT_WORKER_ENABLED: ${DAB_GIT_WORKER_ENABLED:-false}
+      DAB_GIT_WORKER_KILL_SWITCH: ${DAB_GIT_WORKER_KILL_SWITCH:-true}
       DAB_GIT_WORKER_RUNTIME_ID: dab-git-production-1
       DAB_GIT_REPOSITORY_ID: "1293944511"
       DAB_GIT_REPOSITORY: diazpmatt-cmd/AI-Edge-OS

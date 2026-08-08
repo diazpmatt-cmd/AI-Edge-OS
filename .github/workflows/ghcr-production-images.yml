@@ -72,6 +72,19 @@ jobs:
             exit 1
           fi
 
+  verify-main-publish-prerequisites:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require production web build configuration
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
+            echo 'VITE_CLERK_PUBLISHABLE_KEY is not configured for GitHub Actions.' >&2
+            exit 1
+          fi
+
   build-runtime:
     runs-on: ubuntu-latest
     steps:

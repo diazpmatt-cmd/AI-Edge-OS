@@ -1,0 +1,18 @@
+name: Probe Actions config presence
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-actions-config-0700.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Clerk publishable config presence
+        env:
+          VALUE: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: test -n "$VALUE"

@@ -1,0 +1,33 @@
+name: DAB Git restart safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - artifacts/api-server/src/dab-git-worker.ts
+      - artifacts/api-server/src/lib/dab-git-**
+      - artifacts/api-server/src/lib/dab-github-**
+      - artifacts/api-server/src/__tests__/dab-git-restart-safety.test.ts
+      - .github/workflows/dab-git-restart-safety.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restart-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/dab-git-restart-safety.test.ts
+      - run: pnpm --filter @workspace/api-server run typecheck
+      - run: git diff --check

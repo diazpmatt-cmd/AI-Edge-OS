@@ -13,6 +13,7 @@ import {
 const FIXED_REMOTE_URL = `https://github.com/${DAB_GIT_ALLOWED_REPOSITORY}.git`;
 const SAFE_BRANCH = /^(?![-/.])(?!.*(?:\.\.|@\{|\\|\s|\.lock(?:\/|$)))[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
 const FORBIDDEN_PATH_PREFIXES = [".git/", ".github/workflows/", "secrets/", ".env"] as const;
+const DETERMINISTIC_COMMIT_DATE = "2000-01-01T00:00:00Z";
 
 export interface DabGitCommandRunner {
   run(args: readonly string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<string>;
@@ -208,7 +209,10 @@ export class DabGitWorkspaceAdapter implements DabGitRepositoryAdapter, DabGitCo
     if (observed.headSha !== input.parentSha || actual !== expected) throw new Error("DAB_GIT_WORKSPACE_COMMIT_STATE_DRIFT");
 
     await this.runner.run(["add", "--", ...input.files.map((file) => file.path)], { cwd: this.config.workspaceRoot });
-    await this.runner.run(["-c", "user.name=Apollos", "-c", "user.email=apollos@ai-edge.invalid", "commit", "--no-gpg-sign", "-m", `DAB authorized change ${input.idempotencyKey.slice(-12)}`], { cwd: this.config.workspaceRoot });
+    await this.runner.run(
+      ["-c", "user.name=Apollos", "-c", "user.email=apollos@ai-edge.invalid", "commit", "--no-gpg-sign", "-m", `DAB authorized change ${input.idempotencyKey.slice(-12)}`],
+      { cwd: this.config.workspaceRoot, env: { GIT_AUTHOR_DATE: DETERMINISTIC_COMMIT_DATE, GIT_COMMITTER_DATE: DETERMINISTIC_COMMIT_DATE } },
+    );
     const commitSha = await this.runner.run(["rev-parse", "HEAD"], { cwd: this.config.workspaceRoot });
     const parentSha = await this.runner.run(["rev-parse", "HEAD^"], { cwd: this.config.workspaceRoot });
     const treeSha = await this.runner.run(["rev-parse", "HEAD^{tree}"], { cwd: this.config.workspaceRoot });

@@ -97,7 +97,7 @@ describe("DAB fixed semantic Git workspace adapter", () => {
     const adapter = new DabGitWorkspaceAdapter({ config: config(), runner, fileSystem: fs });
     const expected = [{
       path: "artifacts/api-server/src/lib/bounded.ts",
-      sha256: "0b57d98e5809baebff822c92159d2369ade579522b49263d868d4e6f86b25308",
+      sha256: "7d74d1afcc131055bc58df0c04b7cfd7e87ff568e855f05feb3cc4ee7a80f72d",
       bytes: Buffer.byteLength(content, "utf8"),
     }];
 

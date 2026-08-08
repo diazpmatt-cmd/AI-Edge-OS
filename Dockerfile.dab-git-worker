@@ -1,0 +1,26 @@
+FROM node:24-slim AS builder
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm exec tsc --build lib/db/tsconfig.json lib/api-zod/tsconfig.json
+RUN pnpm --filter @workspace/api-server run build
+RUN pnpm deploy --filter @workspace/api-server --prod --legacy /deploy
+
+FROM node:24-slim AS runner
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /deploy/node_modules ./node_modules
+COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
+
+RUN mkdir -p /tmp/dab-git-workspace && chmod 0700 /tmp/dab-git-workspace
+
+ENV NODE_ENV=production
+ENV DAB_GIT_WORKSPACE_ROOT=/tmp/dab-git-workspace
+
+CMD ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]

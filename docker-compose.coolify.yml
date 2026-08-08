@@ -150,6 +150,35 @@ services:
       retries: 3
       start_period: 30s
 
+  dab-git-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dab-git-worker
+    restart: "on-failure:3"
+    command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]
+    environment:
+      NODE_ENV: production
+      DAB_GIT_WORKER_ENABLED: "false"
+      DAB_GIT_WORKER_KILL_SWITCH: "true"
+      DAB_GIT_WORKER_RUNTIME_ID: dab-git-production-1
+      DAB_GIT_REPOSITORY_ID: "1293944511"
+      DAB_GIT_REPOSITORY: diazpmatt-cmd/AI-Edge-OS
+      DAB_GIT_WORKSPACE_ROOT: /tmp/dab-git-workspace
+      DAB_GIT_GITHUB_TOKEN: ${DAB_GIT_GITHUB_TOKEN:-}
+    read_only: true
+    tmpfs:
+      - /tmp/dab-git-workspace:size=256m,mode=0700
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   dab-publishing-worker:
     build:
       context: .
@@ -180,7 +209,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-
 
   apollos-campaign-worker:
     build:

@@ -1,5 +1,9 @@
+x-api-runtime: &api-runtime
+  image: ai-edge-os-runtime:${SOURCE_COMMIT:-latest}
+
 services:
   api:
+    <<: *api-runtime
     build:
       context: .
       dockerfile: Dockerfile
@@ -60,9 +64,7 @@ services:
       start_period: 60s
 
   dab-planner-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
     environment:
@@ -83,9 +85,7 @@ services:
       start_period: 30s
 
   dab-agent-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
     environment:
@@ -115,9 +115,7 @@ services:
       start_period: 30s
 
   dab-preparation-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
     environment:
@@ -181,9 +179,7 @@ services:
       start_period: 30s
 
   dab-publishing-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     depends_on:
       api:
@@ -212,9 +208,7 @@ services:
       start_period: 30s
 
   apollos-campaign-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     depends_on:
       api:
@@ -245,9 +239,7 @@ services:
       start_period: 30s
 
   apollos-repair-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *api-runtime
     restart: "on-failure:3"
     depends_on:
       api:

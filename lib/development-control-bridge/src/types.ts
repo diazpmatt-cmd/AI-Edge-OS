@@ -21,6 +21,13 @@ export const BRIDGE_OPERATIONS = [
   "transition_to_in_progress",
   "request_review",
   "submit_completion_report",
+  "apply_prepared_artifact",
+  "commit_applied_artifact",
+  "push_committed_artifact",
+  "create_pull_request",
+  "reconcile_trusted_ci",
+  "merge_pull_request",
+  "verify_post_merge",
   "verify_task",
   "complete_task",
   "record_milestone",
@@ -73,6 +80,7 @@ export interface BridgeRequestEnvelope extends BridgeRequestEnvelopeInput {
 export type BridgeOperationAvailability =
   | "read_only"
   | "modeled_write"
+  | "bounded_execution"
   | "deferred";
 
 export interface BridgeOperationPolicy {

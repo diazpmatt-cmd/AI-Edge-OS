@@ -1,0 +1,36 @@
+name: Probe current main GHCR publication
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-ghcr-main-1ad482.yml
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  probe-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Clerk publishable config presence
+        env:
+          VALUE: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: test -n "$VALUE"
+
+  probe-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check runtime image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null
+      - name: Check Git worker image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null
+      - name: Check web image
+        run: docker buildx imagetools inspect ghcr.io/diazpmatt-cmd/ai-edge-os-web:1ad4827111ee3c2b4abc099207002141c194ca64 >/dev/null

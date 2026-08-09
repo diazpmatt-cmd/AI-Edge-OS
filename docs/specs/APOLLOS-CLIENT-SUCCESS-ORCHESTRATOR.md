@@ -39,9 +39,23 @@ The live coverage adapter reads the existing `socialConnectionsTable` scoped by 
 
 The live coverage adapter reuses the existing `auto_content_settings` row scoped by authenticated `userId` for enabled/paused state and configured platforms.
 
+### Local Presence
+
+The live coverage adapter reads canonical `local_presence_profiles` and `local_presence_channels` rows using the resolved client slug. It does **not** use the legacy `default` Local Presence compatibility identifier as cross-tenant evidence.
+
+A configured Local Presence profile activates the engine coverage lane. Apple Business, Bing Places, and Nextdoor become active individually only when their canonical channel status is `connected`, `verified_publishing`, or `live`.
+
+### Discovery
+
+The live adapter reads the latest canonical `discovery_snapshots` row using the resolved client UUID. A current Discovery run is evidence that the engine is configured and operating. Latest `failed`, `cancelled`, or `cancel_requested` state is represented as degraded instead of active.
+
+### Authority
+
+The live adapter reads canonical `backlink_workflows` using the resolved client UUID. Existing tenant-scoped Authority workflow state is reused as evidence that the Authority Engine is in use; no second backlink lifecycle is created.
+
 ### Existing Apollos machinery
 
-The orchestrator is additive to the existing Apollos chat, weekly campaign planning/preview, publishing status, delivery status, approval engine, Publishing Center, and System Diagnostics paths. It does not duplicate publishing or OAuth execution systems.
+The orchestrator is additive to the existing Apollos chat, weekly campaign planning/preview, publishing status, delivery status, approval engine, Publishing Center, System Diagnostics, Discovery, AI Visibility read models, and Authority workflow. It does not duplicate publishing, OAuth, backlink, or execution systems.
 
 ## Canonical Capability Registry
 
@@ -121,6 +135,23 @@ The activation planner turns coverage gaps into an ordered plan. Each plan item 
 
 Repair and degraded states rank ahead of ordinary setup work. Authorization-blocked actions remain in the plan but do not prevent independent `SAFE_AUTOMATIC_ACTION` work from being identified.
 
+## Full-Utilization Mission Contract
+
+`buildApollosClientMissionSummary()` is the deterministic operator-facing response for the North Star command.
+
+It groups the current activation plan into:
+
+- safe automatic work that is ready;
+- human approval work;
+- OAuth authorization work;
+- external configuration work;
+- blocked work;
+- top prioritized actions.
+
+It fails closed if the coverage object and activation plan do not belong to the same client.
+
+The authenticated API exposes this as `GET /apollos/full-utilization`.
+
 ## Execution Gates
 
 Apollos uses these explicit boundaries:
@@ -153,26 +184,32 @@ The API server exposes:
 - `GET /apollos/client-context`
 - `GET /apollos/client-coverage`
 - `GET /apollos/activation-plan`
+- `GET /apollos/full-utilization`
 - `GET /apollos/capabilities/:capabilityKey`
 - `POST /apollos/prepare-activation`
 
-These provide the behavior required by future Apollos MCP tools such as list/context/audit/coverage/status/plan/explain/prepare without prematurely coupling customer data into the engineering DAB bridge.
+These provide the behavior required by future Apollos MCP tools such as context/audit/coverage/status/plan/explain/prepare without prematurely coupling customer data into the engineering DAB bridge.
 
 ## MCP Boundary
 
 The existing Secure Tunnel currently targets the isolated Development Agent Bridge MCP runtime. That runtime has a deliberately bounded engineering tool surface and DAB-specific OAuth/policy model.
 
+Its authentication contract is a pinned workload identity with exact `dab:read` scope, repository/task policy evaluation, nonce/idempotency controls, and a tenant-independent DAB ledger. Those controls are appropriate for engineering operations but do not establish an AI Edge customer tenant.
+
 Do **not** simply add customer-tenant tools to the DAB engineering catalog. Client orchestration requires an authenticated mapping from the ChatGPT actor to the AI Edge tenant and appropriate client-scoped authorization.
 
-The next MCP phase should expose the orchestrator API through a tenant-scoped Apollos MCP surface, reusing these pure coverage and activation contracts while preserving the existing DAB engineering boundary.
+The next MCP phase should expose the orchestrator through a tenant-scoped Apollos MCP surface while preserving the existing DAB engineering boundary. The transport can be shared later, but authorization and tool policy must remain distinct.
 
 ## Initial Live Evidence
 
-The first live adapter intentionally uses only tenant-safe evidence already proven to be scoped:
+The live adapter currently uses only tenant-safe evidence with explicit ownership:
 
 - canonical resolved client context and service registry;
 - user-scoped social connections;
-- user-scoped Content Autopilot settings and platforms.
+- user-scoped Content Autopilot settings and platforms;
+- slug-scoped Local Presence profile/channels;
+- client-UUID-scoped Discovery snapshots;
+- client-UUID-scoped Authority workflows.
 
 Capabilities without tenant-safe live evidence remain setup/available instead of borrowing legacy global BB&B state.
 
@@ -195,12 +232,14 @@ They prove:
 - commerce/local-service applicability;
 - deterministic activation planning;
 - blocked authorization does not suppress independent ready work;
+- full-utilization mission grouping;
+- cross-tenant mission mismatch fails closed;
 - no BB&B identity leakage into Boatliner output.
 
 ## Expansion Order
 
-1. **Current MVP** — capability registry, coverage engine, activation planner, tenant-safe live evidence, side-effect-free preparation API.
-2. Add tenant-safe evidence adapters for reviews, AI Receptionist, Lead Recovery, Local Presence, Discovery, Authority, Optimization, Measurement, and Commerce using their existing sources of truth.
+1. **Current MVP** — capability registry, coverage engine, activation planner, full-utilization mission, tenant-safe live evidence, side-effect-free preparation API.
+2. Add remaining tenant-safe evidence adapters for reviews, AI Receptionist, Lead Recovery, Optimization, Measurement, and Commerce using their existing sources of truth.
 3. Add the smallest existing Apollos/Command Center UI surface for coverage score and prioritized actions.
 4. Add a tenant-scoped Apollos MCP adapter over the orchestrator contracts.
 5. Bind safe automatic actions to existing canonical execution systems.

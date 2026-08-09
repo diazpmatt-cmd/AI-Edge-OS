@@ -69,8 +69,8 @@ jobs:
           fi
 
           default_services=$(docker compose -f docker-compose.prebuilt.yml config --services)
-          if [ "$default_services" != "api
-          web" ]; then
+          default_service_count=$(printf '%s\n' "$default_services" | wc -l)
+          if [ "$default_service_count" -ne 2 ] || printf '%s\n' "$default_services" | grep -Ev '^(api|web)$' >/dev/null; then
             echo 'Default prebuilt compose must start only api and web.' >&2
             printf '%s\n' "$default_services"
             exit 1

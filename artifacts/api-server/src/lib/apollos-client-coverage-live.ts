@@ -1,4 +1,8 @@
-import { db } from "@workspace/db";
+import {
+  db,
+  localPresenceChannelsTable,
+  localPresenceProfilesTable,
+} from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 
@@ -46,6 +50,23 @@ export type ApollosLiveCoverageResult =
   | ApollosLiveCoverageSuccess
   | { readonly ok: false; readonly reason: ApollosLiveCoverageFailureReason };
 
+interface LocalPresenceEvidence {
+  readonly configured: boolean;
+  readonly channels: readonly { readonly channelName: string; readonly status: string }[];
+}
+
+const LIVE_LOCAL_PRESENCE_STATUSES = new Set([
+  "connected",
+  "verified_publishing",
+  "live",
+]);
+
+const LOCAL_PRESENCE_FEATURE_BY_CHANNEL: Readonly<Record<string, string>> = Object.freeze({
+  apple_business: "local_presence:apple",
+  bing_places: "local_presence:bing",
+  nextdoor: "local_presence:nextdoor",
+});
+
 function parsePlatformList(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.filter((value): value is string => typeof value === "string");
@@ -85,6 +106,27 @@ async function loadAutopilotEvidence(userId: string): Promise<{
   });
 }
 
+async function loadLocalPresenceEvidence(clientSlug: string): Promise<LocalPresenceEvidence> {
+  const [profiles, channels] = await Promise.all([
+    db
+      .select({ id: localPresenceProfilesTable.id })
+      .from(localPresenceProfilesTable)
+      .where(eq(localPresenceProfilesTable.clientId, clientSlug)),
+    db
+      .select({
+        channelName: localPresenceChannelsTable.channelName,
+        status: localPresenceChannelsTable.status,
+      })
+      .from(localPresenceChannelsTable)
+      .where(eq(localPresenceChannelsTable.clientId, clientSlug)),
+  ]);
+
+  return Object.freeze({
+    configured: profiles.length > 0 || channels.length > 0,
+    channels: Object.freeze(channels.map((channel) => Object.freeze({ ...channel }))),
+  });
+}
+
 export async function buildApollosLiveCoverageForUser(
   userId: string,
 ): Promise<ApollosLiveCoverageResult> {
@@ -93,7 +135,7 @@ export async function buildApollosLiveCoverageForUser(
     return Object.freeze({ ok: false as const, reason: resolved.reason });
   }
 
-  const [connections, autopilot] = await Promise.all([
+  const [connections, autopilot, localPresence] = await Promise.all([
     db
       .select({
         provider: socialConnectionsTable.provider,
@@ -102,6 +144,7 @@ export async function buildApollosLiveCoverageForUser(
       .from(socialConnectionsTable)
       .where(eq(socialConnectionsTable.userId, userId)),
     loadAutopilotEvidence(userId),
+    loadLocalPresenceEvidence(resolved.client.slug),
   ]);
 
   const connectedIntegrations = connections
@@ -137,9 +180,19 @@ export async function buildApollosLiveCoverageForUser(
     }
   }
 
+  if (localPresence.configured) {
+    activeFeatures.push("local_presence_engine");
+    for (const channel of localPresence.channels) {
+      const feature = LOCAL_PRESENCE_FEATURE_BY_CHANNEL[channel.channelName];
+      if (feature && LIVE_LOCAL_PRESENCE_STATUSES.has(channel.status)) {
+        activeFeatures.push(feature);
+      }
+    }
+  }
+
   const evidence: ApollosClientEvidence = Object.freeze({
     connectedIntegrations: Object.freeze(connectedIntegrations),
-    activeFeatures: Object.freeze(activeFeatures),
+    activeFeatures: Object.freeze([...new Set(activeFeatures)]),
     degradedFeatures: Object.freeze(degradedFeatures),
     misconfiguredFeatures: Object.freeze(misconfiguredFeatures),
   });

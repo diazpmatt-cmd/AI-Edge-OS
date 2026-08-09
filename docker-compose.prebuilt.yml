@@ -74,6 +74,7 @@ services:
       start_period: 60s
 
   dab-planner-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
@@ -95,6 +96,7 @@ services:
       start_period: 30s
 
   dab-agent-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
@@ -125,6 +127,7 @@ services:
       start_period: 30s
 
   dab-preparation-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
@@ -159,6 +162,7 @@ services:
       start_period: 30s
 
   dab-git-worker:
+    profiles: ["git"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]
@@ -187,6 +191,7 @@ services:
       start_period: 30s
 
   dab-publishing-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     depends_on:
@@ -216,6 +221,7 @@ services:
       start_period: 30s
 
   apollos-campaign-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     depends_on:
@@ -247,6 +253,7 @@ services:
       start_period: 30s
 
   apollos-repair-worker:
+    profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
     depends_on:

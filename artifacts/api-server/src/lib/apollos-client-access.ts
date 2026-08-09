@@ -24,29 +24,35 @@ export interface ApollosAuthorizedClientTarget extends ApollosAuthorizedClient {
 
 export type ApollosClientTargetResolution = ApollosClientSelectionResult<ApollosAuthorizedClientTarget>;
 
-export const apollosClientAccessBootstrapReady = (async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS apollos_client_access (
-      id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      actor_user_id  TEXT        NOT NULL,
-      client_id      UUID        NOT NULL,
-      access_level   TEXT        NOT NULL DEFAULT 'operator',
-      is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (actor_user_id, client_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_apollos_client_access_actor
-      ON apollos_client_access(actor_user_id)
-      WHERE is_active = TRUE;
-    CREATE INDEX IF NOT EXISTS idx_apollos_client_access_client
-      ON apollos_client_access(client_id)
-      WHERE is_active = TRUE;
-  `);
-})().catch((error) => {
-  console.error("[APOLLOS-CLIENT-ACCESS] bootstrap failed", error);
-  throw error;
-});
+let bootstrapPromise: Promise<void> | null = null;
+
+export function ensureApollosClientAccessTable(): Promise<void> {
+  if (!bootstrapPromise) {
+    bootstrapPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS apollos_client_access (
+        id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        actor_user_id  TEXT        NOT NULL,
+        client_id      UUID        NOT NULL,
+        access_level   TEXT        NOT NULL DEFAULT 'operator',
+        is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (actor_user_id, client_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_apollos_client_access_actor
+        ON apollos_client_access(actor_user_id)
+        WHERE is_active = TRUE;
+      CREATE INDEX IF NOT EXISTS idx_apollos_client_access_client
+        ON apollos_client_access(client_id)
+        WHERE is_active = TRUE;
+    `).then(() => undefined).catch((error) => {
+      bootstrapPromise = null;
+      console.error("[APOLLOS-CLIENT-ACCESS] bootstrap failed", error);
+      throw error;
+    });
+  }
+  return bootstrapPromise;
+}
 
 function normalizeAccessLevel(value: string): ApollosClientAccessLevel {
   return value === "viewer" || value === "owner" ? value : "operator";
@@ -58,7 +64,7 @@ export async function listAuthorizedApollosClientTargets(
   const actor = actorUserId.trim();
   if (!actor) return Object.freeze([]);
 
-  await apollosClientAccessBootstrapReady;
+  await ensureApollosClientAccessTable();
 
   const result = await pool.query<{
     id: string;

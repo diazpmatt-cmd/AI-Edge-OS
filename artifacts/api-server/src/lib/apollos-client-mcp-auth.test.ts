@@ -80,15 +80,24 @@ describe("Apollos MCP OAuth contract", () => {
       );
   });
 
-  it("declares OAuth and read-only safety metadata on every Apollos MCP tool", () => {
+  it("requires OAuth on every tool and keeps only the safe executor write-capable", () => {
     for (const tool of APOLLOS_CLIENT_MCP_TOOLS) {
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: APOLLOS_MCP_OAUTH_SCOPES }]);
-      expect(tool.annotations).toEqual({
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      });
+      if (tool.name === "apollos_execute_safe_action") {
+        expect(tool.annotations).toEqual({
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        });
+      } else {
+        expect(tool.annotations).toEqual({
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        });
+      }
     }
   });
 });

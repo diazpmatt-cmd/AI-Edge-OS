@@ -11,6 +11,10 @@ import {
   type ApollosClientTargetResolver,
 } from "./apollos-client-mcp";
 import type { ApollosLiveCoverageSuccess } from "./apollos-client-coverage-live";
+import {
+  ApollosSafeActionExecutor,
+  type ApollosAiVisibilityRunner,
+} from "./apollos-safe-action-executor";
 
 function liveClient(name = "Boatliner Company", clientId = "client-boatliner"): ApollosLiveCoverageSuccess {
   const coverage = buildApollosClientCoverage({
@@ -86,15 +90,28 @@ function listOne(): ApollosClientListBuilder {
   }]);
 }
 
+function safeExecutor(runner?: ApollosAiVisibilityRunner): ApollosSafeActionExecutor {
+  return new ApollosSafeActionExecutor(runner ?? {
+    execute: vi.fn(async () => ({
+      generatedAt: new Date("2026-08-09T18:00:00.000Z"),
+      recommendations: [],
+      coverage: [],
+      rejected: [],
+    })),
+  });
+}
+
 function runtime(overrides: {
   build?: (ownerUserId: string) => Promise<any>;
   list?: ApollosClientListBuilder;
   resolve?: ApollosClientTargetResolver;
+  safe?: ApollosSafeActionExecutor;
 } = {}): ApollosClientMcpRuntime {
   return new ApollosClientMcpRuntime(
     overrides.build ?? (async () => liveClient()),
     overrides.list ?? listOne(),
     overrides.resolve ?? allowTarget(),
+    overrides.safe ?? safeExecutor(),
   );
 }
 
@@ -108,7 +125,28 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_get_full_utilization",
       "apollos_get_capability_status",
       "apollos_prepare_activation",
+      "apollos_execute_safe_action",
     ]);
+  });
+
+  it("marks only the safe-action executor as a write-capable MCP tool", () => {
+    const byName = new Map(APOLLOS_CLIENT_MCP_TOOLS.map((tool) => [tool.name, tool]));
+    for (const name of [
+      "apollos_list_clients",
+      "apollos_get_client_context",
+      "apollos_get_client_coverage",
+      "apollos_get_activation_plan",
+      "apollos_get_full_utilization",
+      "apollos_get_capability_status",
+      "apollos_prepare_activation",
+    ] as const) {
+      expect(byName.get(name)?.annotations.readOnlyHint).toBe(true);
+    }
+    expect(byName.get("apollos_execute_safe_action")?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
   });
 
   it("keeps client selection server-authorized instead of authoritative from tool arguments", async () => {
@@ -212,6 +250,55 @@ describe("ApollosClientMcpRuntime", () => {
       capabilityKey: "facebook_social",
       sideEffects: false,
       executionStarted: false,
+    });
+  });
+
+  it("executes an allowlisted safe action using the authorized target owner's identity", async () => {
+    const runner: ApollosAiVisibilityRunner = {
+      execute: vi.fn(async () => ({
+        generatedAt: new Date("2026-08-09T18:00:00.000Z"),
+        recommendations: [{ id: 1 }],
+        coverage: [{ id: 1 }, { id: 2 }],
+        rejected: [],
+      })),
+    };
+    const result = await runtime({ safe: safeExecutor(runner) }).execute({
+      context,
+      toolName: "apollos_execute_safe_action",
+      arguments: {
+        clientId: "client-boatliner",
+        capabilityKey: "ai_visibility_monitoring",
+      },
+    });
+
+    expect(runner.execute).toHaveBeenCalledWith({
+      clientId: "client-boatliner",
+      userId: "clerk-owner-boatliner",
+    });
+    expect(result.sideEffects).toBe(true);
+    expect(result.data).toMatchObject({
+      status: "executed",
+      capabilityKey: "ai_visibility_monitoring",
+      externalSideEffects: false,
+      providerCalls: false,
+      spendAuthorized: false,
+    });
+  });
+
+  it("refuses non-safe execution requests without side effects", async () => {
+    const result = await runtime().execute({
+      context,
+      toolName: "apollos_execute_safe_action",
+      arguments: {
+        clientId: "client-boatliner",
+        capabilityKey: "facebook_social",
+      },
+    });
+
+    expect(result.sideEffects).toBe(false);
+    expect(result.data).toMatchObject({
+      status: "execution_not_allowed",
+      capabilityKey: "facebook_social",
     });
   });
 

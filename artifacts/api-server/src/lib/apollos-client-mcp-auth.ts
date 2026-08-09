@@ -18,6 +18,13 @@ export const APOLLOS_MCP_READ_ONLY_ANNOTATIONS = Object.freeze({
   openWorldHint: false,
 });
 
+export const APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS = Object.freeze({
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+});
+
 function decodeBase64Url(value: string): string | null {
   try {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");

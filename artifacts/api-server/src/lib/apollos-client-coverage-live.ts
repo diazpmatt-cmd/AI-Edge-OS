@@ -4,7 +4,10 @@ import {
   localPresenceProfilesTable,
   pool,
 } from "@workspace/db";
-import { socialConnectionsTable } from "@workspace/db/schema";
+import {
+  aiReceptionistSettingsTable,
+  socialConnectionsTable,
+} from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 import { resolveClientContentContextFromDb } from "./client-resolver.js";
@@ -63,6 +66,11 @@ interface DiscoveryEvidence {
 
 interface AuthorityEvidence {
   readonly configured: boolean;
+}
+
+interface ReceptionistEvidence {
+  readonly configured: boolean;
+  readonly misconfigured: boolean;
 }
 
 const LIVE_LOCAL_PRESENCE_STATUSES = new Set([
@@ -171,6 +179,24 @@ async function loadAuthorityEvidence(clientId: string): Promise<AuthorityEvidenc
   });
 }
 
+async function loadReceptionistEvidence(clientSlug: string): Promise<ReceptionistEvidence> {
+  const rows = await db
+    .select({
+      id: aiReceptionistSettingsTable.id,
+      transferPhone: aiReceptionistSettingsTable.transferPhone,
+    })
+    .from(aiReceptionistSettingsTable)
+    .where(eq(aiReceptionistSettingsTable.clientId, clientSlug));
+  const row = rows[0];
+  if (!row) {
+    return Object.freeze({ configured: false, misconfigured: false });
+  }
+  return Object.freeze({
+    configured: true,
+    misconfigured: typeof row.transferPhone !== "string" || row.transferPhone.trim().length === 0,
+  });
+}
+
 export async function buildApollosLiveCoverageForUser(
   userId: string,
 ): Promise<ApollosLiveCoverageResult> {
@@ -179,7 +205,7 @@ export async function buildApollosLiveCoverageForUser(
     return Object.freeze({ ok: false as const, reason: resolved.reason });
   }
 
-  const [connections, autopilot, localPresence, discovery, authority] = await Promise.all([
+  const [connections, autopilot, localPresence, discovery, authority, receptionist] = await Promise.all([
     db
       .select({
         provider: socialConnectionsTable.provider,
@@ -191,6 +217,7 @@ export async function buildApollosLiveCoverageForUser(
     loadLocalPresenceEvidence(resolved.client.slug),
     loadDiscoveryEvidence(resolved.client.id),
     loadAuthorityEvidence(resolved.client.id),
+    loadReceptionistEvidence(resolved.client.slug),
   ]);
 
   const connectedIntegrations = connections
@@ -245,11 +272,16 @@ export async function buildApollosLiveCoverageForUser(
     activeFeatures.push("authority_engine");
   }
 
+  if (receptionist.configured) {
+    if (receptionist.misconfigured) misconfiguredFeatures.push("ai_receptionist");
+    else activeFeatures.push("ai_receptionist");
+  }
+
   const evidence: ApollosClientEvidence = Object.freeze({
     connectedIntegrations: Object.freeze(connectedIntegrations),
     activeFeatures: Object.freeze([...new Set(activeFeatures)]),
     degradedFeatures: Object.freeze([...new Set(degradedFeatures)]),
-    misconfiguredFeatures: Object.freeze(misconfiguredFeatures),
+    misconfiguredFeatures: Object.freeze([...new Set(misconfiguredFeatures)]),
   });
 
   const coverage = buildApollosClientCoverage({

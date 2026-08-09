@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 
+import { resolveAuthorizedApollosClientTarget } from "./apollos-client-access.js";
 import { resolveClientContentContextFromDb } from "./client-resolver.js";
 import {
   buildApollosActivationPlan,
@@ -27,7 +28,10 @@ export type ApollosLiveCoverageFailureReason =
   | "unsupported_registry"
   | "registry_not_configured"
   | "registry_invalid"
-  | "registry_unavailable";
+  | "registry_unavailable"
+  | "unauthorized"
+  | "selection_required"
+  | "resolution_mismatch";
 
 export interface ApollosSafeClientContext {
   readonly clientId: string;
@@ -317,6 +321,23 @@ export async function buildApollosLiveCoverageForUser(
     coverage,
     activationPlan: buildApollosActivationPlan(coverage),
   });
+}
+
+export async function buildApollosLiveCoverageForActor(
+  actorUserId: string,
+  requestedClientId?: string | null,
+): Promise<ApollosLiveCoverageResult> {
+  const resolution = await resolveAuthorizedApollosClientTarget(actorUserId, requestedClientId);
+  if (!resolution.ok) {
+    return Object.freeze({ ok: false as const, reason: resolution.reason });
+  }
+
+  const live = await buildApollosLiveCoverageForUser(resolution.target.ownerUserId);
+  if (!live.ok) return live;
+  if (live.context.clientId !== resolution.target.clientId) {
+    return Object.freeze({ ok: false as const, reason: "resolution_mismatch" as const });
+  }
+  return live;
 }
 
 export async function explainApollosLiveGapForUser(

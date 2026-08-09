@@ -24,8 +24,8 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  TUNNEL_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-tunnel-client
-  TUNNEL_VERSION: v0.0.10
+  TUNNEL_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp
+  TUNNEL_VERSION_TAG: tunnel-v0.0.10
 
 jobs:
   build-tunnel-client:
@@ -56,10 +56,10 @@ jobs:
           file: ./tunnel-client-src/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.TUNNEL_IMAGE }}:${{ env.TUNNEL_VERSION }}
-            ${{ env.TUNNEL_IMAGE }}:${{ github.sha }}
+            ${{ env.TUNNEL_IMAGE }}:${{ env.TUNNEL_VERSION_TAG }}
+            ${{ env.TUNNEL_IMAGE }}:tunnel-${{ github.sha }}
           build-args: |
-            GIT_SHA=${{ env.TUNNEL_VERSION }}
+            GIT_SHA=v0.0.10
           cache-from: type=gha,scope=tunnel-client-v0.0.10
           cache-to: type=gha,mode=max,scope=tunnel-client-v0.0.10
 
@@ -67,5 +67,5 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           set -eu
-          docker buildx imagetools inspect "$TUNNEL_IMAGE:$TUNNEL_VERSION" >/dev/null
-          docker buildx imagetools inspect "$TUNNEL_IMAGE:$GITHUB_SHA" >/dev/null
+          docker buildx imagetools inspect "$TUNNEL_IMAGE:$TUNNEL_VERSION_TAG" >/dev/null
+          docker buildx imagetools inspect "$TUNNEL_IMAGE:tunnel-$GITHUB_SHA" >/dev/null

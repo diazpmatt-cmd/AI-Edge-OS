@@ -41,7 +41,7 @@ services:
   tunnel-client:
     profiles:
       - tunnel
-    image: ghcr.io/diazpmatt-cmd/ai-edge-os-tunnel-client:v0.0.10
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:tunnel-v0.0.10
     restart: unless-stopped
     networks:
       - coolify

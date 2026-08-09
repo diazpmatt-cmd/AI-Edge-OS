@@ -126,10 +126,11 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_get_capability_status",
       "apollos_prepare_activation",
       "apollos_execute_safe_action",
+      "apollos_run_full_utilization_cycle",
     ]);
   });
 
-  it("marks only the safe-action executor as a write-capable MCP tool", () => {
+  it("keeps only bounded internal execution tools write-capable", () => {
     const byName = new Map(APOLLOS_CLIENT_MCP_TOOLS.map((tool) => [tool.name, tool]));
     for (const name of [
       "apollos_list_clients",
@@ -142,11 +143,16 @@ describe("ApollosClientMcpRuntime", () => {
     ] as const) {
       expect(byName.get(name)?.annotations.readOnlyHint).toBe(true);
     }
-    expect(byName.get("apollos_execute_safe_action")?.annotations).toMatchObject({
-      readOnlyHint: false,
-      destructiveHint: false,
-      openWorldHint: false,
-    });
+    for (const name of [
+      "apollos_execute_safe_action",
+      "apollos_run_full_utilization_cycle",
+    ] as const) {
+      expect(byName.get(name)?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+    }
   });
 
   it("keeps client selection server-authorized instead of authoritative from tool arguments", async () => {

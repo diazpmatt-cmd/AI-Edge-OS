@@ -26,20 +26,17 @@ jobs:
         run: |
           set -eu
           docker compose -f docker-compose.mcp.prebuilt.yml config --format json > /tmp/mcp-compose-default.json
-          docker compose --profile tunnel -f docker-compose.mcp.prebuilt.yml config --format json > /tmp/mcp-compose-tunnel.json
           python3 - <<'PY'
           import json
 
           with open('/tmp/mcp-compose-default.json', encoding='utf-8') as handle:
               default = json.load(handle)
-          with open('/tmp/mcp-compose-tunnel.json', encoding='utf-8') as handle:
-              tunneled = json.load(handle)
 
-          default_services = default.get('services', {})
-          if set(default_services) != {'mcp'}:
-              raise SystemExit(f"default profile must contain only mcp, found {sorted(default_services)}")
+          services = default.get('services', {})
+          if set(services) != {'mcp', 'tunnel-client'}:
+              raise SystemExit(f"default compose must contain mcp and tunnel-client, found {sorted(services)}")
 
-          mcp = default_services['mcp']
+          mcp = services['mcp']
           if 'build' in mcp:
               raise SystemExit('mcp compose must never build on the Coolify host')
 
@@ -61,10 +58,6 @@ jobs:
           top_network = default.get('networks', {}).get('coolify', {})
           if top_network.get('external') is not True:
               raise SystemExit('coolify network must remain external')
-
-          services = tunneled.get('services', {})
-          if set(services) != {'mcp', 'tunnel-client'}:
-              raise SystemExit(f"tunnel profile must contain mcp and tunnel-client, found {sorted(services)}")
 
           tunnel = services['tunnel-client']
           if 'build' in tunnel:

@@ -5,6 +5,7 @@ import { createDab3cNodeHandler, type Dab3cEnvironment } from "./activation.js";
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 3000;
 const SHUTDOWN_GRACE_MS = 10_000;
+const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 
 export interface StandaloneBindAddress {
   readonly host: string;
@@ -61,7 +62,7 @@ export function createDab3dStandaloneServer(input: {
       response.end(request.method === "HEAD" ? undefined : '{"status":"ok"}');
       return;
     }
-    if (path !== "/mcp") {
+    if (path !== "/mcp" && path !== PROTECTED_RESOURCE_METADATA_PATH) {
       jsonResponse(response, 404, { error: "not_found" });
       return;
     }

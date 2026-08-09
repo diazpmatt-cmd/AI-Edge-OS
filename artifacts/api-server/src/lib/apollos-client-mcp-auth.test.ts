@@ -9,6 +9,7 @@ import {
   resolveApollosMcpAuthorizationServer,
   resolveApollosMcpResourceUrl,
 } from "./apollos-client-mcp-auth";
+import { APOLLOS_CLIENT_MCP_TOOLS } from "./apollos-client-mcp";
 
 function publishableKey(hostname: string): string {
   return `pk_test_${Buffer.from(`${hostname}$`, "utf8").toString("base64")}`;
@@ -77,5 +78,17 @@ describe("Apollos MCP OAuth contract", () => {
       .toBe(
         "Bearer realm=\"ai-edge-apollos\", resource_metadata=\"https://mcp.example.com/.well-known/oauth-protected-resource/api/apollos/mcp\"",
       );
+  });
+
+  it("declares OAuth and read-only safety metadata on every Apollos MCP tool", () => {
+    for (const tool of APOLLOS_CLIENT_MCP_TOOLS) {
+      expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: APOLLOS_MCP_OAUTH_SCOPES }]);
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
+    }
   });
 });

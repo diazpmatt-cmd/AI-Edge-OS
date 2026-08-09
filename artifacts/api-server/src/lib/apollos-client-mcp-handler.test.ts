@@ -33,11 +33,38 @@ function liveClient(): ApollosLiveCoverageSuccess {
   };
 }
 
-const context = { userId: "clerk-bbb", actorReference: "chatgpt-matt" } as const;
+const context = { userId: "clerk-matt", actorReference: "chatgpt-matt" } as const;
+
+const target = {
+  clientId: "client-bbb",
+  ownerUserId: "clerk-bbb-owner",
+  slug: "bed-bugs-and-beyond",
+  clientName: "Bed Bugs & Beyond",
+  industry: "pest_control",
+  industryLabel: "Pest Control",
+  region: "Baldwin County",
+  accessLevel: "operator" as const,
+  ownership: "delegated" as const,
+};
 
 function handler(): ApollosClientMcpJsonRpcHandler {
   return new ApollosClientMcpJsonRpcHandler(
-    new ApollosClientMcpRuntime(async () => liveClient()),
+    new ApollosClientMcpRuntime(
+      async () => liveClient(),
+      async () => [{
+        clientId: target.clientId,
+        slug: target.slug,
+        clientName: target.clientName,
+        industry: target.industry,
+        industryLabel: target.industryLabel,
+        region: target.region,
+        accessLevel: target.accessLevel,
+        ownership: target.ownership,
+      }],
+      async (_actorUserId, requestedClientId) => requestedClientId && requestedClientId !== target.clientId
+        ? { ok: false, reason: "unauthorized" }
+        : { ok: true, target },
+    ),
   );
 }
 
@@ -64,18 +91,22 @@ describe("ApollosClientMcpJsonRpcHandler", () => {
       message: { jsonrpc: "2.0", id: 2, method: "tools/list" },
     });
     const tools = (response.body as any).result.tools;
+    expect(tools.map((tool: any) => tool.name)).toContain("apollos_list_clients");
     expect(tools.map((tool: any) => tool.name)).toContain("apollos_get_full_utilization");
     expect(tools.map((tool: any) => tool.name)).not.toContain("get_task");
   });
 
-  it("executes the full-utilization mission as an MCP tools/call response", async () => {
+  it("executes the full-utilization mission for an authorized selected client", async () => {
     const response = await handler().handle({
       context,
       message: {
         jsonrpc: "2.0",
         id: 3,
         method: "tools/call",
-        params: { name: "apollos_get_full_utilization", arguments: {} },
+        params: {
+          name: "apollos_get_full_utilization",
+          arguments: { clientId: "client-bbb" },
+        },
       },
     });
     expect(response.body).toMatchObject({
@@ -83,6 +114,7 @@ describe("ApollosClientMcpJsonRpcHandler", () => {
         structuredContent: {
           tool: "apollos_get_full_utilization",
           actorReference: "chatgpt-matt",
+          clientId: "client-bbb",
           sideEffects: false,
         },
         isError: false,
@@ -90,7 +122,7 @@ describe("ApollosClientMcpJsonRpcHandler", () => {
     });
   });
 
-  it("returns an MCP tool error instead of leaking exception details", async () => {
+  it("returns a bounded MCP error for an unauthorized client selection", async () => {
     const response = await handler().handle({
       context,
       message: {
@@ -106,7 +138,7 @@ describe("ApollosClientMcpJsonRpcHandler", () => {
     expect(response.body).toMatchObject({
       result: {
         isError: true,
-        _meta: { reason: "APOLLOS_MCP_ARGUMENTS_INVALID" },
+        _meta: { reason: "APOLLOS_MCP_CLIENT_UNAUTHORIZED" },
       },
     });
   });

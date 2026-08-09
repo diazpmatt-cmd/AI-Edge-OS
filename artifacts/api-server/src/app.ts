@@ -21,6 +21,10 @@ import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-sa
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
 import dabEngineeringStatusRouter from "./routes/dab-engineering-status";
+import {
+  apollosMcpAuthenticatedRouter,
+  apollosMcpPublicRouter,
+} from "./routes/apollos-client-mcp";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -65,6 +69,10 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
+// OAuth protected-resource discovery must be reachable before both the Clerk
+// auth boundary and the SPA catch-all. The metadata contains no tenant data.
+app.use(apollosMcpPublicRouter);
+
 app.use("/api/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/audio", express.static(path.join(__dirname, "..", "public", "audio")));
 
@@ -106,6 +114,11 @@ app.use(
     ),
   })),
 );
+
+// Clerk OAuth is the user identity boundary for Apollos MCP. The route performs
+// an explicit oauth_token verification before constructing the canonical AI
+// Edge actor context used by the tenant-safe orchestrator runtime.
+app.use("/api", apollosMcpAuthenticatedRouter);
 
 // Friendly API boundary for every known user mutation that could alter or
 // remove an approved payload while provider delivery is in flight. PostgreSQL's

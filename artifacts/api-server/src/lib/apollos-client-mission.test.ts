@@ -44,7 +44,7 @@ describe("buildApollosClientMissionSummary", () => {
       .toThrow("APOLLOS_MISSION_TENANT_MISMATCH");
   });
 
-  it("reports optimized when every score-eligible capability is active and no planned blocker is included in the plan", () => {
+  it("reports optimized when every applicable non-planned capability is active", () => {
     const coverage = buildApollosClientCoverage({
       client,
       evidence: {
@@ -58,6 +58,9 @@ describe("buildApollosClientMissionSummary", () => {
           "ai_receptionist",
           "lead_recovery",
           "local_presence_engine",
+          "local_presence:apple",
+          "local_presence:bing",
+          "local_presence:nextdoor",
           "discovery_engine",
           "authority_engine",
           "optimization_engine",

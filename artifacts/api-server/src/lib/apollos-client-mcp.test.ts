@@ -7,13 +7,15 @@ import {
 import {
   APOLLOS_CLIENT_MCP_TOOLS,
   ApollosClientMcpRuntime,
+  type ApollosClientListBuilder,
+  type ApollosClientTargetResolver,
 } from "./apollos-client-mcp";
 import type { ApollosLiveCoverageSuccess } from "./apollos-client-coverage-live";
 
-function liveClient(name = "Boatliner Company"): ApollosLiveCoverageSuccess {
+function liveClient(name = "Boatliner Company", clientId = "client-boatliner"): ApollosLiveCoverageSuccess {
   const coverage = buildApollosClientCoverage({
     client: {
-      id: "client-boatliner",
+      id: clientId,
       name,
       industry: "marine_services",
     },
@@ -25,7 +27,7 @@ function liveClient(name = "Boatliner Company"): ApollosLiveCoverageSuccess {
   return {
     ok: true,
     context: {
-      clientId: "client-boatliner",
+      clientId,
       clientName: name,
       industry: "marine_services",
       industryLabel: "Marine Services",
@@ -46,13 +48,60 @@ function liveClient(name = "Boatliner Company"): ApollosLiveCoverageSuccess {
 }
 
 const context = {
-  userId: "clerk-user-boatliner",
+  userId: "clerk-user-operator",
   actorReference: "chatgpt-user-42",
 } as const;
+
+const target = Object.freeze({
+  clientId: "client-boatliner",
+  ownerUserId: "clerk-owner-boatliner",
+  slug: "boatliner-company",
+  clientName: "Boatliner Company",
+  industry: "marine_services",
+  industryLabel: "Marine Services",
+  region: "Alabama Gulf Coast",
+  accessLevel: "operator" as const,
+  ownership: "delegated" as const,
+});
+
+function allowTarget(): ApollosClientTargetResolver {
+  return vi.fn(async (_actorUserId: string, requestedClientId?: string | null) => {
+    if (requestedClientId && requestedClientId !== target.clientId) {
+      return { ok: false as const, reason: "unauthorized" as const };
+    }
+    return { ok: true as const, target };
+  });
+}
+
+function listOne(): ApollosClientListBuilder {
+  return vi.fn(async () => [{
+    clientId: target.clientId,
+    slug: target.slug,
+    clientName: target.clientName,
+    industry: target.industry,
+    industryLabel: target.industryLabel,
+    region: target.region,
+    accessLevel: target.accessLevel,
+    ownership: target.ownership,
+  }]);
+}
+
+function runtime(overrides: {
+  build?: (ownerUserId: string) => Promise<any>;
+  list?: ApollosClientListBuilder;
+  resolve?: ApollosClientTargetResolver;
+} = {}): ApollosClientMcpRuntime {
+  return new ApollosClientMcpRuntime(
+    overrides.build ?? (async () => liveClient()),
+    overrides.list ?? listOne(),
+    overrides.resolve ?? allowTarget(),
+  );
+}
 
 describe("ApollosClientMcpRuntime", () => {
   it("publishes the bounded Apollos client tool catalog", () => {
     expect(APOLLOS_CLIENT_MCP_TOOLS.map((tool) => tool.name)).toEqual([
+      "apollos_list_clients",
       "apollos_get_client_context",
       "apollos_get_client_coverage",
       "apollos_get_activation_plan",
@@ -62,55 +111,84 @@ describe("ApollosClientMcpRuntime", () => {
     ]);
   });
 
-  it("does not expose clientId as a tool-selected tenant argument", () => {
-    for (const tool of APOLLOS_CLIENT_MCP_TOOLS) {
-      expect(JSON.stringify(tool.inputSchema)).not.toContain("clientId");
-    }
+  it("keeps client selection server-authorized instead of authoritative from tool arguments", async () => {
+    const resolve = allowTarget();
+    const instance = runtime({ resolve });
+
+    const result = await instance.execute({
+      context,
+      toolName: "apollos_get_client_coverage",
+      arguments: { clientId: "client-boatliner" },
+    });
+
+    expect(resolve).toHaveBeenCalledWith("clerk-user-operator", "client-boatliner");
+    expect(result.clientId).toBe("client-boatliner");
   });
 
-  it("resolves live client state from the authenticated context userId", async () => {
-    const builder = vi.fn(async (userId: string) => {
-      expect(userId).toBe("clerk-user-boatliner");
-      return liveClient();
-    });
-    const runtime = new ApollosClientMcpRuntime(builder);
-
-    const result = await runtime.execute({
+  it("lists only the actor's safe authorized-client view", async () => {
+    const instance = runtime();
+    const result = await instance.execute({
       context,
-      toolName: "apollos_get_client_context",
+      toolName: "apollos_list_clients",
       arguments: {},
     });
 
-    expect(builder).toHaveBeenCalledTimes(1);
+    expect(result.clientId).toBeNull();
+    expect(result.data).toEqual({ clients: [{
+      clientId: "client-boatliner",
+      slug: "boatliner-company",
+      clientName: "Boatliner Company",
+      industry: "marine_services",
+      industryLabel: "Marine Services",
+      region: "Alabama Gulf Coast",
+      accessLevel: "operator",
+      ownership: "delegated",
+    }] });
+    expect(JSON.stringify(result.data)).not.toContain("ownerUserId");
+  });
+
+  it("builds live state using the authorized target owner's canonical userId", async () => {
+    const build = vi.fn(async (ownerUserId: string) => {
+      expect(ownerUserId).toBe("clerk-owner-boatliner");
+      return liveClient();
+    });
+    const instance = runtime({ build });
+
+    const result = await instance.execute({
+      context,
+      toolName: "apollos_get_client_context",
+      arguments: { clientId: "client-boatliner" },
+    });
+
+    expect(build).toHaveBeenCalledTimes(1);
     expect(result.actorReference).toBe("chatgpt-user-42");
     expect(result.sideEffects).toBe(false);
     expect(result.data).toMatchObject({ clientName: "Boatliner Company" });
   });
 
-  it("rejects an attempted client override on no-argument tools", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => liveClient());
-    await expect(runtime.execute({
+  it("fails closed when a client selection is not in the actor's access set", async () => {
+    const instance = runtime();
+    await expect(instance.execute({
       context,
       toolName: "apollos_get_client_coverage",
       arguments: { clientId: "client-bbb" },
-    })).rejects.toThrow("APOLLOS_MCP_ARGUMENTS_INVALID");
+    })).rejects.toThrow("APOLLOS_MCP_CLIENT_UNAUTHORIZED");
   });
 
-  it("rejects client override mixed into capability arguments", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => liveClient());
-    await expect(runtime.execute({
+  it("fails closed if authorized target resolution and live client resolution disagree", async () => {
+    const instance = runtime({ build: async () => liveClient("Wrong Client", "client-other") });
+    await expect(instance.execute({
       context,
-      toolName: "apollos_get_capability_status",
-      arguments: { capabilityKey: "facebook_social", clientId: "client-bbb" },
-    })).rejects.toThrow("APOLLOS_MCP_ARGUMENTS_INVALID");
+      toolName: "apollos_get_client_context",
+      arguments: { clientId: "client-boatliner" },
+    })).rejects.toThrow("APOLLOS_MCP_CLIENT_RESOLUTION_MISMATCH");
   });
 
   it("returns the full-utilization mission through one operator-facing tool", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => liveClient());
-    const result = await runtime.execute({
+    const result = await runtime().execute({
       context,
       toolName: "apollos_get_full_utilization",
-      arguments: {},
+      arguments: { clientId: "client-boatliner" },
     });
 
     expect(result.data).toMatchObject({
@@ -122,11 +200,10 @@ describe("ApollosClientMcpRuntime", () => {
   });
 
   it("keeps activation preparation side-effect free", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => liveClient());
-    const result = await runtime.execute({
+    const result = await runtime().execute({
       context,
       toolName: "apollos_prepare_activation",
-      arguments: { capabilityKey: "facebook_social" },
+      arguments: { clientId: "client-boatliner", capabilityKey: "facebook_social" },
     });
 
     expect(result.sideEffects).toBe(false);
@@ -138,18 +215,30 @@ describe("ApollosClientMcpRuntime", () => {
     });
   });
 
-  it("fails closed when the authenticated tenant cannot be resolved", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => ({ ok: false, reason: "not_found" }));
-    await expect(runtime.execute({
+  it("fails closed when the actor has no authorized client", async () => {
+    const instance = runtime({
+      resolve: async () => ({ ok: false, reason: "not_found" }),
+    });
+    await expect(instance.execute({
       context,
       toolName: "apollos_get_full_utilization",
       arguments: {},
     })).rejects.toThrow("APOLLOS_MCP_CLIENT_NOT_FOUND");
   });
 
+  it("requires an explicit selection when an access resolver says the actor has multiple ambiguous clients", async () => {
+    const instance = runtime({
+      resolve: async () => ({ ok: false, reason: "selection_required" }),
+    });
+    await expect(instance.execute({
+      context,
+      toolName: "apollos_get_full_utilization",
+      arguments: {},
+    })).rejects.toThrow("APOLLOS_MCP_CLIENT_SELECTION_REQUIRED");
+  });
+
   it("requires an authenticated transport identity", async () => {
-    const runtime = new ApollosClientMcpRuntime(async () => liveClient());
-    await expect(runtime.execute({
+    await expect(runtime().execute({
       context: { userId: "", actorReference: "" },
       toolName: "apollos_get_client_context",
       arguments: {},

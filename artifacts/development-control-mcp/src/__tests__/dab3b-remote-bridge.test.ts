@@ -101,11 +101,12 @@ function runtime(input: { evidence?: readonly GitHubEvidence[]; approvals?: read
 }
 
 describe("DAB-3B remote read-only MCP bridge", () => {
-  it("declares exactly five closed read-only tools", () => {
+  it("declares exactly five closed read-only OAuth-protected tools", () => {
     expect(REMOTE_BRIDGE_TOOL_NAMES).toEqual(["get_task", "get_specification_revisions", "get_authorization_decisions", "get_verified_git_evidence", "get_task_progress"]);
     expect(REMOTE_BRIDGE_TOOLS).toHaveLength(5);
     for (const tool of REMOTE_BRIDGE_TOOLS) {
       expect(tool.annotations).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+      expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: ["dab:read"] }]);
       expect(tool.inputSchema.additionalProperties).toBe(false);
       expect(tool.outputSchema.additionalProperties).toBe(false);
     }
@@ -195,7 +196,27 @@ describe("DAB-3B remote read-only MCP bridge", () => {
     const metadata = await handler(new Request("https://bridge.example.invalid/.well-known/oauth-protected-resource"));
     expect(await metadata.json()).toEqual({ resource: auth.audience, authorization_servers: [auth.issuer], scopes_supported: ["dab:read"], resource_documentation: "https://docs.example.invalid/bridge" });
     const listed = await handler(new Request(auth.audience, { method: "POST", headers: { authorization: `Bearer ${signToken()}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
-    expect(((await listed.json()) as { result: { tools: unknown[] } }).result.tools).toHaveLength(5);
+    const listedBody = (await listed.json()) as { result: { tools: typeof REMOTE_BRIDGE_TOOLS } };
+    expect(listedBody.result.tools).toHaveLength(5);
+    expect(listedBody.result.tools.every((tool) => tool.securitySchemes[0]?.type === "oauth2")).toBe(true);
+  });
+
+  it("returns ChatGPT tool-level OAuth challenge metadata without executing the tool", async () => {
+    const current = runtime();
+    const handler = createRemoteMcpHttpHandler({ runtime: current.runtime, resourceUrl: auth.audience, authorizationServerIssuer: auth.issuer, documentationUrl: "https://docs.example.invalid/bridge" });
+    const response = await handler(new Request(auth.audience, {
+      method: "POST",
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_task", arguments: toolInput() } }),
+    }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { result: { isError: boolean; _meta: { "mcp/www_authenticate": string[] } } };
+    expect(body.result.isError).toBe(true);
+    const challenge = body.result._meta["mcp/www_authenticate"][0];
+    expect(challenge).toContain('resource_metadata="https://bridge.example.invalid/.well-known/oauth-protected-resource"');
+    expect(challenge).toContain('scope="dab:read"');
+    expect(challenge).toContain('error="invalid_token"');
+    expect(challenge).toContain("error_description=");
+    expect(current.repository.listLedger()).toHaveLength(0);
   });
 
   it("returns bounded redacted HTTP errors and challenges missing authentication", async () => {
@@ -203,6 +224,7 @@ describe("DAB-3B remote read-only MCP bridge", () => {
     const response = await handler(new Request(auth.audience, { method: "POST", body: "{}" }));
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toContain("oauth-protected-resource");
+    expect(response.headers.get("www-authenticate")).toContain('scope="dab:read"');
     expect(JSON.stringify(await response.json())).not.toMatch(/token-fixture|private|stack|DATABASE_URL/i);
   });
 });

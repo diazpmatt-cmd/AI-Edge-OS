@@ -3,7 +3,7 @@ import type { ApollosLiveCoverageSuccess } from "./apollos-client-coverage-live.
 
 export interface ApollosAiVisibilityRunner {
   execute(input: { readonly clientId: string; readonly userId: string }): Promise<{
-    readonly generatedAt: Date;
+    readonly generatedAt: string;
     readonly recommendations: readonly unknown[];
     readonly coverage: readonly unknown[];
     readonly rejected: readonly unknown[];
@@ -135,7 +135,7 @@ export class ApollosSafeActionExecutor {
       effectScope: "ai_edge_internal_state_only" as const,
       providerCalls: false as const,
       spendAuthorized: false as const,
-      generatedAt: model.generatedAt.toISOString(),
+      generatedAt: model.generatedAt,
       recommendationCount: model.recommendations.length,
       coverageSourceCount: model.coverage.length,
       rejectedCount: model.rejected.length,

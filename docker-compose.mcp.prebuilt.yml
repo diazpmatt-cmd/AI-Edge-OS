@@ -1,0 +1,43 @@
+services:
+  mcp:
+    image: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:${MCP_IMAGE_TAG:?MCP_IMAGE_TAG is required}
+    restart: unless-stopped
+    networks:
+      - coolify
+    environment:
+      NODE_ENV: production
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      DAB3C_ENABLED: ${DAB3C_ENABLED:-false}
+      DAB3C_KILL_SWITCH: ${DAB3C_KILL_SWITCH:-true}
+      DAB3C_RESOURCE_URL: ${DAB3C_RESOURCE_URL:-}
+      DAB3C_DOCUMENTATION_URL: ${DAB3C_DOCUMENTATION_URL:-}
+      DAB3C_OAUTH_ISSUER: ${DAB3C_OAUTH_ISSUER:-}
+      DAB3C_OAUTH_AUTHORIZED_PARTY: ${DAB3C_OAUTH_AUTHORIZED_PARTY:-}
+      DAB3C_OAUTH_SUBJECT: ${DAB3C_OAUTH_SUBJECT:-}
+      DAB3C_OAUTH_KEY_ID: ${DAB3C_OAUTH_KEY_ID:-}
+      DAB3C_OAUTH_PUBLIC_KEY_PEM_B64: ${DAB3C_OAUTH_PUBLIC_KEY_PEM_B64:-}
+      DAB3C_REPOSITORY_ID: ${DAB3C_REPOSITORY_ID:-}
+      DAB3C_MATTHEW_ACTOR_ID: ${DAB3C_MATTHEW_ACTOR_ID:-}
+      DAB3C_REVOCATION_GENERATION: ${DAB3C_REVOCATION_GENERATION:-}
+      DAB3C_CONTROL_DATABASE_URL: ${DAB3C_CONTROL_DATABASE_URL:-}
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+networks:
+  coolify:
+    external: true

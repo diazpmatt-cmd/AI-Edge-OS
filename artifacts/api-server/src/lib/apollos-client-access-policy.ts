@@ -9,6 +9,14 @@ export type ApollosClientSelectionResult<T extends ApollosSelectableClient> =
   | { readonly ok: true; readonly target: T }
   | { readonly ok: false; readonly reason: ApollosClientSelectionFailureReason };
 
+export type ApollosNormalizedAccessLevel = "viewer" | "operator" | "owner";
+
+export function normalizeApollosClientAccessLevel(value: string): ApollosNormalizedAccessLevel {
+  return value === "viewer" || value === "operator" || value === "owner"
+    ? value
+    : "viewer";
+}
+
 export function selectAuthorizedApollosClient<T extends ApollosSelectableClient>(
   targets: readonly T[],
   requestedClientId?: string | null,

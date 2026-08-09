@@ -1,9 +1,9 @@
-FROM node:22.12.0-bookworm-slim
+FROM node:24-slim
 
 WORKDIR /app
 
 RUN corepack enable \
-  && corepack prepare pnpm@11.7.0 --activate
+  && corepack prepare pnpm@10.26.1 --activate
 
 COPY . .
 

@@ -36,6 +36,7 @@ export type ApollosSafeActionExecutionResult =
       readonly sideEffects: false;
       readonly reason: string;
       readonly gate?: string;
+      readonly missingDependencies?: readonly string[];
     };
 
 /**
@@ -86,6 +87,23 @@ export class ApollosSafeActionExecutor {
         sideEffects: false as const,
         gate: coverage.capability.activationGate,
         reason: "Capability requires a non-automatic authorization boundary.",
+      });
+    }
+
+    const missingDependencies = (coverage.capability.dependencies ?? []).filter((dependencyKey) => {
+      const dependency = input.live.coverage.capabilities.find(
+        (candidate) => candidate.capability.key === dependencyKey,
+      );
+      return dependency?.status !== "ACTIVE";
+    });
+    if (missingDependencies.length > 0 || coverage.status === "BLOCKED") {
+      return Object.freeze({
+        status: "execution_not_allowed" as const,
+        capabilityKey,
+        sideEffects: false as const,
+        gate: coverage.actionGate ?? "BLOCKED",
+        reason: coverage.blockedReason ?? "Required capability dependencies are not active.",
+        missingDependencies: Object.freeze([...missingDependencies]),
       });
     }
 

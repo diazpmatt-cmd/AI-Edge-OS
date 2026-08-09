@@ -13,12 +13,18 @@ const client = {
 } as const;
 
 describe("buildApollosClientMissionSummary", () => {
-  it("groups independent, approval, OAuth, external, and blocked work without hiding any lane", () => {
+  it("groups independent, approval, OAuth, external, and real blocked work without roadmap-only noise", () => {
     const coverage = buildApollosClientCoverage({
       client,
       evidence: {
         connectedIntegrations: [],
         activeFeatures: [],
+        blockedCapabilities: {
+          review_automation: {
+            reason: "Review provider migration is blocked.",
+            gate: "BLOCKED",
+          },
+        },
       },
     });
     const activationPlan = buildApollosActivationPlan(coverage);
@@ -29,7 +35,8 @@ describe("buildApollosClientMissionSummary", () => {
     expect(mission.readyAutomatic.length).toBeGreaterThan(0);
     expect(mission.humanApprovalRequired.length).toBeGreaterThan(0);
     expect(mission.externalConfigurationRequired.length).toBeGreaterThan(0);
-    expect(mission.blockedActions.length).toBeGreaterThan(0);
+    expect(mission.blockedActions.map((item) => item.capabilityKey)).toContain("review_automation");
+    expect(mission.blockedActions.map((item) => item.capabilityKey)).not.toContain("tiktok_social");
     expect(mission.topPriorityActions.length).toBeLessThanOrEqual(8);
   });
 
@@ -44,7 +51,7 @@ describe("buildApollosClientMissionSummary", () => {
       .toThrow("APOLLOS_MISSION_TENANT_MISMATCH");
   });
 
-  it("reports optimized when every applicable non-planned capability is active", () => {
+  it("reports optimized when every capability currently offered to the client is active", () => {
     const coverage = buildApollosClientCoverage({
       client,
       evidence: {
@@ -67,7 +74,6 @@ describe("buildApollosClientMissionSummary", () => {
           "measurement_engine",
           "ai_visibility_monitoring",
         ],
-        notApplicableCapabilities: ["tiktok_social", "linkedin_social", "pinterest_social"],
       },
     });
     const activationPlan = buildApollosActivationPlan(coverage);

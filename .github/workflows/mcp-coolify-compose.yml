@@ -1,0 +1,61 @@
+name: MCP Coolify compose validation
+
+on:
+  pull_request:
+    paths:
+      - docker-compose.mcp.prebuilt.yml
+      - .github/workflows/mcp-coolify-compose.yml
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.mcp.prebuilt.yml
+      - .github/workflows/mcp-coolify-compose.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-mcp-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Prove isolated MCP compose is pull-only and fail-closed
+        env:
+          MCP_IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -eu
+          docker compose -f docker-compose.mcp.prebuilt.yml config --format json > /tmp/mcp-compose.json
+          python3 - <<'PY'
+          import json
+
+          with open('/tmp/mcp-compose.json', encoding='utf-8') as handle:
+              config = json.load(handle)
+
+          services = config.get('services', {})
+          if set(services) != {'mcp'}:
+              raise SystemExit(f"expected exactly one mcp service, found {sorted(services)}")
+
+          mcp = services['mcp']
+          if 'build' in mcp:
+              raise SystemExit('mcp compose must never build on the Coolify host')
+
+          image = mcp.get('image', '')
+          expected_prefix = 'ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:'
+          if not image.startswith(expected_prefix):
+              raise SystemExit(f'unexpected MCP image: {image}')
+
+          environment = mcp.get('environment', {})
+          if environment.get('DAB3C_ENABLED') != 'false':
+              raise SystemExit('DAB3C_ENABLED must default false')
+          if environment.get('DAB3C_KILL_SWITCH') != 'true':
+              raise SystemExit('DAB3C_KILL_SWITCH must default true')
+
+          networks = mcp.get('networks', {})
+          if 'coolify' not in networks:
+              raise SystemExit('mcp must join the external coolify network for control-plane database DNS')
+
+          top_network = config.get('networks', {}).get('coolify', {})
+          if top_network.get('external') is not True:
+              raise SystemExit('coolify network must remain external')
+          PY

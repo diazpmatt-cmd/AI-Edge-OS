@@ -38,6 +38,30 @@ services:
     cap_drop:
       - ALL
 
+  tunnel-client:
+    profiles:
+      - tunnel
+    image: ghcr.io/openai/tunnel-client:v0.0.10
+    restart: unless-stopped
+    networks:
+      - coolify
+    depends_on:
+      mcp:
+        condition: service_healthy
+    environment:
+      CONTROL_PLANE_API_KEY: ${CONTROL_PLANE_API_KEY:-}
+      CONTROL_PLANE_TUNNEL_ID: ${CONTROL_PLANE_TUNNEL_ID:-}
+      MCP_SERVER_URL: http://mcp:3000/mcp
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      HEALTH_LISTEN_ADDR: ":8080"
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
 networks:
   coolify:
     external: true

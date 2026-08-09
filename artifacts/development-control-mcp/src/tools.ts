@@ -15,6 +15,9 @@ export interface RemoteBridgeToolInput {
 
 const INPUT_KEYS = ["repositoryId", "taskId", "specificationRevision", "specificationHash", "expectedOriginMainSha", "nonce", "issuedAt", "expiresAt", "correlationId", "idempotencyKey"] as const;
 const boundedString = Object.freeze({ type: "string", minLength: 1, maxLength: 300 });
+const oauthSecuritySchemes = Object.freeze([
+  Object.freeze({ type: "oauth2" as const, scopes: Object.freeze(["dab:read"] as const) }),
+]);
 export const REMOTE_BRIDGE_INPUT_SCHEMA = Object.freeze({
   type: "object", additionalProperties: false, required: [...INPUT_KEYS],
   properties: Object.freeze({
@@ -34,6 +37,7 @@ export const REMOTE_BRIDGE_OUTPUT_SCHEMA = Object.freeze({
 export const REMOTE_BRIDGE_TOOLS = Object.freeze(REMOTE_BRIDGE_TOOL_NAMES.map((name) => Object.freeze({
   name, title: name.replaceAll("_", " "), description: `Read one bounded canonical DAB projection using ${name}.`,
   inputSchema: REMOTE_BRIDGE_INPUT_SCHEMA, outputSchema: REMOTE_BRIDGE_OUTPUT_SCHEMA,
+  securitySchemes: oauthSecuritySchemes,
   annotations: Object.freeze({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }),
 })));
 

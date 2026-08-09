@@ -41,7 +41,7 @@ services:
   tunnel-client:
     profiles:
       - tunnel
-    image: ghcr.io/openai/tunnel-client:v0.0.10
+    image: ghcr.io/openai/tunnel-client:v0.0.11
     restart: unless-stopped
     networks:
       - coolify

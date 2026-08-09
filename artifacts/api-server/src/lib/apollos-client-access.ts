@@ -6,6 +6,7 @@ import {
 } from "./apollos-client-access-policy.js";
 
 export type ApollosClientAccessLevel = "viewer" | "operator" | "owner";
+export type ApollosDelegatedAccessLevel = Exclude<ApollosClientAccessLevel, "owner">;
 
 export interface ApollosAuthorizedClient {
   readonly clientId: string;
@@ -23,6 +24,10 @@ export interface ApollosAuthorizedClientTarget extends ApollosAuthorizedClient {
 }
 
 export type ApollosClientTargetResolution = ApollosClientSelectionResult<ApollosAuthorizedClientTarget>;
+
+export type ApollosClientAccessMutationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: "client_not_found" | "self_owned" | "grant_not_found" };
 
 let bootstrapPromise: Promise<void> | null = null;
 
@@ -127,4 +132,74 @@ export async function resolveAuthorizedApollosClientTarget(
 ): Promise<ApollosClientTargetResolution> {
   const targets = await listAuthorizedApollosClientTargets(actorUserId);
   return selectAuthorizedApollosClient(targets, requestedClientId);
+}
+
+export async function grantDelegatedApollosClientAccess(input: {
+  readonly actorUserId: string;
+  readonly clientId: string;
+  readonly accessLevel: ApollosDelegatedAccessLevel;
+}): Promise<ApollosClientAccessMutationResult> {
+  const actorUserId = input.actorUserId.trim();
+  const clientId = input.clientId.trim();
+  if (!actorUserId || !clientId) {
+    return Object.freeze({ ok: false as const, reason: "client_not_found" as const });
+  }
+
+  await ensureApollosClientAccessTable();
+
+  const client = await pool.query<{ user_id: string }>(
+    `SELECT user_id
+       FROM clients
+      WHERE id = $1
+        AND is_active = TRUE
+      LIMIT 1`,
+    [clientId],
+  );
+  const ownerUserId = client.rows[0]?.user_id;
+  if (!ownerUserId) {
+    return Object.freeze({ ok: false as const, reason: "client_not_found" as const });
+  }
+  if (ownerUserId === actorUserId) {
+    return Object.freeze({ ok: false as const, reason: "self_owned" as const });
+  }
+
+  await pool.query(
+    `INSERT INTO apollos_client_access (
+       actor_user_id, client_id, access_level, is_active, updated_at
+     ) VALUES ($1, $2, $3, TRUE, NOW())
+     ON CONFLICT (actor_user_id, client_id)
+     DO UPDATE SET
+       access_level = EXCLUDED.access_level,
+       is_active = TRUE,
+       updated_at = NOW()`,
+    [actorUserId, clientId, input.accessLevel],
+  );
+
+  return Object.freeze({ ok: true as const });
+}
+
+export async function revokeDelegatedApollosClientAccess(input: {
+  readonly actorUserId: string;
+  readonly clientId: string;
+}): Promise<ApollosClientAccessMutationResult> {
+  const actorUserId = input.actorUserId.trim();
+  const clientId = input.clientId.trim();
+  if (!actorUserId || !clientId) {
+    return Object.freeze({ ok: false as const, reason: "grant_not_found" as const });
+  }
+
+  await ensureApollosClientAccessTable();
+  const result = await pool.query(
+    `UPDATE apollos_client_access
+        SET is_active = FALSE,
+            updated_at = NOW()
+      WHERE actor_user_id = $1
+        AND client_id = $2
+        AND is_active = TRUE`,
+    [actorUserId, clientId],
+  );
+
+  return result.rowCount && result.rowCount > 0
+    ? Object.freeze({ ok: true as const })
+    : Object.freeze({ ok: false as const, reason: "grant_not_found" as const });
 }

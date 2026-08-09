@@ -66,6 +66,7 @@ const FirstPublishPage = lazy(() => import("./pages/FirstPublishPage"));
 const CustomerTimelinePage = lazy(() => import("./pages/CustomerTimelinePage"));
 const ProfitCenterPage = lazy(() => import("./pages/ProfitCenterPage"));
 const ApollosPage = lazy(() => import("./pages/ApollosPage"));
+const ApollosCoveragePage = lazy(() => import("./pages/ApollosCoveragePage"));
 const SecretsPage = lazy(() => import("./pages/SecretsPage"));
 const DemoPage = lazy(() => import("./pages/DemoPage"));
 const CompetitorIntelligencePage = lazy(() => import("./pages/CompetitorIntelligencePage"));
@@ -128,6 +129,7 @@ function AppRouter() {
     <Route path="/admin/customer-timeline"><Authenticated><CustomerTimelinePage /></Authenticated></Route>
     <Route path="/admin/profit-center"><Authenticated><ProfitCenterPage /></Authenticated></Route>
     <Route path="/admin/apollos"><Authenticated><ApollosPage /></Authenticated></Route>
+    <Route path="/admin/apollos-coverage"><Authenticated><ApollosCoveragePage /></Authenticated></Route>
     <Route path="/admin/secrets"><Authenticated><SecretsPage /></Authenticated></Route>
     <Route path="/admin/competitor-intelligence"><Authenticated><CompetitorIntelligencePage /></Authenticated></Route>
     <Route path="/admin/authority-engine"><Authenticated><AuthorityEnginePage /></Authenticated></Route>

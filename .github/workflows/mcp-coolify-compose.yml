@@ -69,7 +69,7 @@ jobs:
           tunnel = services['tunnel-client']
           if 'build' in tunnel:
               raise SystemExit('tunnel-client must never build on the Coolify host')
-          if tunnel.get('image') != 'ghcr.io/openai/tunnel-client:v0.0.11':
+          if tunnel.get('image') != 'ghcr.io/diazpmatt-cmd/ai-edge-os-tunnel-client:v0.0.10':
               raise SystemExit(f"unexpected tunnel-client image: {tunnel.get('image')}")
           tunnel_environment = tunnel.get('environment', {})
           if tunnel_environment.get('MCP_SERVER_URL') != 'http://mcp:3000/mcp':

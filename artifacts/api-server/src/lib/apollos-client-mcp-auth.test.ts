@@ -42,6 +42,13 @@ describe("Apollos MCP OAuth contract", () => {
     })).toBe("https://mcp.example.com/api/apollos/mcp");
   });
 
+  it("accepts a private HTTP MCP resource derived from the Coolify service host", () => {
+    expect(resolveApollosMcpResourceUrl({
+      protocol: "http",
+      host: "api:3000",
+    })).toBe("http://api:3000/api/apollos/mcp");
+  });
+
   it("prefers the configured public MCP resource URL for tunnel deployments", () => {
     expect(resolveApollosMcpResourceUrl({
       configuredResourceUrl: "https://tunnel.example.com/mcp",
@@ -53,6 +60,10 @@ describe("Apollos MCP OAuth contract", () => {
   it("rejects insecure non-local public resource URLs", () => {
     expect(resolveApollosMcpResourceUrl({
       configuredResourceUrl: "http://public.example.com/mcp",
+    })).toBeNull();
+    expect(resolveApollosMcpResourceUrl({
+      protocol: "http",
+      host: "public.example.com",
     })).toBeNull();
   });
 

@@ -44,6 +44,7 @@ env:
   RUNTIME_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime
   GIT_WORKER_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker
   WEB_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-web
+  MCP_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp
 
 jobs:
   validate-compose:
@@ -171,9 +172,31 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
+  build-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build MCP bridge image off production
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: .
+          file: artifacts/development-control-mcp/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.MCP_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=mcp
+          cache-to: type=gha,mode=max,scope=mcp
+
   verify-published-images:
     if: github.event_name != 'pull_request'
-    needs: [validate-compose, build-runtime, build-git-worker, build-web]
+    needs: [validate-compose, build-runtime, build-git-worker, build-web, build-mcp]
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
@@ -186,7 +209,7 @@ jobs:
       - name: Verify immutable production image tags exist
         run: |
           set -eu
-          for image in "$RUNTIME_IMAGE" "$GIT_WORKER_IMAGE" "$WEB_IMAGE"; do
+          for image in "$RUNTIME_IMAGE" "$GIT_WORKER_IMAGE" "$WEB_IMAGE" "$MCP_IMAGE"; do
             docker buildx imagetools inspect "$image:$GITHUB_SHA" >/dev/null
           done
       - name: Publish GHCR verification commit status

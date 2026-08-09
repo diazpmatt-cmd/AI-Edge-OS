@@ -10,16 +10,26 @@ import {
   type ApollosLiveCoverageResult,
 } from "./apollos-client-coverage-live.js";
 import { prepareApollosCapabilityActivation } from "./apollos-client-preparation.js";
+import {
+  APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+} from "./apollos-client-mcp-auth.js";
 
 const CLIENT_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
+const TOOL_AUTH = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+});
 
 export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
   {
+    ...TOOL_AUTH,
     name: "apollos_list_clients",
     description: "List the AI Edge client tenants the authenticated actor is authorized to operate.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_get_client_context",
     description: "Return safe business context and enabled services for one authorized AI Edge client.",
     inputSchema: {
@@ -29,6 +39,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_get_client_coverage",
     description: "Audit meaningful utilization across all AI Edge capabilities applicable to one authorized client.",
     inputSchema: {
@@ -38,6 +49,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_get_activation_plan",
     description: "Return the prioritized plan for closing one authorized client's current AI Edge capability gaps.",
     inputSchema: {
@@ -47,6 +59,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_get_full_utilization",
     description: "Answer the operator mission: make sure one authorized client is using everything AI Edge currently offers.",
     inputSchema: {
@@ -56,6 +69,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_get_capability_status",
     description: "Return status and recommended action for one AI Edge capability for one authorized client.",
     inputSchema: {
@@ -69,6 +83,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     },
   },
   {
+    ...TOOL_AUTH,
     name: "apollos_prepare_activation",
     description: "Prepare one authorized client's next activation action and authorization boundary without external side effects.",
     inputSchema: {

@@ -1,0 +1,63 @@
+name: Apollos MCP tunnel compose validation
+
+on:
+  pull_request:
+    paths:
+      - docker-compose.apollos-mcp-tunnel.prebuilt.yml
+      - .github/workflows/apollos-mcp-tunnel-compose.yml
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.apollos-mcp-tunnel.prebuilt.yml
+      - .github/workflows/apollos-mcp-tunnel-compose.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-apollos-tunnel-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Validate pull-only dedicated Apollos tunnel
+        env:
+          APOLLOS_CONTROL_PLANE_API_KEY: test-control-plane-key
+          APOLLOS_CONTROL_PLANE_TUNNEL_ID: tunnel_test
+        run: |
+          set -eu
+          docker compose -f docker-compose.apollos-mcp-tunnel.prebuilt.yml config --format json > /tmp/apollos-tunnel-compose.json
+          python3 - <<'PY'
+          import json
+
+          with open('/tmp/apollos-tunnel-compose.json', encoding='utf-8') as handle:
+              compose = json.load(handle)
+
+          services = compose.get('services', {})
+          if set(services) != {'apollos-tunnel-client'}:
+              raise SystemExit(f"unexpected services: {sorted(services)}")
+
+          tunnel = services['apollos-tunnel-client']
+          if 'build' in tunnel:
+              raise SystemExit('Apollos tunnel must never build on the Coolify host')
+          if tunnel.get('image') != 'ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:tunnel-v0.0.10':
+              raise SystemExit(f"unexpected tunnel image: {tunnel.get('image')}")
+
+          environment = tunnel.get('environment', {})
+          if environment.get('MCP_SERVER_URL') != 'http://api:3000/api/apollos/mcp':
+              raise SystemExit(f"unexpected MCP target: {environment.get('MCP_SERVER_URL')}")
+          if environment.get('CONTROL_PLANE_API_KEY') != 'test-control-plane-key':
+              raise SystemExit('control-plane API key mapping missing')
+          if environment.get('CONTROL_PLANE_TUNNEL_ID') != 'tunnel_test':
+              raise SystemExit('tunnel ID mapping missing')
+
+          if 'coolify' not in tunnel.get('networks', {}):
+              raise SystemExit('tunnel must join the external coolify network')
+          if compose.get('networks', {}).get('coolify', {}).get('external') is not True:
+              raise SystemExit('coolify network must remain external')
+
+          if tunnel.get('security_opt') != ['no-new-privileges:true']:
+              raise SystemExit('no-new-privileges must remain enabled')
+          if tunnel.get('cap_drop') != ['ALL']:
+              raise SystemExit('all Linux capabilities must remain dropped')
+          PY

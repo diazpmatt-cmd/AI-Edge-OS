@@ -205,6 +205,11 @@ function assertToolName(value: unknown): ApollosClientMcpToolName {
   return value as ApollosClientMcpToolName;
 }
 
+function requiresOperatorAccess(tool: ApollosClientMcpToolName): boolean {
+  return tool === "apollos_execute_safe_action"
+    || tool === "apollos_run_full_utilization_cycle";
+}
+
 export class ApollosClientMcpRuntime {
   private readonly fullUtilizationCycle: ApollosFullUtilizationCycleRunner;
 
@@ -258,6 +263,9 @@ export class ApollosClientMcpRuntime {
     const resolution = await this.resolveTarget(actorUserId, parsed.clientId);
     if (!resolution.ok) {
       throw new Error(`APOLLOS_MCP_CLIENT_${resolution.reason.toUpperCase()}`);
+    }
+    if (requiresOperatorAccess(tool) && resolution.target.accessLevel === "viewer") {
+      throw new Error("APOLLOS_MCP_CLIENT_WRITE_UNAUTHORIZED");
     }
 
     const live = await this.buildLiveCoverage(resolution.target.ownerUserId);

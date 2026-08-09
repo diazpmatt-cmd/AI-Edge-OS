@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
 
-import { selectAuthorizedApollosClient } from "./apollos-client-access-policy";
+import {
+  normalizeApollosDelegatedAccessLevel,
+  selectAuthorizedApollosClient,
+} from "./apollos-client-access-policy";
 
 const self = { clientId: "client-self", ownership: "self" as const };
 const bbb = { clientId: "client-bbb", ownership: "delegated" as const };
 const boatliner = { clientId: "client-boatliner", ownership: "delegated" as const };
+
+describe("normalizeApollosDelegatedAccessLevel", () => {
+  it("preserves canonical delegated access levels", () => {
+    expect(normalizeApollosDelegatedAccessLevel("viewer")).toBe("viewer");
+    expect(normalizeApollosDelegatedAccessLevel("operator")).toBe("operator");
+  });
+
+  it("fails closed to viewer for unexpected or elevated persisted values", () => {
+    expect(normalizeApollosDelegatedAccessLevel("owner")).toBe("viewer");
+    expect(normalizeApollosDelegatedAccessLevel("admin")).toBe("viewer");
+    expect(normalizeApollosDelegatedAccessLevel("")).toBe("viewer");
+  });
+});
 
 describe("selectAuthorizedApollosClient", () => {
   it("fails closed when the actor has no authorized clients", () => {

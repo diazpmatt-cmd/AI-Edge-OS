@@ -1,6 +1,7 @@
 import { pool } from "@workspace/db";
 
 import {
+  normalizeApollosDelegatedAccessLevel,
   selectAuthorizedApollosClient,
   type ApollosClientSelectionResult,
 } from "./apollos-client-access-policy.js";
@@ -59,10 +60,6 @@ export function ensureApollosClientAccessTable(): Promise<void> {
   return bootstrapPromise;
 }
 
-function normalizeAccessLevel(value: string): ApollosClientAccessLevel {
-  return value === "viewer" || value === "owner" ? value : "operator";
-}
-
 export async function listAuthorizedApollosClientTargets(
   actorUserId: string,
 ): Promise<readonly ApollosAuthorizedClientTarget[]> {
@@ -114,7 +111,9 @@ export async function listAuthorizedApollosClientTargets(
     industry: row.industry,
     industryLabel: row.industry_label,
     region: row.region,
-    accessLevel: normalizeAccessLevel(row.access_level),
+    accessLevel: row.ownership === "self"
+      ? "owner"
+      : normalizeApollosDelegatedAccessLevel(row.access_level),
     ownership: row.ownership,
   })));
 }

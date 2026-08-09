@@ -34,7 +34,12 @@ export function buildApollosClientMissionSummary(input: {
   }
 
   const limit = Math.max(1, Math.min(20, Math.trunc(input.topActionLimit ?? 8)));
-  const items = input.activationPlan.items;
+  const productStageByCapability = new Map(
+    input.coverage.capabilities.map((item) => [item.capability.key, item.capability.productStage] as const),
+  );
+  const items = input.activationPlan.items.filter(
+    (item) => productStageByCapability.get(item.capabilityKey) !== "planned",
+  );
   const byExecutionStatus = (status: ApollosActivationPlanItem["executionStatus"]) =>
     Object.freeze(items.filter((item) => item.executionStatus === status));
 

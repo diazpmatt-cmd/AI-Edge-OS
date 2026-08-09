@@ -6,7 +6,6 @@ import {
 } from "@workspace/db";
 import {
   aiReceptionistSettingsTable,
-  aiVisibilityAuditsTable,
   socialConnectionsTable,
 } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -207,13 +206,20 @@ async function loadReceptionistEvidence(clientSlug: string): Promise<Receptionis
 }
 
 async function loadAiVisibilityEvidence(clientId: string): Promise<AiVisibilityEvidence> {
-  const rows = await db
-    .select({ id: aiVisibilityAuditsTable.id })
-    .from(aiVisibilityAuditsTable)
-    .where(eq(aiVisibilityAuditsTable.clientId, clientId))
-    .limit(1);
+  const result = await pool.query<{ present: number }>(
+    `SELECT 1 AS present
+     FROM ai_visibility_run_results
+     WHERE client_id = $1
+     LIMIT 1`,
+    [clientId],
+  ).catch((error: { code?: string }) => {
+    if (error?.code === "42P01") {
+      return { rows: [] as Array<{ present: number }> };
+    }
+    throw error;
+  });
 
-  return Object.freeze({ configured: rows.length > 0 });
+  return Object.freeze({ configured: result.rows.length > 0 });
 }
 
 export async function buildApollosLiveCoverageForUser(

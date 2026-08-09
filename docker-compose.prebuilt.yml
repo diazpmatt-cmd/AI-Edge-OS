@@ -2,6 +2,9 @@ services:
   api:
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: unless-stopped
+    networks:
+      - default
+      - coolify
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -77,6 +80,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-planner-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -99,6 +105,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-agent-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -130,6 +139,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-preparation-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -165,6 +177,9 @@ services:
     profiles: ["git"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-git-worker:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     command: ["node", "--enable-source-maps", "./artifacts/api-server/dist/dab-git-worker.mjs"]
     environment:
       NODE_ENV: production
@@ -194,6 +209,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     depends_on:
       api:
         condition: service_healthy
@@ -224,6 +242,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     depends_on:
       api:
         condition: service_healthy
@@ -256,6 +277,9 @@ services:
     profiles: ["workers"]
     image: ghcr.io/diazpmatt-cmd/ai-edge-os-runtime:${IMAGE_TAG:?IMAGE_TAG is required}
     restart: "on-failure:3"
+    networks:
+      - default
+      - coolify
     depends_on:
       api:
         condition: service_healthy
@@ -294,6 +318,10 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+networks:
+  coolify:
+    external: true
 
 volumes:
   media_uploads:

@@ -1,9 +1,25 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
+
+interface AuthorizedClient {
+  clientId: string;
+  slug: string;
+  clientName: string;
+  industry: string;
+  industryLabel: string;
+  region: string;
+  accessLevel: "viewer" | "operator" | "owner";
+  ownership: "self" | "delegated";
+}
+
+interface AuthorizedClientsResponse {
+  clients: AuthorizedClient[];
+}
 
 interface ActivationItem {
   id: string;
@@ -51,7 +67,6 @@ interface FullUtilizationMission {
 }
 
 const COLORS = {
-  background: "#030612",
   panel: "#080E1F",
   panel2: "#0B1328",
   border: "rgba(0,174,239,0.16)",
@@ -120,12 +135,38 @@ function ActionCard({ item, rank }: { item: ActivationItem; rank: number }) {
 
 export default function ApollosCoveragePage() {
   const apiFetch = useApiFetch();
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  const clientsQuery = useQuery<AuthorizedClientsResponse>({
+    queryKey: ["apollos-authorized-clients"],
+    queryFn: () => apiFetch("/apollos/clients"),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    const clients = clientsQuery.data?.clients ?? [];
+    if (clients.length === 0) {
+      setSelectedClientId("");
+      return;
+    }
+    if (selectedClientId && clients.some((client) => client.clientId === selectedClientId)) return;
+    const preferred = clients.find((client) => client.ownership === "self") ?? clients[0];
+    setSelectedClientId(preferred?.clientId ?? "");
+  }, [clientsQuery.data, selectedClientId]);
+
   const missionQuery = useQuery<FullUtilizationMission>({
-    queryKey: ["apollos-full-utilization"],
-    queryFn: () => apiFetch("/apollos/full-utilization"),
+    queryKey: ["apollos-full-utilization", selectedClientId],
+    queryFn: () => apiFetch(`/apollos/full-utilization?clientId=${encodeURIComponent(selectedClientId)}`),
+    enabled: !!selectedClientId,
     staleTime: 30_000,
     retry: 1,
   });
+
+  const authorizedClients = clientsQuery.data?.clients ?? [];
+  const selectedClient = authorizedClients.find((client) => client.clientId === selectedClientId) ?? null;
+  const loading = clientsQuery.isLoading || (!!selectedClientId && missionQuery.isLoading);
+  const error = clientsQuery.isError || missionQuery.isError;
 
   return (
     <AppShell>
@@ -140,24 +181,53 @@ export default function ApollosCoveragePage() {
               One view of whether this client is actually using every AI Edge capability available to them—not just whether accounts happen to be connected.
             </p>
           </div>
-          <Link to="/admin/apollos" style={{
-            display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none", padding: "10px 14px",
-            borderRadius: 10, fontSize: 12, fontWeight: 800, color: "#fff", background: COLORS.blue,
-          }}>
-            Talk to Apollos <ArrowRight size={14} />
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {authorizedClients.length > 1 && (
+              <select
+                aria-label="Authorized client"
+                value={selectedClientId}
+                onChange={(event) => setSelectedClientId(event.target.value)}
+                style={{
+                  background: COLORS.panel, color: COLORS.text, border: `1px solid ${COLORS.border}`,
+                  borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, minWidth: 220,
+                }}
+              >
+                {authorizedClients.map((client) => (
+                  <option key={client.clientId} value={client.clientId}>{client.clientName}</option>
+                ))}
+              </select>
+            )}
+            {selectedClient && authorizedClients.length === 1 && (
+              <div style={{
+                padding: "8px 11px", borderRadius: 9, background: "rgba(244,114,182,0.08)",
+                border: "1px solid rgba(244,114,182,0.20)", color: "#F9A8D4", fontSize: 11, fontWeight: 800,
+              }}>{selectedClient.clientName}</div>
+            )}
+            <Link to="/admin/apollos" style={{
+              display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none", padding: "10px 14px",
+              borderRadius: 10, fontSize: 12, fontWeight: 800, color: "#fff", background: COLORS.blue,
+            }}>
+              Talk to Apollos <ArrowRight size={14} />
+            </Link>
+          </div>
         </div>
 
-        {missionQuery.isLoading && (
+        {!clientsQuery.isLoading && authorizedClients.length === 0 && !clientsQuery.isError && (
+          <div style={{ ...panel, padding: 20, color: COLORS.muted }}>
+            No active AI Edge client is authorized for this account yet.
+          </div>
+        )}
+
+        {loading && (
           <div style={{ ...panel, minHeight: 220, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: COLORS.muted }}>
             <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /> Loading client coverage…
           </div>
         )}
 
-        {missionQuery.isError && (
+        {error && (
           <div style={{ ...panel, padding: 20, borderColor: "rgba(239,68,68,0.3)", color: "#FCA5A5" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}><AlertTriangle size={17} /> Coverage unavailable</div>
-            <div style={{ fontSize: 12, marginTop: 6, color: COLORS.muted }}>Apollos could not resolve the authenticated client coverage right now.</div>
+            <div style={{ fontSize: 12, marginTop: 6, color: COLORS.muted }}>Apollos could not resolve the selected authorized client coverage right now.</div>
           </div>
         )}
 

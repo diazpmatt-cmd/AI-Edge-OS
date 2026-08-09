@@ -145,6 +145,7 @@ export const SECTIONS: SectionDef[] = [
     accentColor: "#F472B6",
     tiles: [
       { to: "/admin/apollos", icon: "🧠", label: "Apollos AI", sub: "Business intelligence", family: "aiCMO" },
+      { to: "/admin/apollos-coverage", icon: "🎯", label: "Client Coverage", sub: "Utilization & activation", family: "aiCMO" },
     ],
   },
   {

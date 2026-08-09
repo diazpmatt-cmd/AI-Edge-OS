@@ -10,15 +10,22 @@ import {
   type ApollosLiveCoverageResult,
 } from "./apollos-client-coverage-live.js";
 import { prepareApollosCapabilityActivation } from "./apollos-client-preparation.js";
+import { ApollosSafeActionExecutor } from "./apollos-safe-action-executor.js";
 import {
+  APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
 } from "./apollos-client-mcp-auth.js";
 
 const CLIENT_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
+const CAPABILITY_KEY_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
 const TOOL_AUTH = Object.freeze({
   securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+});
+const TOOL_INTERNAL_WRITE_AUTH = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
 });
 
 export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
@@ -76,7 +83,7 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
       type: "object",
       properties: {
         clientId: CLIENT_ID_PROPERTY,
-        capabilityKey: { type: "string", minLength: 1, maxLength: 100 },
+        capabilityKey: CAPABILITY_KEY_PROPERTY,
       },
       required: ["capabilityKey"],
       additionalProperties: false,
@@ -90,7 +97,21 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
       type: "object",
       properties: {
         clientId: CLIENT_ID_PROPERTY,
-        capabilityKey: { type: "string", minLength: 1, maxLength: 100 },
+        capabilityKey: CAPABILITY_KEY_PROPERTY,
+      },
+      required: ["capabilityKey"],
+      additionalProperties: false,
+    },
+  },
+  {
+    ...TOOL_INTERNAL_WRITE_AUTH,
+    name: "apollos_execute_safe_action",
+    description: "Execute one allowlisted SAFE_AUTOMATIC_ACTION for an authorized client. Rejects OAuth, publishing, outreach, provider-spend, external-configuration, and unimplemented actions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        clientId: CLIENT_ID_PROPERTY,
+        capabilityKey: CAPABILITY_KEY_PROPERTY,
       },
       required: ["capabilityKey"],
       additionalProperties: false,
@@ -110,7 +131,7 @@ export interface ApollosClientMcpResult {
   readonly tool: ApollosClientMcpToolName;
   readonly actorReference: string;
   readonly clientId: string | null;
-  readonly sideEffects: false;
+  readonly sideEffects: boolean;
   readonly data: unknown;
 }
 
@@ -178,6 +199,7 @@ export class ApollosClientMcpRuntime {
     private readonly buildLiveCoverage: ApollosLiveCoverageBuilder = buildApollosLiveCoverageForUser,
     private readonly listClients: ApollosClientListBuilder = listAuthorizedApollosClients,
     private readonly resolveTarget: ApollosClientTargetResolver = resolveAuthorizedApollosClientTarget,
+    private readonly safeActionExecutor: ApollosSafeActionExecutor = new ApollosSafeActionExecutor(),
   ) {}
 
   listTools(): typeof APOLLOS_CLIENT_MCP_TOOLS {
@@ -202,12 +224,14 @@ export class ApollosClientMcpRuntime {
         tool,
         actorReference: input.context.actorReference,
         clientId: null,
-        sideEffects: false as const,
+        sideEffects: false,
         data: Object.freeze({ clients }),
       });
     }
 
-    const capabilityRequired = tool === "apollos_get_capability_status" || tool === "apollos_prepare_activation";
+    const capabilityRequired = tool === "apollos_get_capability_status"
+      || tool === "apollos_prepare_activation"
+      || tool === "apollos_execute_safe_action";
     const parsed = parseArguments({
       value: input.arguments,
       capabilityRequired,
@@ -228,6 +252,7 @@ export class ApollosClientMcpRuntime {
     }
 
     let data: unknown;
+    let sideEffects = false;
     switch (tool) {
       case "apollos_get_client_context":
         data = live.context;
@@ -260,6 +285,16 @@ export class ApollosClientMcpRuntime {
         data = prepared;
         break;
       }
+      case "apollos_execute_safe_action": {
+        const execution = await this.safeActionExecutor.execute({
+          live,
+          ownerUserId: resolution.target.ownerUserId,
+          capabilityKey: parsed.capabilityKey!,
+        });
+        data = execution;
+        sideEffects = execution.status === "executed";
+        break;
+      }
       default:
         throw new Error("APOLLOS_MCP_TOOL_INVALID");
     }
@@ -268,7 +303,7 @@ export class ApollosClientMcpRuntime {
       tool,
       actorReference: input.context.actorReference,
       clientId: resolution.target.clientId,
-      sideEffects: false as const,
+      sideEffects,
       data,
     });
   }

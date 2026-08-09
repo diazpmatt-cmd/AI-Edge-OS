@@ -60,14 +60,32 @@ export function clerkAuthorizationServerFromPublishableKey(
   }
 }
 
-function normalizeResourceUrl(value: string | null | undefined): string | null {
+function isPrivateHttpResourceHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  if (!host) return false;
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
+
+  // Docker/Coolify service discovery commonly uses single-label DNS names such
+  // as `api`. These are private-network identities, not public web origins.
+  if (!host.includes(".")) return true;
+  if (host.endsWith(".internal") || host.endsWith(".local")) return true;
+
+  return /^(?:10\.|127\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
+}
+
+function normalizeResourceUrl(
+  value: string | null | undefined,
+  options: { readonly allowPrivateHttp?: boolean } = {},
+): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
 
   try {
     const url = new URL(trimmed);
-    const localhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-    if (url.protocol !== "https:" && !(localhost && url.protocol === "http:")) return null;
+    const privateHttp = url.protocol === "http:"
+      && options.allowPrivateHttp === true
+      && isPrivateHttpResourceHost(url.hostname);
+    if (url.protocol !== "https:" && !privateHttp) return null;
     if (url.username || url.password || url.hash || url.search) return null;
     url.pathname = url.pathname.replace(/\/+$/, "") || "/";
     return url.toString().replace(/\/$/, url.pathname === "/" ? "" : "");
@@ -93,14 +111,18 @@ export function resolveApollosMcpResourceUrl(input: {
   readonly protocol?: string | null;
   readonly host?: string | null;
 }): string | null {
-  const configured = normalizeResourceUrl(input.configuredResourceUrl);
+  const configured = normalizeResourceUrl(input.configuredResourceUrl, {
+    allowPrivateHttp: true,
+  });
   if (configured) return configured;
 
   const protocol = input.protocol?.split(",")[0]?.trim().toLowerCase();
   const host = input.host?.split(",")[0]?.trim();
   if (!protocol || !host) return null;
 
-  return normalizeResourceUrl(`${protocol}://${host}/api/apollos/mcp`);
+  return normalizeResourceUrl(`${protocol}://${host}/api/apollos/mcp`, {
+    allowPrivateHttp: true,
+  });
 }
 
 export function resolveApollosMcpAuthorizationServer(input: {

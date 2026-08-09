@@ -143,6 +143,13 @@ export class RemoteBridgeRuntime {
   }
 }
 
+interface JsonRpcMessage {
+  readonly jsonrpc?: unknown;
+  readonly id?: unknown;
+  readonly method?: unknown;
+  readonly params?: unknown;
+}
+
 export function createRemoteMcpHttpHandler(input: {
   readonly runtime: RemoteBridgeRuntime;
   readonly resourceUrl: string;
@@ -152,8 +159,10 @@ export function createRemoteMcpHttpHandler(input: {
   const resource = new URL(input.resourceUrl);
   if (resource.protocol !== "https:" || resource.pathname !== "/mcp") throw new Error("REMOTE_BRIDGE_RESOURCE_INVALID");
   const metadataPath = "/.well-known/oauth-protected-resource";
+  const metadataUrl = `${resource.origin}${metadataPath}`;
   const headers = { "content-type": "application/json", "cache-control": "no-store" };
   const json = (body: unknown, status = 200, extra: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { ...headers, ...extra } });
+  const oauthChallenge = () => `Bearer resource_metadata="${metadataUrl}", scope="dab:read", error="invalid_token", error_description="Authentication required to use this tool"`;
   return async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
     if (path === metadataPath && request.method === "GET") {
@@ -161,12 +170,34 @@ export function createRemoteMcpHttpHandler(input: {
     }
     if (path !== "/mcp") return json({ error: "not_found" }, 404);
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
+    let message: JsonRpcMessage | null = null;
     try {
-      input.runtime.authenticate(request.headers.get("authorization"));
       const text = await request.text();
       if (Buffer.byteLength(text, "utf8") > 65_536) throw new RemoteBridgeError("REQUEST_TOO_LARGE", 413);
-      const message = JSON.parse(text) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
-      if (message.jsonrpc !== "2.0" || typeof message.method !== "string") throw new RemoteBridgeError("JSON_RPC_INVALID", 400);
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) message = parsed as JsonRpcMessage;
+      } catch {
+        message = null;
+      }
+      try {
+        input.runtime.authenticate(request.headers.get("authorization"));
+      } catch (error) {
+        const authError = error instanceof RemoteBridgeError ? error : new RemoteBridgeError("REQUEST_REJECTED", 400);
+        if (authError.status === 401 && message?.jsonrpc === "2.0" && message.method === "tools/call") {
+          return json({
+            jsonrpc: "2.0",
+            id: message.id ?? null,
+            result: {
+              content: [{ type: "text", text: "Authentication required to use this tool." }],
+              _meta: { "mcp/www_authenticate": [oauthChallenge()] },
+              isError: true,
+            },
+          });
+        }
+        throw authError;
+      }
+      if (!message || message.jsonrpc !== "2.0" || typeof message.method !== "string") throw new RemoteBridgeError("JSON_RPC_INVALID", 400);
       if (message.method === "notifications/initialized") return new Response(null, { status: 202 });
       if (message.method === "initialize") return json({ jsonrpc: "2.0", id: message.id ?? null, result: { protocolVersion: "2025-03-26", capabilities: { tools: { listChanged: false } }, serverInfo: { name: "ai-edge-development-control-readonly", version: "0.1.0" } } });
       if (message.method === "tools/list") return json({ jsonrpc: "2.0", id: message.id ?? null, result: { tools: input.runtime.listTools() } });
@@ -180,7 +211,7 @@ export function createRemoteMcpHttpHandler(input: {
     } catch (error) {
       const bridgeError = error instanceof RemoteBridgeError ? error : new RemoteBridgeError("REQUEST_REJECTED", 400);
       const extra: Record<string, string> = bridgeError.status === 401
-        ? { "www-authenticate": `Bearer resource_metadata="${resource.origin}${metadataPath}"` }
+        ? { "www-authenticate": oauthChallenge() }
         : {};
       return json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Request rejected", data: { reason: bridgeError.code } } }, bridgeError.status, extra);
     }

@@ -77,6 +77,10 @@ interface ReceptionistEvidence {
   readonly misconfigured: boolean;
 }
 
+interface AiVisibilityEvidence {
+  readonly configured: boolean;
+}
+
 const LIVE_LOCAL_PRESENCE_STATUSES = new Set([
   "connected",
   "verified_publishing",
@@ -201,6 +205,23 @@ async function loadReceptionistEvidence(clientSlug: string): Promise<Receptionis
   });
 }
 
+async function loadAiVisibilityEvidence(clientId: string): Promise<AiVisibilityEvidence> {
+  const result = await pool.query<{ present: number }>(
+    `SELECT 1 AS present
+     FROM ai_visibility_run_results
+     WHERE client_id = $1
+     LIMIT 1`,
+    [clientId],
+  ).catch((error: { code?: string }) => {
+    if (error?.code === "42P01") {
+      return { rows: [] as Array<{ present: number }> };
+    }
+    throw error;
+  });
+
+  return Object.freeze({ configured: result.rows.length > 0 });
+}
+
 export async function buildApollosLiveCoverageForUser(
   userId: string,
 ): Promise<ApollosLiveCoverageResult> {
@@ -209,7 +230,7 @@ export async function buildApollosLiveCoverageForUser(
     return Object.freeze({ ok: false as const, reason: resolved.reason });
   }
 
-  const [connections, autopilot, localPresence, discovery, authority, receptionist] = await Promise.all([
+  const [connections, autopilot, localPresence, discovery, authority, receptionist, aiVisibility] = await Promise.all([
     db
       .select({
         provider: socialConnectionsTable.provider,
@@ -222,6 +243,7 @@ export async function buildApollosLiveCoverageForUser(
     loadDiscoveryEvidence(resolved.client.id),
     loadAuthorityEvidence(resolved.client.id),
     loadReceptionistEvidence(resolved.client.slug),
+    loadAiVisibilityEvidence(resolved.client.id),
   ]);
 
   const connectedIntegrations = connections
@@ -279,6 +301,10 @@ export async function buildApollosLiveCoverageForUser(
   if (receptionist.configured) {
     if (receptionist.misconfigured) misconfiguredFeatures.push("ai_receptionist");
     else activeFeatures.push("ai_receptionist");
+  }
+
+  if (aiVisibility.configured) {
+    activeFeatures.push("ai_visibility_monitoring");
   }
 
   const evidence: ApollosClientEvidence = Object.freeze({

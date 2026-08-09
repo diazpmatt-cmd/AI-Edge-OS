@@ -48,7 +48,7 @@ describe("DAB-3D standalone Coolify runtime", () => {
     );
   });
 
-  it("serves bounded liveness without activating MCP", async () => {
+  it("serves bounded liveness and routes OAuth metadata without bypassing activation", async () => {
     const base = await start({
       DAB3C_ENABLED: "false",
       DAB3C_KILL_SWITCH: "true",
@@ -58,9 +58,10 @@ describe("DAB-3D standalone Coolify runtime", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ status: "ok" });
     expect((await fetch(`${base}/not-a-route`)).status).toBe(404);
-    expect(
-      (await fetch(`${base}/.well-known/oauth-protected-resource`)).status,
-    ).toBe(404);
+
+    const metadata = await fetch(`${base}/.well-known/oauth-protected-resource`);
+    expect(metadata.status).toBe(503);
+    expect(await metadata.json()).toEqual({ error: "remote_bridge_unavailable" });
   });
 
   it("keeps MCP unavailable while the existing kill switch is active", async () => {

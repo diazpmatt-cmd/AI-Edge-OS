@@ -11,6 +11,7 @@ import {
 } from "./apollos-client-coverage-live.js";
 import { prepareApollosCapabilityActivation } from "./apollos-client-preparation.js";
 import { ApollosSafeActionExecutor } from "./apollos-safe-action-executor.js";
+import { ApollosFullUtilizationCycleRunner } from "./apollos-full-utilization-cycle.js";
 import {
   APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
@@ -117,6 +118,16 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
       additionalProperties: false,
     },
   },
+  {
+    ...TOOL_INTERNAL_WRITE_AUTH,
+    name: "apollos_run_full_utilization_cycle",
+    description: "Do everything currently safe and implemented for one authorized client, refresh state after successful actions, and return the remaining OAuth, approval, setup, and unimplemented queue.",
+    inputSchema: {
+      type: "object",
+      properties: { clientId: CLIENT_ID_PROPERTY },
+      additionalProperties: false,
+    },
+  },
 ] as const);
 
 export type ApollosClientMcpToolName = typeof APOLLOS_CLIENT_MCP_TOOLS[number]["name"];
@@ -195,12 +206,18 @@ function assertToolName(value: unknown): ApollosClientMcpToolName {
 }
 
 export class ApollosClientMcpRuntime {
+  private readonly fullUtilizationCycle: ApollosFullUtilizationCycleRunner;
+
   constructor(
     private readonly buildLiveCoverage: ApollosLiveCoverageBuilder = buildApollosLiveCoverageForUser,
     private readonly listClients: ApollosClientListBuilder = listAuthorizedApollosClients,
     private readonly resolveTarget: ApollosClientTargetResolver = resolveAuthorizedApollosClientTarget,
     private readonly safeActionExecutor: ApollosSafeActionExecutor = new ApollosSafeActionExecutor(),
-  ) {}
+    fullUtilizationCycle?: ApollosFullUtilizationCycleRunner,
+  ) {
+    this.fullUtilizationCycle = fullUtilizationCycle
+      ?? new ApollosFullUtilizationCycleRunner(this.buildLiveCoverage, this.safeActionExecutor);
+  }
 
   listTools(): typeof APOLLOS_CLIENT_MCP_TOOLS {
     return APOLLOS_CLIENT_MCP_TOOLS;
@@ -293,6 +310,15 @@ export class ApollosClientMcpRuntime {
         });
         data = execution;
         sideEffects = execution.status === "executed";
+        break;
+      }
+      case "apollos_run_full_utilization_cycle": {
+        const cycle = await this.fullUtilizationCycle.run({
+          ownerUserId: resolution.target.ownerUserId,
+          initialLive: live,
+        });
+        data = cycle;
+        sideEffects = cycle.sideEffects;
         break;
       }
       default:

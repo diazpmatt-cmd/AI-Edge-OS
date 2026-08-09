@@ -80,10 +80,13 @@ describe("Apollos MCP OAuth contract", () => {
       );
   });
 
-  it("requires OAuth on every tool and keeps only the safe executor write-capable", () => {
+  it("requires OAuth on every tool and marks only bounded execution tools write-capable", () => {
     for (const tool of APOLLOS_CLIENT_MCP_TOOLS) {
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: APOLLOS_MCP_OAUTH_SCOPES }]);
-      if (tool.name === "apollos_execute_safe_action") {
+      if (
+        tool.name === "apollos_execute_safe_action"
+        || tool.name === "apollos_run_full_utilization_cycle"
+      ) {
         expect(tool.annotations).toEqual({
           readOnlyHint: false,
           destructiveHint: false,

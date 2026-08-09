@@ -10,6 +10,7 @@ import {
   explainApollosLiveGapForUser,
   type ApollosLiveCoverageFailureReason,
 } from "../lib/apollos-client-coverage-live.js";
+import { buildApollosClientMissionSummary } from "../lib/apollos-client-mission.js";
 
 const router = Router();
 
@@ -88,6 +89,28 @@ router.get("/apollos/activation-plan", async (req, res) => {
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json(live.activationPlan);
+});
+
+router.get("/apollos/full-utilization", async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const live = await buildApollosLiveCoverageForUser(userId);
+  if (!live.ok) {
+    respondFailure(res, live.reason);
+    return;
+  }
+
+  const mission = buildApollosClientMissionSummary({
+    coverage: live.coverage,
+    activationPlan: live.activationPlan,
+  });
+
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json(mission);
 });
 
 router.get("/apollos/capabilities/:capabilityKey", async (req, res) => {

@@ -2,6 +2,7 @@ import {
   db,
   localPresenceChannelsTable,
   localPresenceProfilesTable,
+  pool,
 } from "@workspace/db";
 import { socialConnectionsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -55,10 +56,25 @@ interface LocalPresenceEvidence {
   readonly channels: readonly { readonly channelName: string; readonly status: string }[];
 }
 
+interface DiscoveryEvidence {
+  readonly configured: boolean;
+  readonly degraded: boolean;
+}
+
+interface AuthorityEvidence {
+  readonly configured: boolean;
+}
+
 const LIVE_LOCAL_PRESENCE_STATUSES = new Set([
   "connected",
   "verified_publishing",
   "live",
+]);
+
+const DEGRADED_DISCOVERY_STATUSES = new Set([
+  "failed",
+  "cancelled",
+  "cancel_requested",
 ]);
 
 const LOCAL_PRESENCE_FEATURE_BY_CHANNEL: Readonly<Record<string, string>> = Object.freeze({
@@ -127,6 +143,34 @@ async function loadLocalPresenceEvidence(clientSlug: string): Promise<LocalPrese
   });
 }
 
+async function loadDiscoveryEvidence(clientId: string): Promise<DiscoveryEvidence> {
+  const result = await pool.query<{ status: string }>(
+    `SELECT status
+     FROM discovery_snapshots
+     WHERE client_id = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [clientId],
+  );
+  const status = result.rows[0]?.status ?? null;
+  return Object.freeze({
+    configured: status !== null,
+    degraded: status !== null && DEGRADED_DISCOVERY_STATUSES.has(status),
+  });
+}
+
+async function loadAuthorityEvidence(clientId: string): Promise<AuthorityEvidence> {
+  const result = await pool.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM backlink_workflows
+     WHERE client_id = $1`,
+    [clientId],
+  );
+  return Object.freeze({
+    configured: Number(result.rows[0]?.count ?? 0) > 0,
+  });
+}
+
 export async function buildApollosLiveCoverageForUser(
   userId: string,
 ): Promise<ApollosLiveCoverageResult> {
@@ -135,7 +179,7 @@ export async function buildApollosLiveCoverageForUser(
     return Object.freeze({ ok: false as const, reason: resolved.reason });
   }
 
-  const [connections, autopilot, localPresence] = await Promise.all([
+  const [connections, autopilot, localPresence, discovery, authority] = await Promise.all([
     db
       .select({
         provider: socialConnectionsTable.provider,
@@ -145,6 +189,8 @@ export async function buildApollosLiveCoverageForUser(
       .where(eq(socialConnectionsTable.userId, userId)),
     loadAutopilotEvidence(userId),
     loadLocalPresenceEvidence(resolved.client.slug),
+    loadDiscoveryEvidence(resolved.client.id),
+    loadAuthorityEvidence(resolved.client.id),
   ]);
 
   const connectedIntegrations = connections
@@ -190,10 +236,19 @@ export async function buildApollosLiveCoverageForUser(
     }
   }
 
+  if (discovery.configured) {
+    if (discovery.degraded) degradedFeatures.push("discovery_engine");
+    else activeFeatures.push("discovery_engine");
+  }
+
+  if (authority.configured) {
+    activeFeatures.push("authority_engine");
+  }
+
   const evidence: ApollosClientEvidence = Object.freeze({
     connectedIntegrations: Object.freeze(connectedIntegrations),
     activeFeatures: Object.freeze([...new Set(activeFeatures)]),
-    degradedFeatures: Object.freeze(degradedFeatures),
+    degradedFeatures: Object.freeze([...new Set(degradedFeatures)]),
     misconfiguredFeatures: Object.freeze(misconfiguredFeatures),
   });
 

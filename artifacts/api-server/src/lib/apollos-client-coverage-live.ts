@@ -155,7 +155,7 @@ export async function buildApollosLiveCoverageForUser(
 
   const serviceNames = resolved.context.registry
     .getGeneratableServices()
-    .map((service) => service.name);
+    .map((service) => service.displayName);
 
   const context: ApollosSafeClientContext = Object.freeze({
     clientId: resolved.client.id,

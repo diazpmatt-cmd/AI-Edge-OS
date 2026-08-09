@@ -1,7 +1,7 @@
 import { pool } from "@workspace/db";
 
 import {
-  normalizeApollosClientAccessLevel,
+  normalizeApollosDelegatedAccessLevel,
   selectAuthorizedApollosClient,
   type ApollosClientSelectionResult,
 } from "./apollos-client-access-policy.js";
@@ -111,7 +111,9 @@ export async function listAuthorizedApollosClientTargets(
     industry: row.industry,
     industryLabel: row.industry_label,
     region: row.region,
-    accessLevel: normalizeApollosClientAccessLevel(row.access_level),
+    accessLevel: row.ownership === "self"
+      ? "owner"
+      : normalizeApollosDelegatedAccessLevel(row.access_level),
     ownership: row.ownership,
   })));
 }

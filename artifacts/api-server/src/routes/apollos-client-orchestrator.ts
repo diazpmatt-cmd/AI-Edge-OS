@@ -1,16 +1,14 @@
 import { Router, type Response } from "express";
 import { getAuth } from "@clerk/express";
 
-import {
-  APOLLOS_CAPABILITY_REGISTRY,
-  type ApollosActionGate,
-} from "../lib/apollos-client-orchestrator.js";
+import { APOLLOS_CAPABILITY_REGISTRY } from "../lib/apollos-client-orchestrator.js";
 import {
   buildApollosLiveCoverageForUser,
   explainApollosLiveGapForUser,
   type ApollosLiveCoverageFailureReason,
 } from "../lib/apollos-client-coverage-live.js";
 import { buildApollosClientMissionSummary } from "../lib/apollos-client-mission.js";
+import { prepareApollosCapabilityActivation } from "../lib/apollos-client-preparation.js";
 
 const router = Router();
 
@@ -23,16 +21,6 @@ function respondFailure(res: Response, reason: ApollosLiveCoverageFailureReason)
         ? 503
         : 422;
   res.status(status).json({ error: `APOLLOS_CLIENT_${reason.toUpperCase()}` });
-}
-
-function executionBoundary(gate: ApollosActionGate): string {
-  switch (gate) {
-    case "SAFE_AUTOMATIC_ACTION": return "prepared_for_safe_execution";
-    case "HUMAN_APPROVAL_REQUIRED": return "human_approval_required";
-    case "OAUTH_AUTHORIZATION_REQUIRED": return "oauth_authorization_required";
-    case "EXTERNAL_CONFIGURATION_REQUIRED": return "external_configuration_required";
-    case "BLOCKED": return "blocked";
-  }
 }
 
 router.get("/apollos/capabilities", (_req, res) => {
@@ -174,40 +162,14 @@ router.post("/apollos/prepare-activation", async (req, res) => {
     return;
   }
 
-  const item = live.activationPlan.items.find((candidate) => candidate.capabilityKey === capabilityKey);
-  if (!item) {
-    const current = live.coverage.capabilities.find((candidate) => candidate.capability.key === capabilityKey);
-    if (!current) {
-      res.status(404).json({ error: "APOLLOS_CAPABILITY_NOT_FOUND" });
-      return;
-    }
-    res.status(200).json({
-      status: "no_action_required",
-      capabilityKey,
-      capabilityStatus: current.status,
-      sideEffects: false,
-    });
+  const prepared = prepareApollosCapabilityActivation(live, capabilityKey);
+  if (prepared.status === "capability_not_found") {
+    res.status(404).json({ error: "APOLLOS_CAPABILITY_NOT_FOUND" });
     return;
   }
 
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).json({
-    status: "prepared",
-    clientId: live.context.clientId,
-    clientName: live.context.clientName,
-    capabilityKey,
-    capabilityName: item.capabilityName,
-    action: item.recommendedAction,
-    reason: item.reason,
-    expectedBenefit: item.expectedBenefit,
-    dependencies: item.dependencies,
-    gate: item.gate,
-    boundary: executionBoundary(item.gate),
-    sideEffects: false,
-    executionStarted: false,
-    message:
-      "Preparation only. This endpoint does not perform OAuth, publish externally, send outreach, spend money, or mutate provider state.",
-  });
+  res.status(200).json(prepared);
 });
 
 export default router;

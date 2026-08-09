@@ -6,6 +6,7 @@ import {
 } from "@workspace/db";
 import {
   aiReceptionistSettingsTable,
+  aiVisibilityAuditsTable,
   socialConnectionsTable,
 } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -75,6 +76,10 @@ interface AuthorityEvidence {
 interface ReceptionistEvidence {
   readonly configured: boolean;
   readonly misconfigured: boolean;
+}
+
+interface AiVisibilityEvidence {
+  readonly configured: boolean;
 }
 
 const LIVE_LOCAL_PRESENCE_STATUSES = new Set([
@@ -201,6 +206,16 @@ async function loadReceptionistEvidence(clientSlug: string): Promise<Receptionis
   });
 }
 
+async function loadAiVisibilityEvidence(clientId: string): Promise<AiVisibilityEvidence> {
+  const rows = await db
+    .select({ id: aiVisibilityAuditsTable.id })
+    .from(aiVisibilityAuditsTable)
+    .where(eq(aiVisibilityAuditsTable.clientId, clientId))
+    .limit(1);
+
+  return Object.freeze({ configured: rows.length > 0 });
+}
+
 export async function buildApollosLiveCoverageForUser(
   userId: string,
 ): Promise<ApollosLiveCoverageResult> {
@@ -209,7 +224,7 @@ export async function buildApollosLiveCoverageForUser(
     return Object.freeze({ ok: false as const, reason: resolved.reason });
   }
 
-  const [connections, autopilot, localPresence, discovery, authority, receptionist] = await Promise.all([
+  const [connections, autopilot, localPresence, discovery, authority, receptionist, aiVisibility] = await Promise.all([
     db
       .select({
         provider: socialConnectionsTable.provider,
@@ -222,6 +237,7 @@ export async function buildApollosLiveCoverageForUser(
     loadDiscoveryEvidence(resolved.client.id),
     loadAuthorityEvidence(resolved.client.id),
     loadReceptionistEvidence(resolved.client.slug),
+    loadAiVisibilityEvidence(resolved.client.id),
   ]);
 
   const connectedIntegrations = connections
@@ -279,6 +295,10 @@ export async function buildApollosLiveCoverageForUser(
   if (receptionist.configured) {
     if (receptionist.misconfigured) misconfiguredFeatures.push("ai_receptionist");
     else activeFeatures.push("ai_receptionist");
+  }
+
+  if (aiVisibility.configured) {
+    activeFeatures.push("ai_visibility_monitoring");
   }
 
   const evidence: ApollosClientEvidence = Object.freeze({

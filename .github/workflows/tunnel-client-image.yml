@@ -1,0 +1,71 @@
+name: Tunnel client production image
+
+on:
+  pull_request:
+    paths:
+      - docker-compose.mcp.prebuilt.yml
+      - .github/workflows/mcp-coolify-compose.yml
+      - .github/workflows/tunnel-client-image.yml
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.mcp.prebuilt.yml
+      - .github/workflows/mcp-coolify-compose.yml
+      - .github/workflows/tunnel-client-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: tunnel-client-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  TUNNEL_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-tunnel-client
+  TUNNEL_VERSION: v0.0.10
+
+jobs:
+  build-tunnel-client:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact OpenAI tunnel-client release
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: openai/tunnel-client
+          ref: v0.0.10
+          path: tunnel-client-src
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build exact OpenAI tunnel-client release off production
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: ./tunnel-client-src
+          file: ./tunnel-client-src/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.TUNNEL_IMAGE }}:${{ env.TUNNEL_VERSION }}
+            ${{ env.TUNNEL_IMAGE }}:${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ env.TUNNEL_VERSION }}
+          cache-from: type=gha,scope=tunnel-client-v0.0.10
+          cache-to: type=gha,mode=max,scope=tunnel-client-v0.0.10
+
+      - name: Verify published image tags
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eu
+          docker buildx imagetools inspect "$TUNNEL_IMAGE:$TUNNEL_VERSION" >/dev/null
+          docker buildx imagetools inspect "$TUNNEL_IMAGE:$GITHUB_SHA" >/dev/null

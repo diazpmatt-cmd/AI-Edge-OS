@@ -37,6 +37,24 @@ function resolveTransportConfiguration(req: Request):
   return { ok: true, resourceUrl, authorizationServer };
 }
 
+function toClerkWebRequest(req: Request): globalThis.Request {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(name, item);
+    } else if (typeof value === "string") {
+      headers.set(name, value);
+    }
+  }
+
+  const protocol = firstHeader(req.headers["x-forwarded-proto"]) ?? req.protocol;
+  const host = getClerkProxyHost(req) ?? "localhost";
+  return new globalThis.Request(`${protocol}://${host}${req.originalUrl || req.url}`, {
+    method: req.method,
+    headers,
+  });
+}
+
 function respondTransportUnavailable(res: Response): void {
   res.setHeader("Cache-Control", "no-store");
   res.status(503).json({ error: "APOLLOS_MCP_OAUTH_CONFIGURATION_UNAVAILABLE" });
@@ -82,7 +100,7 @@ apollosMcpAuthenticatedRouter.post("/apollos/mcp", async (req: Request, res: Res
 
   let requestState;
   try {
-    requestState = await clerkClient.authenticateRequest(req, {
+    requestState = await clerkClient.authenticateRequest(toClerkWebRequest(req), {
       acceptsToken: "oauth_token",
     });
   } catch {
@@ -96,7 +114,11 @@ apollosMcpAuthenticatedRouter.post("/apollos/mcp", async (req: Request, res: Res
   }
 
   const auth = requestState.toAuth();
-  const userId = auth.userId?.trim();
+  const userId = auth.tokenType === "oauth_token"
+    && "userId" in auth
+    && typeof auth.userId === "string"
+    ? auth.userId.trim()
+    : "";
   if (!userId) {
     respondOAuthRequired(res, configuration.resourceUrl);
     return;

@@ -59,16 +59,41 @@ jobs:
           SCHEDULER_SECRET: validation-only
           GORILLADESK_API_KEY: validation-only
         run: |
-          docker compose -f docker-compose.prebuilt.yml config > /tmp/prebuilt-compose.yml
-          if grep -Eq '^[[:space:]]+build:' /tmp/prebuilt-compose.yml; then
-            echo 'Prebuilt compose still contains local build instructions.' >&2
-            cat /tmp/prebuilt-compose.yml
+          set -eu
+
+          docker compose -f docker-compose.prebuilt.yml config > /tmp/prebuilt-default.yml
+          if grep -Eq '^[[:space:]]+build:' /tmp/prebuilt-default.yml; then
+            echo 'Default prebuilt compose still contains local build instructions.' >&2
+            cat /tmp/prebuilt-default.yml
             exit 1
           fi
-          image_count=$(grep -Ec '^[[:space:]]+image: ghcr\.io/diazpmatt-cmd/ai-edge-os-' /tmp/prebuilt-compose.yml)
-          if [ "$image_count" -ne 9 ]; then
-            echo "Expected 9 GHCR-backed services, found $image_count." >&2
-            cat /tmp/prebuilt-compose.yml
+
+          default_services=$(docker compose -f docker-compose.prebuilt.yml config --services)
+          default_service_count=$(printf '%s\n' "$default_services" | wc -l)
+          if [ "$default_service_count" -ne 2 ] || printf '%s\n' "$default_services" | grep -Ev '^(api|web)$' >/dev/null; then
+            echo 'Default prebuilt compose must start only api and web.' >&2
+            printf '%s\n' "$default_services"
+            exit 1
+          fi
+
+          default_image_count=$(grep -Ec '^[[:space:]]+image: ghcr\.io/diazpmatt-cmd/ai-edge-os-' /tmp/prebuilt-default.yml)
+          if [ "$default_image_count" -ne 2 ]; then
+            echo "Expected 2 GHCR-backed services in default profile, found $default_image_count." >&2
+            cat /tmp/prebuilt-default.yml
+            exit 1
+          fi
+
+          docker compose --profile '*' -f docker-compose.prebuilt.yml config > /tmp/prebuilt-all.yml
+          if grep -Eq '^[[:space:]]+build:' /tmp/prebuilt-all.yml; then
+            echo 'Full prebuilt compose still contains local build instructions.' >&2
+            cat /tmp/prebuilt-all.yml
+            exit 1
+          fi
+
+          all_image_count=$(grep -Ec '^[[:space:]]+image: ghcr\.io/diazpmatt-cmd/ai-edge-os-' /tmp/prebuilt-all.yml)
+          if [ "$all_image_count" -ne 9 ]; then
+            echo "Expected 9 GHCR-backed services with all profiles enabled, found $all_image_count." >&2
+            cat /tmp/prebuilt-all.yml
             exit 1
           fi
 

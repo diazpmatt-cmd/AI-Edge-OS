@@ -1,5 +1,10 @@
 import { pool } from "@workspace/db";
 
+import {
+  selectAuthorizedApollosClient,
+  type ApollosClientSelectionResult,
+} from "./apollos-client-access-policy.js";
+
 export type ApollosClientAccessLevel = "viewer" | "operator" | "owner";
 
 export interface ApollosAuthorizedClient {
@@ -17,9 +22,7 @@ export interface ApollosAuthorizedClientTarget extends ApollosAuthorizedClient {
   readonly ownerUserId: string;
 }
 
-export type ApollosClientTargetResolution =
-  | { readonly ok: true; readonly target: ApollosAuthorizedClientTarget }
-  | { readonly ok: false; readonly reason: "not_found" | "unauthorized" | "selection_required" };
+export type ApollosClientTargetResolution = ApollosClientSelectionResult<ApollosAuthorizedClientTarget>;
 
 export const apollosClientAccessBootstrapReady = (async () => {
   await pool.query(`
@@ -117,26 +120,5 @@ export async function resolveAuthorizedApollosClientTarget(
   requestedClientId?: string | null,
 ): Promise<ApollosClientTargetResolution> {
   const targets = await listAuthorizedApollosClientTargets(actorUserId);
-  if (targets.length === 0) {
-    return Object.freeze({ ok: false as const, reason: "not_found" as const });
-  }
-
-  const requested = requestedClientId?.trim() ?? "";
-  if (requested) {
-    const target = targets.find((client) => client.clientId === requested);
-    return target
-      ? Object.freeze({ ok: true as const, target })
-      : Object.freeze({ ok: false as const, reason: "unauthorized" as const });
-  }
-
-  if (targets.length === 1) {
-    return Object.freeze({ ok: true as const, target: targets[0]! });
-  }
-
-  const selfOwned = targets.filter((client) => client.ownership === "self");
-  if (selfOwned.length === 1) {
-    return Object.freeze({ ok: true as const, target: selfOwned[0]! });
-  }
-
-  return Object.freeze({ ok: false as const, reason: "selection_required" as const });
+  return selectAuthorizedApollosClient(targets, requestedClientId);
 }

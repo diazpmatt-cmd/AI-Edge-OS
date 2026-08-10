@@ -29,7 +29,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   TUNNEL_IMAGE: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp
-  TUNNEL_VERSION_TAG: tunnel-v0.0.11
+  TUNNEL_VERSION_TAG: tunnel-v0.0.11-ai-edge1
 
 jobs:
   build-tunnel-client:
@@ -43,6 +43,64 @@ jobs:
           path: tunnel-client-src
           persist-credentials: false
 
+      - name: Apply narrow initialize auth-readiness compatibility patch
+        run: |
+          set -eu
+          python3 - <<'PY'
+          from pathlib import Path
+
+          probe = Path('tunnel-client-src/pkg/mcpclient/probe_state.go')
+          text = probe.read_text(encoding='utf-8')
+          old_import = '"net/http"\n\t"sync"'
+          new_import = '"net/http"\n\t"strings"\n\t"sync"'
+          if text.count(old_import) != 1:
+              raise SystemExit('unexpected probe_state.go import shape')
+          text = text.replace(old_import, new_import, 1)
+
+          old_fn = '''func IsAuthRequiredProbeError(err error) bool {
+          \tvar statusErr *ProbeHTTPStatusError
+          \treturn errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusUnauthorized
+          }'''
+          new_fn = '''func IsAuthRequiredProbeError(err error) bool {
+          \tvar statusErr *ProbeHTTPStatusError
+          \tif errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusUnauthorized {
+          \t\treturn true
+          \t}
+          \tif err == nil {
+          \t\treturn false
+          \t}
+          \tmsg := strings.ToLower(strings.TrimSpace(err.Error()))
+          \treturn strings.HasSuffix(msg, `calling "initialize": sending "initialize": unauthorized`)
+          }'''
+          if text.count(old_fn) != 1:
+              raise SystemExit('unexpected IsAuthRequiredProbeError implementation')
+          probe.write_text(text.replace(old_fn, new_fn, 1), encoding='utf-8')
+
+          test = Path('tunnel-client-src/pkg/mcpclient/probe_state_test.go')
+          test_text = test.read_text(encoding='utf-8')
+          anchor = '''\trequire.True(t, IsAuthRequiredProbeError(NewProbeHTTPStatusError(
+          \t\thttp.StatusUnauthorized,
+          \t\terrors.New("received:401, unathenticated"),
+          \t)))'''
+          addition = anchor + '''
+          \trequire.True(t, IsAuthRequiredProbeError(errors.New(`calling "initialize": sending "initialize": Unauthorized`)))'''
+          if test_text.count(anchor) != 1:
+              raise SystemExit('unexpected auth-readiness test shape')
+          test.write_text(test_text.replace(anchor, addition, 1), encoding='utf-8')
+          PY
+
+          grep -F 'calling "initialize": sending "initialize": unauthorized' tunnel-client-src/pkg/mcpclient/probe_state.go >/dev/null
+          grep -F 'calling "initialize": sending "initialize": Unauthorized' tunnel-client-src/pkg/mcpclient/probe_state_test.go >/dev/null
+
+      - name: Test patched auth-readiness classifier
+        run: |
+          set -eu
+          docker run --rm \
+            -v "$PWD/tunnel-client-src:/src" \
+            -w /src \
+            golang:1.26.2-alpine \
+            sh -c 'go test ./pkg/mcpclient'
+
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
       - name: Log in to GHCR
@@ -53,7 +111,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build exact OpenAI tunnel-client release off production
+      - name: Build OpenAI tunnel-client v0.0.11 with narrow AI Edge readiness patch
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: ./tunnel-client-src
@@ -63,9 +121,9 @@ jobs:
             ${{ env.TUNNEL_IMAGE }}:${{ env.TUNNEL_VERSION_TAG }}
             ${{ env.TUNNEL_IMAGE }}:tunnel-${{ github.sha }}
           build-args: |
-            GIT_SHA=v0.0.11
-          cache-from: type=gha,scope=tunnel-client-v0.0.11
-          cache-to: type=gha,mode=max,scope=tunnel-client-v0.0.11
+            GIT_SHA=v0.0.11-ai-edge1
+          cache-from: type=gha,scope=tunnel-client-v0.0.11-ai-edge1
+          cache-to: type=gha,mode=max,scope=tunnel-client-v0.0.11-ai-edge1
 
       - name: Verify published image tags
         if: github.event_name != 'pull_request'

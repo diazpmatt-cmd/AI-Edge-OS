@@ -2,7 +2,6 @@ export const APOLLOS_MCP_OAUTH_SCOPES = Object.freeze([
   "openid",
   "profile",
   "email",
-  "offline_access",
 ] as const);
 
 export const APOLLOS_MCP_OAUTH_SECURITY_SCHEMES = Object.freeze([

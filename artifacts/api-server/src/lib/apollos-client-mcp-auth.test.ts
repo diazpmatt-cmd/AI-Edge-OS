@@ -15,11 +15,25 @@ function publishableKey(hostname: string): string {
   return `pk_test_${Buffer.from(`${hostname}$`, "utf8").toString("base64")}`;
 }
 
+function extensiblePublishableKey(hostname: string): string {
+  const payload = Buffer.concat([
+    Buffer.from(`${hostname}$`, "utf8"),
+    Buffer.from([0x02, 0x2c, 0x44, 0x4a, 0xff]),
+  ]);
+  return `pk_live_${payload.toString("base64url")}`;
+}
+
 describe("Apollos MCP OAuth contract", () => {
   it("derives Clerk's OAuth authorization-server origin from the publishable key", () => {
     expect(clerkAuthorizationServerFromPublishableKey(
       publishableKey("example.clerk.accounts.dev"),
     )).toBe("https://example.clerk.accounts.dev");
+  });
+
+  it("ignores Clerk publishable-key extension payload after the first delimiter", () => {
+    expect(clerkAuthorizationServerFromPublishableKey(
+      extensiblePublishableKey("clerk.aiedgesolutions.online"),
+    )).toBe("https://clerk.aiedgesolutions.online");
   });
 
   it("fails closed for malformed Clerk publishable keys", () => {

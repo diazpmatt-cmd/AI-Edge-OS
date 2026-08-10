@@ -36,8 +36,9 @@ function decodeBase64Url(value: string): string | null {
 
 /**
  * Clerk publishable keys contain the Frontend API hostname as base64 followed
- * by a `$` delimiter. OAuth authorization-server metadata is hosted on that
- * Frontend API origin.
+ * by a `$` delimiter. Data after the first delimiter is reserved for Clerk key
+ * extensibility and must not become part of the hostname. OAuth authorization-
+ * server metadata is hosted on the Frontend API origin.
  */
 export function clerkAuthorizationServerFromPublishableKey(
   publishableKey: string | null | undefined,
@@ -49,7 +50,10 @@ export function clerkAuthorizationServerFromPublishableKey(
   if (!match?.[1]) return null;
 
   const decoded = decodeBase64Url(match[1]);
-  const hostname = decoded?.replace(/\$$/, "").trim();
+  if (!decoded) return null;
+
+  const delimiterIndex = decoded.indexOf("$");
+  const hostname = (delimiterIndex >= 0 ? decoded.slice(0, delimiterIndex) : decoded).trim();
   if (!hostname || !/^[a-z0-9.-]+(?::[0-9]+)?$/i.test(hostname)) return null;
 
   try {

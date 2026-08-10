@@ -40,7 +40,7 @@ jobs:
           tunnel = services['apollos-tunnel-client']
           if 'build' in tunnel:
               raise SystemExit('Apollos tunnel must never build on the Coolify host')
-          if tunnel.get('image') != 'ghcr.io/openai/tunnel-client:v0.0.11':
+          if tunnel.get('image') != 'ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:tunnel-v0.0.11':
               raise SystemExit(f"unexpected tunnel image: {tunnel.get('image')}")
 
           environment = tunnel.get('environment', {})

@@ -46,6 +46,8 @@ jobs:
           environment = tunnel.get('environment', {})
           if environment.get('MCP_SERVER_URL') != 'http://api:3000/api/apollos/mcp':
               raise SystemExit(f"unexpected MCP target: {environment.get('MCP_SERVER_URL')}")
+          if environment.get('HARPOON_HOSTS_INCLUDE_REGEX') != '^api$':
+              raise SystemExit(f"unexpected Harpoon private-host rule: {environment.get('HARPOON_HOSTS_INCLUDE_REGEX')}")
           if environment.get('CONTROL_PLANE_API_KEY') != 'test-control-plane-key':
               raise SystemExit('control-plane API key mapping missing')
           if environment.get('CONTROL_PLANE_TUNNEL_ID') != 'tunnel_test':

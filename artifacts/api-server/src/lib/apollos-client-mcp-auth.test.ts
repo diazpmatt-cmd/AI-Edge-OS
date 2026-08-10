@@ -24,6 +24,15 @@ function extensiblePublishableKey(hostname: string): string {
 }
 
 describe("Apollos MCP OAuth contract", () => {
+  it("advertises the identity and refresh-token scopes required by ChatGPT OAuth", () => {
+    expect(APOLLOS_MCP_OAUTH_SCOPES).toEqual([
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+    ]);
+  });
+
   it("derives Clerk's OAuth authorization-server origin from the publishable key", () => {
     expect(clerkAuthorizationServerFromPublishableKey(
       publishableKey("example.clerk.accounts.dev"),

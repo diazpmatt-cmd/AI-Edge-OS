@@ -1,6 +1,6 @@
 services:
   apollos-tunnel-client:
-    image: ghcr.io/diazpmatt-cmd/ai-edge-os-mcp:tunnel-v0.0.10
+    image: ghcr.io/openai/tunnel-client:v0.0.11
     restart: unless-stopped
     networks:
       - coolify

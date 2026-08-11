@@ -17,6 +17,7 @@ import {
   getApollosClerkUser,
   listApollosClerkOAuthApplications,
 } from "./apollos-clerk-readonly.js";
+import { getApollosHetznerInfrastructure } from "./apollos-hetzner-readonly.js";
 import {
   APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
@@ -155,6 +156,12 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
       properties: { userId: CLERK_USER_ID_PROPERTY },
       additionalProperties: false,
     },
+  },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_hetzner_get_infrastructure",
+    description: "Admin-only: inspect sanitized Hetzner Cloud servers, public IPs, and firewall configuration. Read-only and never returns API credentials.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
 ] as const);
 
@@ -312,6 +319,18 @@ export class ApollosClientMcpRuntime {
           ? await getApollosClerkOAuthSettings(actorUserId)
           : await listApollosClerkOAuthApplications(actorUserId);
       }
+      return Object.freeze({
+        tool,
+        actorReference: input.context.actorReference,
+        clientId: null,
+        sideEffects: false,
+        data,
+      });
+    }
+
+    if (tool === "apollos_hetzner_get_infrastructure") {
+      parseArguments({ value: input.arguments, capabilityRequired: false, allowClientId: false });
+      const data = await getApollosHetznerInfrastructure(actorUserId);
       return Object.freeze({
         tool,
         actorReference: input.context.actorReference,

@@ -13,6 +13,11 @@ import { prepareApollosCapabilityActivation } from "./apollos-client-preparation
 import { ApollosSafeActionExecutor } from "./apollos-safe-action-executor.js";
 import { ApollosFullUtilizationCycleRunner } from "./apollos-full-utilization-cycle.js";
 import {
+  getApollosClerkOAuthSettings,
+  getApollosClerkUser,
+  listApollosClerkOAuthApplications,
+} from "./apollos-clerk-readonly.js";
+import {
   APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -20,6 +25,7 @@ import {
 
 const CLIENT_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
 const CAPABILITY_KEY_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
+const CLERK_USER_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 200 });
 const TOOL_AUTH = Object.freeze({
   securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -128,6 +134,28 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
       additionalProperties: false,
     },
   },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_clerk_get_oauth_settings",
+    description: "Admin-only: inspect Clerk OAuth application settings used by AI Edge OS, including dynamic client registration and default scopes. Never returns secrets.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_clerk_list_oauth_applications",
+    description: "Admin-only: list sanitized Clerk OAuth applications and dynamically registered clients. Never returns client secrets or access tokens.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_clerk_get_user",
+    description: "Admin-only: return sanitized Clerk identity details for the authenticated admin or a specified Clerk user ID.",
+    inputSchema: {
+      type: "object",
+      properties: { userId: CLERK_USER_ID_PROPERTY },
+      additionalProperties: false,
+    },
+  },
 ] as const);
 
 export type ApollosClientMcpToolName = typeof APOLLOS_CLIENT_MCP_TOOLS[number]["name"];
@@ -197,6 +225,22 @@ function parseArguments(input: {
   return Object.freeze({ clientId, capabilityKey });
 }
 
+function parseOptionalClerkUserId(value: unknown): string | null {
+  const input = value ?? {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+  }
+  const record = input as Record<string, unknown>;
+  if (Object.keys(record).some((key) => key !== "userId")) {
+    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+  }
+  if (record.userId === undefined) return null;
+  if (typeof record.userId !== "string" || !record.userId.trim() || record.userId.trim().length > 200) {
+    throw new Error("APOLLOS_MCP_CLERK_USER_ID_INVALID");
+  }
+  return record.userId.trim();
+}
+
 function assertToolName(value: unknown): ApollosClientMcpToolName {
   if (typeof value !== "string") throw new Error("APOLLOS_MCP_TOOL_INVALID");
   if (!APOLLOS_CLIENT_MCP_TOOLS.some((tool) => tool.name === value)) {
@@ -208,6 +252,12 @@ function assertToolName(value: unknown): ApollosClientMcpToolName {
 function requiresOperatorAccess(tool: ApollosClientMcpToolName): boolean {
   return tool === "apollos_execute_safe_action"
     || tool === "apollos_run_full_utilization_cycle";
+}
+
+function isClerkControlPlaneTool(tool: ApollosClientMcpToolName): boolean {
+  return tool === "apollos_clerk_get_oauth_settings"
+    || tool === "apollos_clerk_list_oauth_applications"
+    || tool === "apollos_clerk_get_user";
 }
 
 export class ApollosClientMcpRuntime {
@@ -248,6 +298,26 @@ export class ApollosClientMcpRuntime {
         clientId: null,
         sideEffects: false,
         data: Object.freeze({ clients }),
+      });
+    }
+
+    if (isClerkControlPlaneTool(tool)) {
+      let data: unknown;
+      if (tool === "apollos_clerk_get_user") {
+        const requestedUserId = parseOptionalClerkUserId(input.arguments);
+        data = await getApollosClerkUser(actorUserId, requestedUserId);
+      } else {
+        parseArguments({ value: input.arguments, capabilityRequired: false, allowClientId: false });
+        data = tool === "apollos_clerk_get_oauth_settings"
+          ? await getApollosClerkOAuthSettings(actorUserId)
+          : await listApollosClerkOAuthApplications(actorUserId);
+      }
+      return Object.freeze({
+        tool,
+        actorReference: input.context.actorReference,
+        clientId: null,
+        sideEffects: false,
+        data,
       });
     }
 

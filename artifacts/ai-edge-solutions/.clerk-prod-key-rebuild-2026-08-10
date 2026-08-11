@@ -1,0 +1,4 @@
+Production web-image rebuild marker after Clerk custom-domain publishable-key rotation.
+
+Purpose: trigger GHCR production web image rebuild after VITE_CLERK_PUBLISHABLE_KEY was corrected to the production custom-domain key for clerk.aiedgesolutions.online.
+No secret values are stored in this file.

@@ -1,0 +1,37 @@
+name: Clerk public config diagnostic
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/clerk-public-config-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-clerk-public-host:
+    runs-on: ubuntu-latest
+    env:
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
+    steps:
+      - name: Verify configured Clerk frontend host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VITE_CLERK_PUBLISHABLE_KEY"
+          payload="${VITE_CLERK_PUBLISHABLE_KEY#pk_live_}"
+          payload="${payload#pk_test_}"
+          decoded="$(printf '%s' "$payload" | base64 -d 2>/dev/null || true)"
+          host="${decoded%%\$*}"
+          host="${host%%!*}"
+          if [ -z "$host" ]; then
+            echo "Unable to decode Clerk publishable-key host" >&2
+            exit 1
+          fi
+          echo "Configured Clerk frontend host: $host"
+          if [ "$host" != "clerk.aiedgesolutions.online" ]; then
+            echo "Expected clerk.aiedgesolutions.online but found $host" >&2
+            exit 1
+          fi
+          echo "Clerk frontend host matches production custom domain."

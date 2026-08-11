@@ -127,6 +127,9 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_prepare_activation",
       "apollos_execute_safe_action",
       "apollos_run_full_utilization_cycle",
+      "apollos_clerk_get_oauth_settings",
+      "apollos_clerk_list_oauth_applications",
+      "apollos_clerk_get_user",
     ]);
   });
 
@@ -140,6 +143,9 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_get_full_utilization",
       "apollos_get_capability_status",
       "apollos_prepare_activation",
+      "apollos_clerk_get_oauth_settings",
+      "apollos_clerk_list_oauth_applications",
+      "apollos_clerk_get_user",
     ] as const) {
       expect(byName.get(name)?.annotations.readOnlyHint).toBe(true);
     }

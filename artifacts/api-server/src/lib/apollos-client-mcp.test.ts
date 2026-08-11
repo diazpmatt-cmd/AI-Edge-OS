@@ -130,6 +130,7 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
       "apollos_clerk_get_user",
+      "apollos_hetzner_get_infrastructure",
     ]);
   });
 
@@ -146,6 +147,7 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
       "apollos_clerk_get_user",
+      "apollos_hetzner_get_infrastructure",
     ] as const) {
       expect(byName.get(name)?.annotations.readOnlyHint).toBe(true);
     }

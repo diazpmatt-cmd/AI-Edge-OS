@@ -14,11 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_PRESENT: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY != '' }}
+      CLERK_VARIABLE_PRESENT: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY != '' }}
     steps:
       - name: Verify configured Clerk frontend host
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$CLERK_SECRET_PRESENT" = "true" ]; then
+            echo "Configured source: GitHub Actions secret VITE_CLERK_PUBLISHABLE_KEY (takes precedence)"
+          elif [ "$CLERK_VARIABLE_PRESENT" = "true" ]; then
+            echo "Configured source: GitHub Actions variable VITE_CLERK_PUBLISHABLE_KEY"
+          else
+            echo "Configured source: none"
+          fi
           test -n "$VITE_CLERK_PUBLISHABLE_KEY"
           payload="${VITE_CLERK_PUBLISHABLE_KEY#pk_live_}"
           payload="${payload#pk_test_}"

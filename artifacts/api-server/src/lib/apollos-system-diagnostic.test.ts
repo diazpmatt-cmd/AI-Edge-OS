@@ -35,6 +35,15 @@ function healthyReaders(
       oauthApplications: { totalCount: 1, applications: [{}] },
       user: { id: "clerk-admin" },
     })),
+    postgres: vi.fn(async () => ({
+      database: { name: "aiedge", inRecovery: false },
+      connections: { applicationPool: { total: 5, idle: 4, waiting: 0 } },
+      workload: {
+        deadlocks: 0,
+        rollbackRatioPercent: 0.2,
+        cacheHitRatioPercent: 99.8,
+      },
+    })),
     ...overrides,
   };
 }
@@ -56,6 +65,7 @@ describe("getApollosSystemDiagnostic", () => {
     expect(readers.coolify).not.toHaveBeenCalled();
     expect(readers.hetzner).not.toHaveBeenCalled();
     expect(readers.clerk).not.toHaveBeenCalled();
+    expect(readers.postgres).not.toHaveBeenCalled();
   });
 
   it("answers the four operator questions when the control plane is healthy", async () => {
@@ -77,7 +87,10 @@ describe("getApollosSystemDiagnostic", () => {
       authority: "apollos",
       confidence: "confirmed",
     });
-    expect(result.whatApollosVerified).toHaveLength(4);
+    expect(result.whatApollosVerified).toHaveLength(5);
+    expect(result.whatApollosVerified).toEqual(expect.arrayContaining([
+      expect.stringContaining("postgres:"),
+    ]));
     expect(result.humanOnlyActions).toEqual([]);
     for (const reader of Object.values(readers)) {
       expect(reader).toHaveBeenCalledWith("clerk-admin");
@@ -109,8 +122,83 @@ describe("getApollosSystemDiagnostic", () => {
       confidence: "confirmed",
     });
     expect(result.humanOnlyActions).toEqual([
-      expect.stringContaining("hetzner read-only runtime credential"),
+      expect.stringContaining("hetzner read-only runtime settings"),
     ]);
+  });
+
+  it("prioritizes a confirmed Postgres outage without granting database repair authority", async () => {
+    const readers = healthyReaders({
+      postgres: vi.fn(async () => { throw new Error("APOLLOS_MCP_POSTGRES_UNAVAILABLE"); }),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("broken");
+    expect(result.whatIsBroken).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "postgres",
+        severity: "critical",
+        code: "APOLLOS_MCP_POSTGRES_UNAVAILABLE",
+        confidence: "confirmed",
+      }),
+    ]));
+    expect(result.highestRoiNextAction).toMatchObject({
+      provider: "postgres",
+      authority: "operator",
+      canApollosExecuteNow: false,
+      confidence: "confirmed",
+    });
+  });
+
+  it("treats current application-pool waiting as Postgres degradation", async () => {
+    const readers = healthyReaders({
+      postgres: vi.fn(async () => ({
+        database: { name: "aiedge", inRecovery: false },
+        connections: { applicationPool: { total: 10, idle: 0, waiting: 3 } },
+        workload: {
+          deadlocks: 0,
+          rollbackRatioPercent: 0.3,
+          cacheHitRatioPercent: 99.9,
+        },
+      })),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("degraded");
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: "postgres", state: "degraded", confidence: "confirmed" }),
+    ]));
+    expect(result.highestRoiNextAction.provider).toBe("postgres");
+  });
+
+  it("keeps cumulative Postgres counters as evidence instead of treating old history as a live outage", async () => {
+    const readers = healthyReaders({
+      postgres: vi.fn(async () => ({
+        database: { name: "aiedge", inRecovery: false },
+        connections: { applicationPool: { total: 5, idle: 5, waiting: 0 } },
+        workload: {
+          deadlocks: 7,
+          rollbackRatioPercent: 12,
+          cacheHitRatioPercent: 89,
+        },
+      })),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("healthy");
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "postgres",
+        state: "healthy",
+        evidence: expect.arrayContaining([
+          "deadlocks=7",
+          "rollbackRatioPercent=12",
+          "cacheHitRatioPercent=89",
+        ]),
+      }),
+    ]));
   });
 
   it("reports provider authorization failures as confirmed broken evidence without leaking raw exceptions", async () => {

@@ -25,6 +25,7 @@ describe("getApollosRuntimeReadiness", () => {
       CLERK_PUBLISHABLE_KEY: "pk_live_public",
       APOLLOS_ADMIN_USER_IDS: "clerk-admin",
       APOLLOS_MCP_RESOURCE_URL: "https://tunnel.example/mcp",
+      APOLLOS_GITHUB_REPOSITORY: "diazpmatt-cmd/AI-Edge-OS",
       APOLLOS_COOLIFY_BASE_URL: "https://coolify.example",
       APOLLOS_COOLIFY_READ_TOKEN: "coolify-secret",
       HETZNER_API_TOKEN: "hetzner-secret",
@@ -59,6 +60,7 @@ describe("getApollosRuntimeReadiness", () => {
       CLERK_PUBLISHABLE_KEY: "configured",
       APOLLOS_ADMIN_USER_IDS: "clerk-admin",
       APOLLOS_MCP_RESOURCE_URL: "https://tunnel.example/mcp",
+      APOLLOS_GITHUB_REPOSITORY: "diazpmatt-cmd/AI-Edge-OS",
     } as NodeJS.ProcessEnv;
 
     const result = getApollosRuntimeReadiness("clerk-admin", env);

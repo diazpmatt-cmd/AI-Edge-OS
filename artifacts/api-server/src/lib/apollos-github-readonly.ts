@@ -12,10 +12,8 @@ function requireAdmin(userId: string): void {
   }
 }
 
-function requireToken(): string {
-  const token = process.env.APOLLOS_GITHUB_READ_TOKEN?.trim();
-  if (!token) throw new Error("APOLLOS_MCP_GITHUB_NOT_CONFIGURED");
-  return token;
+function optionalToken(): string | null {
+  return process.env.APOLLOS_GITHUB_READ_TOKEN?.trim() || null;
 }
 
 function requireRepository(): string {
@@ -44,17 +42,19 @@ async function githubGet(path: string): Promise<unknown> {
   if (!path.startsWith("/") || path.includes("..") || path.includes("\\") || path.includes("://")) {
     throw new Error("APOLLOS_MCP_GITHUB_PATH_INVALID");
   }
-  const token = requireToken();
+  const token = optionalToken();
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "AI-Edge-OS-Apollos",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   let response: globalThis.Response;
   try {
     response = await fetch(`${GITHUB_API_BASE}${path}`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "AI-Edge-OS-Apollos",
-      },
+      headers,
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
   } catch {
@@ -75,7 +75,7 @@ async function githubGet(path: string): Promise<unknown> {
   }
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      throw new Error("APOLLOS_MCP_GITHUB_AUTH_FAILED");
+      throw new Error(token ? "APOLLOS_MCP_GITHUB_AUTH_FAILED" : "APOLLOS_MCP_GITHUB_UNAVAILABLE");
     }
     if (response.status === 404) {
       throw new Error("APOLLOS_MCP_GITHUB_REPOSITORY_NOT_FOUND");

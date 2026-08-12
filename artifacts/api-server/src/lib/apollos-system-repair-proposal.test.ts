@@ -26,6 +26,7 @@ function diagnostic(overrides: Partial<ApollosSystemDiagnostic> = {}): ApollosSy
       { provider: "coolify", state: "healthy", confidence: "confirmed", summary: "Coolify healthy.", evidence: ["unusableServers=0"], reasonCode: null },
       { provider: "hetzner", state: "healthy", confidence: "confirmed", summary: "Hetzner healthy.", evidence: ["nonRunningServers=0"], reasonCode: null },
       { provider: "clerk", state: "healthy", confidence: "confirmed", summary: "Clerk control plane healthy.", evidence: ["actorResolved=true"], reasonCode: null },
+      { provider: "postgres", state: "healthy", confidence: "confirmed", summary: "PostgreSQL healthy.", evidence: ["poolWaiting=0"], reasonCode: null },
     ],
     ...overrides,
   };
@@ -123,6 +124,46 @@ describe("Apollos system repair proposal", () => {
       status: "manual_required",
       approvalRequired: true,
     });
+  });
+
+  it("keeps an unavailable Postgres connection operator-only and blocks generic upstream auto-retry", async () => {
+    const snapshot = diagnostic({
+      overallState: "broken",
+      whatIsBroken: [{
+        provider: "postgres",
+        severity: "critical",
+        code: "APOLLOS_MCP_POSTGRES_UNAVAILABLE",
+        summary: "PostgreSQL read-only health check failed.",
+        confidence: "confirmed",
+      }],
+      providers: [{
+        provider: "postgres",
+        state: "broken",
+        confidence: "confirmed",
+        summary: "PostgreSQL read-only health check failed.",
+        evidence: ["APOLLOS_MCP_POSTGRES_UNAVAILABLE"],
+        reasonCode: "APOLLOS_MCP_POSTGRES_UNAVAILABLE",
+      }],
+    });
+
+    const proposal = await getApollosSystemRepairProposal("clerk-admin", async () => snapshot);
+
+    expect(proposal.diagnosis).toMatchObject({
+      rootCauseCode: "APOLLOS_ROOT_POSTGRES_UNAVAILABLE",
+      repairAuthority: "operator",
+      canApollosRepair: false,
+      confidence: "confirmed",
+    });
+    expect(proposal.diagnosis.recommendedRepair).toContain("must not execute database writes");
+    expect(proposal.repairPlan).toMatchObject({
+      status: "insufficient_evidence",
+      canApollosExecute: false,
+      approvalRequired: false,
+      repairAuthority: "operator",
+    });
+    expect(proposal.repairPlan.steps).toEqual([
+      expect.objectContaining({ key: "collect-causal-evidence", effect: "read_only", executableByApollos: true }),
+    ]);
   });
 
   it("refuses to invent a mutable repair for a generic degraded provider", async () => {

@@ -2,6 +2,7 @@ import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
 import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
 import { getApollosClerkInstanceDiagnostics } from "./apollos-clerk-readonly.js";
 import { getApollosPostgresHealth } from "./apollos-postgres-readonly.js";
+import { getApollosRuntimeReadiness } from "./apollos-runtime-readiness.js";
 import { getApollosSystemDiagnostic } from "./apollos-system-diagnostic.js";
 import { getApollosSystemRepairProposal } from "./apollos-system-repair-proposal.js";
 import {
@@ -52,6 +53,10 @@ export const APOLLOS_CONTROL_PLANE_MCP_TOOLS = Object.freeze([
   tool(
     "apollos_postgres_get_health",
     "Admin-only: inspect sanitized PostgreSQL server, connection-pool, transaction, cache, temp-file, and deadlock health without reading customer rows or returning query text or credentials.",
+  ),
+  tool(
+    "apollos_get_runtime_readiness",
+    "Admin-only: report which Apollos production control-plane providers and OAuth resource settings are configured, using booleans and a secret-free human setup queue. Makes no provider calls and returns no credential values.",
   ),
   tool(
     "apollos_get_system_diagnostic",
@@ -105,6 +110,9 @@ export async function executeApollosControlPlaneMcpTool(input: {
       break;
     case "apollos_postgres_get_health":
       data = await getApollosPostgresHealth(actorUserId);
+      break;
+    case "apollos_get_runtime_readiness":
+      data = getApollosRuntimeReadiness(actorUserId);
       break;
     case "apollos_get_system_diagnostic":
       data = await getApollosSystemDiagnostic(actorUserId);

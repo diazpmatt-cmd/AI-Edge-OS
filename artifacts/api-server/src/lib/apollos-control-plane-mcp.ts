@@ -4,7 +4,7 @@ import { getApollosClerkInstanceDiagnostics } from "./apollos-clerk-readonly.js"
 import { getApollosPostgresHealth } from "./apollos-postgres-readonly.js";
 import { getApollosRuntimeReadiness } from "./apollos-runtime-readiness.js";
 import { getApollosSystemDiagnostic } from "./apollos-system-diagnostic.js";
-import { getApollosSystemRepairProposal } from "./apollos-system-repair-proposal.js";
+import { getApollosSystemRepairProposal } from "./apollos-system-system-repair-proposal.js";
 import {
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -60,7 +60,7 @@ export const APOLLOS_CONTROL_PLANE_MCP_TOOLS = Object.freeze([
   ),
   tool(
     "apollos_get_system_diagnostic",
-    "Admin-only: synthesize GitHub, Coolify, Hetzner, and Clerk evidence into what is broken, what changed, the highest-impact next action, and what Apollos verified itself. Read-only.",
+    "Admin-only: synthesize GitHub, Coolify, Hetzner, Clerk, and PostgreSQL evidence into what is broken, what changed, the highest-impact next action, and what Apollos verified itself. Read-only.",
   ),
   tool(
     "apollos_get_system_repair_proposal",

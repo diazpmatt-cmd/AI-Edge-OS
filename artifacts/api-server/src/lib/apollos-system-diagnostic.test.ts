@@ -6,7 +6,9 @@ import {
 
 const originalEnv = { ...process.env };
 
-function healthyReaders(): ApollosSystemDiagnosticReaders {
+function healthyReaders(
+  overrides: Partial<ApollosSystemDiagnosticReaders> = {},
+): ApollosSystemDiagnosticReaders {
   return {
     github: vi.fn(async () => ({
       repository: { fullName: "diazpmatt-cmd/AI-Edge-OS", defaultBranch: "main", archived: false, disabled: false },
@@ -33,6 +35,7 @@ function healthyReaders(): ApollosSystemDiagnosticReaders {
       oauthApplications: { totalCount: 1, applications: [{}] },
       user: { id: "clerk-admin" },
     })),
+    ...overrides,
   };
 }
 
@@ -82,14 +85,15 @@ describe("getApollosSystemDiagnostic", () => {
   });
 
   it("prioritizes a confirmed Coolify outage over lower-layer visibility gaps", async () => {
-    const readers = healthyReaders();
-    readers.coolify = vi.fn(async () => ({
-      applications: [{ name: "AI Edge OS", status: "exited:unhealthy" }],
-      servers: [{ settings: { isReachable: false, isUsable: false } }],
-      databases: [{ status: "running:healthy" }],
-      activeDeployments: [],
-    }));
-    readers.hetzner = vi.fn(async () => { throw new Error("APOLLOS_MCP_HETZNER_NOT_CONFIGURED"); });
+    const readers = healthyReaders({
+      coolify: vi.fn(async () => ({
+        applications: [{ name: "AI Edge OS", status: "exited:unhealthy" }],
+        servers: [{ settings: { isReachable: false, isUsable: false } }],
+        databases: [{ status: "running:healthy" }],
+        activeDeployments: [],
+      })),
+      hetzner: vi.fn(async () => { throw new Error("APOLLOS_MCP_HETZNER_NOT_CONFIGURED"); }),
+    });
 
     const result = await getApollosSystemDiagnostic("clerk-admin", readers);
 
@@ -110,9 +114,10 @@ describe("getApollosSystemDiagnostic", () => {
   });
 
   it("reports provider authorization failures as confirmed broken evidence without leaking raw exceptions", async () => {
-    const readers = healthyReaders();
-    readers.github = vi.fn(async () => { throw new Error("APOLLOS_MCP_GITHUB_AUTH_FAILED"); });
-    readers.coolify = vi.fn(async () => { throw new Error("unexpected provider body with secret material"); });
+    const readers = healthyReaders({
+      github: vi.fn(async () => { throw new Error("APOLLOS_MCP_GITHUB_AUTH_FAILED"); }),
+      coolify: vi.fn(async () => { throw new Error("unexpected provider body with secret material"); }),
+    });
 
     const result = await getApollosSystemDiagnostic("clerk-admin", readers);
 
@@ -124,10 +129,11 @@ describe("getApollosSystemDiagnostic", () => {
   });
 
   it("marks the report incomplete when evidence is unavailable rather than guessing", async () => {
-    const readers = healthyReaders();
-    readers.github = vi.fn(async () => { throw new Error("APOLLOS_MCP_GITHUB_NOT_CONFIGURED"); });
-    readers.coolify = vi.fn(async () => { throw new Error("APOLLOS_MCP_COOLIFY_NOT_CONFIGURED"); });
-    readers.hetzner = vi.fn(async () => { throw new Error("APOLLOS_MCP_HETZNER_NOT_CONFIGURED"); });
+    const readers = healthyReaders({
+      github: vi.fn(async () => { throw new Error("APOLLOS_MCP_GITHUB_NOT_CONFIGURED"); }),
+      coolify: vi.fn(async () => { throw new Error("APOLLOS_MCP_COOLIFY_NOT_CONFIGURED"); }),
+      hetzner: vi.fn(async () => { throw new Error("APOLLOS_MCP_HETZNER_NOT_CONFIGURED"); }),
+    });
 
     const result = await getApollosSystemDiagnostic("clerk-admin", readers);
 

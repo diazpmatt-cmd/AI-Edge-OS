@@ -8,6 +8,7 @@ on:
       - Dockerfile.web
       - Dockerfile.dab-git-worker
       - docker-compose.coolify.yml
+      - docker-compose.prebuilt.yml
       - deploy/**
       - .dockerignore
       - artifacts/api-server/**
@@ -88,6 +89,7 @@ jobs:
             src/lib/apollos-control-plane-mcp.test.ts \
             src/lib/apollos-postgres-readonly.test.ts \
             src/lib/apollos-runtime-readiness.test.ts \
+            src/lib/apollos-runtime-version.test.ts \
             src/lib/apollos-system-diagnostic-mcp.test.ts \
             src/lib/apollos-system-diagnostic.test.ts \
             src/lib/apollos-system-repair-proposal-mcp.test.ts \

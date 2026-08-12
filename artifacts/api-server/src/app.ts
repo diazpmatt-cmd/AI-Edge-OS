@@ -26,6 +26,7 @@ import {
   apollosMcpPublicRouter,
 } from "./routes/apollos-client-mcp";
 import { logger } from "./lib/logger";
+import { getApollosRuntimeVersion } from "./lib/apollos-runtime-version";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -82,12 +83,7 @@ app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
 });
 
 app.get("/api/version", (_req, res) => {
-  res.json({
-    commit: process.env.APP_COMMIT_SHA || "unknown",
-    branch: process.env.COOLIFY_BRANCH || "unknown",
-    resource: process.env.COOLIFY_RESOURCE_UUID || "unknown",
-    builtAt: process.env.APP_BUILD_TIME || "unknown",
-  });
+  res.json(getApollosRuntimeVersion());
 });
 
 // PUBLIC routes — mounted before Clerk middleware (no auth required).

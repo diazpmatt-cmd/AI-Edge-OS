@@ -80,6 +80,23 @@ function rootCauseForIssue(issue: ApollosSystemIssue): Readonly<{
     });
   }
 
+  if (issue.provider === "runtime" && issue.code === "APOLLOS_RUNTIME_DEPLOYMENT_DRIFT") {
+    return Object.freeze({
+      rootCauseCode: "APOLLOS_ROOT_DEPLOYMENT_DRIFT",
+      rootCause: "The immutable image SHA running in production does not match the verified GitHub default-branch head SHA.",
+      component: "production deployment revision",
+      repairAuthority: "deployment",
+      canApollosRepair: false,
+      requiresApproval: true,
+      recommendedRepair: "Confirm the GitHub head image was published successfully, then deploy that approved immutable SHA through the existing Coolify deployment runbook and verify runtime parity. Apollos must not trigger the production deployment automatically.",
+      verification: Object.freeze([
+        "Confirm the approved GitHub default-branch SHA has a successful immutable-image publication receipt.",
+        "Deploy only that approved SHA through the existing production deployment runbook.",
+        "Rerun the synthesized system diagnostic and confirm the runtime SHA matches GitHub head.",
+      ]),
+    });
+  }
+
   if (issue.code.endsWith("_UNAVAILABLE") || issue.code.endsWith("_REPOSITORY_NOT_FOUND")) {
     return Object.freeze({
       rootCauseCode: "APOLLOS_ROOT_UPSTREAM_UNREACHABLE",

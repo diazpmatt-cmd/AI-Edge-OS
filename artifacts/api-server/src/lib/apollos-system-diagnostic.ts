@@ -3,13 +3,16 @@ import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
 import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
 import { getApollosHetznerInfrastructure } from "./apollos-hetzner-readonly.js";
 import { getApollosPostgresHealth } from "./apollos-postgres-readonly.js";
+import { getApollosRuntimeVersion } from "./apollos-runtime-version.js";
 import {
   getApollosClerkOAuthSettings,
   getApollosClerkUser,
   listApollosClerkOAuthApplications,
 } from "./apollos-clerk-readonly.js";
 
-export type ApollosControlPlaneProvider = "github" | "coolify" | "hetzner" | "clerk" | "postgres";
+const COMMIT_SHA = /^[a-f0-9]{40}$/i;
+
+export type ApollosControlPlaneProvider = "github" | "coolify" | "hetzner" | "clerk" | "postgres" | "runtime";
 export type ApollosControlPlaneState = "healthy" | "degraded" | "broken" | "unconfigured" | "unknown";
 export type ApollosDiagnosticConfidence = "confirmed" | "probable" | "unknown";
 export type ApollosActionAuthority = "apollos" | "operator" | "provider";
@@ -64,6 +67,7 @@ export interface ApollosSystemDiagnosticReaders {
   readonly hetzner: (actorUserId: string) => Promise<unknown>;
   readonly clerk: (actorUserId: string) => Promise<unknown>;
   readonly postgres: (actorUserId: string) => Promise<unknown>;
+  readonly runtime: (actorUserId: string) => Promise<unknown>;
 }
 
 const defaultReaders: ApollosSystemDiagnosticReaders = Object.freeze({
@@ -79,6 +83,7 @@ const defaultReaders: ApollosSystemDiagnosticReaders = Object.freeze({
     return Object.freeze({ oauthSettings, oauthApplications, user });
   },
   postgres: getApollosPostgresHealth,
+  runtime: async () => getApollosRuntimeVersion(),
 });
 
 function record(value: unknown): Record<string, unknown> {
@@ -298,6 +303,74 @@ function postgresObservation(snapshot: unknown): ApollosControlPlaneObservation 
   });
 }
 
+function runtimeObservation(
+  snapshot: unknown,
+  githubSnapshot: unknown,
+): ApollosControlPlaneObservation {
+  const runtime = record(snapshot);
+  const github = record(githubSnapshot);
+  const head = record(github.head);
+  const deployedCommit = text(runtime.commit, 100) ?? "unknown";
+  const githubHead = text(head.sha, 100) ?? "unknown";
+  const branch = text(runtime.branch, 200) ?? "unknown";
+  const resource = text(runtime.resource, 200) ?? "unknown";
+  const builtAt = text(runtime.builtAt, 100) ?? "unknown";
+  const deployedCommitValid = COMMIT_SHA.test(deployedCommit);
+  const githubHeadValid = COMMIT_SHA.test(githubHead);
+
+  if (!deployedCommitValid) {
+    return Object.freeze({
+      provider: "runtime",
+      state: "unknown",
+      confidence: "unknown",
+      summary: "The running API did not expose a valid immutable deployment SHA, so deployment parity cannot be verified.",
+      evidence: Object.freeze([
+        `deployedCommit=${deployedCommit}`,
+        `githubHead=${githubHead}`,
+        `branch=${branch}`,
+        `resource=${resource}`,
+        `builtAt=${builtAt}`,
+      ]),
+      reasonCode: "APOLLOS_RUNTIME_COMMIT_UNKNOWN",
+    });
+  }
+
+  if (!githubHeadValid) {
+    return Object.freeze({
+      provider: "runtime",
+      state: "unknown",
+      confidence: "unknown",
+      summary: "The running API exposed a valid deployment SHA, but GitHub head evidence was unavailable for parity verification.",
+      evidence: Object.freeze([
+        `deployedCommit=${deployedCommit}`,
+        `githubHead=${githubHead}`,
+        `branch=${branch}`,
+        `resource=${resource}`,
+        `builtAt=${builtAt}`,
+      ]),
+      reasonCode: "APOLLOS_RUNTIME_GITHUB_HEAD_UNKNOWN",
+    });
+  }
+
+  const inParity = deployedCommit.toLowerCase() === githubHead.toLowerCase();
+  return Object.freeze({
+    provider: "runtime",
+    state: inParity ? "healthy" : "degraded",
+    confidence: "confirmed",
+    summary: inParity
+      ? `The running API image ${deployedCommit.slice(0, 8)} matches GitHub default-branch head.`
+      : `The running API image ${deployedCommit.slice(0, 8)} does not match GitHub default-branch head ${githubHead.slice(0, 8)}.`,
+    evidence: Object.freeze([
+      `deployedCommit=${deployedCommit}`,
+      `githubHead=${githubHead}`,
+      `branch=${branch}`,
+      `resource=${resource}`,
+      `builtAt=${builtAt}`,
+    ]),
+    reasonCode: inParity ? null : "APOLLOS_RUNTIME_DEPLOYMENT_DRIFT",
+  });
+}
+
 function issueForObservation(observation: ApollosControlPlaneObservation): ApollosSystemIssue | null {
   if (observation.state === "healthy") return null;
   const severity: ApollosSystemIssue["severity"] = observation.state === "broken"
@@ -384,6 +457,16 @@ function highestRoiAction(
   }
 
   const degraded = observations.find((item) => item.state === "degraded");
+  if (degraded?.provider === "runtime") {
+    return Object.freeze({
+      action: "Review the approved GitHub main image, deploy that immutable SHA through the existing Coolify deployment runbook, then re-check runtime parity.",
+      reason: "The running production image is healthy enough to report itself, but it is behind the verified source head; deployment remains an explicit operator approval boundary.",
+      provider: "runtime",
+      authority: "operator",
+      canApollosExecuteNow: false,
+      confidence: degraded.confidence,
+    });
+  }
   if (degraded) {
     return Object.freeze({ action: `Investigate the confirmed ${degraded.provider} degradation and verify the affected component before changing configuration.`, reason: "The fastest safe return is to resolve an observed degradation before adding new moving parts.", provider: degraded.provider, authority: "apollos", canApollosExecuteNow: false, confidence: degraded.confidence });
   }
@@ -408,7 +491,7 @@ export async function getApollosSystemDiagnostic(
     throw new Error("APOLLOS_MCP_SYSTEM_DIAGNOSTIC_ADMIN_REQUIRED");
   }
 
-  const providerNames: readonly ApollosControlPlaneProvider[] = ["github", "coolify", "hetzner", "clerk", "postgres"];
+  const providerNames: readonly ApollosControlPlaneProvider[] = ["github", "coolify", "hetzner", "clerk", "postgres", "runtime"];
   const results = await Promise.allSettled(providerNames.map((provider) => readers[provider](actorUserId)));
   const snapshots = new Map<ApollosControlPlaneProvider, unknown>();
   const observations = results.map((result, index) => {
@@ -419,7 +502,8 @@ export async function getApollosSystemDiagnostic(
     if (provider === "coolify") return coolifyObservation(result.value);
     if (provider === "hetzner") return hetznerObservation(result.value);
     if (provider === "clerk") return clerkObservation(result.value);
-    return postgresObservation(result.value);
+    if (provider === "postgres") return postgresObservation(result.value);
+    return runtimeObservation(result.value, snapshots.get("github"));
   });
 
   const issues = observations.map(issueForObservation).filter((item): item is ApollosSystemIssue => item !== null);

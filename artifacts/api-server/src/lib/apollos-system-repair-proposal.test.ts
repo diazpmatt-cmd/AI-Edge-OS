@@ -27,6 +27,7 @@ function diagnostic(overrides: Partial<ApollosSystemDiagnostic> = {}): ApollosSy
       { provider: "hetzner", state: "healthy", confidence: "confirmed", summary: "Hetzner healthy.", evidence: ["nonRunningServers=0"], reasonCode: null },
       { provider: "clerk", state: "healthy", confidence: "confirmed", summary: "Clerk control plane healthy.", evidence: ["actorResolved=true"], reasonCode: null },
       { provider: "postgres", state: "healthy", confidence: "confirmed", summary: "PostgreSQL healthy.", evidence: ["poolWaiting=0"], reasonCode: null },
+      { provider: "runtime", state: "healthy", confidence: "confirmed", summary: "Runtime revision matches GitHub head.", evidence: ["deployedCommit=aaaaaaaa", "githubHead=aaaaaaaa"], reasonCode: null },
     ],
     ...overrides,
   };
@@ -163,6 +164,49 @@ describe("Apollos system repair proposal", () => {
     });
     expect(proposal.repairPlan.steps).toEqual([
       expect.objectContaining({ key: "collect-causal-evidence", effect: "read_only", executableByApollos: true }),
+    ]);
+  });
+
+  it("turns confirmed deployment drift into a manual approved deployment plan", async () => {
+    const snapshot = diagnostic({
+      overallState: "degraded",
+      whatIsBroken: [{
+        provider: "runtime",
+        severity: "medium",
+        code: "APOLLOS_RUNTIME_DEPLOYMENT_DRIFT",
+        summary: "Running image does not match GitHub head.",
+        confidence: "confirmed",
+      }],
+      providers: [{
+        provider: "runtime",
+        state: "degraded",
+        confidence: "confirmed",
+        summary: "Running image does not match GitHub head.",
+        evidence: ["deployedCommit=bbbbbbbb", "githubHead=aaaaaaaa"],
+        reasonCode: "APOLLOS_RUNTIME_DEPLOYMENT_DRIFT",
+      }],
+    });
+
+    const proposal = await getApollosSystemRepairProposal("clerk-admin", async () => snapshot);
+
+    expect(proposal.diagnosis).toMatchObject({
+      rootCauseCode: "APOLLOS_ROOT_DEPLOYMENT_DRIFT",
+      repairAuthority: "deployment",
+      canApollosRepair: false,
+      requiresApproval: true,
+      confidence: "confirmed",
+    });
+    expect(proposal.diagnosis.recommendedRepair).toContain("must not trigger the production deployment automatically");
+    expect(proposal.repairPlan).toMatchObject({
+      status: "manual_required",
+      canApollosExecute: false,
+      approvalRequired: true,
+      repairAuthority: "deployment",
+    });
+    expect(proposal.repairPlan.steps).toEqual([
+      expect.objectContaining({ key: "confirm-published-main-image", effect: "read_only", executableByApollos: true }),
+      expect.objectContaining({ key: "deploy-approved-main-image", effect: "deployment_change", executableByApollos: false, requiresApproval: true }),
+      expect.objectContaining({ key: "verify-runtime-parity", effect: "read_only", executableByApollos: true }),
     ]);
   });
 

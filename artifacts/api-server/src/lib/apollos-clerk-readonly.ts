@@ -65,6 +65,28 @@ function stringArray(value: unknown): readonly string[] {
     : Object.freeze([]);
 }
 
+function nullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function boundedString(value: unknown, max = 300): string | null {
+  return typeof value === "string" ? value.slice(0, max) : null;
+}
+
+function paginatedData(value: unknown): readonly unknown[] {
+  const payload = record(value);
+  return Array.isArray(payload.data) ? payload.data : Array.isArray(value) ? value : [];
+}
+
+function paginatedCount(value: unknown): number {
+  const payload = record(value);
+  return nullableNumber(payload.total_count ?? payload.totalCount) ?? paginatedData(value).length;
+}
+
 function sanitizeOAuthApplication(value: unknown): Readonly<Record<string, unknown>> {
   const app = record(value);
   return Object.freeze({
@@ -92,6 +114,33 @@ function sanitizeEmailAddresses(value: unknown): readonly Readonly<Record<string
       verificationStatus: verification.status ?? null,
     });
   }));
+}
+
+function sanitizeOrganization(value: unknown): Readonly<Record<string, unknown>> {
+  const organization = record(value);
+  return Object.freeze({
+    id: boundedString(organization.id, 200),
+    name: boundedString(organization.name, 250),
+    slug: boundedString(organization.slug, 250),
+    membersCount: nullableNumber(organization.members_count ?? organization.membersCount),
+    maxAllowedMemberships: nullableNumber(organization.max_allowed_memberships ?? organization.maxAllowedMemberships),
+  });
+}
+
+function sanitizeMembership(value: unknown): Readonly<Record<string, unknown>> {
+  const membership = record(value);
+  const organization = record(membership.organization);
+  return Object.freeze({
+    id: boundedString(membership.id, 200),
+    role: boundedString(membership.role, 200),
+    organization: Object.freeze({
+      id: boundedString(organization.id, 200),
+      name: boundedString(organization.name, 250),
+      slug: boundedString(organization.slug, 250),
+    }),
+    createdAt: membership.created_at ?? membership.createdAt ?? null,
+    updatedAt: membership.updated_at ?? membership.updatedAt ?? null,
+  });
 }
 
 export async function getApollosClerkOAuthSettings(actorUserId: string): Promise<Readonly<Record<string, unknown>>> {
@@ -139,5 +188,80 @@ export async function getApollosClerkUser(
     lastSignInAt: user.last_sign_in_at ?? user.lastSignInAt ?? null,
     createdAt: user.created_at ?? user.createdAt ?? null,
     updatedAt: user.updated_at ?? user.updatedAt ?? null,
+  });
+}
+
+export async function getApollosClerkInstanceDiagnostics(
+  actorUserId: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  requireAdmin(actorUserId);
+  const userId = actorUserId.trim();
+  if (!userId || userId.length > 200) throw new Error("APOLLOS_MCP_CLERK_USER_ID_INVALID");
+
+  const [instanceResponse, organizationSettingsResponse, organizationsResponse, membershipsResponse] = await Promise.all([
+    clerkBapi("/instance"),
+    clerkBapi("/instance/organization_settings"),
+    clerkBapi("/organizations?limit=100&include_members_count=true"),
+    clerkBapi(`/users/${encodeURIComponent(userId)}/organization_memberships?limit=100`),
+  ]);
+
+  const instance = record(instanceResponse.body);
+  const organizationSettings = record(organizationSettingsResponse.body);
+  const forceOrganizationSelection = nullableBoolean(
+    organizationSettings.force_organization_selection
+    ?? organizationSettings.forceOrganizationSelection,
+  );
+  const organizations = paginatedData(organizationsResponse.body).map(sanitizeOrganization);
+  const memberships = paginatedData(membershipsResponse.body).map(sanitizeMembership);
+
+  return Object.freeze({
+    instance: Object.freeze({
+      environmentType: boundedString(instance.environment_type ?? instance.environmentType, 40),
+      allowedOrigins: stringArray(instance.allowed_origins ?? instance.allowedOrigins),
+    }),
+    organizations: Object.freeze({
+      enabled: nullableBoolean(organizationSettings.enabled),
+      membershipRequired: forceOrganizationSelection,
+      personalAccountsEnabled: forceOrganizationSelection === null ? null : !forceOrganizationSelection,
+      domainsEnabled: nullableBoolean(organizationSettings.domains_enabled ?? organizationSettings.domainsEnabled),
+      domainsEnrollmentModes: stringArray(
+        organizationSettings.domains_enrollment_modes
+        ?? organizationSettings.domainsEnrollmentModes,
+      ),
+      creatorRole: boundedString(organizationSettings.creator_role ?? organizationSettings.creatorRole, 200),
+      domainsDefaultRole: boundedString(
+        organizationSettings.domains_default_role
+        ?? organizationSettings.domainsDefaultRole,
+        200,
+      ),
+      maxAllowedMemberships: nullableNumber(
+        organizationSettings.max_allowed_memberships
+        ?? organizationSettings.maxAllowedMemberships,
+      ),
+      maxAllowedPermissions: nullableNumber(
+        organizationSettings.max_allowed_permissions
+        ?? organizationSettings.maxAllowedPermissions,
+      ),
+      maxAllowedRoles: nullableNumber(
+        organizationSettings.max_allowed_roles
+        ?? organizationSettings.maxAllowedRoles,
+      ),
+      slugDisabled: nullableBoolean(organizationSettings.slug_disabled ?? organizationSettings.slugDisabled),
+      adminDeleteEnabled: nullableBoolean(
+        organizationSettings.admin_delete_enabled
+        ?? organizationSettings.adminDeleteEnabled,
+      ),
+      totalOrganizations: paginatedCount(organizationsResponse.body),
+      items: Object.freeze(organizations),
+    }),
+    actorMemberships: Object.freeze({
+      totalCount: paginatedCount(membershipsResponse.body),
+      items: Object.freeze(memberships),
+    }),
+    interpretation: Object.freeze({
+      membershipPolicyKnown: forceOrganizationSelection !== null,
+      actorHasOrganizationMembership: memberships.length > 0,
+      requiresDashboardConfirmation: forceOrganizationSelection === null,
+    }),
   });
 }

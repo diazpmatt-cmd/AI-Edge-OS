@@ -1,8 +1,6 @@
 import { pool } from "@workspace/db";
 import { isApollosAdminUser } from "./apollos-admin-access-policy.js";
 
-const QUERY_TIMEOUT_MS = 5_000;
-
 function requireAdmin(userId: string): void {
   if (!isApollosAdminUser(userId)) {
     throw new Error("APOLLOS_MCP_POSTGRES_ADMIN_REQUIRED");
@@ -28,8 +26,12 @@ export async function getApollosPostgresHealth(
     throw new Error("APOLLOS_MCP_POSTGRES_UNAVAILABLE");
   });
 
+  let transactionStarted = false;
   try {
-    await client.query(`SET statement_timeout = ${QUERY_TIMEOUT_MS}`);
+    await client.query("BEGIN READ ONLY");
+    transactionStarted = true;
+    await client.query("SET LOCAL statement_timeout = '5s'");
+
     const [identity, activity, stats] = await Promise.all([
       client.query<{
         database_name: string;
@@ -96,7 +98,7 @@ export async function getApollosPostgresHealth(
       ? Math.round((rollbacks / transactionTotal) * 10_000) / 100
       : null;
 
-    return Object.freeze({
+    const result = Object.freeze({
       database: Object.freeze({
         name: safeText(identityRow.database_name, 120),
         serverVersion: safeText(identityRow.server_version, 80),
@@ -127,12 +129,21 @@ export async function getApollosPostgresHealth(
       }),
       safety: Object.freeze({
         readOnlyInspection: true,
+        transactionReadOnly: true,
+        transactionLocalTimeout: true,
         customerRowsRead: false,
         queryTextReturned: false,
         credentialsReturned: false,
       }),
     });
+
+    await client.query("COMMIT");
+    transactionStarted = false;
+    return result;
   } catch (error) {
+    if (transactionStarted) {
+      await client.query("ROLLBACK").catch(() => undefined);
+    }
     if (error instanceof Error && /^APOLLOS_MCP_POSTGRES_/.test(error.message)) throw error;
     throw new Error("APOLLOS_MCP_POSTGRES_UNAVAILABLE");
   } finally {

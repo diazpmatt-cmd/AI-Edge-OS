@@ -4,13 +4,17 @@
 
 - Repository: `diazpmatt-cmd/AI-Edge-OS`
 - Branch: `main`
-- Compose file: `docker-compose.coolify.yml`
+- Compose file: `docker-compose.prebuilt.yml`
 - Public service: `web`
 - Internal API service: `api`
 
+Production consumes immutable GHCR images through `docker-compose.prebuilt.yml`. The required `IMAGE_TAG` must be the approved full 40-character `main` commit SHA whose production images have already been published successfully. The API receives that same value as `APP_COMMIT_SHA`, making `GET /api/version` the canonical secret-free proof of the revision actually running.
+
 ## Coolify configuration
 
-Create or update a Docker Compose application using this repository and Compose file. Attach the production domain to the `web` service on port 80. Do not expose the `api` service publicly; Nginx proxies same-origin `/api/*` requests to it over the Compose network.
+Create or update a Docker Compose application using this repository and `docker-compose.prebuilt.yml`. Attach the production domain to the `web` service on port 80. Do not expose the `api` service publicly; Nginx proxies same-origin `/api/*` requests to it over the Compose network.
+
+Set `IMAGE_TAG` to the exact approved full Git SHA for every production deployment. Do not use a floating tag such as `latest` for production acceptance.
 
 ## Required protected variables
 
@@ -190,26 +194,32 @@ The API startup code only starts recurring schedulers when `SCHEDULER_ENABLED` i
 
 ## Deployment procedure
 
-1. Confirm the selected Git revision is the approved `main` commit.
-2. Confirm all required variables exist in Coolify.
-3. Confirm the safety values above remain unchanged.
-4. Deploy the Compose application.
-5. Wait for both service health checks to pass.
-6. Verify `GET /healthz` on the public domain returns `200 ok`.
-7. Verify `GET /api/healthz` returns JSON with `status: ok`.
-8. Sign in through Clerk and perform tenant-scoped read-only smoke tests.
-9. Confirm Referral Growth readiness reports delivery disabled, dry-run mode, emergency stop engaged, and schedulers disabled.
-10. Do not send a live message, issue a reward, process a payment, write to an external CRM, or release the emergency stop without separate authorization.
+1. Confirm the selected full 40-character Git revision is the approved `main` commit.
+2. Confirm the GHCR production-image workflow succeeded for that exact SHA and the immutable runtime/web/MCP/worker image tags exist.
+3. Set Coolify `IMAGE_TAG` to that exact approved SHA. Do not use `latest` or another floating tag.
+4. Confirm all required protected variables exist in Coolify.
+5. Confirm the safety values above remain unchanged.
+6. Deploy the `docker-compose.prebuilt.yml` application.
+7. Wait for both service health checks to pass.
+8. Verify `GET /healthz` on the public domain returns `200 ok`.
+9. Verify `GET /api/healthz` returns JSON with `status: ok`.
+10. Verify `GET /api/version` returns `commit` equal to both the approved `IMAGE_TAG` and current approved GitHub `main` SHA. A mismatch is deployment drift; stop acceptance and correct the deployed revision before continuing.
+11. Sign in through Clerk and perform tenant-scoped read-only smoke tests.
+12. Confirm Referral Growth readiness reports delivery disabled, dry-run mode, emergency stop engaged, and schedulers disabled.
+13. Do not send a live message, issue a reward, process a payment, write to an external CRM, or release the emergency stop without separate authorization.
 
 ## Rollback
 
-Use Coolify's previous successful deployment revision. After rollback, repeat both health checks and verify the safety-state indicators. Database rollback is not automatic; do not reverse migrations unless a reviewed migration-specific rollback procedure exists.
+Use Coolify's previous successful deployment revision. After rollback, repeat both health checks and verify `GET /api/version` reports the expected rollback SHA before resuming traffic acceptance. Verify the safety-state indicators as well. Database rollback is not automatic; do not reverse migrations unless a reviewed migration-specific rollback procedure exists.
 
 ## Production acceptance evidence
 
 Record:
 
-- deployed Git SHA;
+- approved GitHub `main` SHA;
+- immutable GHCR publication result for that SHA;
+- deployed `IMAGE_TAG`;
+- `GET /api/version` runtime SHA and parity result;
 - deployment start and completion times;
 - web and API health results;
 - authenticated smoke-test results;

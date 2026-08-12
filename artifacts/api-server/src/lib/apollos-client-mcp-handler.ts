@@ -4,6 +4,7 @@ import {
 } from "./apollos-client-mcp.js";
 import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
 import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
+import { getApollosClerkInstanceDiagnostics } from "./apollos-clerk-readonly.js";
 import { getApollosSystemDiagnostic } from "./apollos-system-diagnostic.js";
 import { getApollosSystemRepairProposal } from "./apollos-system-repair-proposal.js";
 import {
@@ -38,6 +39,14 @@ const APOLLOS_COOLIFY_CONTROL_PLANE_TOOL = Object.freeze({
   annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
   name: "apollos_coolify_get_control_plane",
   description: "Admin-only: inspect sanitized Coolify applications, servers, databases, and active deployments. Read-only and never returns credentials, raw compose, or deployment logs.",
+  inputSchema: EMPTY_INPUT_SCHEMA,
+});
+
+const APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+  name: "apollos_clerk_get_instance_diagnostics",
+  description: "Admin-only: inspect sanitized Clerk production instance, Organization settings, Organization count, and the authenticated admin's Organization memberships. Read-only and never returns the Clerk secret key or private metadata.",
   inputSchema: EMPTY_INPUT_SCHEMA,
 });
 
@@ -133,6 +142,7 @@ export class ApollosClientMcpJsonRpcHandler {
           ...this.runtime.listTools(),
           APOLLOS_GITHUB_CONTROL_PLANE_TOOL,
           APOLLOS_COOLIFY_CONTROL_PLANE_TOOL,
+          APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL,
           APOLLOS_SYSTEM_DIAGNOSTIC_TOOL,
           APOLLOS_SYSTEM_REPAIR_PROPOSAL_TOOL,
         ]),
@@ -160,6 +170,13 @@ export class ApollosClientMcpJsonRpcHandler {
           if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
           const data = await getApollosCoolifyControlPlane(actorUserId);
           return executionResult(message.id, Object.freeze({ tool: APOLLOS_COOLIFY_CONTROL_PLANE_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
+        }
+
+        if (params.name === APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL.name) {
+          assertEmptyArguments(params.arguments);
+          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
+          const data = await getApollosClerkInstanceDiagnostics(actorUserId);
+          return executionResult(message.id, Object.freeze({ tool: APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
         }
 
         if (params.name === APOLLOS_SYSTEM_DIAGNOSTIC_TOOL.name) {

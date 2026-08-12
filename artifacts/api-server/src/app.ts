@@ -32,6 +32,7 @@ import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
   getClerkProxyHost,
+  getClerkProxyUrl,
 } from "./middlewares/clerkProxyMiddleware";
 import { requireInternalPublishAdapter } from "./middlewares/internalPublishAdapterMiddleware";
 import { persistInternalPublishAdapterReceipts } from "./middlewares/internalPublishReceiptMiddleware";
@@ -104,12 +105,20 @@ app.use(
 );
 
 app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
+  clerkMiddleware((req) => {
+    const publishableKey = publishableKeyFromHost(
       getClerkProxyHost(req) ?? "",
       process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
+    );
+    const proxyUrl = publishableKey.startsWith("pk_live_")
+      ? getClerkProxyUrl(req)
+      : undefined;
+
+    return {
+      publishableKey,
+      ...(proxyUrl ? { proxyUrl } : {}),
+    };
+  }),
 );
 
 // Clerk OAuth is the user identity boundary for Apollos MCP. The route performs

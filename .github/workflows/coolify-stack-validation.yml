@@ -101,6 +101,8 @@ jobs:
       - run: pnpm --filter @workspace/ai-edge-solutions run build
       - name: Validate Compose rendering
         run: docker compose -f docker-compose.coolify.yml config >/tmp/coolify-compose.yml
+      - name: Validate production Nginx config
+        run: docker run --rm --add-host api:127.0.0.1 -v "$PWD/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:1.27-alpine nginx -t
       - name: Build production images
         run: docker compose -f docker-compose.coolify.yml build
       - name: Apollos core runtime preflight

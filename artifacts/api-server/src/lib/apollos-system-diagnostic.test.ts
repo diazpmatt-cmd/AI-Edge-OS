@@ -5,6 +5,7 @@ import {
 } from "./apollos-system-diagnostic.js";
 
 const originalEnv = { ...process.env };
+const MAIN_SHA = "a".repeat(40);
 
 function healthyReaders(
   overrides: Partial<ApollosSystemDiagnosticReaders> = {},
@@ -12,10 +13,15 @@ function healthyReaders(
   return {
     github: vi.fn(async () => ({
       repository: { fullName: "diazpmatt-cmd/AI-Edge-OS", defaultBranch: "main", archived: false, disabled: false },
+      head: {
+        sha: MAIN_SHA,
+        message: "Merge control-plane visibility",
+        committedAt: "2026-08-12T00:10:00Z",
+      },
       combinedStatus: { state: "success" },
       counts: { openPullRequests: 1, workflowRuns: 3 },
       recentCommits: [{
-        sha: "a".repeat(40),
+        sha: MAIN_SHA,
         message: "Merge control-plane visibility",
         committedAt: "2026-08-12T00:10:00Z",
       }],
@@ -44,6 +50,12 @@ function healthyReaders(
         cacheHitRatioPercent: 99.8,
       },
     })),
+    runtime: vi.fn(async () => ({
+      commit: MAIN_SHA,
+      branch: "main",
+      resource: "production-resource",
+      builtAt: "2026-08-12T00:05:00Z",
+    })),
     ...overrides,
   };
 }
@@ -66,9 +78,10 @@ describe("getApollosSystemDiagnostic", () => {
     expect(readers.hetzner).not.toHaveBeenCalled();
     expect(readers.clerk).not.toHaveBeenCalled();
     expect(readers.postgres).not.toHaveBeenCalled();
+    expect(readers.runtime).not.toHaveBeenCalled();
   });
 
-  it("answers the four operator questions when the control plane is healthy", async () => {
+  it("answers the four operator questions when the control plane and deployed image are healthy", async () => {
     const readers = healthyReaders();
     const result = await getApollosSystemDiagnostic("clerk-admin", readers);
 
@@ -87,9 +100,21 @@ describe("getApollosSystemDiagnostic", () => {
       authority: "apollos",
       confidence: "confirmed",
     });
-    expect(result.whatApollosVerified).toHaveLength(5);
+    expect(result.whatApollosVerified).toHaveLength(6);
     expect(result.whatApollosVerified).toEqual(expect.arrayContaining([
       expect.stringContaining("postgres:"),
+      expect.stringContaining("runtime:"),
+    ]));
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "runtime",
+        state: "healthy",
+        confidence: "confirmed",
+        evidence: expect.arrayContaining([
+          `deployedCommit=${MAIN_SHA}`,
+          `githubHead=${MAIN_SHA}`,
+        ]),
+      }),
     ]));
     expect(result.humanOnlyActions).toEqual([]);
     for (const reader of Object.values(readers)) {
@@ -227,6 +252,76 @@ describe("getApollosSystemDiagnostic", () => {
     ]));
   });
 
+  it("detects a healthy-but-stale production image as deployment drift without granting deployment authority", async () => {
+    const deployedSha = "b".repeat(40);
+    const readers = healthyReaders({
+      runtime: vi.fn(async () => ({
+        commit: deployedSha,
+        branch: "main",
+        resource: "production-resource",
+        builtAt: "unknown",
+      })),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("degraded");
+    expect(result.whatIsBroken).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "runtime",
+        severity: "medium",
+        code: "APOLLOS_RUNTIME_DEPLOYMENT_DRIFT",
+        confidence: "confirmed",
+      }),
+    ]));
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "runtime",
+        state: "degraded",
+        evidence: expect.arrayContaining([
+          `deployedCommit=${deployedSha}`,
+          `githubHead=${MAIN_SHA}`,
+        ]),
+      }),
+    ]));
+    expect(result.highestRoiNextAction).toMatchObject({
+      provider: "runtime",
+      authority: "operator",
+      canApollosExecuteNow: false,
+      confidence: "confirmed",
+    });
+    expect(result.highestRoiNextAction.action).toContain("Coolify deployment runbook");
+  });
+
+  it("reports unknown deployment parity instead of guessing when the runtime SHA is missing", async () => {
+    const readers = healthyReaders({
+      runtime: vi.fn(async () => ({
+        commit: "unknown",
+        branch: "main",
+        resource: "production-resource",
+        builtAt: "unknown",
+      })),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("incomplete");
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "runtime",
+        state: "unknown",
+        confidence: "unknown",
+        reasonCode: "APOLLOS_RUNTIME_COMMIT_UNKNOWN",
+      }),
+    ]));
+    expect(result.highestRoiNextAction).toMatchObject({
+      provider: null,
+      authority: "apollos",
+      canApollosExecuteNow: true,
+      confidence: "unknown",
+    });
+  });
+
   it("reports provider authorization failures as confirmed broken evidence without leaking raw exceptions", async () => {
     const readers = healthyReaders({
       github: vi.fn(async () => { throw new Error("APOLLOS_MCP_GITHUB_AUTH_FAILED"); }),
@@ -238,6 +333,7 @@ describe("getApollosSystemDiagnostic", () => {
     expect(result.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({ provider: "github", state: "broken", reasonCode: "APOLLOS_MCP_GITHUB_AUTH_FAILED" }),
       expect.objectContaining({ provider: "coolify", state: "unknown", reasonCode: "APOLLOS_MCP_CONTROL_PLANE_UNKNOWN" }),
+      expect.objectContaining({ provider: "runtime", state: "unknown", reasonCode: "APOLLOS_RUNTIME_GITHUB_HEAD_UNKNOWN" }),
     ]));
     expect(JSON.stringify(result)).not.toContain("secret material");
   });

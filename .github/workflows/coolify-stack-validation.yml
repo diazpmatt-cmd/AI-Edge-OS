@@ -74,6 +74,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck:libs
       - run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/scheduler-enabled.test.ts src/__tests__/dab-planner-worker-config.test.ts src/__tests__/dab-runtime-status.test.ts src/__tests__/apollos-capabilities.test.ts src/__tests__/apollos-weekly-campaign.test.ts src/__tests__/apollos-weekly-approval.test.ts src/__tests__/apollos-weekly-execution.test.ts src/__tests__/apollos-diagnostics.test.ts src/__tests__/apollos-repair-planner.test.ts src/__tests__/apollos-repair-approval.test.ts src/__tests__/apollos-repair-execution.test.ts src/__tests__/apollos-repair-runner.test.ts src/__tests__/apollos-repair-worker-config.test.ts src/__tests__/apollos-repair-adapters.test.ts src/__tests__/apollos-repair-adapter-status.test.ts src/__tests__/apollos-upstream-probe.test.ts src/__tests__/dab-agent-worker-config.test.ts src/__tests__/dab-trusted-context.test.ts src/__tests__/dab-approval-policy.test.ts src/__tests__/dab-preparation-policy.test.ts src/__tests__/dab-git-apply-policy.test.ts src/__tests__/dab-git-apply-handler.test.ts src/__tests__/dab-git-commit-handler.test.ts src/__tests__/dab-git-push-pr-handler.test.ts src/__tests__/dab-ci-reconciliation.test.ts src/__tests__/dab-git-merge-handler.test.ts src/__tests__/dab-engineering-milestone-recorder.test.ts src/__tests__/dab-post-merge-verification.test.ts src/__tests__/dab-autonomous-engineering-chain.test.ts src/__tests__/dab-git-worker-config.test.ts src/__tests__/dab-github-transport-adapter.test.ts src/__tests__/dab-publishing-policy.test.ts src/lib/apollos-client-access-policy.test.ts src/lib/apollos-client-mcp-auth.test.ts src/lib/apollos-client-mcp-handler.test.ts src/lib/apollos-client-mcp.test.ts src/lib/apollos-client-mcp-access-level.test.ts src/lib/backlink-opportunity-intelligence.test.ts src/lib/backlink-workflow-human-action.test.ts src/lib/backlink-workflow-patch.test.ts src/lib/authority-outreach-draft.test.ts src/lib/authority-outreach-draft-lifecycle.test.ts src/lib/authority-outreach-draft-store.integration.test.ts src/lib/authority-target-contact-lifecycle.test.ts src/lib/authority-target-contact-store.integration.test.ts src/lib/authority-outreach-readiness.test.ts src/lib/backlink-workflow-win-evidence-policy.test.ts src/lib/authority-backlink-win-evidence-store.integration.test.ts
+      - name: Test Apollos control-plane behavior
+        working-directory: artifacts/api-server
+        run: |
+          pnpm exec vitest run \
+            src/lib/apollos-admin-access-policy.test.ts \
+            src/lib/apollos-github-mcp-extension.test.ts \
+            src/lib/apollos-github-readonly.test.ts \
+            src/lib/apollos-coolify-mcp-extension.test.ts \
+            src/lib/apollos-coolify-readonly.test.ts \
+            src/lib/apollos-clerk-instance-diagnostics-mcp.test.ts \
+            src/lib/apollos-clerk-instance-diagnostics.test.ts \
+            src/lib/apollos-control-plane-mcp.test.ts \
+            src/lib/apollos-postgres-readonly.test.ts \
+            src/lib/apollos-runtime-readiness.test.ts \
+            src/lib/apollos-system-diagnostic-mcp.test.ts \
+            src/lib/apollos-system-diagnostic.test.ts \
+            src/lib/apollos-system-repair-proposal-mcp.test.ts \
+            src/lib/apollos-system-repair-proposal.test.ts
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/ai-edge-solutions run build
       - name: Validate Compose rendering

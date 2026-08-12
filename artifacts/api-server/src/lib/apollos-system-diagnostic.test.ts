@@ -172,6 +172,32 @@ describe("getApollosSystemDiagnostic", () => {
     expect(result.highestRoiNextAction.provider).toBe("postgres");
   });
 
+  it("treats active Postgres recovery mode as degradation", async () => {
+    const readers = healthyReaders({
+      postgres: vi.fn(async () => ({
+        database: { name: "aiedge", inRecovery: true },
+        connections: { applicationPool: { total: 5, idle: 5, waiting: 0 } },
+        workload: {
+          deadlocks: 0,
+          rollbackRatioPercent: 0.2,
+          cacheHitRatioPercent: 99.8,
+        },
+      })),
+    });
+
+    const result = await getApollosSystemDiagnostic("clerk-admin", readers);
+
+    expect(result.overallState).toBe("degraded");
+    expect(result.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "postgres",
+        state: "degraded",
+        evidence: expect.arrayContaining(["inRecovery=true"]),
+      }),
+    ]));
+    expect(result.highestRoiNextAction.provider).toBe("postgres");
+  });
+
   it("keeps cumulative Postgres counters as evidence instead of treating old history as a live outage", async () => {
     const readers = healthyReaders({
       postgres: vi.fn(async () => ({

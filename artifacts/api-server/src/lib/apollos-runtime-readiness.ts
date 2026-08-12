@@ -36,8 +36,7 @@ export function getApollosRuntimeReadiness(
 ): ApollosRuntimeReadiness {
   requireAdmin(actorUserId);
 
-  const githubRepositoryConfigured = present(env.APOLLOS_GITHUB_REPOSITORY)
-    || env.NODE_ENV === "production";
+  const githubRepositoryConfigured = present(env.APOLLOS_GITHUB_REPOSITORY);
   const coolifyConfigured = present(env.APOLLOS_COOLIFY_BASE_URL)
     && present(env.APOLLOS_COOLIFY_READ_TOKEN);
   const hetznerConfigured = present(env.HETZNER_API_TOKEN);

@@ -52,6 +52,40 @@ export function getClerkProxyHost(req: {
   return firstHop || req.headers.host?.trim() || undefined;
 }
 
+/**
+ * Returns the original public request protocol. Coolify terminates TLS before
+ * the request reaches the web/API containers, so the immediate socket is HTTP
+ * even though the browser is on HTTPS. Clerk production proxy validation must
+ * receive the public HTTPS scheme, not the internal container hop.
+ */
+export function getClerkProxyProtocol(req: {
+  headers: IncomingHttpHeaders;
+}): "http" | "https" {
+  const forwarded = req.headers["x-forwarded-proto"];
+  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const firstHop = raw?.split(",")[0]?.trim().toLowerCase();
+
+  if (firstHop === "http" || firstHop === "https") {
+    return firstHop;
+  }
+
+  // Production Clerk proxying requires HTTPS. Falling back to HTTPS is safer
+  // than manufacturing an internal http:// public proxy URL when an upstream
+  // omitted the forwarding header.
+  return "https";
+}
+
+export function getClerkProxyUrl(req: {
+  headers: IncomingHttpHeaders;
+}): string | undefined {
+  const host = getClerkProxyHost(req);
+  if (!host) {
+    return undefined;
+  }
+
+  return `${getClerkProxyProtocol(req)}://${host}${CLERK_PROXY_PATH}`;
+}
+
 export function clerkProxyMiddleware(): RequestHandler {
   // Only run proxy in production — Clerk proxying doesn't work for dev instances
   if (process.env.NODE_ENV !== "production") {
@@ -70,11 +104,10 @@ export function clerkProxyMiddleware(): RequestHandler {
       path.replace(new RegExp(`^${CLERK_PROXY_PATH}`), ""),
     on: {
       proxyReq: (proxyReq, req) => {
-        const protocol = req.headers["x-forwarded-proto"] || "https";
-        const host = getClerkProxyHost(req) || "";
-        const proxyUrl = `${protocol}://${host}${CLERK_PROXY_PATH}`;
-
-        proxyReq.setHeader("Clerk-Proxy-Url", proxyUrl);
+        const proxyUrl = getClerkProxyUrl(req);
+        if (proxyUrl) {
+          proxyReq.setHeader("Clerk-Proxy-Url", proxyUrl);
+        }
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
 
         const xff = req.headers["x-forwarded-for"];

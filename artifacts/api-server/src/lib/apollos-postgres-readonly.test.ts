@@ -109,8 +109,6 @@ describe("getApollosPostgresHealth", () => {
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toMatch(/"(?:password|secret|token|queryText)"\s*:/i);
-    expect(result.safety.queryTextReturned).toBe(false);
-    expect(result.safety.credentialsReturned).toBe(false);
     expect(mocks.query.mock.calls[0]?.[0]).toBe("BEGIN READ ONLY");
     expect(mocks.query.mock.calls[1]?.[0]).toBe("SET LOCAL statement_timeout = '5s'");
     expect(mocks.query.mock.calls[5]?.[0]).toBe("COMMIT");

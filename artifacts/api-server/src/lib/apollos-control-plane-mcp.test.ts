@@ -2,17 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => {
   const query = vi.fn();
+  const poolQuery = vi.fn(async () => ({ rows: [] }));
   const release = vi.fn();
   const connect = vi.fn(async () => ({ query, release }));
   return {
     query,
+    poolQuery,
     release,
     connect,
-    pool: { connect, totalCount: 1, idleCount: 1, waitingCount: 0 },
+    pool: { connect, query: poolQuery, totalCount: 1, idleCount: 1, waitingCount: 0 },
+    db: {},
   };
 });
 
-vi.mock("@workspace/db", () => ({ pool: dbMocks.pool }));
+vi.mock("@workspace/db", () => ({ pool: dbMocks.pool, db: dbMocks.db }));
 
 import {
   APOLLOS_CONTROL_PLANE_MCP_TOOLS,

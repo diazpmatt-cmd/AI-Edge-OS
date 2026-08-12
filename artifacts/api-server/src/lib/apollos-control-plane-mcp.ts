@@ -4,7 +4,7 @@ import { getApollosClerkInstanceDiagnostics } from "./apollos-clerk-readonly.js"
 import { getApollosPostgresHealth } from "./apollos-postgres-readonly.js";
 import { getApollosRuntimeReadiness } from "./apollos-runtime-readiness.js";
 import { getApollosSystemDiagnostic } from "./apollos-system-diagnostic.js";
-import { getApollosSystemRepairProposal } from "./apollos-system-system-repair-proposal.js";
+import { getApollosSystemRepairProposal } from "./apollos-system-repair-proposal.js";
 import {
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,

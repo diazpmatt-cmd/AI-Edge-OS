@@ -41,8 +41,9 @@ describe("getApollosPostgresHealth", () => {
     expect(mocks.connect).not.toHaveBeenCalled();
   });
 
-  it("returns operational statistics without customer rows, query text, or credentials", async () => {
+  it("returns operational statistics inside a transaction-local read-only inspection", async () => {
     mocks.query
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [{
@@ -69,7 +70,8 @@ describe("getApollosPostgresHealth", () => {
           temp_files: "2",
           deadlocks: "0",
         }],
-      });
+      })
+      .mockResolvedValueOnce({ rows: [] });
 
     const result = await getApollosPostgresHealth("clerk-admin");
 
@@ -98,23 +100,33 @@ describe("getApollosPostgresHealth", () => {
       },
       safety: {
         readOnlyInspection: true,
+        transactionReadOnly: true,
+        transactionLocalTimeout: true,
         customerRowsRead: false,
         queryTextReturned: false,
         credentialsReturned: false,
       },
     });
     expect(JSON.stringify(result)).not.toMatch(/password|secret|token|queryText/i);
+    expect(mocks.query.mock.calls[0]?.[0]).toBe("BEGIN READ ONLY");
+    expect(mocks.query.mock.calls[1]?.[0]).toBe("SET LOCAL statement_timeout = '5s'");
+    expect(mocks.query.mock.calls[5]?.[0]).toBe("COMMIT");
     expect(mocks.release).toHaveBeenCalledOnce();
-    expect(mocks.query).toHaveBeenCalledTimes(4);
+    expect(mocks.query).toHaveBeenCalledTimes(6);
   });
 
-  it("releases the connection and returns a bounded error when a health query fails", async () => {
+  it("rolls back, releases the connection, and returns a bounded error when a health query fails", async () => {
     mocks.query
       .mockResolvedValueOnce({ rows: [] })
-      .mockRejectedValueOnce(new Error("password=must-not-leak"));
+      .mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("password=must-not-leak"))
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
 
     await expect(getApollosPostgresHealth("clerk-admin"))
       .rejects.toThrow("APOLLOS_MCP_POSTGRES_UNAVAILABLE");
+    expect(mocks.query.mock.calls.at(-1)?.[0]).toBe("ROLLBACK");
     expect(mocks.release).toHaveBeenCalledOnce();
   });
 

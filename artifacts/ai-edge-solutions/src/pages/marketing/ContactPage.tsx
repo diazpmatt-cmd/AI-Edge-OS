@@ -136,7 +136,7 @@ export default function ContactPage() {
             Thanks, {form.firstName}. We've received your request and will contact you within 1 business day to schedule your free strategy call.
           </p>
           <p style={{ fontSize: 15, color: "#4B5563" }}>
-            Check your email at <span style={{ color: "#00AEEF" }}>{form.email}</span> for a confirmation.
+            We received the contact details you submitted and will use them to follow up.
           </p>
         </div>
         <Footer />

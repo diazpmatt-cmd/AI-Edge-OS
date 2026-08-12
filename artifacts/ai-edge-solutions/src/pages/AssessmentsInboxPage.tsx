@@ -50,14 +50,6 @@ function opportunityLevel(score: number | null): { label: string; color: string 
   return            { label: "Low",    color: "#94A3B8" };
 }
 
-function revenuePotential(score: number | null): string {
-  const s = score ?? 0;
-  if (s < 35) return "$2,400–$3,600/mo";
-  if (s < 55) return "$1,200–$2,400/mo";
-  if (s < 70) return "$800–$1,500/mo";
-  return "$600–$1,200/mo";
-}
-
 function scoreColor(n: number | null) {
   const v = n ?? 0;
   if (v >= 70) return "#22C55E";
@@ -134,7 +126,9 @@ export default function AssessmentsInboxPage() {
   const callsBooked = leads.filter(l => l.status === "strategy_call_booked").length;
   const won      = leads.filter(l => l.status === "won").length;
   const convRate = total > 0 ? Math.round((won / total) * 100) : 0;
-  const pipelineVal = leads.filter(l => !["won","lost"].includes(l.status)).length * 1200;
+  const activeLeads = leads.filter(l => !["won","lost"].includes(l.status)).length;
+  const qualified = leads.filter(l => l.status === "qualified").length;
+  const proposalsSent = leads.filter(l => l.status === "proposal_sent").length;
 
   // ── Patch helpers ──
   async function patchLead(id: string, patch: { status?: string; notes?: string }) {
@@ -169,11 +163,6 @@ export default function AssessmentsInboxPage() {
     setEditingNotes(false);
   }
 
-  // ── Revenue forecast tiers ──
-  const highPipe   = leads.filter(l => (l.scoreOverall ?? 100) < 45 && !["won","lost"].includes(l.status)).length;
-  const medPipe    = leads.filter(l => (l.scoreOverall ?? 100) >= 45 && (l.scoreOverall ?? 100) < 65 && !["won","lost"].includes(l.status)).length;
-  const lowPipe    = leads.filter(l => (l.scoreOverall ?? 100) >= 65 && !["won","lost"].includes(l.status)).length;
-
   return (
     <AppShell>
       <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", color: "#FFFFFF" }}>
@@ -203,7 +192,7 @@ export default function AssessmentsInboxPage() {
             { icon: "🆕", label: "New Leads",              value: String(newLeads),        color: "#22C55E" },
             { icon: "📅", label: "Strategy Calls Booked",  value: String(callsBooked),     color: "#06B6D4" },
             { icon: "🎯", label: "Conversion Rate",        value: `${convRate}%`,           color: "#3B82F6" },
-            { icon: "💰", label: "Revenue Pipeline",       value: `$${(pipelineVal).toLocaleString()}`, color: "#F59E0B" },
+            { icon: "📋", label: "Active Leads",           value: String(activeLeads),      color: "#F59E0B" },
           ].map(card => (
             <div key={card.label} style={{
               background: "linear-gradient(160deg, rgba(11,22,41,0.98), rgba(3,6,18,0.9))",
@@ -254,7 +243,7 @@ export default function AssessmentsInboxPage() {
                 background: "rgba(0,174,239,0.04)",
                 borderBottom: "1px solid rgba(255,255,255,0.05)",
               }}>
-                {["Business", "Contact", "Industry", "Score", "Opportunity", "Revenue Est.", "Status", "Date"].map(h => (
+                {["Business", "Contact", "Industry", "Score", "Form Estimate", "Contact Method", "Status", "Date"].map(h => (
                   <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px" }}>{h}</div>
                 ))}
               </div>
@@ -298,7 +287,7 @@ export default function AssessmentsInboxPage() {
                     <div style={{ alignSelf: "center" }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: opp.color, background: `${opp.color}15`, border: `1px solid ${opp.color}30`, padding: "2px 8px", borderRadius: 12 }}>{opp.label}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#475569", alignSelf: "center" }}>{revenuePotential(lead.scoreOverall)}</div>
+                    <div style={{ fontSize: 11, color: "#64748B", alignSelf: "center", textTransform: "capitalize" }}>{lead.contactMethod || "Not provided"}</div>
                     <div style={{ alignSelf: "center" }}>
                       <span style={{ fontSize: 10, fontWeight: 800, color: sc.color, background: sc.bg, padding: "3px 8px", borderRadius: 12, whiteSpace: "nowrap" }}>{sc.label}</span>
                     </div>
@@ -308,14 +297,14 @@ export default function AssessmentsInboxPage() {
               })}
             </div>
 
-            {/* Revenue Forecast */}
-            <SectionHeader icon="💰" title="Revenue Forecast" mt={28} />
+            {/* Lead-stage counts */}
+            <SectionHeader icon="📊" title="Lead Stage Snapshot" mt={28} />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
               {[
-                { label: "High Probability Pipeline",   value: `$${(highPipe * 2400).toLocaleString()}`,  color: "#22C55E", sub: `${highPipe} leads · Score < 45` },
-                { label: "Medium Probability Pipeline",  value: `$${(medPipe * 1500).toLocaleString()}`,   color: "#F59E0B", sub: `${medPipe} leads · Score 45–65` },
-                { label: "Low Probability Pipeline",     value: `$${(lowPipe * 900).toLocaleString()}`,    color: "#F97316", sub: `${lowPipe} leads · Score 65+`  },
-                { label: "Total Pipeline",               value: `$${(highPipe*2400+medPipe*1500+lowPipe*900).toLocaleString()}`, color: "#00AEEF", sub: "All active opportunities" },
+                { label: "New", value: String(newLeads), color: "#3B82F6", sub: "Awaiting first pipeline action" },
+                { label: "Qualified", value: String(qualified), color: "#F59E0B", sub: "Marked qualified" },
+                { label: "Proposals Sent", value: String(proposalsSent), color: "#F97316", sub: "Marked proposal sent" },
+                { label: "Won", value: String(won), color: "#22C55E", sub: "Marked won" },
               ].map(fc => (
                 <div key={fc.label} style={{
                   background: `${fc.color}06`, border: `1px solid ${fc.color}20`, borderRadius: 12, padding: "16px 14px",
@@ -327,20 +316,20 @@ export default function AssessmentsInboxPage() {
               ))}
             </div>
 
-            {/* Smart Insights */}
-            <SectionHeader icon="✨" title="AI Edge Smart Insights" mt={24} />
+            {/* Truthful pipeline summary */}
+            <SectionHeader icon="📋" title="Pipeline Summary" mt={24} />
             <div style={{
               background: "linear-gradient(160deg, rgba(11,22,41,0.9), rgba(3,6,18,0.8))",
               border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: "20px 20px",
               display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
             }}>
               {[
-                { icon: "✨", text: "67% of leads have weak AI visibility (score < 45)", color: "#3B82F6" },
-                { icon: "🍎", text: "52% of leads missing Apple Business Connect",       color: "#00AEEF" },
-                { icon: "📋", text: "71% of leads missing schema markup",                color: "#F59E0B" },
-                { icon: "🏆", text: "Highest converting industry: Home Services",        color: "#22C55E" },
-                { icon: "📍", text: "58% have no Bing Places listing verified",          color: "#F97316" },
-                { icon: "⭐", text: "Low review velocity detected in 44% of leads",      color: "#EF4444" },
+                { icon: "🆕", text: `${newLeads} assessment${newLeads === 1 ? "" : "s"} marked new`, color: "#3B82F6" },
+                { icon: "✅", text: `${qualified} assessment${qualified === 1 ? "" : "s"} marked qualified`, color: "#F59E0B" },
+                { icon: "📅", text: `${callsBooked} strategy call${callsBooked === 1 ? "" : "s"} booked`, color: "#06B6D4" },
+                { icon: "📨", text: `${proposalsSent} proposal${proposalsSent === 1 ? "" : "s"} sent`, color: "#F97316" },
+                { icon: "🏆", text: `${won} assessment${won === 1 ? "" : "s"} marked won`, color: "#22C55E" },
+                { icon: "📋", text: `${activeLeads} active assessment${activeLeads === 1 ? "" : "s"} remain in progress`, color: "#00AEEF" },
               ].map((ins, i) => (
                 <div key={i} style={{
                   display: "flex", alignItems: "flex-start", gap: 10,
@@ -388,7 +377,7 @@ export default function AssessmentsInboxPage() {
                 </DetailSection>
 
                 {/* Assessment Scores */}
-                <DetailSection title="Assessment Scores">
+                <DetailSection title="Form-Based Assessment Scores">
                   {[
                     { label: "Overall Score",     value: selected.scoreOverall },
                     { label: "Lead Recovery",     value: selected.scoreLeadRecovery },
@@ -408,13 +397,13 @@ export default function AssessmentsInboxPage() {
                   ))}
                 </DetailSection>
 
-                {/* Opportunity Metrics */}
-                <DetailSection title="Opportunity Metrics">
+                {/* Verification status */}
+                <DetailSection title="Verification Status">
                   {[
-                    { label: "Revenue Recovery",      value: "Estimate pending", color: "#22C55E" },
-                    { label: "AI Edge Visibility",    value: "Estimate pending", color: "#3B82F6" },
-                    { label: "Local Visibility",      value: "Estimate pending", color: "#00AEEF" },
-                    { label: "Lead Conversion",       value: "Estimate pending", color: "#F59E0B" },
+                    { label: "Website", value: selected.websiteUrl ? "URL submitted" : "Not provided", color: "#22C55E" },
+                    { label: "Google Business Profile", value: selected.gbpUrl ? "URL submitted" : "Not provided", color: "#3B82F6" },
+                    { label: "Facebook", value: selected.facebookUrl ? "URL submitted" : "Not provided", color: "#00AEEF" },
+                    { label: "Instagram", value: selected.instagramUrl ? "URL submitted" : "Not provided", color: "#F59E0B" },
                   ].map(op => (
                     <div key={op.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontSize: 12, color: "#64748B" }}>{op.label}</span>
@@ -423,22 +412,10 @@ export default function AssessmentsInboxPage() {
                   ))}
                 </DetailSection>
 
-                {/* Pain Points */}
-                <DetailSection title="Pain Points">
-                  {[
-                    !selected.gbpUrl      && "Missing Google Business Profile",
-                    "Apple Business Connect not claimed",
-                    "Bing Places not verified",
-                    "Weak AI search visibility",
-                    "Missing schema markup",
-                    "Low review velocity",
-                    !selected.websiteUrl  && "No website detected",
-                  ].filter(Boolean).slice(0, 5).map((pt, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                      <span style={{ color: "#EF4444", fontSize: 11 }}>✕</span>
-                      <span style={{ fontSize: 12, color: "#94A3B8" }}>{pt as string}</span>
-                    </div>
-                  ))}
+                <DetailSection title="Evidence Boundary">
+                  <p style={{ fontSize: 12, color: "#94A3B8", lineHeight: 1.6, margin: 0 }}>
+                    Scores are preliminary and form-derived. Provider listings, reviews, citations, schema, rankings, and AI visibility require separate live verification.
+                  </p>
                 </DetailSection>
 
                 {/* Pipeline Actions */}

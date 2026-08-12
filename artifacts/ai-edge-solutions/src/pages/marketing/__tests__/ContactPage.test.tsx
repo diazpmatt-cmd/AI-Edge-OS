@@ -47,6 +47,8 @@ describe("ContactPage — form submission", () => {
     });
 
     expect(screen.queryByText(/Submission failed/i)).toBeNull();
+    expect(screen.getByText(/We received the contact details you submitted/i)).toBeTruthy();
+    expect(screen.queryByText(/Check your email/i)).toBeNull();
   });
 
   it("shows the error banner and NOT the success screen on a network failure", async () => {

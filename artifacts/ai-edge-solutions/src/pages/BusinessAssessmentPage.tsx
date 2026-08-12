@@ -18,12 +18,12 @@ type Scores = {
 };
 
 const LOADING_MESSAGES = [
-  "Scanning business presence...",
-  "Checking local visibility...",
-  "Analyzing AI discoverability...",
-  "Evaluating competitor positioning...",
-  "Running growth opportunity analysis...",
-  "Generating AI Edge assessment...",
+  "Reviewing the information you provided...",
+  "Calculating preliminary form-based estimates...",
+  "Organizing your submitted business details...",
+  "Preparing suggested follow-up topics...",
+  "Saving your assessment request...",
+  "Preparing your preliminary assessment...",
 ];
 
 const INDUSTRIES = [
@@ -133,6 +133,9 @@ export default function BusinessAssessmentPage() {
   const [loadingPct, setLoadingPct] = useState(0);
   const [scores, setScores] = useState<Scores | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const submissionInFlightRef = useRef(false);
+  const submissionSucceededRef = useRef(false);
   const resultsRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState<FormData>({
@@ -158,19 +161,37 @@ export default function BusinessAssessmentPage() {
     const timer = setTimeout(async () => {
       clearInterval(pctInterval);
       clearInterval(msgInterval);
+      if (submissionInFlightRef.current || submissionSucceededRef.current) return;
+
       const computed = computeScores(form);
       setScores(computed);
-      // Save to API (fire-and-forget, no auth required)
+      submissionInFlightRef.current = true;
+      setSubmitting(true);
+      setSubmissionError(null);
+
       try {
         const base = import.meta.env.BASE_URL ?? "/";
-        await fetch(`${base}api/assessments`, {
+        const response = await fetch(`${base}api/assessments`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, ...{ scoreOverall: computed.overall, scoreLeadRecovery: computed.leadRecovery, scoreLocalPresence: computed.localPresence, scoreAiVisibility: computed.aiVisibility, scoreReviewStrength: computed.reviewStrength } }),
         });
-      } catch { /* non-blocking */ }
-      setPhase("results");
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+
+        if (!response.ok) {
+          throw new Error(`Assessment request failed (${response.status})`);
+        }
+
+        submissionSucceededRef.current = true;
+        setPhase("results");
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      } catch {
+        setSubmissionError("We couldn't save your assessment. Your information is still here—please try again.");
+        setStep(3);
+        setPhase("form");
+      } finally {
+        submissionInFlightRef.current = false;
+        setSubmitting(false);
+      }
     }, 4200);
     return () => { clearInterval(pctInterval); clearInterval(msgInterval); clearTimeout(timer); };
   }, [phase]);
@@ -181,7 +202,8 @@ export default function BusinessAssessmentPage() {
 
   function handleNext() {
     if (step < 3) setStep(s => s + 1);
-    else {
+    else if (!submitting && !submissionInFlightRef.current && !submissionSucceededRef.current) {
+      setSubmissionError(null);
       setPhase("loading");
       setLoadingPct(0);
       setLoadingMsgIdx(0);
@@ -210,7 +232,7 @@ export default function BusinessAssessmentPage() {
               <span style={{ color: "#00AEEF", textShadow: "0 0 28px rgba(0,174,239,0.4)" }}>Losing Revenue</span>
             </h1>
             <p style={{ fontSize: 16, color: "#6B7280", lineHeight: 1.7, maxWidth: 500, margin: "0 auto" }}>
-              Get an instant AI-powered report showing your Lead Recovery Score, Local Edge Presence, AI Edge Visibility, and exactly what to fix first.
+              Get a preliminary, form-based estimate of your lead recovery and online-presence opportunities.
             </p>
           </div>
 
@@ -283,7 +305,7 @@ export default function BusinessAssessmentPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div style={{ marginBottom: 4 }}>
                   <h2 style={{ fontSize: 20, fontWeight: 800, color: "#FFFFFF", margin: "0 0 4px" }}>Online Presence</h2>
-                  <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>These help us detect visibility gaps. All fields optional but improve accuracy.</p>
+                  <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>These optional links improve the form-based estimate; no live provider checks run here.</p>
                 </div>
                 <Field label="Website URL">
                   <Input type="url" value={form.websiteUrl} onChange={e => set("websiteUrl", e.target.value)} placeholder="https://yourbusiness.com" />
@@ -302,7 +324,7 @@ export default function BusinessAssessmentPage() {
                   borderRadius: 10, padding: "12px 14px",
                   fontSize: 12, color: "#64748B", lineHeight: 1.5,
                 }}>
-                  💡 No Google Business Profile? That's a major discovery gap — our assessment will highlight exactly what you're missing.
+                  💡 Add a Google Business Profile URL if you have one. A missing URL means only that it was not supplied here, not that the listing was checked.
                 </div>
               </div>
             )}
@@ -312,7 +334,7 @@ export default function BusinessAssessmentPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 <div style={{ marginBottom: 4 }}>
                   <h2 style={{ fontSize: 20, fontWeight: 800, color: "#FFFFFF", margin: "0 0 4px" }}>Contact Information</h2>
-                  <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>We'll send your assessment report and can walk you through it on a free strategy call.</p>
+                  <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>We'll save your request before showing the preliminary assessment, and can review it with you on a free strategy call.</p>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <Field label="Your Name" required>
@@ -350,6 +372,14 @@ export default function BusinessAssessmentPage() {
                 }}>
                   🔒 Your information is never shared. AI Edge uses it only to deliver your personalized assessment and follow-up strategy.
                 </div>
+                {submissionError && (
+                  <div role="alert" style={{
+                    background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)",
+                    borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#FCA5A5", lineHeight: 1.5,
+                  }}>
+                    {submissionError}
+                  </div>
+                )}
               </div>
             )}
 
@@ -364,7 +394,7 @@ export default function BusinessAssessmentPage() {
 
               <button
                 onClick={handleNext}
-                disabled={step === 1 ? !canAdvance1 : step === 3 ? !canSubmit : false}
+                disabled={submitting || (step === 1 ? !canAdvance1 : step === 3 ? !canSubmit : false)}
                 style={{
                   padding: "12px 32px", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer",
                   background: (step === 1 ? !canAdvance1 : step === 3 ? !canSubmit : false) ? "rgba(0,174,239,0.2)" : "linear-gradient(135deg, #00AEEF, #0080C0)",
@@ -374,7 +404,7 @@ export default function BusinessAssessmentPage() {
                   transition: "all 0.2s",
                 }}
               >
-                {step < 3 ? "Continue →" : "🚀 Run My Assessment"}
+                 {step < 3 ? "Continue →" : submissionError ? "Retry Assessment" : "🚀 Run My Assessment"}
               </button>
             </div>
           </div>
@@ -433,7 +463,7 @@ export default function BusinessAssessmentPage() {
             Analyzing {form.businessName || "Your Business"}
           </h2>
           <p style={{ fontSize: 14, color: "#475569", marginBottom: 36 }}>
-            Running 6 AI diagnostic modules...
+            Calculating a preliminary estimate from your form responses...
           </p>
 
           {/* Rotating message */}
@@ -468,16 +498,12 @@ export default function BusinessAssessmentPage() {
   const overallLabel = scores.overall >= 70 ? "Good Foundation" : scores.overall >= 50 ? "Growth Opportunity Detected" : "Significant Growth Potential";
   const overallColor = scores.overall >= 70 ? "#22C55E" : scores.overall >= 50 ? "#F59E0B" : "#EF4444";
 
-  const PAIN_POINTS = [
-    { issue: "Apple Business Connect not claimed",        severity: "critical", impact: "Siri and Apple Maps discoveries blocked"         },
-    { issue: "Bing Places not verified",                  severity: "critical", impact: "Bing Copilot and Microsoft AI blind spot"         },
-    { issue: "Nextdoor Business page missing",            severity: "high",     impact: "Missing hyperlocal neighbor discovery"           },
-    { issue: "Weak AI search visibility",                 severity: "critical", impact: "ChatGPT, Perplexity not recommending business"   },
-    ...(!form.gbpUrl ? [{ issue: "Google Business Profile not verified",  severity: "critical", impact: "Major local SEO and Google AI ranking gap" }] : []),
-    { issue: "Low review velocity",                       severity: "high",     impact: "Competitors winning trust with more reviews"     },
-    { issue: "Weak citation authority",                   severity: "high",     impact: "AI engines can't verify business legitimacy"    },
-    { issue: "Missing schema markup",                     severity: "medium",   impact: "AI systems can't parse services and location"   },
-    { issue: `No ${form.city}-specific landing pages`,    severity: "medium",   impact: "Losing high-intent local search traffic"        },
+  const FORM_OBSERVATIONS = [
+    ...(!form.websiteUrl ? [{ issue: "Website URL not provided", severity: "medium", impact: "A website review requires a valid URL and a separate live verification" }] : []),
+    ...(!form.gbpUrl ? [{ issue: "Google Business Profile URL not provided", severity: "medium", impact: "Listing status was not checked; add the URL for a future verified review" }] : []),
+    ...(!form.facebookUrl ? [{ issue: "Facebook page URL not provided", severity: "medium", impact: "Facebook presence was not checked in this form-based estimate" }] : []),
+    ...(!form.instagramUrl ? [{ issue: "Instagram URL not provided", severity: "medium", impact: "Instagram presence was not checked in this form-based estimate" }] : []),
+    ...(!form.contactPhone ? [{ issue: "Contact phone not provided", severity: "medium", impact: "Follow-up will use the contact method and details supplied" }] : []),
   ];
 
   const SEVERITY_STYLE: Record<string, { color: string; label: string }> = {
@@ -506,7 +532,10 @@ export default function BusinessAssessmentPage() {
             {form.businessName || "Your Business"} Assessment
           </h1>
           <p style={{ fontSize: 15, color: "#6B7280", marginBottom: 32 }}>
-            {form.city}, {form.state} · {form.industry} · AI Edge found several high-impact growth opportunities.
+            {form.city}, {form.state} · {form.industry} · Preliminary estimates based only on the information submitted in this form.
+          </p>
+          <p style={{ fontSize: 13, color: "#94A3B8", maxWidth: 640, margin: "-18px auto 28px", lineHeight: 1.6 }}>
+            These scores are not live provider-verified diagnostics. Listings, reviews, citations, schema, rankings, and AI-search visibility were not independently checked.
           </p>
 
           {/* Big score */}
@@ -560,13 +589,13 @@ export default function BusinessAssessmentPage() {
 
         {/* ── Opportunity Section ── */}
         <div style={{ marginBottom: 32 }}>
-          <Divider>Revenue & Growth Opportunities Identified</Divider>
+          <Divider>Preliminary Form-Based Opportunities</Divider>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {[
-              { icon: "💰", label: "Revenue Recovery Opportunity",  value: "Estimate pending", color: "#22C55E", note: "Missed call recovery + lead conversion optimization" },
-              { icon: "📍", label: "Local Visibility Opportunity",  value: "Estimate pending", color: "#00AEEF", note: "Apple, Bing, Nextdoor listings not yet claimed"        },
-              { icon: "✨", label: "AI Edge Visibility Opportunity", value: "Estimate pending", color: "#3B82F6", note: "AI search engines not recommending your business"      },
-              { icon: "⭐", label: "Lead Conversion Opportunity",   value: "Estimate pending", color: "#F59E0B", note: "Review velocity and trust signals below competitors"   },
+              { icon: "💰", label: "Lead Recovery Opportunity", value: "Review needed", color: "#22C55E", note: "A verified workflow review is needed before estimating impact" },
+              { icon: "📍", label: "Local Presence Opportunity", value: "Review needed", color: "#00AEEF", note: "Provider listings were not checked by this assessment" },
+              { icon: "✨", label: "AI Visibility Opportunity", value: "Review needed", color: "#3B82F6", note: "AI answer-engine visibility requires separate live evidence" },
+              { icon: "⭐", label: "Trust Signal Opportunity", value: "Review needed", color: "#F59E0B", note: "Reviews and citations require a separate verified audit" },
             ].map(op => (
               <div key={op.label} style={{
                 background: "rgba(11,22,41,0.7)", border: `1px solid ${op.color}20`,
@@ -586,9 +615,9 @@ export default function BusinessAssessmentPage() {
 
         {/* ── Pain Points ── */}
         <div style={{ marginBottom: 32 }}>
-          <Divider>Issues Found in Your Business Presence</Divider>
+          <Divider>Submitted Information to Review</Divider>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {PAIN_POINTS.map((p, i) => {
+            {(FORM_OBSERVATIONS.length > 0 ? FORM_OBSERVATIONS : [{ issue: "All optional profile URLs were provided", severity: "medium", impact: "Their live status still requires separate verification" }]).map((p, i) => {
               const sv = SEVERITY_STYLE[p.severity];
               return (
                 <div key={i} style={{
@@ -610,14 +639,14 @@ export default function BusinessAssessmentPage() {
 
         {/* ── AI Edge Recommendations ── */}
         <div style={{ marginBottom: 32 }}>
-          <Divider>AI Edge Priority Action Plan</Divider>
+          <Divider>Suggested Verification Plan</Divider>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { rank: 1, action: "Claim & optimize Apple Business Connect",                   impact: "High", time: "30 min" },
-              { rank: 2, action: "Claim & verify Bing Places for Business",                  impact: "High", time: "30 min" },
-              { rank: 3, action: "Improve AI search visibility with content + schema",       impact: "High", time: "2–3 hrs" },
-              { rank: 4, action: `Create ${form.city}-specific pest control landing pages`,  impact: "High", time: "1 day"  },
-              { rank: 5, action: "Deploy Lead Recovery AI + missed call text-back",          impact: "High", time: "1 day"  },
+              { rank: 1, action: "Verify the submitted business and profile URLs", impact: "Review", time: "TBD" },
+              { rank: 2, action: "Confirm current lead-response workflows and follow-up gaps", impact: "Review", time: "TBD" },
+              { rank: 3, action: "Collect live provider evidence before recommending visibility changes", impact: "Review", time: "TBD" },
+              { rank: 4, action: `Review ${form.city} service-area information for accuracy`, impact: "Review", time: "TBD" },
+              { rank: 5, action: "Prioritize only evidence-backed next steps with your team", impact: "Review", time: "TBD" },
             ].map(a => (
               <div key={a.rank} style={{
                 display: "flex", alignItems: "center", gap: 14,
@@ -676,7 +705,7 @@ export default function BusinessAssessmentPage() {
             Ready to fix these growth gaps?
           </h2>
           <p style={{ fontSize: 16, color: "#6B7280", maxWidth: 480, margin: "0 auto 32px", lineHeight: 1.7 }}>
-            Our team will walk you through a custom implementation plan — at no cost. Most businesses see results within 30 days.
+            Our team can review the preliminary estimate and identify which opportunities require live verification.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <button

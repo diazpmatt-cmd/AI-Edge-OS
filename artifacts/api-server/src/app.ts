@@ -21,6 +21,7 @@ import backlinkWorkflowPatchSafeRouter from "./routes/backlink-workflow-patch-sa
 import backlinkWorkflowActionsRouter from "./routes/backlink-workflow-actions";
 import backlinksRouter from "./routes/backlinks";
 import dabEngineeringStatusRouter from "./routes/dab-engineering-status";
+import apollosFullUtilizationRunRouter from "./routes/apollos-full-utilization-run";
 import {
   apollosMcpAuthenticatedRouter,
   apollosMcpPublicRouter,
@@ -115,6 +116,10 @@ app.use(
 // an explicit oauth_token verification before constructing the canonical AI
 // Edge actor context used by the tenant-safe orchestrator runtime.
 app.use("/api", apollosMcpAuthenticatedRouter);
+
+// Web-session bridge for the same bounded Full Utilization runtime used by MCP.
+// The runtime remains authoritative for operator access and safe-action gating.
+app.use("/api", apollosFullUtilizationRunRouter);
 
 // Friendly API boundary for every known user mutation that could alter or
 // remove an approved payload while provider delivery is in flight. PostgreSQL's

@@ -44,7 +44,7 @@ describe("getApollosCoolifyControlPlane", () => {
 
   it("allows private HTTP for an internal control-plane hop", async () => {
     process.env.APOLLOS_COOLIFY_BASE_URL = "http://10.0.0.5:8000";
-    const fetchMock = vi.fn(async () => json([]));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => json([]));
     vi.stubGlobal("fetch", fetchMock);
     const result = await getApollosCoolifyControlPlane("clerk-admin");
     expect(result).toMatchObject({ counts: { applications: 0, servers: 0, databases: 0, activeDeployments: 0 } });

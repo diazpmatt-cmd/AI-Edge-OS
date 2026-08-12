@@ -60,7 +60,7 @@ export const APOLLOS_CONTROL_PLANE_MCP_TOOLS = Object.freeze([
   ),
   tool(
     "apollos_get_system_diagnostic",
-    "Admin-only: synthesize GitHub, Coolify, Hetzner, Clerk, and PostgreSQL evidence into what is broken, what changed, the highest-impact next action, and what Apollos verified itself. Read-only.",
+    "Admin-only: synthesize GitHub, Coolify, Hetzner, Clerk, PostgreSQL, and the running immutable runtime revision into what is broken, what changed, deployment parity, the highest-impact next action, and what Apollos verified itself. Read-only.",
   ),
   tool(
     "apollos_get_system_repair_proposal",

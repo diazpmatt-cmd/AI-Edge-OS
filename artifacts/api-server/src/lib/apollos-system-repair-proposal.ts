@@ -63,6 +63,23 @@ function rootCauseForIssue(issue: ApollosSystemIssue): Readonly<{
     });
   }
 
+  if (issue.provider === "postgres" && issue.code.endsWith("_UNAVAILABLE")) {
+    return Object.freeze({
+      rootCauseCode: "APOLLOS_ROOT_POSTGRES_UNAVAILABLE",
+      rootCause: "The production PostgreSQL health probe could not establish a read-only connection.",
+      component: "PostgreSQL connection path",
+      repairAuthority: "operator",
+      canApollosRepair: false,
+      requiresApproval: false,
+      recommendedRepair: "Verify the production database service and runtime connection path outside MCP, restore only the failing service or configuration, and rerun the read-only PostgreSQL health check. Apollos must not execute database writes or autonomous database restarts for this condition.",
+      verification: Object.freeze([
+        "Confirm the production PostgreSQL service is reachable from the API runtime.",
+        "Run the read-only PostgreSQL health check successfully without returning credentials or customer rows.",
+        "Rerun the synthesized system diagnostic and confirm PostgreSQL is no longer broken.",
+      ]),
+    });
+  }
+
   if (issue.code.endsWith("_UNAVAILABLE") || issue.code.endsWith("_REPOSITORY_NOT_FOUND")) {
     return Object.freeze({
       rootCauseCode: "APOLLOS_ROOT_UPSTREAM_UNREACHABLE",

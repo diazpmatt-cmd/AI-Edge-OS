@@ -3,6 +3,7 @@ import {
   type ApollosClientMcpExecutionContext,
 } from "./apollos-client-mcp.js";
 import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
+import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
 import {
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -25,6 +26,14 @@ const APOLLOS_GITHUB_CONTROL_PLANE_TOOL = Object.freeze({
   annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
   name: "apollos_github_get_control_plane",
   description: "Admin-only: inspect sanitized AI Edge OS GitHub repository state, recent commits, open pull requests, commit statuses, and workflow runs. Read-only and never returns credentials.",
+  inputSchema: Object.freeze({ type: "object", properties: Object.freeze({}), additionalProperties: false }),
+});
+
+const APOLLOS_COOLIFY_CONTROL_PLANE_TOOL = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+  name: "apollos_coolify_get_control_plane",
+  description: "Admin-only: inspect sanitized Coolify applications, servers, databases, and active deployments. Read-only and never returns credentials, raw compose, or deployment logs.",
   inputSchema: Object.freeze({ type: "object", properties: Object.freeze({}), additionalProperties: false }),
 });
 
@@ -100,7 +109,11 @@ export class ApollosClientMcpJsonRpcHandler {
 
     if (message.method === "tools/list") {
       return result(message.id, Object.freeze({
-        tools: Object.freeze([...this.runtime.listTools(), APOLLOS_GITHUB_CONTROL_PLANE_TOOL]),
+        tools: Object.freeze([
+          ...this.runtime.listTools(),
+          APOLLOS_GITHUB_CONTROL_PLANE_TOOL,
+          APOLLOS_COOLIFY_CONTROL_PLANE_TOOL,
+        ]),
       }));
     }
 
@@ -114,18 +127,30 @@ export class ApollosClientMcpJsonRpcHandler {
           assertEmptyArguments(params.arguments);
           const actorUserId = input.context.userId.trim();
           const actorReference = input.context.actorReference.trim();
-          if (!actorUserId || !actorReference) {
-            throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          }
+          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
           const data = await getApollosGitHubControlPlane(actorUserId);
-          const execution = Object.freeze({
+          return executionResult(message.id, Object.freeze({
             tool: APOLLOS_GITHUB_CONTROL_PLANE_TOOL.name,
             actorReference,
             clientId: null,
             sideEffects: false,
             data,
-          });
-          return executionResult(message.id, execution);
+          }));
+        }
+
+        if (params.name === APOLLOS_COOLIFY_CONTROL_PLANE_TOOL.name) {
+          assertEmptyArguments(params.arguments);
+          const actorUserId = input.context.userId.trim();
+          const actorReference = input.context.actorReference.trim();
+          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
+          const data = await getApollosCoolifyControlPlane(actorUserId);
+          return executionResult(message.id, Object.freeze({
+            tool: APOLLOS_COOLIFY_CONTROL_PLANE_TOOL.name,
+            actorReference,
+            clientId: null,
+            sideEffects: false,
+            data,
+          }));
         }
 
         const execution = await this.runtime.execute({

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LockKeyhole, PlayCircle, ShieldCheck, Sparkles } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
@@ -64,6 +64,29 @@ interface FullUtilizationMission {
   blockedActions: ActivationItem[];
   topPriorityActions: ActivationItem[];
   nextCommand: string;
+}
+
+interface FullUtilizationCycleResult {
+  mission: "maximize_ai_edge_utilization";
+  clientId: string;
+  clientName: string;
+  initialCoverageScore: number;
+  finalCoverageScore: number;
+  sideEffects: boolean;
+  executedCapabilityKeys: string[];
+  remainingAutomaticCapabilityKeys: string[];
+  remainingHumanActions: Array<{
+    capabilityKey: string;
+    capabilityName: string;
+    gate: string;
+    recommendedAction: string;
+  }>;
+}
+
+interface FullUtilizationCycleResponse {
+  clientId: string;
+  sideEffects: boolean;
+  cycle: FullUtilizationCycleResult;
 }
 
 const COLORS = {
@@ -163,8 +186,19 @@ export default function ApollosCoveragePage() {
     retry: 1,
   });
 
+  const runCycleMutation = useMutation<FullUtilizationCycleResponse>({
+    mutationFn: () => apiFetch<FullUtilizationCycleResponse>("/apollos/full-utilization/run", {
+      method: "POST",
+      body: JSON.stringify({ clientId: selectedClientId }),
+    }),
+    onSuccess: async () => {
+      await missionQuery.refetch();
+    },
+  });
+
   const authorizedClients = clientsQuery.data?.clients ?? [];
   const selectedClient = authorizedClients.find((client) => client.clientId === selectedClientId) ?? null;
+  const canRunCycle = !!selectedClient && selectedClient.accessLevel !== "viewer";
   const loading = clientsQuery.isLoading || (!!selectedClientId && missionQuery.isLoading);
   const error = clientsQuery.isError || missionQuery.isError;
 
@@ -203,6 +237,23 @@ export default function ApollosCoveragePage() {
                 border: "1px solid rgba(244,114,182,0.20)", color: "#F9A8D4", fontSize: 11, fontWeight: 800,
               }}>{selectedClient.clientName}</div>
             )}
+            {canRunCycle && (
+              <button
+                type="button"
+                onClick={() => runCycleMutation.mutate()}
+                disabled={!selectedClientId || runCycleMutation.isPending}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 14px", cursor: runCycleMutation.isPending ? "wait" : "pointer",
+                  borderRadius: 10, fontSize: 12, fontWeight: 800, color: "#D1FAE5", background: "rgba(34,197,94,0.12)",
+                  border: "1px solid rgba(34,197,94,0.35)", opacity: runCycleMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {runCycleMutation.isPending
+                  ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                  : <PlayCircle size={14} />}
+                {runCycleMutation.isPending ? "Running safe cycle…" : "Run safe utilization cycle"}
+              </button>
+            )}
             <Link to="/admin/apollos" style={{
               display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none", padding: "10px 14px",
               borderRadius: 10, fontSize: 12, fontWeight: 800, color: "#fff", background: COLORS.blue,
@@ -228,6 +279,34 @@ export default function ApollosCoveragePage() {
           <div style={{ ...panel, padding: 20, borderColor: "rgba(239,68,68,0.3)", color: "#FCA5A5" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}><AlertTriangle size={17} /> Coverage unavailable</div>
             <div style={{ fontSize: 12, marginTop: 6, color: COLORS.muted }}>Apollos could not resolve the selected authorized client coverage right now.</div>
+          </div>
+        )}
+
+        {runCycleMutation.isError && (
+          <div style={{ ...panel, padding: 18, borderColor: "rgba(239,68,68,0.3)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#FCA5A5", fontWeight: 800 }}>
+              <AlertTriangle size={16} /> Safe utilization cycle was not executed
+            </div>
+            <div style={{ color: COLORS.muted, fontSize: 12, lineHeight: 1.55, marginTop: 6 }}>
+              Apollos rejected the request or could not resolve the selected client. No authorization boundary was bypassed.
+            </div>
+          </div>
+        )}
+
+        {runCycleMutation.data && (
+          <div style={{ ...panel, padding: 18, borderColor: "rgba(34,197,94,0.30)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.green, fontWeight: 900 }}>
+              <CheckCircle2 size={17} /> Safe utilization cycle complete for {runCycleMutation.data.cycle.clientName}
+            </div>
+            <div style={{ color: COLORS.text, fontSize: 12, lineHeight: 1.6, marginTop: 8 }}>
+              Coverage: <strong>{runCycleMutation.data.cycle.initialCoverageScore}% → {runCycleMutation.data.cycle.finalCoverageScore}%</strong>
+              {runCycleMutation.data.cycle.executedCapabilityKeys.length > 0
+                ? ` · Executed internal-safe capabilities: ${runCycleMutation.data.cycle.executedCapabilityKeys.join(", ")}`
+                : " · No additional allowlisted internal-safe action was needed."}
+            </div>
+            <div style={{ color: COLORS.muted, fontSize: 11, lineHeight: 1.55, marginTop: 6 }}>
+              Remaining queue: {runCycleMutation.data.cycle.remainingHumanActions.length} human/authorization/setup action{runCycleMutation.data.cycle.remainingHumanActions.length === 1 ? "" : "s"} · {runCycleMutation.data.cycle.remainingAutomaticCapabilityKeys.length} safe automatic action{runCycleMutation.data.cycle.remainingAutomaticCapabilityKeys.length === 1 ? "" : "s"} still pending.
+            </div>
           </div>
         )}
 

@@ -23,7 +23,10 @@ interface ToolDefinition {
   readonly inputSchema: typeof EMPTY_INPUT_SCHEMA;
 }
 
-function tool(name: string, description: string): ToolDefinition {
+function tool<const TName extends string>(
+  name: TName,
+  description: string,
+): ToolDefinition & { readonly name: TName } {
   return Object.freeze({
     securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
     annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,

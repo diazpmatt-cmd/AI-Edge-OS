@@ -2,13 +2,14 @@ import { isApollosAdminUser } from "./apollos-admin-access-policy.js";
 import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
 import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
 import { getApollosHetznerInfrastructure } from "./apollos-hetzner-readonly.js";
+import { getApollosPostgresHealth } from "./apollos-postgres-readonly.js";
 import {
   getApollosClerkOAuthSettings,
   getApollosClerkUser,
   listApollosClerkOAuthApplications,
 } from "./apollos-clerk-readonly.js";
 
-export type ApollosControlPlaneProvider = "github" | "coolify" | "hetzner" | "clerk";
+export type ApollosControlPlaneProvider = "github" | "coolify" | "hetzner" | "clerk" | "postgres";
 export type ApollosControlPlaneState = "healthy" | "degraded" | "broken" | "unconfigured" | "unknown";
 export type ApollosDiagnosticConfidence = "confirmed" | "probable" | "unknown";
 export type ApollosActionAuthority = "apollos" | "operator" | "provider";
@@ -62,6 +63,7 @@ export interface ApollosSystemDiagnosticReaders {
   readonly coolify: (actorUserId: string) => Promise<unknown>;
   readonly hetzner: (actorUserId: string) => Promise<unknown>;
   readonly clerk: (actorUserId: string) => Promise<unknown>;
+  readonly postgres: (actorUserId: string) => Promise<unknown>;
 }
 
 const defaultReaders: ApollosSystemDiagnosticReaders = Object.freeze({
@@ -76,6 +78,7 @@ const defaultReaders: ApollosSystemDiagnosticReaders = Object.freeze({
     ]);
     return Object.freeze({ oauthSettings, oauthApplications, user });
   },
+  postgres: getApollosPostgresHealth,
 });
 
 function record(value: unknown): Record<string, unknown> {
@@ -257,10 +260,48 @@ function clerkObservation(snapshot: unknown): ApollosControlPlaneObservation {
   });
 }
 
+function postgresObservation(snapshot: unknown): ApollosControlPlaneObservation {
+  const root = record(snapshot);
+  const database = record(root.database);
+  const connections = record(root.connections);
+  const applicationPool = record(connections.applicationPool);
+  const workload = record(root.workload);
+  const inRecovery = database.inRecovery === true;
+  const waiting = number(applicationPool.waiting) ?? 0;
+  const deadlocks = number(workload.deadlocks) ?? 0;
+  const rollbackRatio = number(workload.rollbackRatioPercent);
+  const cacheHitRatio = number(workload.cacheHitRatioPercent);
+  const hasIdentity = Boolean(text(database.name, 120));
+
+  const state: ApollosControlPlaneState = !hasIdentity
+    ? "unknown"
+    : inRecovery || waiting > 0 || deadlocks > 0 || (rollbackRatio !== null && rollbackRatio >= 10)
+      ? "degraded"
+      : "healthy";
+
+  return Object.freeze({
+    provider: "postgres",
+    state,
+    confidence: state === "unknown" ? "unknown" : "confirmed",
+    summary: hasIdentity
+      ? `PostgreSQL read-only health check succeeded; waiting pool clients=${waiting}, deadlocks=${deadlocks}, rollback ratio=${rollbackRatio ?? "unknown"}%.`
+      : "PostgreSQL read-only health check returned incomplete sanitized database identity evidence.",
+    evidence: Object.freeze([
+      `databaseResolved=${hasIdentity}`,
+      `inRecovery=${inRecovery}`,
+      `poolWaiting=${waiting}`,
+      `deadlocks=${deadlocks}`,
+      `rollbackRatioPercent=${rollbackRatio ?? "unknown"}`,
+      `cacheHitRatioPercent=${cacheHitRatio ?? "unknown"}`,
+    ]),
+    reasonCode: null,
+  });
+}
+
 function issueForObservation(observation: ApollosControlPlaneObservation): ApollosSystemIssue | null {
   if (observation.state === "healthy") return null;
   const severity: ApollosSystemIssue["severity"] = observation.state === "broken"
-    ? (observation.provider === "coolify" || observation.provider === "clerk" ? "critical" : "high")
+    ? (observation.provider === "coolify" || observation.provider === "clerk" || observation.provider === "postgres" ? "critical" : "high")
     : observation.state === "degraded"
       ? "medium"
       : "low";
@@ -321,12 +362,16 @@ function highestRoiAction(
 ): ApollosSystemNextAction {
   const byProvider = new Map(observations.map((item) => [item.provider, item] as const));
   const coolify = byProvider.get("coolify");
+  const postgres = byProvider.get("postgres");
   const clerk = byProvider.get("clerk");
   const github = byProvider.get("github");
   const hetzner = byProvider.get("hetzner");
 
   if (coolify?.state === "broken") {
     return Object.freeze({ action: "Restore the production runtime or host path before feature work.", reason: "Production availability protects every client-facing and revenue workflow.", provider: "coolify", authority: "operator", canApollosExecuteNow: false, confidence: coolify.confidence });
+  }
+  if (postgres?.state === "broken") {
+    return Object.freeze({ action: "Restore the production PostgreSQL connection path before feature work or client automation.", reason: "Database availability protects authentication state, client configuration, durable receipts, and revenue workflows.", provider: "postgres", authority: "operator", canApollosExecuteNow: false, confidence: postgres.confidence });
   }
   if (clerk?.state === "broken") {
     return Object.freeze({ action: "Restore Clerk control-plane authorization and user access.", reason: "Authentication failure blocks operator access and the Secure MCP user boundary.", provider: "clerk", authority: "operator", canApollosExecuteNow: false, confidence: clerk.confidence });
@@ -345,7 +390,7 @@ function highestRoiAction(
 
   const unconfigured = observations.find((item) => item.state === "unconfigured");
   if (unconfigured) {
-    return Object.freeze({ action: `Configure Apollos read-only ${unconfigured.provider} visibility without exposing the credential through MCP.`, reason: "Closing this observability gap increases autonomous diagnosis and reduces human troubleshooting work.", provider: unconfigured.provider, authority: "operator", canApollosExecuteNow: false, confidence: "confirmed" });
+    return Object.freeze({ action: `Configure Apollos read-only ${unconfigured.provider} visibility without exposing secrets through MCP.`, reason: "Closing this observability gap increases autonomous diagnosis and reduces human troubleshooting work.", provider: unconfigured.provider, authority: "operator", canApollosExecuteNow: false, confidence: "confirmed" });
   }
 
   if (observations.every((item) => item.state === "healthy")) {
@@ -363,7 +408,7 @@ export async function getApollosSystemDiagnostic(
     throw new Error("APOLLOS_MCP_SYSTEM_DIAGNOSTIC_ADMIN_REQUIRED");
   }
 
-  const providerNames: readonly ApollosControlPlaneProvider[] = ["github", "coolify", "hetzner", "clerk"];
+  const providerNames: readonly ApollosControlPlaneProvider[] = ["github", "coolify", "hetzner", "clerk", "postgres"];
   const results = await Promise.allSettled(providerNames.map((provider) => readers[provider](actorUserId)));
   const snapshots = new Map<ApollosControlPlaneProvider, unknown>();
   const observations = results.map((result, index) => {
@@ -373,7 +418,8 @@ export async function getApollosSystemDiagnostic(
     if (provider === "github") return githubObservation(result.value);
     if (provider === "coolify") return coolifyObservation(result.value);
     if (provider === "hetzner") return hetznerObservation(result.value);
-    return clerkObservation(result.value);
+    if (provider === "clerk") return clerkObservation(result.value);
+    return postgresObservation(result.value);
   });
 
   const issues = observations.map(issueForObservation).filter((item): item is ApollosSystemIssue => item !== null);
@@ -395,7 +441,7 @@ export async function getApollosSystemDiagnostic(
     .map((item) => `${item.provider}: ${item.summary}`);
   const humanOnlyActions = observations
     .filter((item) => item.state === "unconfigured")
-    .map((item) => `Configure the ${item.provider} read-only runtime credential outside MCP; do not paste the credential into chat or source control.`);
+    .map((item) => `Configure the ${item.provider} read-only runtime settings outside MCP; do not paste secret values into chat or source control.`);
 
   return Object.freeze({
     overallState,

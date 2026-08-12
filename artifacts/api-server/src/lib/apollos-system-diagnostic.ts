@@ -275,7 +275,7 @@ function postgresObservation(snapshot: unknown): ApollosControlPlaneObservation 
 
   const state: ApollosControlPlaneState = !hasIdentity
     ? "unknown"
-    : waiting > 0
+    : inRecovery || waiting > 0
       ? "degraded"
       : "healthy";
 

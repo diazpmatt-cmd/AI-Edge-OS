@@ -2,6 +2,11 @@ import {
   ApollosClientMcpRuntime,
   type ApollosClientMcpExecutionContext,
 } from "./apollos-client-mcp.js";
+import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
+import {
+  APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+} from "./apollos-client-mcp-auth.js";
 
 interface JsonRpcMessage {
   readonly jsonrpc?: unknown;
@@ -14,6 +19,14 @@ export interface ApollosClientMcpJsonRpcResponse {
   readonly status: number;
   readonly body: unknown | null;
 }
+
+const APOLLOS_GITHUB_CONTROL_PLANE_TOOL = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
+  name: "apollos_github_get_control_plane",
+  description: "Admin-only: inspect sanitized AI Edge OS GitHub repository state, recent commits, open pull requests, commit statuses, and workflow runs. Read-only and never returns credentials.",
+  inputSchema: Object.freeze({ type: "object", properties: Object.freeze({}), additionalProperties: false }),
+});
 
 function result(id: unknown, payload: unknown): ApollosClientMcpJsonRpcResponse {
   return Object.freeze({
@@ -46,6 +59,21 @@ function safeReason(exception: unknown): string {
     : "APOLLOS_MCP_REQUEST_REJECTED";
 }
 
+function assertEmptyArguments(value: unknown): void {
+  const input = value ?? {};
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input as Record<string, unknown>).length !== 0) {
+    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+  }
+}
+
+function executionResult(id: unknown, execution: unknown): ApollosClientMcpJsonRpcResponse {
+  return result(id, Object.freeze({
+    structuredContent: execution,
+    content: Object.freeze([{ type: "text", text: JSON.stringify(execution) }]),
+    isError: false,
+  }));
+}
+
 export class ApollosClientMcpJsonRpcHandler {
   constructor(private readonly runtime = new ApollosClientMcpRuntime()) {}
 
@@ -71,7 +99,9 @@ export class ApollosClientMcpJsonRpcHandler {
     }
 
     if (message.method === "tools/list") {
-      return result(message.id, Object.freeze({ tools: this.runtime.listTools() }));
+      return result(message.id, Object.freeze({
+        tools: Object.freeze([...this.runtime.listTools(), APOLLOS_GITHUB_CONTROL_PLANE_TOOL]),
+      }));
     }
 
     if (message.method === "tools/call") {
@@ -80,16 +110,30 @@ export class ApollosClientMcpJsonRpcHandler {
         return error(message.id, -32602, "Invalid params", "APOLLOS_MCP_ARGUMENTS_INVALID");
       }
       try {
+        if (params.name === APOLLOS_GITHUB_CONTROL_PLANE_TOOL.name) {
+          assertEmptyArguments(params.arguments);
+          const actorUserId = input.context.userId.trim();
+          const actorReference = input.context.actorReference.trim();
+          if (!actorUserId || !actorReference) {
+            throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
+          }
+          const data = await getApollosGitHubControlPlane(actorUserId);
+          const execution = Object.freeze({
+            tool: APOLLOS_GITHUB_CONTROL_PLANE_TOOL.name,
+            actorReference,
+            clientId: null,
+            sideEffects: false,
+            data,
+          });
+          return executionResult(message.id, execution);
+        }
+
         const execution = await this.runtime.execute({
           context: input.context,
           toolName: params.name,
           arguments: params.arguments,
         });
-        return result(message.id, Object.freeze({
-          structuredContent: execution,
-          content: Object.freeze([{ type: "text", text: JSON.stringify(execution) }]),
-          isError: false,
-        }));
+        return executionResult(message.id, execution);
       } catch (exception) {
         const reason = safeReason(exception);
         return result(message.id, Object.freeze({

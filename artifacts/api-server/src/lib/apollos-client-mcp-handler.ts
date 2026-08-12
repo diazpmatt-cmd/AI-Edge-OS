@@ -2,15 +2,11 @@ import {
   ApollosClientMcpRuntime,
   type ApollosClientMcpExecutionContext,
 } from "./apollos-client-mcp.js";
-import { getApollosGitHubControlPlane } from "./apollos-github-readonly.js";
-import { getApollosCoolifyControlPlane } from "./apollos-coolify-readonly.js";
-import { getApollosClerkInstanceDiagnostics } from "./apollos-clerk-readonly.js";
-import { getApollosSystemDiagnostic } from "./apollos-system-diagnostic.js";
-import { getApollosSystemRepairProposal } from "./apollos-system-repair-proposal.js";
 import {
-  APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-} from "./apollos-client-mcp-auth.js";
+  APOLLOS_CONTROL_PLANE_MCP_TOOLS,
+  executeApollosControlPlaneMcpTool,
+  isApollosControlPlaneMcpToolName,
+} from "./apollos-control-plane-mcp.js";
 
 interface JsonRpcMessage {
   readonly jsonrpc?: unknown;
@@ -23,48 +19,6 @@ export interface ApollosClientMcpJsonRpcResponse {
   readonly status: number;
   readonly body: unknown | null;
 }
-
-const EMPTY_INPUT_SCHEMA = Object.freeze({ type: "object", properties: Object.freeze({}), additionalProperties: false });
-
-const APOLLOS_GITHUB_CONTROL_PLANE_TOOL = Object.freeze({
-  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-  name: "apollos_github_get_control_plane",
-  description: "Admin-only: inspect sanitized AI Edge OS GitHub repository state, recent commits, open pull requests, commit statuses, and workflow runs. Read-only and never returns credentials.",
-  inputSchema: EMPTY_INPUT_SCHEMA,
-});
-
-const APOLLOS_COOLIFY_CONTROL_PLANE_TOOL = Object.freeze({
-  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-  name: "apollos_coolify_get_control_plane",
-  description: "Admin-only: inspect sanitized Coolify applications, servers, databases, and active deployments. Read-only and never returns credentials, raw compose, or deployment logs.",
-  inputSchema: EMPTY_INPUT_SCHEMA,
-});
-
-const APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL = Object.freeze({
-  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-  name: "apollos_clerk_get_instance_diagnostics",
-  description: "Admin-only: inspect sanitized Clerk production instance, Organization settings, Organization count, and the authenticated admin's Organization memberships. Read-only and never returns the Clerk secret key or private metadata.",
-  inputSchema: EMPTY_INPUT_SCHEMA,
-});
-
-const APOLLOS_SYSTEM_DIAGNOSTIC_TOOL = Object.freeze({
-  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-  name: "apollos_get_system_diagnostic",
-  description: "Admin-only: synthesize GitHub, Coolify, Hetzner, and Clerk evidence into what is broken, what changed, the highest-impact next action, and what Apollos verified itself. Read-only.",
-  inputSchema: EMPTY_INPUT_SCHEMA,
-});
-
-const APOLLOS_SYSTEM_REPAIR_PROPOSAL_TOOL = Object.freeze({
-  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
-  name: "apollos_get_system_repair_proposal",
-  description: "Admin-only: turn the current system diagnostic into an evidence-backed repair proposal using the existing Apollos repair planner, including authority, approval boundary, smallest safe repair, and verification. Does not execute repairs.",
-  inputSchema: EMPTY_INPUT_SCHEMA,
-});
 
 function result(id: unknown, payload: unknown): ApollosClientMcpJsonRpcResponse {
   return Object.freeze({
@@ -95,13 +49,6 @@ function safeReason(exception: unknown): string {
   return /^APOLLOS_MCP_[A-Z0-9_]+$/.test(message)
     ? message
     : "APOLLOS_MCP_REQUEST_REJECTED";
-}
-
-function assertEmptyArguments(value: unknown): void {
-  const input = value ?? {};
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input as Record<string, unknown>).length !== 0) {
-    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
-  }
 }
 
 function executionResult(id: unknown, execution: unknown): ApollosClientMcpJsonRpcResponse {
@@ -140,11 +87,7 @@ export class ApollosClientMcpJsonRpcHandler {
       return result(message.id, Object.freeze({
         tools: Object.freeze([
           ...this.runtime.listTools(),
-          APOLLOS_GITHUB_CONTROL_PLANE_TOOL,
-          APOLLOS_COOLIFY_CONTROL_PLANE_TOOL,
-          APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL,
-          APOLLOS_SYSTEM_DIAGNOSTIC_TOOL,
-          APOLLOS_SYSTEM_REPAIR_PROPOSAL_TOOL,
+          ...APOLLOS_CONTROL_PLANE_MCP_TOOLS,
         ]),
       }));
     }
@@ -155,49 +98,18 @@ export class ApollosClientMcpJsonRpcHandler {
         return error(message.id, -32602, "Invalid params", "APOLLOS_MCP_ARGUMENTS_INVALID");
       }
       try {
-        const actorUserId = input.context.userId.trim();
-        const actorReference = input.context.actorReference.trim();
-
-        if (params.name === APOLLOS_GITHUB_CONTROL_PLANE_TOOL.name) {
-          assertEmptyArguments(params.arguments);
-          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          const data = await getApollosGitHubControlPlane(actorUserId);
-          return executionResult(message.id, Object.freeze({ tool: APOLLOS_GITHUB_CONTROL_PLANE_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
-        }
-
-        if (params.name === APOLLOS_COOLIFY_CONTROL_PLANE_TOOL.name) {
-          assertEmptyArguments(params.arguments);
-          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          const data = await getApollosCoolifyControlPlane(actorUserId);
-          return executionResult(message.id, Object.freeze({ tool: APOLLOS_COOLIFY_CONTROL_PLANE_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
-        }
-
-        if (params.name === APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL.name) {
-          assertEmptyArguments(params.arguments);
-          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          const data = await getApollosClerkInstanceDiagnostics(actorUserId);
-          return executionResult(message.id, Object.freeze({ tool: APOLLOS_CLERK_INSTANCE_DIAGNOSTICS_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
-        }
-
-        if (params.name === APOLLOS_SYSTEM_DIAGNOSTIC_TOOL.name) {
-          assertEmptyArguments(params.arguments);
-          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          const data = await getApollosSystemDiagnostic(actorUserId);
-          return executionResult(message.id, Object.freeze({ tool: APOLLOS_SYSTEM_DIAGNOSTIC_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
-        }
-
-        if (params.name === APOLLOS_SYSTEM_REPAIR_PROPOSAL_TOOL.name) {
-          assertEmptyArguments(params.arguments);
-          if (!actorUserId || !actorReference) throw new Error("APOLLOS_MCP_IDENTITY_REQUIRED");
-          const data = await getApollosSystemRepairProposal(actorUserId);
-          return executionResult(message.id, Object.freeze({ tool: APOLLOS_SYSTEM_REPAIR_PROPOSAL_TOOL.name, actorReference, clientId: null, sideEffects: false, data }));
-        }
-
-        const execution = await this.runtime.execute({
-          context: input.context,
-          toolName: params.name,
-          arguments: params.arguments,
-        });
+        const execution = isApollosControlPlaneMcpToolName(params.name)
+          ? await executeApollosControlPlaneMcpTool({
+              toolName: params.name,
+              arguments: params.arguments,
+              actorUserId: input.context.userId,
+              actorReference: input.context.actorReference,
+            })
+          : await this.runtime.execute({
+              context: input.context,
+              toolName: params.name,
+              arguments: params.arguments,
+            });
         return executionResult(message.id, execution);
       } catch (exception) {
         const reason = safeReason(exception);

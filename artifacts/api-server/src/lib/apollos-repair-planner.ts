@@ -104,6 +104,16 @@ const TEMPLATES: Readonly<Record<string, Template>> = {
       prepare("retry-provider-checkpoint", "Retry failed checkpoint", "Resume only the original failed checkpoint.", "internal_change", "The checkpoint records one completed receipt."),
     ],
   },
+  APOLLOS_ROOT_DEPLOYMENT_DRIFT: {
+    status: "manual_required",
+    summary: "Deploy the already-approved immutable main image, then verify the running revision matches source truth.",
+    approvalReason: "Production deployment remains an explicit operator approval boundary.",
+    steps: [
+      inspect("confirm-published-main-image", "Confirm immutable image publication", "Verify the GitHub default-branch SHA has a successful immutable-image publication receipt before any deployment action.", "The exact GitHub head SHA is confirmed as published and approved."),
+      step("deploy-approved-main-image", "Deploy approved immutable image", "The operator deploys only the confirmed GitHub head SHA through the existing Coolify production deployment runbook.", "prepare", "deployment_change", false, "Production health checks pass on the approved immutable SHA."),
+      inspect("verify-runtime-parity", "Verify deployed revision parity", "Read the secret-free runtime build identity and compare it with GitHub default-branch head.", "The runtime SHA exactly matches the verified GitHub head SHA."),
+    ],
+  },
   APOLLOS_ROOT_GOOGLE_CERTIFICATE_PATH_INVALID: {
     status: "approval_required",
     summary: "Remove the stale optional certificate path while preserving normal OAuth, then redeploy.",

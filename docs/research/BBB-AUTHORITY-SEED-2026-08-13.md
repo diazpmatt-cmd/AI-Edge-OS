@@ -15,12 +15,16 @@ This public-source queue complements canonical Authority evidence; it does not r
 2. **Coastal Alabama Business Chamber**
    - Why: serves Orange Beach, Gulf Shores, Fort Morgan, and coastal Alabama; public member/business directory.
    - Evidence: https://www.mygulfcoastchamber.com/ and https://business.mygulfcoastchamber.com/list
-   - Next action: verify whether BB&B already has a member/profile record; if absent, document membership/listing options and cost before owner decision.
+   - Competitor proof: the public directory currently contains pest-control competitors including Lewis Critter Gitter Pest Control and Mosquito Joe of Gulf Coast Alabama, so this is a demonstrated local authority/citation lane rather than a theoretical directory target.
+   - Current BB&B verification: no indexed BB&B chamber profile was found in exact-name searches during this audit; treat that as a verification lead, not proof of absence.
+   - Next action: use the chamber's own directory search to verify whether BB&B has an existing record. If absent, document membership/listing options and current cost before owner decision.
 
 3. **South Baldwin Chamber of Commerce**
    - Why: Foley/South Baldwin business authority with public member directory and coastal-business network.
    - Evidence: https://www.southbaldwinchamber.com/ and https://businesshub.southbaldwinchamber.com/member-application
-   - Next action: verify existing listing/membership and capture exact current membership tier/cost before any purchase.
+   - Competitor proof: the public directory currently lists Rogue Pest Solutions, Beebe's Pest & Termite Control, and Prewett Pest Control under Pest Control Services.
+   - Current BB&B verification: no indexed BB&B member record was found in exact-name searches during this audit; treat that as a verification lead, not proof of absence.
+   - Next action: verify directly in the member directory; if absent, capture exact current membership tier/cost before any purchase.
 
 4. **Baldwin REALTORS — Affiliate Membership**
    - Why: local association/MLS for 3,000+ REALTORS; affiliate membership explicitly supports non-real-estate businesses and includes website registration/networking.
@@ -46,7 +50,8 @@ This public-source queue complements canonical Authority evidence; it does not r
 8. **BBB Serving Central & South Alabama — Business Profile / Accreditation**
    - Why: BBB serves Mobile and South Alabama and offers business profiles; free profile and paid accreditation are distinct paths.
    - Evidence: https://www.bbb.org/local-bbb/bbb-serving-central-and-south-alabama
-   - Next action: verify whether BB&B already has a BBB profile; if present, audit NAP/URL accuracy. If absent, evaluate free profile first; accreditation spend requires separate approval.
+   - Verification result: public web search did not surface a matching Alabama BB&B profile; a similarly named Canadian business did appear. This is not enough to prove BB&B lacks a profile.
+   - Next action: search the local BBB directory by exact business name, address, and public phone. If a profile exists, audit NAP/URL accuracy. If absent, evaluate free profile first; accreditation spend requires separate approval.
 
 9. **Alabama Restaurant & Hospitality Association — Hospitality service-company membership**
    - Why: represents lodging, tourism, hospitality, and hospitality-service companies; has a Baldwin County chapter and member/vendor relationship opportunities.
@@ -59,12 +64,25 @@ This public-source queue complements canonical Authority evidence; it does not r
     - Observed cost: supplier membership is publicly listed at $1,075/year as of this research; re-verify before any decision.
     - Next action: treat as a later/high-cost authority partnership. Do not purchase without explicit owner approval and evidence that local/regional alternatives have been exhausted or the expected relationship value justifies it.
 
+## Existing authority/citation surfaces already verified
+
+- **Angi** — BB&B has an indexed Foley business profile with the official website and public business information. Treat as maintain/audit, not a new acquisition target.
+- **HomeAdvisor** — BB&B is appearing in current Foley/Silverhill pest-control results. Treat as maintain/audit, not a new acquisition target.
+- **Own website** — BB&B's site is indexed for Baldwin County/Foley and service-area pages. This is owned-media evidence, not a backlink opportunity.
+
+## Relationship targets visible inside the chamber ecosystem
+
+The Coastal Alabama Business Chamber directory also exposes vacation-rental/property-management companies such as Sunset Properties and Young's Suncoast Realty & Vacation Rentals. These are strategically aligned with BB&B's vacation-rental/property-manager service lane, but they are relationship/outreach prospects rather than automatic backlink targets. No contact has been made.
+
 ## Priority suggestion for human review
 
 Start with the lowest-friction/local-fit checks: Gulf Shores & Orange Beach Tourism, Coastal Alabama Business Chamber, South Baldwin Chamber, existing BBB profile, Baldwin REALTORS affiliate eligibility, and Mobile Bay Apartment Association supplier eligibility. These are stronger immediate local-fit candidates than paying for a national VRMA supplier membership.
 
+Within the chamber lane, competitor directory presence is now verified, which raises Coastal Alabama Business Chamber and South Baldwin Chamber above generic directory hunting. Verify BB&B's membership/listing state there before considering broader paid directories.
+
 ## Truth / safety boundaries
 - No claim that any candidate will produce a backlink until a public listing/link is actually verified.
+- Search-engine non-discovery is not treated as proof that a listing does not exist.
 - No claim of domain authority, ranking lift, traffic, leads, or revenue.
 - No external contact or form submission has occurred.
 - No payment, sponsorship, membership purchase, account creation, or listing mutation has occurred.

@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { leadsTable, gorilladeskMetricSnapshotsTable } from "@workspace/db/schema";
+import { clientsTable, leadsTable, gorilladeskMetricSnapshotsTable } from "@workspace/db/schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -66,10 +66,36 @@ function realRowsFilter() {
   return sql`(${sql.join(phoneConditions, sql` AND `)} AND ${leadsTable.message} NOT LIKE '[TEST]%')`;
 }
 
+/**
+ * Compute Telnyx analytics for one canonical client.
+ *
+ * Preferred call shape is (clientId, projectId). The one-argument form exists
+ * only for the legacy Insights engine, which historically passes the client
+ * project slug. In that form we resolve the slug to the canonical client ID
+ * before touching lead data; there is no global or BB&B fallback.
+ */
 export async function computeTelnyxAnalytics(
-  clientId: string,
-  projectId: string,
+  clientIdOrProjectId: string,
+  projectId?: string,
 ): Promise<TelnyxAnalytics> {
+  let clientId = clientIdOrProjectId;
+  let resolvedProjectId = projectId;
+
+  if (!resolvedProjectId) {
+    const [client] = await db
+      .select({ id: clientsTable.id, slug: clientsTable.slug })
+      .from(clientsTable)
+      .where(eq(clientsTable.slug, clientIdOrProjectId))
+      .limit(1);
+
+    if (!client) {
+      throw new Error("Analytics client not found");
+    }
+
+    clientId = client.id;
+    resolvedProjectId = client.slug;
+  }
+
   const eventRows = await db
     .select({
       eventType: leadsTable.eventType,
@@ -155,7 +181,7 @@ export async function computeTelnyxAnalytics(
       .select({ data: gorilladeskMetricSnapshotsTable.data })
       .from(gorilladeskMetricSnapshotsTable)
       .where(and(
-        eq(gorilladeskMetricSnapshotsTable.projectId, projectId),
+        eq(gorilladeskMetricSnapshotsTable.projectId, resolvedProjectId),
         eq(gorilladeskMetricSnapshotsTable.metricType, "revenue"),
       ))
       .orderBy(gorilladeskMetricSnapshotsTable.importedAt)

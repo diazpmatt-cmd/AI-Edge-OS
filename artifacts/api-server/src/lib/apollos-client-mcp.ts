@@ -18,7 +18,10 @@ import {
   listApollosClerkOAuthApplications,
 } from "./apollos-clerk-readonly.js";
 import { getApollosHetznerInfrastructure } from "./apollos-hetzner-readonly.js";
+import { getApollosReferralPilotStatus } from "./apollos-referral-pilot-status.js";
+import { dispatchApollosApprovedReferralInvitation } from "./apollos-referral-dispatch.js";
 import {
+  APOLLOS_MCP_EXTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -27,6 +30,15 @@ import {
 const CLIENT_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
 const CAPABILITY_KEY_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
 const CLERK_USER_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 200 });
+const REFERRAL_INVITATION_ID_PROPERTY = Object.freeze({ type: "string", format: "uuid" });
+const REFERRAL_MODE_PROPERTY = Object.freeze({ type: "string", enum: ["dry_run", "live"] });
+const REFERRAL_CONFIRM_PROPERTY = Object.freeze({ type: "boolean", const: true });
+const REFERRAL_IDEMPOTENCY_KEY_PROPERTY = Object.freeze({
+  type: "string",
+  minLength: 8,
+  maxLength: 120,
+  pattern: "^[A-Za-z0-9:_-]{8,120}$",
+});
 const TOOL_AUTH = Object.freeze({
   securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   annotations: APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -34,6 +46,10 @@ const TOOL_AUTH = Object.freeze({
 const TOOL_INTERNAL_WRITE_AUTH = Object.freeze({
   securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   annotations: APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
+});
+const TOOL_EXTERNAL_WRITE_AUTH = Object.freeze({
+  securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
+  annotations: APOLLOS_MCP_EXTERNAL_WRITE_ANNOTATIONS,
 });
 
 export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
@@ -137,6 +153,33 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
   },
   {
     ...TOOL_AUTH,
+    name: "apollos_get_referral_pilot_status",
+    description: "Return non-PII Referral pilot readiness, local GorillaDesk aggregate sync evidence, invitation counts, and delivery/attribution evidence for one authorized client.",
+    inputSchema: {
+      type: "object",
+      properties: { clientId: CLIENT_ID_PROPERTY },
+      additionalProperties: false,
+    },
+  },
+  {
+    ...TOOL_EXTERNAL_WRITE_AUTH,
+    name: "apollos_dispatch_approved_referral_invitation",
+    description: "Dispatch exactly one already-approved Referral invitation through the canonical delivery path. Live mode may contact the invitation recipient; no destination or message body is accepted through MCP.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        clientId: CLIENT_ID_PROPERTY,
+        invitationId: REFERRAL_INVITATION_ID_PROPERTY,
+        requestedMode: REFERRAL_MODE_PROPERTY,
+        confirmDispatch: REFERRAL_CONFIRM_PROPERTY,
+        idempotencyKey: REFERRAL_IDEMPOTENCY_KEY_PROPERTY,
+      },
+      required: ["invitationId", "requestedMode", "confirmDispatch", "idempotencyKey"],
+      additionalProperties: false,
+    },
+  },
+  {
+    ...TOOL_AUTH,
     name: "apollos_clerk_get_oauth_settings",
     description: "Admin-only: inspect Clerk OAuth application settings used by AI Edge OS, including dynamic client registration and default scopes. Never returns secrets.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -193,6 +236,14 @@ interface ParsedArguments {
   readonly capabilityKey: string | null;
 }
 
+interface ParsedReferralDispatchArguments {
+  readonly clientId: string | null;
+  readonly invitationId: string;
+  readonly requestedMode: "dry_run" | "live";
+  readonly confirmDispatch: true;
+  readonly idempotencyKey: string;
+}
+
 function parseArguments(input: {
   readonly value: unknown;
   readonly capabilityRequired: boolean;
@@ -232,6 +283,52 @@ function parseArguments(input: {
   return Object.freeze({ clientId, capabilityKey });
 }
 
+function parseReferralDispatchArguments(value: unknown): ParsedReferralDispatchArguments {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = new Set([
+    "clientId",
+    "invitationId",
+    "requestedMode",
+    "confirmDispatch",
+    "idempotencyKey",
+  ]);
+  if (Object.keys(record).some((key) => !allowed.has(key))) {
+    throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+  }
+
+  const rawClientId = record.clientId;
+  const clientId = rawClientId === undefined
+    ? null
+    : typeof rawClientId === "string" && rawClientId.trim() && rawClientId.trim().length <= 100
+      ? rawClientId.trim()
+      : (() => { throw new Error("APOLLOS_MCP_CLIENT_ID_INVALID"); })();
+  const invitationId = typeof record.invitationId === "string" ? record.invitationId.trim() : "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationId)) {
+    throw new Error("APOLLOS_MCP_REFERRAL_INVITATION_ID_INVALID");
+  }
+  if (record.requestedMode !== "dry_run" && record.requestedMode !== "live") {
+    throw new Error("APOLLOS_MCP_REFERRAL_MODE_INVALID");
+  }
+  if (record.confirmDispatch !== true) {
+    throw new Error("APOLLOS_MCP_REFERRAL_CONFIRMATION_REQUIRED");
+  }
+  const idempotencyKey = typeof record.idempotencyKey === "string" ? record.idempotencyKey.trim() : "";
+  if (!/^[A-Za-z0-9:_-]{8,120}$/.test(idempotencyKey)) {
+    throw new Error("APOLLOS_MCP_REFERRAL_IDEMPOTENCY_KEY_INVALID");
+  }
+
+  return Object.freeze({
+    clientId,
+    invitationId,
+    requestedMode: record.requestedMode,
+    confirmDispatch: true as const,
+    idempotencyKey,
+  });
+}
+
 function parseOptionalClerkUserId(value: unknown): string | null {
   const input = value ?? {};
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -258,7 +355,8 @@ function assertToolName(value: unknown): ApollosClientMcpToolName {
 
 function requiresOperatorAccess(tool: ApollosClientMcpToolName): boolean {
   return tool === "apollos_execute_safe_action"
-    || tool === "apollos_run_full_utilization_cycle";
+    || tool === "apollos_run_full_utilization_cycle"
+    || tool === "apollos_dispatch_approved_referral_invitation";
 }
 
 function isClerkControlPlaneTool(tool: ApollosClientMcpToolName): boolean {
@@ -340,14 +438,19 @@ export class ApollosClientMcpRuntime {
       });
     }
 
+    const referralDispatch = tool === "apollos_dispatch_approved_referral_invitation"
+      ? parseReferralDispatchArguments(input.arguments)
+      : null;
     const capabilityRequired = tool === "apollos_get_capability_status"
       || tool === "apollos_prepare_activation"
       || tool === "apollos_execute_safe_action";
-    const parsed = parseArguments({
-      value: input.arguments,
-      capabilityRequired,
-      allowClientId: true,
-    });
+    const parsed = referralDispatch
+      ? Object.freeze({ clientId: referralDispatch.clientId, capabilityKey: null })
+      : parseArguments({
+          value: input.arguments,
+          capabilityRequired,
+          allowClientId: true,
+        });
 
     const resolution = await this.resolveTarget(actorUserId, parsed.clientId);
     if (!resolution.ok) {
@@ -416,6 +519,22 @@ export class ApollosClientMcpRuntime {
         });
         data = cycle;
         sideEffects = cycle.sideEffects;
+        break;
+      }
+      case "apollos_get_referral_pilot_status":
+        data = await getApollosReferralPilotStatus(resolution.target.clientId);
+        break;
+      case "apollos_dispatch_approved_referral_invitation": {
+        if (!referralDispatch) throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");
+        const dispatch = await dispatchApollosApprovedReferralInvitation({
+          clientId: resolution.target.clientId,
+          actorUserId,
+          invitationId: referralDispatch.invitationId,
+          requestedMode: referralDispatch.requestedMode,
+          idempotencyKey: referralDispatch.idempotencyKey,
+        });
+        data = dispatch;
+        sideEffects = !dispatch.idempotent;
         break;
       }
       default:

@@ -10,7 +10,7 @@ const routeSource = readFileSync(
   "utf8",
 );
 const pageSource = readFileSync(
-  resolve(repoRoot, "ai-edge-solutions/src/pages/RevenueAttributionPage.tsx"),
+  resolve(repoRoot, "artifacts/ai-edge-solutions/src/pages/RevenueAttributionPage.tsx"),
   "utf8",
 );
 

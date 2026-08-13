@@ -1,22 +1,19 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
 import { useApiFetch } from "@/lib/api";
-import { useAuth } from "@clerk/react";
 import { useActiveBusiness } from "@/contexts/business-context";
-import AiVisibilityReadModelView, { type RMReadModel } from "@/components/AiVisibilityReadModelView";
-import AiVisibilityQueryEvidencePanel, { type QEScan, type QEResult } from "@/components/AiVisibilityQueryEvidencePanel";
+import AiVisibilityReadModelView, {
+  type RMReadModel,
+} from "@/components/AiVisibilityReadModelView";
+import AiVisibilityQueryEvidencePanel, {
+  type QEScan,
+  type QEResult,
+} from "@/components/AiVisibilityQueryEvidencePanel";
 import AiVisibilityHistoryPanel from "@/components/AiVisibilityHistoryPanel";
-
-// ─── Scan error classifier (exported for tests) ───────────────────────────────
-// Translates thrown errors into safe, user-readable messages.
-// A 401 or 403 must never be described as an AI-provider configuration failure.
-// No secrets, stack traces, raw payloads, or internal identifiers are exposed.
 
 export function classifyScanError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-
-  // apiFetch throws: "API {status}: {body}"
   const statusMatch = msg.match(/^API (\d+):/);
   if (statusMatch) {
     const status = parseInt(statusMatch[1], 10);
@@ -24,7 +21,6 @@ export function classifyScanError(err: unknown): string {
     if (status === 403) return "Access denied — this business is not authorized for your account.";
     if (status === 404) return "Scan endpoint or business not found.";
     if (status === 422) {
-      // Preflight failure: tenant profile data is incomplete — do not suggest an API config issue.
       const lower = msg.toLowerCase();
       if (lower.includes("no_active_services")) {
         return "Scan cannot run: no active services are configured for this business. Contact your administrator.";
@@ -38,7 +34,6 @@ export function classifyScanError(err: unknown): string {
     return `Request failed (${status}). Please try again.`;
   }
 
-  // Network / connectivity failures (no HTTP response)
   const lower = msg.toLowerCase();
   if (
     lower.includes("failed to fetch") ||
@@ -48,8 +43,6 @@ export function classifyScanError(err: unknown): string {
   ) {
     return "Network error — could not reach the scan service. Check your connection.";
   }
-
-  // Provider-specific failures that surface outside normal HTTP flow
   if (lower.includes("not_configured") || lower.includes("provider not configured")) {
     return "AI provider not configured. Contact your administrator.";
   }
@@ -62,942 +55,219 @@ export function classifyScanError(err: unknown): string {
   if (lower.includes("rate_limit") || lower.includes("rate limit") || lower.includes("quota")) {
     return "AI provider rate limit reached. Please try again shortly.";
   }
-
-  // Safe generic fallback — never exposes raw error content
   return "Scan failed. Please try again.";
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type TabId = "opportunities" | "ai_query" | "history";
 
-interface Channel {
-  id: string; name: string; category: string;
-  status: string; score: number; priority: string; action: string;
-}
-interface Competitor {
-  name: string; reviewGap: number; keywordGap: string;
-  backlinkGap: string; aiGap: number; opportunityScore: number;
-}
-interface Recommendation {
-  priority: string; task: string; reason: string; impact: string; status: string;
-}
-interface AuditData {
-  businessName: string;
-  overallScore: number; searchScore: number; mapsScore: number;
-  aiSearchScore: number; authorityScore: number; reviewScore: number;
-  competitorGapScore: number;
-  channelsJson: string; competitorsJson: string; recommendationsJson: string;
-}
-
-// ─── Demo fallback (identical to API demo) ────────────────────────────────────
-
-const DEMO: AuditData = {
-  businessName: "Bed Bugs & Beyond",
-  overallScore: 34, searchScore: 42, mapsScore: 51,
-  aiSearchScore: 18, authorityScore: 29, reviewScore: 61, competitorGapScore: 27,
-  channelsJson: JSON.stringify([
-    { id: "google_search",    name: "Google Search",    category: "search",    status: "Connected",   score: 58, priority: "high",     action: "Add LocalBusiness schema" },
-    { id: "bing_search",      name: "Bing Search",      category: "search",    status: "Needs Setup", score: 22, priority: "high",     action: "Claim Bing Places listing" },
-    { id: "google_maps",      name: "Google Maps",      category: "maps",      status: "Connected",   score: 64, priority: "high",     action: "Add more photos & posts" },
-    { id: "apple_maps",       name: "Apple Maps",       category: "maps",      status: "Needs Setup", score: 0,  priority: "critical", action: "Claim Apple Business Connect" },
-    { id: "bing_places",      name: "Bing Places",      category: "maps",      status: "Needs Setup", score: 0,  priority: "high",     action: "Claim Bing Places for Business" },
-    { id: "waze",             name: "Waze",             category: "maps",      status: "Opportunity", score: 15, priority: "medium",   action: "Add Waze business listing" },
-    { id: "yelp",             name: "Yelp",             category: "directory", status: "Connected",   score: 44, priority: "medium",   action: "Increase review velocity" },
-    { id: "facebook",         name: "Facebook",         category: "directory", status: "Connected",   score: 52, priority: "medium",   action: "Enable recommendations" },
-    { id: "nextdoor",         name: "Nextdoor",         category: "directory", status: "Opportunity", score: 8,  priority: "medium",   action: "Create Nextdoor business page" },
-    { id: "chatgpt",          name: "ChatGPT",          category: "ai",        status: "Monitoring",  score: 12, priority: "critical", action: "Build citation authority" },
-    { id: "claude",           name: "Claude",           category: "ai",        status: "Monitoring",  score: 9,  priority: "high",     action: "Add structured data + FAQ" },
-    { id: "gemini",           name: "Gemini",           category: "ai",        status: "Monitoring",  score: 21, priority: "high",     action: "Strengthen GBP signals" },
-    { id: "perplexity",       name: "Perplexity",       category: "ai",        status: "Monitoring",  score: 7,  priority: "high",     action: "Build high-authority citations" },
-    { id: "copilot",          name: "Copilot",          category: "ai",        status: "Monitoring",  score: 14, priority: "high",     action: "Claim Bing Places + schema" },
-    { id: "grok",             name: "Grok",             category: "ai",        status: "Monitoring",  score: 5,  priority: "low",      action: "Monitor for future integration" },
-    { id: "siri",             name: "Siri / Voice",     category: "voice",     status: "Needs Setup", score: 0,  priority: "high",     action: "Claim Apple Business Connect" },
-    { id: "alexa",            name: "Alexa / Voice",    category: "voice",     status: "Opportunity", score: 6,  priority: "medium",   action: "Add Yext or Alexa listing" },
-    { id: "google_assistant", name: "Google Assistant", category: "voice",     status: "Connected",   score: 38, priority: "medium",   action: "Optimize for voice queries" },
-  ]),
-  competitorsJson: JSON.stringify([
-    { name: "Havard Pest Control",            reviewGap: -24, keywordGap: "High",   backlinkGap: "High",   aiGap: -16, opportunityScore: 78 },
-    { name: "Beebe's Pest & Termite",         reviewGap: -8,  keywordGap: "Medium", backlinkGap: "Medium", aiGap: -9,  opportunityScore: 55 },
-    { name: "Knox Pest Control",              reviewGap: -3,  keywordGap: "Low",    backlinkGap: "Low",    aiGap: -7,  opportunityScore: 42 },
-    { name: "Arrow Exterminators",            reviewGap: -41, keywordGap: "High",   backlinkGap: "High",   aiGap: -22, opportunityScore: 91 },
-  ]),
-  recommendationsJson: JSON.stringify([
-    { priority: "critical", task: "Claim Apple Business Connect",          reason: "Siri & Apple Maps send zero customers without this",           impact: "High",   status: "pending" },
-    { priority: "critical", task: "Add LocalBusiness JSON-LD schema",      reason: "AI platforms can't identify business as a local entity",       impact: "High",   status: "pending" },
-    { priority: "critical", task: "Build 20+ citation listings",           reason: "Citation count is 18 below competitor average",               impact: "High",   status: "pending" },
-    { priority: "high",     task: "Claim Bing Places for Business",        reason: "Copilot AI pulls from Bing Places — currently missing",       impact: "High",   status: "pending" },
-    { priority: "high",     task: "Add FAQPage schema to service pages",   reason: "FAQ schema is top signal for AI search snippet selection",    impact: "Medium", status: "pending" },
-    { priority: "high",     task: "Launch post-job review request campaign",reason: "Review velocity is 68% below competitor average",            impact: "High",   status: "pending" },
-    { priority: "high",     task: "Create 6 city-specific service pages",  reason: "Location pages unlock long-tail AI visibility per city",      impact: "High",   status: "pending" },
-    { priority: "medium",   task: "Add llms.txt to website root",          reason: "Allows AI crawlers to index business info directly",          impact: "Medium", status: "pending" },
-    { priority: "medium",   task: "Create AI-optimized About page",        reason: "Entity recognition needs a clear, crawlable business bio",    impact: "Medium", status: "pending" },
-    { priority: "medium",   task: "Build local backlink profile",          reason: "Chamber links + news citations improve authority signals",    impact: "Medium", status: "pending" },
-    { priority: "low",      task: "Set up Nextdoor business page",         reason: "Nextdoor drives hyper-local neighborhood word-of-mouth",      impact: "Low",    status: "pending" },
-    { priority: "low",      task: "Add Waze business listing",             reason: "Captures nearby navigation-intent customers",                 impact: "Low",    status: "pending" },
-  ]),
-};
-
-// ─── Authority engine items ───────────────────────────────────────────────────
-
-const AUTHORITY_ITEMS = [
-  { label: "Citation Health",          icon: "📋", score: 28, status: "weak",    note: "~12 active citations vs. competitor avg 30+" },
-  { label: "NAP Consistency",          icon: "🏢", score: 71, status: "good",    note: "Name, Address, Phone is consistent on major platforms" },
-  { label: "Backlink Opportunities",   icon: "🔗", score: 19, status: "weak",    note: "3 local backlinks found — target 20+ for AI authority" },
-  { label: "Directory Listings",       icon: "📁", score: 44, status: "medium",  note: "8 of 18 major directories claimed" },
-  { label: "Structured Data (Schema)", icon: "🏷", score: 0,  status: "missing", note: "No LocalBusiness, FAQ, or Service schema detected" },
-  { label: "llms.txt / AI Crawler",    icon: "🤖", score: 0,  status: "missing", note: "No llms.txt found — AI crawlers cannot index business data" },
+const TABS: Array<{ id: TabId; label: string; description: string }> = [
+  {
+    id: "opportunities",
+    label: "Opportunities",
+    description: "Evidence-backed actions from connected AI Edge data sources.",
+  },
+  {
+    id: "ai_query",
+    label: "AI Query Evidence",
+    description: "See whether AI search answers mention the business, competitors, and citations.",
+  },
+  {
+    id: "history",
+    label: "History",
+    description: "Track mention-rate and citation evidence over time.",
+  },
 ];
-
-const AI_READINESS = [
-  { platform: "ChatGPT",    icon: "🤖", score: 12, recs: ["Add FAQ schema", "Build citations", "Create AI-readable About page"] },
-  { platform: "Gemini",     icon: "💎", score: 21, recs: ["Strengthen GBP", "Add review schema", "Publish weekly GBP posts"] },
-  { platform: "Perplexity", icon: "🧠", score: 7,  recs: ["High-authority citations", "Add backlinks", "Create expert content"] },
-  { platform: "Claude",     icon: "✦",  score: 9,  recs: ["Structured data", "FAQ content", "Authoritative service pages"] },
-  { platform: "Copilot",    icon: "🪟", score: 14, recs: ["Claim Bing Places", "Add schema", "Increase Bing citations"] },
-  { platform: "Grok",       icon: "✗",  score: 5,  recs: ["Monitor integration", "Build general authority", "Social presence"] },
-];
-
-// ─── Style helpers ────────────────────────────────────────────────────────────
-
-const STATUS_STYLE: Record<string, { color: string; label: string }> = {
-  "Connected":   { color: "#22C55E", label: "Connected"   },
-  "Needs Setup": { color: "#EF4444", label: "Needs Setup" },
-  "Opportunity": { color: "#F59E0B", label: "Opportunity" },
-  "Monitoring":  { color: "#3B82F6", label: "Monitoring"  },
-};
-
-const PRIORITY_STYLE: Record<string, { color: string }> = {
-  critical: { color: "#EF4444" },
-  high:     { color: "#F59E0B" },
-  medium:   { color: "#3B82F6" },
-  low:      { color: "#6B7280" },
-};
-
-const AUTHORITY_STATUS: Record<string, { color: string; label: string }> = {
-  missing: { color: "#EF4444", label: "Missing" },
-  weak:    { color: "#F59E0B", label: "Weak"    },
-  medium:  { color: "#3B82F6", label: "Fair"    },
-  good:    { color: "#22C55E", label: "Good"    },
-};
-
-const CATEGORY_ICONS: Record<string, string> = {
-  search: "🔍", maps: "🗺️", directory: "📁", ai: "🤖", voice: "🔊",
-};
-const CATEGORY_LABELS: Record<string, string> = {
-  search: "Search Engines", maps: "Maps & Navigation", directory: "Directories & Social", ai: "AI Search Platforms", voice: "Voice Assistants",
-};
-
-// ─── Small components ─────────────────────────────────────────────────────────
-
-function SectionDivider({ title, sub, isDark }: { title: string; sub?: string; isDark: boolean }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-      <div style={{ whiteSpace: "nowrap" }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: isDark ? "#475569" : "#4B5563", letterSpacing: "1px", textTransform: "uppercase" }}>{title}</div>
-        {sub && <div style={{ fontSize: 10, color: isDark ? "#334155" : "#9CA3AF", marginTop: 1 }}>{sub}</div>}
-      </div>
-      <div style={{ flex: 1, height: 1, background: isDark ? "rgba(255,255,255,0.05)" : "#E5E7EB" }} />
-    </div>
-  );
-}
-
-function ScoreRing({ score, size = 56, color }: { score: number; size?: number; color: string }) {
-  const r = (size - 6) / 2;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
-  return (
-    <svg width={size} height={size} style={{ transform: "rotate(-90deg)", flexShrink: 0 }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={5}
-        strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
-        style={{ transition: "stroke-dasharray 0.8s ease" }} />
-    </svg>
-  );
-}
-
-function Bar({ value, color, isDark }: { value: number; color: string; isDark: boolean }) {
-  return (
-    <div style={{ height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
-      <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 3, transition: "width 0.7s ease" }} />
-    </div>
-  );
-}
-
-function StatusChip({ label, color }: { label: string; color: string }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      background: `${color}18`, color, fontSize: 9, fontWeight: 800,
-      padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap",
-      border: `1px solid ${color}30`,
-    }}>
-      <span style={{ width: 4, height: 4, borderRadius: "50%", background: color, flexShrink: 0 }} />
-      {label}
-    </span>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AIVisibilityEnginePage() {
+  const apiFetch = useApiFetch();
   const { colors: t, isDark } = useTheme();
-  const apiFetch   = useApiFetch();
-  const { getToken } = useAuth();
-
-  // ── Canonical tenant identity — sourced from authenticated BusinessContext ──
-  // Must NOT be derived from window.location.search or any URL query parameter.
-  // activeBusiness.id is always the authorized slug for the signed-in user
-  // (e.g. "bed-bugs-and-beyond").  Never defaults to "default".
   const { activeBusiness } = useActiveBusiness();
-  const clientId = activeBusiness.id;
-  const isClientView = Boolean(clientId);
+  const clientId = activeBusiness?.id ?? "";
 
-  const [audit, setAudit]         = useState<AuditData>(DEMO);
-  const [loading, setLoading]     = useState(true);
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [actionFilter, setActionFilter]     = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<TabId>("opportunities");
+  const [readModel, setReadModel] = useState<RMReadModel | null>(null);
+  const [readModelLoading, setReadModelLoading] = useState(false);
+  const [readModelError, setReadModelError] = useState<string | null>(null);
+  const [readModelTrigger, setReadModelTrigger] = useState(0);
 
-  // Export states
-  const [pdfLoading,    setPdfLoading]    = useState(false);
-  const [emailModal,    setEmailModal]    = useState(false);
-  const [emailInput,    setEmailInput]    = useState("");
-  const [emailLoading,  setEmailLoading]  = useState(false);
-  const [emailStatus,   setEmailStatus]   = useState<{ ok: boolean; msg: string } | null>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
-
-  // ── Read model (Opportunities tab) ──────────────────────────────────────────
-  const [activeTab, setActiveTab]  = useState<"opportunities" | "ai_query" | "legacy" | "history">("opportunities");
-  const [rmTrigger, setRmTrigger]  = useState(0);
-  const [readModel, setReadModel]  = useState<RMReadModel | null>(null);
-  const [rmLoading, setRmLoading]  = useState(false);
-  const [rmError,   setRmError]    = useState<string | null>(null);
-
-  // ── AI Query scan state ───────────────────────────────────────────────────
-  const [qeScan,      setQeScan]      = useState<QEScan | null>(null);
-  const [qeResults,   setQeResults]   = useState<readonly QEResult[]>([]);
-  const [qeLoading,   setQeLoading]   = useState(false);
-  const [qeError,     setQeError]     = useState<string | null>(null);
-  const qeLoadedRef = useRef(false);
+  const [scan, setScan] = useState<QEScan | null>(null);
+  const [results, setResults] = useState<readonly QEResult[]>([]);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (activeTab !== "opportunities") return;
-    setRmLoading(true);
-    setRmError(null);
+    if (!clientId || activeTab !== "opportunities") return;
+    setReadModelLoading(true);
+    setReadModelError(null);
     apiFetch<RMReadModel>(`/ai-visibility/read-model/${clientId}`)
-      .then(data => setReadModel(data))
-      .catch(() => setRmError("Failed to load AI visibility data. Please try again."))
-      .finally(() => setRmLoading(false));
-  }, [activeTab, clientId, apiFetch, rmTrigger]);
-
-  // Load latest scan when AI Query tab first becomes active
-  useEffect(() => {
-    if (activeTab !== "ai_query" || qeLoadedRef.current) return;
-    qeLoadedRef.current = true;
-    setQeLoading(true);
-    setQeError(null);
-    apiFetch<{ scan: QEScan; results: QEResult[] }>(`/ai-visibility/query-scan/${clientId}/latest`)
-      .then(data => { setQeScan(data.scan); setQeResults(data.results); })
-      .catch(err => {
-        const msg = err?.message ?? String(err);
-        if (msg.includes("404") || msg.includes("no_scan_found")) {
-          setQeScan(null); setQeResults([]);
-        } else {
-          setQeError("Failed to load scan data.");
-        }
+      .then((data) => setReadModel(data))
+      .catch(() => {
+        setReadModel(null);
+        setReadModelError("No verified AI visibility read model is available right now. No demo data has been substituted.");
       })
-      .finally(() => setQeLoading(false));
-  }, [activeTab, clientId, apiFetch]);
+      .finally(() => setReadModelLoading(false));
+  }, [activeTab, apiFetch, clientId, readModelTrigger]);
 
-  async function handleRunScan() {
+  useEffect(() => {
+    if (!clientId || activeTab !== "ai_query") return;
+    setScanLoading(true);
+    setScanError(null);
+    apiFetch<{ scan: QEScan; results: QEResult[] }>(
+      `/ai-visibility/query-scan/${clientId}/latest`,
+    )
+      .then((data) => {
+        setScan(data.scan);
+        setResults(data.results);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("404") || message.includes("no_scan_found")) {
+          setScan(null);
+          setResults([]);
+          return;
+        }
+        setScan(null);
+        setResults([]);
+        setScanError("Verified AI query evidence could not be loaded. No demo scan has been substituted.");
+      })
+      .finally(() => setScanLoading(false));
+  }, [activeTab, apiFetch, clientId]);
+
+  async function runScan() {
     if (!clientId) {
-      setQeError("Tenant identity unavailable. Please reload and try again.");
+      setScanError("Tenant identity unavailable. Please reload and try again.");
       return;
     }
-    setQeLoading(true);
-    setQeError(null);
+    setScanLoading(true);
+    setScanError(null);
     try {
       const data = await apiFetch<QEScan & { results: QEResult[] }>(
         `/ai-visibility/query-scan/${clientId}`,
         { method: "POST" },
       );
-      setQeScan(data);
-      setQeResults((data as any).results ?? []);
-      // Refresh the read model so ai_query coverage updates
-      setRmTrigger(n => n + 1);
+      setScan(data);
+      setResults(data.results ?? []);
+      setReadModelTrigger((value) => value + 1);
     } catch (err) {
-      setQeError(classifyScanError(err));
+      setScanError(classifyScanError(err));
     } finally {
-      setQeLoading(false);
+      setScanLoading(false);
     }
   }
 
-  useEffect(() => {
-    setLoading(true);
-    apiFetch<AuditData>(`/ai-visibility/${clientId}`)
-      .then(data => setAudit(data))
-      .catch(() => setAudit(DEMO))
-      .finally(() => setLoading(false));
-  }, [clientId]);
-
-  // ── PDF export ──
-  async function handleExportPDF() {
-    setPdfLoading(true);
-    try {
-      const token = await getToken().catch(() => null);
-      const base  = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const res   = await fetch(`${base}/api/ai-visibility/download-pdf`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ clientId }),
-      });
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = `AI-Visibility-Audit-${audit.businessName.replace(/[^a-z0-9]/gi, "-")}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      alert("PDF export failed. Please try again.");
-    } finally {
-      setPdfLoading(false);
-    }
-  }
-
-  // ── Email report ──
-  async function handleEmailReport(e: React.FormEvent) {
-    e.preventDefault();
-    if (!emailInput.trim()) return;
-    setEmailLoading(true);
-    setEmailStatus(null);
-    try {
-      const data = await apiFetch<{ status: string; message: string }>(
-        "/ai-visibility/email-report",
-        { method: "POST", body: JSON.stringify({ clientId, recipientEmail: emailInput.trim() }) }
-      );
-      setEmailStatus({ ok: true, msg: data.message });
-    } catch {
-      setEmailStatus({ ok: false, msg: "Failed to send. Please try again." });
-    } finally {
-      setEmailLoading(false);
-    }
-  }
-
-  // ── Generate report ──
-  const [generateLoading, setGenerateLoading] = useState(false);
-  const [reportReady, setReportReady]         = useState(false);
-
-  async function handleGenerateReport() {
-    setGenerateLoading(true);
-    setReportReady(false);
-    try {
-      await apiFetch("/ai-visibility/generate-report", {
-        method: "POST", body: JSON.stringify({ clientId }),
-      });
-      setReportReady(true);
-      // Refresh scores on screen
-      apiFetch<AuditData>(`/ai-visibility/${clientId}`)
-        .then(data => { setAudit(data); })
-        .catch(() => {});
-      setTimeout(() => setReportReady(false), 4000);
-    } catch {
-      alert("Failed to generate report. Please try again.");
-    } finally {
-      setGenerateLoading(false);
-    }
-  }
-
-  const channels: Channel[]         = JSON.parse(audit.channelsJson       || "[]");
-  const competitors: Competitor[]   = JSON.parse(audit.competitorsJson    || "[]");
-  const recommendations: Recommendation[] = JSON.parse(audit.recommendationsJson || "[]");
-
-  const filteredChannels = categoryFilter === "all"
-    ? channels
-    : channels.filter(c => c.category === categoryFilter);
-
-  const criticalRecs = recommendations.filter(r => r.priority === "critical");
-  const highRecs     = recommendations.filter(r => r.priority === "high");
-  const mediumRecs   = recommendations.filter(r => r.priority === "medium");
-  const lowRecs      = recommendations.filter(r => r.priority === "low");
-
-  const displayRecs = actionFilter === "all" ? recommendations
-    : actionFilter === "critical" ? criticalRecs
-    : actionFilter === "high"     ? highRecs
-    : actionFilter === "medium"   ? mediumRecs
-    : lowRecs;
-
-  // ── Theme-aware card styles ──
-  const card = {
-    background: isDark ? "rgba(11,22,41,0.8)" : "#FFFFFF",
-    border: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid #E5E7EB",
-    borderRadius: 14,
-  } as const;
-
-  const kpiCards = [
-    { icon: "⚡", label: "Overall Visibility",  value: audit.overallScore,       color: audit.overallScore  >= 70 ? "#22C55E" : audit.overallScore  >= 40 ? "#F59E0B" : "#EF4444", suffix: "/100" },
-    { icon: "🔍", label: "Search Visibility",   value: audit.searchScore,        color: "#00AEEF",  suffix: "/100" },
-    { icon: "🗺️", label: "Maps Visibility",     value: audit.mapsScore,          color: "#22C55E",  suffix: "/100" },
-    { icon: "🤖", label: "AI Search",           value: audit.aiSearchScore,      color: "#3B82F6",  suffix: "/100" },
-    { icon: "🏛️", label: "Authority Score",     value: audit.authorityScore,     color: "#F59E0B",  suffix: "/100" },
-    { icon: "⭐", label: "Review Strength",     value: audit.reviewScore,        color: "#FBBF24",  suffix: "/100" },
-    { icon: "⚔️", label: "Competitor Gap",      value: audit.competitorGapScore, color: "#EF4444",  suffix: "/100" },
-  ];
-
-  const categories = [
-    { id: "all",       label: `All (${channels.length})` },
-    { id: "search",    label: `Search (${channels.filter(c => c.category === "search").length})` },
-    { id: "maps",      label: `Maps (${channels.filter(c => c.category === "maps").length})` },
-    { id: "directory", label: `Directories (${channels.filter(c => c.category === "directory").length})` },
-    { id: "ai",        label: `AI (${channels.filter(c => c.category === "ai").length})` },
-    { id: "voice",     label: `Voice (${channels.filter(c => c.category === "voice").length})` },
-  ];
+  const cardBorder = isDark ? "rgba(255,255,255,0.08)" : "#E5E7EB";
+  const cardBackground = isDark ? "rgba(11,22,41,0.8)" : "#FFFFFF";
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-
-        {/* ── Header ── */}
-        <div style={{ marginBottom: 26 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)",
-            borderRadius: 20, padding: "4px 14px", marginBottom: 12,
-          }}>
-            <span style={{ fontSize: 12, color: "#FBBF24", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              🤖 AI Edge Visibility
-            </span>
+      <div style={{ maxWidth: 1180, margin: "0 auto", paddingBottom: 40 }}>
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "5px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(0,174,239,0.28)",
+              background: "rgba(0,174,239,0.08)",
+              color: "#00AEEF",
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: ".5px",
+              textTransform: "uppercase",
+              marginBottom: 12,
+            }}
+          >
+            AI Visibility · Verified Evidence
           </div>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div>
-              <h1 style={{ fontSize: 26, fontWeight: 800, color: t.text, letterSpacing: "-0.5px", margin: "0 0 5px" }}>
-                AI Edge Visibility
-              </h1>
-              <p style={{ fontSize: 13, color: t.text2, margin: 0, maxWidth: 620 }}>
-                {isClientView && audit.businessName
-                  ? <>Visibility audit for <strong style={{ color: t.text }}>{audit.businessName}</strong> — track & improve presence across all channels.</>
-                  : <>Track & improve visibility across search engines, maps, directories, AI search platforms, and voice assistants.</>
-                }
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              {isClientView && audit.businessName && !loading && (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 7,
-                  background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
-                  borderRadius: 10, padding: "7px 13px",
-                }}>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E" }} />
-                  <span style={{ fontSize: 11, color: "#22C55E", fontWeight: 700 }}>{audit.businessName}</span>
-                </div>
-              )}
-              {loading && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 10, padding: "7px 13px" }}>
-                  <span style={{ fontSize: 11, color: "#FBBF24", fontWeight: 600 }}>⚡ Loading audit…</span>
-                </div>
-              )}
-              {/* ── 3 action buttons ── */}
-              <button
-                onClick={handleGenerateReport}
-                disabled={generateLoading || loading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: reportReady ? "#22C55E" : "rgba(59,130,246,0.12)",
-                  border: `1px solid ${reportReady ? "#22C55E" : "rgba(59,130,246,0.4)"}`,
-                  borderRadius: 10, padding: "8px 16px",
-                  cursor: generateLoading ? "wait" : "pointer",
-                  color: reportReady ? "#fff" : "#3B82F6",
-                  fontSize: 12, fontWeight: 700,
-                  transition: "all 0.25s",
-                  opacity: generateLoading ? 0.7 : 1,
-                }}
-              >
-                {generateLoading ? "⏳ Generating…" : reportReady ? "✓ Report Ready" : "✦ Generate Report"}
-              </button>
-              <button
-                onClick={handleExportPDF}
-                disabled={pdfLoading || loading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "#00AEEF", border: "none", borderRadius: 10,
-                  padding: "8px 16px", cursor: pdfLoading ? "wait" : "pointer",
-                  color: "#fff", fontSize: 12, fontWeight: 700,
-                  opacity: pdfLoading ? 0.7 : 1,
-                }}
-              >
-                {pdfLoading ? "⏳ Building…" : "↓ Download PDF"}
-              </button>
-              <button
-                onClick={() => { setEmailModal(true); setEmailStatus(null); setEmailInput(""); }}
-                disabled={loading}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "rgba(0,174,239,0.10)", border: "1px solid rgba(0,174,239,0.35)",
-                  borderRadius: 10, padding: "8px 16px", cursor: "pointer",
-                  color: "#00AEEF", fontSize: 12, fontWeight: 700,
-                }}
-              >
-                ✉ Email Report
-              </button>
-            </div>
-          </div>
+          <h1 style={{ margin: 0, fontSize: 28, color: t.text }}>
+            AI Search Visibility
+          </h1>
+          <p style={{ margin: "8px 0 0", color: t.text2, fontSize: 13, maxWidth: 760, lineHeight: 1.6 }}>
+            Find where the business is visible, where competitors appear instead, and what AI Edge can prove should be fixed next. This production view never substitutes demo scores or fabricated competitor data when evidence is missing.
+          </p>
         </div>
 
-        {/* ── Email Modal ── */}
-        {emailModal && (
-          <div style={{
-            position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }} onClick={() => setEmailModal(false)}>
-            <div style={{
-              background: isDark ? "#0B1629" : "#fff",
-              border: `1px solid ${isDark ? "rgba(0,174,239,0.2)" : "#E5E7EB"}`,
-              borderRadius: 16, padding: "32px 28px", width: 420, maxWidth: "90vw",
-              boxShadow: "0 24px 60px rgba(0,0,0,0.4)",
-            }} onClick={e => e.stopPropagation()}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: t.text }}>Email Audit Report</h3>
-                  <p style={{ margin: "4px 0 0", fontSize: 12, color: t.text2 }}>Send PDF to client or prospect</p>
-                </div>
-                <button onClick={() => setEmailModal(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: t.text2 }}>✕</button>
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: t.text2, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Business</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{audit.businessName}</div>
-              </div>
-
-              <form onSubmit={handleEmailReport}>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: t.text2, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
-                    Recipient Email
-                  </label>
-                  <input
-                    ref={emailRef}
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    placeholder="client@example.com"
-                    style={{
-                      width: "100%", padding: "10px 12px", borderRadius: 8, fontSize: 14,
-                      background: isDark ? "rgba(255,255,255,0.05)" : "#F9FAFB",
-                      border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "#D1D5DB"}`,
-                      color: t.text, outline: "none", boxSizing: "border-box",
-                    }}
-                    autoFocus
-                  />
-                </div>
-
-                {emailStatus && (
-                  <div style={{
-                    marginBottom: 16, padding: "10px 14px", borderRadius: 8,
-                    background: emailStatus.ok ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
-                    border: `1px solid ${emailStatus.ok ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
-                    fontSize: 12, color: emailStatus.ok ? "#22C55E" : "#EF4444", fontWeight: 600,
-                  }}>
-                    {emailStatus.ok ? "✓ " : "✕ "}{emailStatus.msg}
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button type="button" onClick={() => setEmailModal(false)} style={{
-                    flex: 1, padding: "10px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                    background: "none", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "#D1D5DB"}`,
-                    color: t.text2, cursor: "pointer",
-                  }}>
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={emailLoading} style={{
-                    flex: 2, padding: "10px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                    background: "#00AEEF", border: "none", color: "#fff",
-                    cursor: emailLoading ? "wait" : "pointer", opacity: emailLoading ? 0.7 : 1,
-                  }}>
-                    {emailLoading ? "Sending…" : "Send Report"}
-                  </button>
-                </div>
-              </form>
-            </div>
+        {!clientId ? (
+          <div
+            style={{
+              padding: 22,
+              borderRadius: 12,
+              border: `1px solid ${cardBorder}`,
+              background: cardBackground,
+              color: "#EF4444",
+              fontSize: 13,
+            }}
+          >
+            No authorized business is active. Select or provision a client before running visibility analysis.
           </div>
-        )}
-
-        {/* ── Tab navigation ── */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 28, borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
-          {([
-            { id: "opportunities", label: "✦ Opportunities", color: "#00AEEF" },
-            { id: "ai_query",      label: "🤖 AI Query",      color: "#A78BFA" },
-            { id: "history",       label: "📈 History",        color: "#22C55E" },
-            { id: "legacy",        label: "📊 Legacy Audit",  color: "#FBBF24" },
-          ] as const).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+        ) : (
+          <>
+            <div
               style={{
-                padding: "9px 18px", background: "none", border: "none",
-                cursor: "pointer", fontSize: 12, fontWeight: 700,
-                color: activeTab === tab.id ? tab.color : (isDark ? "#475569" : "#9CA3AF"),
-                borderBottom: activeTab === tab.id ? `2px solid ${tab.color}` : "2px solid transparent",
-                marginBottom: -1, transition: "all 0.15s",
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                marginBottom: 12,
               }}
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Opportunities view ── */}
-        {activeTab === "opportunities" && (
-          <AiVisibilityReadModelView
-            model={readModel}
-            loading={rmLoading}
-            error={rmError}
-            onRetry={() => setRmTrigger(n => n + 1)}
-            isDark={isDark}
-            colors={t}
-          />
-        )}
-
-        {/* ── AI Query evidence view ── */}
-        {activeTab === "ai_query" && (
-          <AiVisibilityQueryEvidencePanel
-            scan={qeScan}
-            results={qeResults}
-            isLoading={qeLoading}
-            error={qeError}
-            clientId={clientId}
-            onRunScan={handleRunScan}
-            isDark={isDark}
-          />
-        )}
-
-        {/* ── History view ── */}
-        {activeTab === "history" && (
-          <AiVisibilityHistoryPanel clientId={clientId} />
-        )}
-
-        {/* ── Legacy Audit view ── */}
-        {activeTab === "legacy" && (<>
-
-        {/* ── 1. KPI Score Cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10, marginBottom: 30 }}>
-          {kpiCards.map(k => (
-            <div key={k.label} style={{
-              ...card,
-              padding: "16px 14px",
-              boxShadow: `0 0 20px ${k.color}10`,
-              borderTop: `2px solid ${k.color}50`,
-            }}>
-              <div style={{ fontSize: 18, marginBottom: 8 }}>{k.icon}</div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: isDark ? "#475569" : "#6B7280", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>{k.label}</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
-                <span style={{ fontSize: 28, fontWeight: 900, color: k.color, lineHeight: 1 }}>{k.value}</span>
-                <span style={{ fontSize: 11, color: isDark ? "#475569" : "#9CA3AF" }}>{k.suffix}</span>
-              </div>
-              <Bar value={k.value} color={k.color} isDark={isDark} />
-            </div>
-          ))}
-        </div>
-
-        {/* ── 2. Get Found Everywhere ── */}
-        <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="Get Found Everywhere — 18 Channels" sub="Status, score, and recommended action for each platform" isDark={isDark} />
-
-          {/* Category filter tabs */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setCategoryFilter(cat.id)}
-                style={{
-                  padding: "5px 12px", borderRadius: 20, fontSize: 10, fontWeight: 700,
-                  cursor: "pointer", border: "none",
-                  background: categoryFilter === cat.id
-                    ? "rgba(251,191,36,0.15)"
-                    : (isDark ? "rgba(255,255,255,0.05)" : "#F3F4F6"),
-                  color: categoryFilter === cat.id
-                    ? "#FBBF24"
-                    : (isDark ? "#64748B" : "#6B7280"),
-                  transition: "all 0.15s",
-                }}
-              >{cat.label}</button>
-            ))}
-          </div>
-
-          {/* Group by category when showing all */}
-          {categoryFilter === "all" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {["search", "maps", "directory", "ai", "voice"].map(cat => {
-                const catChannels = channels.filter(c => c.category === cat);
-                if (!catChannels.length) return null;
+              {TABS.map((tab) => {
+                const selected = activeTab === tab.id;
                 return (
-                  <div key={cat}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontSize: 14 }}>{CATEGORY_ICONS[cat]}</span>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: isDark ? "#475569" : "#6B7280", textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                        {CATEGORY_LABELS[cat]}
-                      </span>
-                    </div>
-                    <ChannelGrid channels={catChannels} card={card} isDark={isDark} />
-                  </div>
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      border: `1px solid ${selected ? "#00AEEF" : cardBorder}`,
+                      background: selected ? "rgba(0,174,239,0.12)" : cardBackground,
+                      color: selected ? "#00AEEF" : t.text2,
+                      borderRadius: 9,
+                      padding: "9px 14px",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 750,
+                    }}
+                  >
+                    {tab.label}
+                  </button>
                 );
               })}
             </div>
-          ) : (
-            <ChannelGrid channels={filteredChannels} card={card} isDark={isDark} />
-          )}
-        </div>
 
-        {/* ── 3. Competitor Intelligence ── */}
-        <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="Competitor Intelligence" sub="Review, keyword, backlink, and AI visibility gaps" isDark={isDark} />
-          <div style={{ ...card, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
-                  {["Competitor", "Review Gap", "Keyword Gap", "Backlink Gap", "AI Gap", "Opportunity Score"].map(h => (
-                    <th key={h} style={{ padding: "11px 16px", fontSize: 9, fontWeight: 800, color: isDark ? "#475569" : "#6B7280", textAlign: "left", textTransform: "uppercase", letterSpacing: "0.7px", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {competitors.map((c, i) => (
-                  <tr key={i} style={{ borderBottom: i < competitors.length - 1 ? (isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6") : "none" }}>
-                    <td style={{ padding: "13px 16px", fontSize: 13, fontWeight: 700, color: t.text }}>{c.name}</td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: c.reviewGap < -15 ? "#EF4444" : c.reviewGap < -5 ? "#F59E0B" : "#22C55E" }}>
-                        {c.reviewGap}
-                      </span>
-                    </td>
-                    <td style={{ padding: "13px 16px" }}><GapBadge level={c.keywordGap} /></td>
-                    <td style={{ padding: "13px 16px" }}><GapBadge level={c.backlinkGap} /></td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: Math.abs(c.aiGap) > 15 ? "#EF4444" : "#F59E0B" }}>
-                        {c.aiGap}
-                      </span>
-                    </td>
-                    <td style={{ padding: "13px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1, maxWidth: 80, height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${c.opportunityScore}%`, background: c.opportunityScore > 70 ? "#EF4444" : "#F59E0B", borderRadius: 3 }} />
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: c.opportunityScore > 70 ? "#EF4444" : "#F59E0B" }}>{c.opportunityScore}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ padding: "11px 16px", borderTop: isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #F3F4F6", background: isDark ? "rgba(239,68,68,0.03)" : "#FEF2F2" }}>
-              <span style={{ fontSize: 11, color: isDark ? "#94A3B8" : "#6B7280" }}>
-                📊 <strong style={{ color: "#EF4444" }}>Bed Bugs &amp; Beyond</strong> has an estimated <strong style={{ color: "#EF4444" }}>2 AI mentions</strong> vs. competitor average of <strong style={{ color: "#FBBF24" }}>14</strong>. Closing this gap is the #1 growth lever.
-              </span>
+            <div style={{ color: t.text2, fontSize: 12, marginBottom: 22 }}>
+              {TABS.find((tab) => tab.id === activeTab)?.description}
             </div>
-          </div>
-        </div>
 
-        {/* ── 4. Authority Engine ── */}
-        <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="Edge Authority" sub="Citation health, NAP consistency, backlinks, directories, schema, AI crawler readiness" isDark={isDark} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            {AUTHORITY_ITEMS.map(item => {
-              const st = AUTHORITY_STATUS[item.status];
-              return (
-                <div key={item.label} style={{
-                  ...card,
-                  padding: "16px 18px",
-                  borderLeft: `3px solid ${st.color}60`,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                      background: `${st.color}12`, border: `1px solid ${st.color}25`,
-                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                    }}>{item.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 1 }}>{item.label}</div>
-                      <StatusChip label={st.label} color={st.color} />
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 22, fontWeight: 900, color: st.color, lineHeight: 1 }}>{item.score}</div>
-                      <div style={{ fontSize: 9, color: isDark ? "#475569" : "#9CA3AF" }}>/100</div>
-                    </div>
-                  </div>
-                  <Bar value={item.score} color={st.color} isDark={isDark} />
-                  <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", marginTop: 8, lineHeight: 1.4 }}>{item.note}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+            {activeTab === "opportunities" && (
+              <AiVisibilityReadModelView
+                model={readModel}
+                loading={readModelLoading}
+                error={readModelError}
+                onRetry={() => setReadModelTrigger((value) => value + 1)}
+                isDark={isDark}
+                colors={t}
+              />
+            )}
 
-        {/* ── 5. AI Search Readiness ── */}
-        <div style={{ marginBottom: 30 }}>
-          <SectionDivider title="AI Search Readiness" sub="How ready each AI platform is to recommend this business" isDark={isDark} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            {AI_READINESS.map(p => {
-              const col = p.score >= 50 ? "#22C55E" : p.score >= 25 ? "#F59E0B" : "#EF4444";
-              return (
-                <div key={p.platform} style={{ ...card, padding: "18px 18px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                    <div style={{
-                      width: 42, height: 42, borderRadius: 10, flexShrink: 0,
-                      background: `${col}10`, border: `1px solid ${col}25`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 20, fontWeight: 900,
-                    }}>{p.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: t.text, marginBottom: 3 }}>{p.platform}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1, height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${p.score}%`, background: col, borderRadius: 3 }} />
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: col }}>{p.score}%</span>
-                      </div>
-                    </div>
-                    <ScoreRing score={p.score} size={44} color={col} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    {p.recs.map((rec, j) => (
-                      <div key={j} style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
-                        <span style={{ color: col, fontSize: 10, marginTop: 1, flexShrink: 0 }}>→</span>
-                        <span style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.4 }}>{rec}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+            {activeTab === "ai_query" && (
+              <AiVisibilityQueryEvidencePanel
+                scan={scan}
+                results={results}
+                isLoading={scanLoading}
+                error={scanError}
+                clientId={clientId}
+                onRunScan={() => void runScan()}
+                isDark={isDark}
+              />
+            )}
 
-        {/* ── 6. Action Plan ── */}
-        <div style={{ marginBottom: 30 }}>
-          <SectionDivider title={`Action Plan — ${recommendations.length} items`} sub="Prioritized tasks to improve AI visibility" isDark={isDark} />
-
-          {/* Filter tabs */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-            {[
-              { id: "all",      label: `All (${recommendations.length})`,    color: "#94A3B8" },
-              { id: "critical", label: `Critical (${criticalRecs.length})`,  color: "#EF4444" },
-              { id: "high",     label: `High (${highRecs.length})`,          color: "#F59E0B" },
-              { id: "medium",   label: `Medium (${mediumRecs.length})`,      color: "#3B82F6" },
-              { id: "low",      label: `Low (${lowRecs.length})`,            color: "#64748B" },
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setActionFilter(f.id)}
-                style={{
-                  padding: "5px 12px", borderRadius: 20, fontSize: 10, fontWeight: 700,
-                  cursor: "pointer", border: "none",
-                  background: actionFilter === f.id ? `${f.color}18` : (isDark ? "rgba(255,255,255,0.05)" : "#F3F4F6"),
-                  color: actionFilter === f.id ? f.color : (isDark ? "#64748B" : "#6B7280"),
-                  transition: "all 0.15s",
-                }}
-              >{f.label}</button>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {displayRecs.map((rec, i) => {
-              const ps = PRIORITY_STYLE[rec.priority] || PRIORITY_STYLE.low;
-              const impactColor = rec.impact === "High" ? "#22C55E" : rec.impact === "Medium" ? "#3B82F6" : "#6B7280";
-              return (
-                <div key={i} style={{
-                  ...card,
-                  padding: "14px 18px",
-                  display: "flex", alignItems: "flex-start", gap: 14,
-                  borderLeft: `3px solid ${ps.color}60`,
-                }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                    background: `${ps.color}12`, border: `1px solid ${ps.color}25`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 10, fontWeight: 900, color: ps.color,
-                    textTransform: "uppercase",
-                  }}>
-                    {rec.priority === "critical" ? "!" : rec.priority.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 3 }}>{rec.task}</div>
-                    <div style={{ fontSize: 11, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.4 }}>{rec.reason}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: ps.color, background: `${ps.color}12`, border: `1px solid ${ps.color}25`, padding: "3px 8px", borderRadius: 20 }}>
-                      {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
-                    </span>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: impactColor, background: `${impactColor}12`, border: `1px solid ${impactColor}25`, padding: "3px 8px", borderRadius: 20 }}>
-                      {rec.impact} Impact
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        </>)}
-
+            {activeTab === "history" && (
+              <AiVisibilityHistoryPanel clientId={clientId} />
+            )}
+          </>
+        )}
       </div>
     </AppShell>
-  );
-}
-
-// ─── Channel grid sub-component ───────────────────────────────────────────────
-
-function ChannelGrid({ channels, card, isDark }: { channels: Channel[]; card: React.CSSProperties; isDark: boolean }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10 }}>
-      {channels.map(ch => {
-        const st = STATUS_STYLE[ch.status] || { color: "#64748B", label: ch.status };
-        const ps = PRIORITY_STYLE[ch.priority] || PRIORITY_STYLE.low;
-        return (
-          <div key={ch.id} style={{
-            ...card,
-            padding: "14px 13px",
-            display: "flex", flexDirection: "column", gap: 8,
-            borderTop: `2px solid ${st.color}40`,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>{CATEGORY_ICONS[ch.category] || "🌐"}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: isDark ? "#E2E8F0" : "#111827", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ch.name}</span>
-            </div>
-            <StatusChip label={st.label} color={st.color} />
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 9, color: isDark ? "#475569" : "#9CA3AF", fontWeight: 700 }}>Score</span>
-                <span style={{ fontSize: 10, fontWeight: 800, color: st.color }}>{ch.score}%</span>
-              </div>
-              <div style={{ height: 4, background: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB", borderRadius: 2, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${ch.score}%`, background: st.color, borderRadius: 2 }} />
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 8, fontWeight: 800, color: ps.color, textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                {ch.priority}
-              </span>
-            </div>
-            <div style={{ fontSize: 9, color: isDark ? "#64748B" : "#6B7280", lineHeight: 1.35, borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : "1px solid #F3F4F6", paddingTop: 6, marginTop: "auto" }}>
-              → {ch.action}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Gap badge ────────────────────────────────────────────────────────────────
-
-function GapBadge({ level }: { level: string }) {
-  const col = level === "High" ? "#EF4444" : level === "Medium" ? "#F59E0B" : "#22C55E";
-  return (
-    <span style={{ fontSize: 11, fontWeight: 700, color: col, background: `${col}12`, border: `1px solid ${col}25`, padding: "2px 9px", borderRadius: 6 }}>
-      {level}
-    </span>
   );
 }

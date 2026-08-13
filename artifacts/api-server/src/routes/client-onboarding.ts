@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { db, pool } from "@workspace/db";
 import { clientOnboardingTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
+import { buildStagingRowPreflight } from "../lib/client-onboarding-staging-preflight.js";
 
 const router = Router();
 
@@ -72,6 +73,37 @@ router.get("/client-onboarding", async (req, res) => {
   } catch (err) {
     console.error("[client-onboarding] list error:", err);
     res.status(500).json({ error: "Failed to load onboardings" });
+  }
+});
+
+// ── GET /api/client-onboarding/:id/preflight ── read-only owned draft check ──
+router.get("/client-onboarding/:id/preflight", async (req, res) => {
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
+  try {
+    const [row] = await db
+      .select()
+      .from(clientOnboardingTable)
+      .where(ownedRow(req.params.id, userId));
+
+    if (!row) return void res.status(404).json({ error: "Not found" });
+
+    const preflight = buildStagingRowPreflight(row);
+    res.json({
+      onboardingId: row.id,
+      stagingStatus: row.status,
+      preflight,
+      provisioningStatus: "not_accepted",
+      safety: {
+        stagingRowMutated: false,
+        canonicalClientCreated: false,
+        externalProviderCalled: false,
+      },
+    });
+  } catch (err) {
+    console.error("[client-onboarding] preflight error:", err);
+    res.status(500).json({ error: "Failed to run onboarding preflight" });
   }
 });
 

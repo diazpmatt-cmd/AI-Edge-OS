@@ -90,7 +90,7 @@ router.get("/reviews/overview", async (req, res) => {
  *   - the job is completed and has a completion timestamp;
  *   - the job has a stable external ID and customer ID;
  *   - the matching customer belongs to the same tenant project;
- *   - at least one collected payment with a paid timestamp is tied to the job;
+ *   - collected payment total covers the full positive job amount;
  *   - there is no prior review-request delivery evidence for this job in the
  *     tenant-scoped customer journey ledger.
  *
@@ -131,6 +131,7 @@ router.get("/reviews/eligibility", async (req, res) => {
          AND j.completed_at IS NOT NULL
          AND j.external_id IS NOT NULL
          AND j.customer_id IS NOT NULL
+         AND j.amount_cents > 0
          AND j.completed_at >= NOW() - ($2::int * INTERVAL '1 day')
          AND NOT EXISTS (
            SELECT 1
@@ -153,7 +154,7 @@ router.get("/reviews/eligibility", async (req, res) => {
          j.service_type,
          j.amount_cents,
          j.completed_at
-       HAVING COALESCE(SUM(p.amount_cents), 0) > 0
+       HAVING COALESCE(SUM(p.amount_cents), 0) >= j.amount_cents
        ORDER BY j.completed_at DESC
        LIMIT 100`,
       [tenant.slug, windowDays, tenant.clientId],
@@ -178,7 +179,7 @@ router.get("/reviews/eligibility", async (req, res) => {
         },
         evidence: {
           completedJob: true,
-          collectedPayment: true,
+          paidInFull: true,
           sameTenantProject: true,
           priorReviewRequestEvidence: false,
         },

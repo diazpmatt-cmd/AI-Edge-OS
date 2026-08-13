@@ -4,6 +4,7 @@ import type {
   DevelopmentCoordinationStore,
   TaskRecord,
 } from "../../../../lib/development-control/src/index.js";
+import { DAB_GIT_CI_REPAIR_CONSTRAINT, type DabGitCiRepairHandoffReceipt } from "./dab-git-ci-repair-handoff.js";
 import { DAB_GIT_MUTATION_AUTHORIZATIONS, type DabGitMissionAuthorizationMap, type DabResolvedGitMission } from "./dab-git-mission-runner.js";
 import { sha256, validateManifest } from "./dab-preparation-policy.js";
 
@@ -18,8 +19,15 @@ type PreparedCandidate = {
   context_hash: string;
   manifest_content: string;
   manifest_sha256: string;
+  completed_at: string | null;
   task_id: string;
 };
+
+type RepairHandoffRow = { receipt: DabGitCiRepairHandoffReceipt };
+
+function isRepairApproval(approval: ApprovalRecord): boolean {
+  return approval.categories.includes("editing") && approval.constraints.includes(DAB_GIT_CI_REPAIR_CONSTRAINT);
+}
 
 function latestApprovalForCategory(input: {
   approvals: readonly ApprovalRecord[];
@@ -28,7 +36,7 @@ function latestApprovalForCategory(input: {
   now: Date;
 }): ApprovalRecord {
   const relevant = input.approvals
-    .filter((approval) => approval.categories.includes(input.category))
+    .filter((approval) => approval.categories.includes(input.category) && (input.category !== "editing" || !isRepairApproval(approval)))
     .sort((a, b) => Date.parse(b.decidedAt) - Date.parse(a.decidedAt));
   const latest = relevant[0];
   if (!latest) throw new Error(`DAB_GIT_RESOLVER_${input.category.toUpperCase()}_APPROVAL_MISSING`);
@@ -38,6 +46,15 @@ function latestApprovalForCategory(input: {
   }
   if (latest.expiresAt && Date.parse(latest.expiresAt) <= input.now.getTime()) throw new Error(`DAB_GIT_RESOLVER_${input.category.toUpperCase()}_APPROVAL_EXPIRED`);
   if (!latest.decidingActor.verified || latest.decidingActor.actorType !== "human_authority") throw new Error(`DAB_GIT_RESOLVER_${input.category.toUpperCase()}_ACTOR_INVALID`);
+  return latest;
+}
+
+function latestRepairApproval(approvals: readonly ApprovalRecord[], task: TaskRecord, now: Date): ApprovalRecord | null {
+  const latest = approvals.filter(isRepairApproval).sort((a, b) => Date.parse(b.decidedAt) - Date.parse(a.decidedAt))[0];
+  if (!latest || latest.decision !== "approved") return null;
+  if (latest.specificationRevision !== task.specification.revision || latest.specificationHash !== task.specification.specificationHash || latest.expectedGitSha !== task.specification.expectedOriginMainSha) return null;
+  if (latest.expiresAt && Date.parse(latest.expiresAt) <= now.getTime()) return null;
+  if (!latest.decidingActor.verified || latest.decidingActor.actorType !== "human_authority") return null;
   return latest;
 }
 
@@ -55,6 +72,16 @@ function exactAuthorizedFiles(task: TaskRecord, manifestContent: string): readon
   return Object.freeze(manifestPaths);
 }
 
+function validRepairHandoff(receipt: DabGitCiRepairHandoffReceipt | null, task: TaskRecord, files: readonly string[]): DabGitCiRepairHandoffReceipt | null {
+  if (!receipt) return null;
+  if (receipt.operation !== "ci_repair_handoff" || receipt.outcome !== "requested") return null;
+  if (receipt.taskId !== task.specification.taskId || receipt.specificationRevision !== task.specification.revision || receipt.specificationHash !== task.specification.specificationHash) return null;
+  if (receipt.expectedBaseSha !== task.specification.expectedOriginMainSha || !/^[a-f0-9]{40}$/.test(receipt.failedHeadSha)) return null;
+  if (!Number.isInteger(receipt.prNumber) || receipt.prNumber <= 0 || !Number.isInteger(receipt.attempt) || receipt.attempt < 1 || receipt.attempt > receipt.maxAttempts) return null;
+  if (JSON.stringify([...receipt.authorizedFiles].sort()) !== JSON.stringify([...files].sort())) return null;
+  return receipt;
+}
+
 export async function resolveNextDabGitMission(input: {
   sql: DabGitMissionQueryClient;
   store: DevelopmentCoordinationStore;
@@ -68,6 +95,7 @@ export async function resolveNextDabGitMission(input: {
            j.context_hash,
            a.content AS manifest_content,
            a.sha256 AS manifest_sha256,
+           j.completed_at::text AS completed_at,
            c.task_id
       FROM dab_preparation_jobs j
       JOIN dab_preparation_artifacts a
@@ -99,11 +127,34 @@ export async function resolveNextDabGitMission(input: {
 
     let files: readonly string[];
     let approvals: DabGitMissionAuthorizationMap;
+    let repairApproval: ApprovalRecord | null;
     try {
       files = exactAuthorizedFiles(task, row.manifest_content);
-      approvals = authorizationMap(task, await input.store.getApprovals(task.specification.taskId), now);
+      const taskApprovals = await input.store.getApprovals(task.specification.taskId);
+      approvals = authorizationMap(task, taskApprovals, now);
+      repairApproval = latestRepairApproval(taskApprovals, task, now);
     } catch {
       continue;
+    }
+
+    let repairHandoff: DabGitCiRepairHandoffReceipt | null = null;
+    try {
+      const repairRows = await input.sql.query<RepairHandoffRow>(`
+        SELECT result->'receipt' AS receipt
+          FROM development_idempotency_records
+         WHERE operation='git_receipt:repair_handoff'
+           AND task_id=$1
+         ORDER BY created_at DESC
+         LIMIT 1
+      `, [task.specification.taskId]);
+      repairHandoff = validRepairHandoff(repairRows.rows[0]?.receipt ?? null, task, files);
+    } catch {
+      continue;
+    }
+
+    if (repairHandoff) {
+      if (!row.completed_at || Date.parse(row.completed_at) <= Date.parse(repairHandoff.createdAt)) continue;
+      if (row.job_id === repairHandoff.sourcePreparationJobId || row.proposal_id === repairHandoff.sourceProposalId) continue;
     }
 
     return Object.freeze({
@@ -122,6 +173,10 @@ export async function resolveNextDabGitMission(input: {
         branchName: task.specification.intendedBranch,
         authorizedFiles: files,
         approvals,
+        repairApproval,
+        repairAttempt: repairHandoff?.attempt ?? 0,
+        expectedRemoteSha: repairHandoff?.failedHeadSha ?? null,
+        existingPrNumber: repairHandoff?.prNumber ?? null,
       }),
     });
   }

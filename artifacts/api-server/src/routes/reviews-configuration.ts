@@ -49,8 +49,17 @@ router.put("/reviews/configuration", async (req, res) => {
   if (!tenant) return;
 
   const reviewUrl = req.body?.reviewUrl;
+  const ownerConfirmed = req.body?.ownerConfirmed;
+
   if (typeof reviewUrl !== "string" || !reviewUrl.trim()) {
     res.status(400).json({ error: "review_url_required" });
+    return;
+  }
+  if (ownerConfirmed !== true) {
+    res.status(400).json({
+      error: "owner_confirmation_required",
+      message: "Explicit owner confirmation is required before storing a review URL as verified for this tenant.",
+    });
     return;
   }
 

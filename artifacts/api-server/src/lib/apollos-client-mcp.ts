@@ -12,6 +12,7 @@ import {
 import { prepareApollosCapabilityActivation } from "./apollos-client-preparation.js";
 import { ApollosSafeActionExecutor } from "./apollos-safe-action-executor.js";
 import { ApollosFullUtilizationCycleRunner } from "./apollos-full-utilization-cycle.js";
+import { buildBacklinkOpportunityReadModel } from "./backlink-opportunity-read-model.js";
 import {
   getApollosClerkOAuthSettings,
   getApollosClerkUser,
@@ -77,6 +78,16 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     ...TOOL_AUTH,
     name: "apollos_get_full_utilization",
     description: "Answer the operator mission: make sure one authorized client is using everything AI Edge currently offers.",
+    inputSchema: {
+      type: "object",
+      properties: { clientId: CLIENT_ID_PROPERTY },
+      additionalProperties: false,
+    },
+  },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_get_authority_opportunities",
+    description: "Return the top 10 evidence-backed Authority/backlink opportunities for one authorized client from the canonical tenant-scoped read model. Read-only; no outreach or provider action.",
     inputSchema: {
       type: "object",
       properties: { clientId: CLIENT_ID_PROPERTY },
@@ -382,6 +393,9 @@ export class ApollosClientMcpRuntime {
           coverage: live.coverage,
           activationPlan: live.activationPlan,
         });
+        break;
+      case "apollos_get_authority_opportunities":
+        data = await buildBacklinkOpportunityReadModel(resolution.target.clientId, 10);
         break;
       case "apollos_get_capability_status": {
         const current = live.coverage.capabilities.find(

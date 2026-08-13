@@ -4,7 +4,7 @@ export const aiReceptionistSettingsTable = pgTable("ai_receptionist_settings", {
   id:                 uuid("id").primaryKey().defaultRandom(),
   clientId:           text("client_id").notNull().unique(),
   businessName:       text("business_name").notNull().default("My Business"),
-  transferPhone:      text("transfer_phone").notNull().default("+12513249090"),
+  transferPhone:      text("transfer_phone").notNull().default(""),
   greetingScript:     text("greeting_script"),
   callbackMessage:    text("callback_message"),
   voicemailMessage:   text("voicemail_message"),

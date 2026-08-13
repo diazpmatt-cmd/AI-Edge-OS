@@ -1,22 +1,33 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { and, db, eq } from "@workspace/db";
+import { and, db, eq, pool } from "@workspace/db";
 import {
   aiReceptionistSettingsTable,
   communicationEndpointsTable,
 } from "@workspace/db/schema";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
+import {
+  assessTransferSafety,
+  normalizeE164,
+} from "../lib/lead-recovery-transfer-safety.js";
 
 const router = Router();
 
-function normalizeE164(value: string | undefined): string {
-  const raw = (value ?? "").trim();
-  if (!raw) return "";
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  return raw.startsWith("+") ? raw : `+${digits}`;
-}
+// Production does not run drizzle-kit push automatically. Neutralize only the
+// historical database DEFAULT here; never rewrite an existing tenant row.
+const transferDefaultSafetyBootstrap: Promise<boolean> = pool
+  .query(`
+    ALTER TABLE ai_receptionist_settings
+      ALTER COLUMN transfer_phone SET DEFAULT '';
+  `)
+  .then(() => {
+    console.log("[lead-recovery-readiness] receptionist transfer default neutralized");
+    return true;
+  })
+  .catch((error) => {
+    console.error("[lead-recovery-readiness] transfer default bootstrap failed:", error);
+    return false;
+  });
 
 router.get("/lead-recovery/readiness", async (req, res) => {
   const { userId } = getAuth(req);
@@ -37,7 +48,7 @@ router.get("/lead-recovery/readiness", async (req, res) => {
       process.env.TELNYX_FROM_NUMBER ?? "+12512863200",
     );
 
-    const [endpointRows, settingsRows] = await Promise.all([
+    const [endpointRows, settingsRows, schemaDefaultNeutralized] = await Promise.all([
       db
         .select({
           id: communicationEndpointsTable.id,
@@ -63,6 +74,7 @@ router.get("/lead-recovery/readiness", async (req, res) => {
         .from(aiReceptionistSettingsTable)
         .where(eq(aiReceptionistSettingsTable.clientId, clientId))
         .limit(1),
+      transferDefaultSafetyBootstrap,
     ]);
 
     const endpoint = endpointRows[0] ?? null;
@@ -71,7 +83,16 @@ router.get("/lead-recovery/readiness", async (req, res) => {
     const telnyxApiKeyConfigured = !!process.env.TELNYX_API_KEY?.trim();
     const telnyxPublicKeyConfigured = !!process.env.TELNYX_PUBLIC_KEY?.trim();
     const schedulerEnabled = process.env.SCHEDULER_ENABLED === "true";
-    const transferConfigured = !!settings?.transferPhone?.trim();
+
+    const transferSafety = assessTransferSafety({
+      transferPhone: settings?.transferPhone,
+      telnyxAiNumber: telnyxFromNumber,
+    });
+
+    const transferConfigured = transferSafety.configured;
+    const transferConfigurationReady = endpointReady && transferConfigured;
+    const transferSafeForLiveTest =
+      endpointReady && transferSafety.status === "verified_non_looping";
 
     res.json({
       checkedAt: new Date().toISOString(),
@@ -92,18 +113,36 @@ router.get("/lead-recovery/readiness", async (req, res) => {
         settingsPresent: !!settings,
         businessName: settings?.businessName ?? null,
         transferConfigured,
+        transferPhone: transferSafety.transferPhone || null,
         afterHoursMode: settings?.afterHoursMode ?? null,
+        transferSafety: {
+          status: transferSafety.status,
+          reason: transferSafety.reason,
+          sameAsTelnyxAiNumber: transferSafety.sameAsTelnyxAiNumber,
+          sameAsCanonicalPublicInbound: transferSafety.sameAsCanonicalPublicInbound,
+          knownLegacyUnsafeDefaultDetected: transferSafety.knownLegacyUnsafeDefaultDetected,
+          canonicalPublicInboundPhone: transferSafety.canonicalPublicInboundPhone,
+          manualVerificationRequired:
+            transferSafety.status === "manual_verification_required",
+        },
       },
       recoveryOwnership: {
         schedulerEnabled,
         immediateWebhookOwner: true,
         duplicateOwnerRisk: schedulerEnabled,
       },
+      safetyMaintenance: {
+        schemaDefaultNeutralized,
+        existingTransferRowMutated: false,
+      },
       readiness: {
         inboundRoutingReady: endpointReady,
         missedCallRecoveryReady: endpointReady && telnyxApiKeyConfigured && !schedulerEnabled,
         signedWebhookVerificationReady: telnyxPublicKeyConfigured,
-        receptionistTransferReady: endpointReady && transferConfigured,
+        receptionistTransferConfigurationReady: transferConfigurationReady,
+        receptionistTransferSafetyVerified:
+          transferSafety.status === "verified_non_looping",
+        receptionistTransferReady: transferSafeForLiveTest,
       },
     });
   } catch (error) {

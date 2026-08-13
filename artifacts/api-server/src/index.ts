@@ -1,6 +1,7 @@
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
 import { isSchedulerEnabled } from "./lib/scheduler-enabled.js";
+import { startScheduledPublishingMonitor } from "./lib/scheduled-publishing-monitor.js";
 import { migrateAgentTasks } from "./lib/agent-tasks-migrate.js";
 import { migrateLeadAuditEvents } from "./lib/lead-audit-migrate.js";
 import { migrateAuthorityOutreachDrafts } from "./lib/authority-outreach-draft-migrate.js";
@@ -41,6 +42,7 @@ migrateSchema()
 
       logger.info({ port }, "Server listening");
       startPublishingInterruptionRecoveryMonitor();
+      startScheduledPublishingMonitor();
       if (isSchedulerEnabled()) {
         startScheduler();
       } else {

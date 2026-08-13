@@ -1,24 +1,72 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { clientOnboardingTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 
-function requireAuth(req: any, res: any): boolean {
+/**
+ * Production does not run drizzle-kit push. Bootstrap only the ownership column
+ * needed by this route, idempotently, and fail closed if PostgreSQL is not ready.
+ * The matching SQL migration remains the durable schema history.
+ */
+const onboardingOwnershipBootstrapReady: Promise<boolean> = pool
+  .query(`
+    ALTER TABLE client_onboarding
+      ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+
+    CREATE INDEX IF NOT EXISTS client_onboarding_created_by_user_id_idx
+      ON client_onboarding (created_by_user_id)
+      WHERE created_by_user_id IS NOT NULL;
+  `)
+  .then(() => {
+    console.log("[client-onboarding] operator ownership schema ready");
+    return true;
+  })
+  .catch((err) => {
+    console.error("[client-onboarding] ownership bootstrap failed:", err);
+    return false;
+  });
+
+function authenticatedUserId(req: any, res: any): string | null {
   const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return false; }
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  return userId;
+}
+
+async function requireOwnershipSchema(res: any): Promise<boolean> {
+  const ready = await onboardingOwnershipBootstrapReady;
+  if (!ready) {
+    res.status(503).json({
+      error: "client_onboarding_unavailable",
+      code: "ONBOARDING_OWNERSHIP_BOOTSTRAP_UNAVAILABLE",
+    });
+    return false;
+  }
   return true;
 }
 
-// ── GET /api/client-onboarding ── list all ──────────────────────────────────
+function ownedRow(id: string, userId: string) {
+  return and(
+    eq(clientOnboardingTable.id, id),
+    eq(clientOnboardingTable.createdByUserId, userId),
+  );
+}
+
+// ── GET /api/client-onboarding ── operator-owned staging rows only ────────────
 router.get("/client-onboarding", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
   try {
     const rows = await db
       .select()
       .from(clientOnboardingTable)
+      .where(eq(clientOnboardingTable.createdByUserId, userId))
       .orderBy(clientOnboardingTable.createdAt);
     res.json(rows);
   } catch (err) {
@@ -27,14 +75,16 @@ router.get("/client-onboarding", async (req, res) => {
   }
 });
 
-// ── GET /api/client-onboarding/:id ── single ────────────────────────────────
+// ── GET /api/client-onboarding/:id ── owned row only ─────────────────────────
 router.get("/client-onboarding/:id", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
   try {
     const [row] = await db
       .select()
       .from(clientOnboardingTable)
-      .where(eq(clientOnboardingTable.id, req.params.id));
+      .where(ownedRow(req.params.id, userId));
     if (!row) return void res.status(404).json({ error: "Not found" });
     res.json(row);
   } catch (err) {
@@ -43,9 +93,11 @@ router.get("/client-onboarding/:id", async (req, res) => {
   }
 });
 
-// ── POST /api/client-onboarding ── create ───────────────────────────────────
+// ── POST /api/client-onboarding ── create operator-owned draft ───────────────
 router.post("/client-onboarding", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
   try {
     const {
       businessName, industry, website, mainPhone, forwardingPhone, email,
@@ -55,10 +107,13 @@ router.post("/client-onboarding", async (req, res) => {
       modulesEnabled,
     } = req.body;
 
-    if (!businessName) return void res.status(400).json({ error: "businessName required" });
+    if (!String(businessName ?? "").trim()) {
+      return void res.status(400).json({ error: "businessName required" });
+    }
 
     const [row] = await db.insert(clientOnboardingTable).values({
-      businessName,
+      createdByUserId:     userId,
+      businessName:        String(businessName).trim(),
       industry:            industry            ?? "",
       website:             website             ?? "",
       mainPhone:           mainPhone           ?? "",
@@ -76,7 +131,7 @@ router.post("/client-onboarding", async (req, res) => {
       primaryColor:        primaryColor        ?? "#00AEEF",
       secondaryColor:      secondaryColor      ?? "#C0C0C0",
       brandTone:           brandTone           ?? "professional",
-      modulesEnabled:      JSON.stringify(modulesEnabled ?? []),
+      modulesEnabled:      JSON.stringify(Array.isArray(modulesEnabled) ? modulesEnabled : []),
       status:              "draft",
     }).returning();
 
@@ -87,15 +142,17 @@ router.post("/client-onboarding", async (req, res) => {
   }
 });
 
-// ── PUT /api/client-onboarding/:id ── update ────────────────────────────────
+// ── PUT /api/client-onboarding/:id ── update owned draft fields only ─────────
 router.put("/client-onboarding/:id", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
   try {
     const b = req.body;
     const [row] = await db
       .update(clientOnboardingTable)
       .set({
-        ...(b.businessName      !== undefined && { businessName:        b.businessName }),
+        ...(b.businessName      !== undefined && { businessName:        String(b.businessName).trim() }),
         ...(b.industry          !== undefined && { industry:            b.industry }),
         ...(b.website           !== undefined && { website:             b.website }),
         ...(b.mainPhone         !== undefined && { mainPhone:           b.mainPhone }),
@@ -113,10 +170,11 @@ router.put("/client-onboarding/:id", async (req, res) => {
         ...(b.primaryColor      !== undefined && { primaryColor:        b.primaryColor }),
         ...(b.secondaryColor    !== undefined && { secondaryColor:      b.secondaryColor }),
         ...(b.brandTone         !== undefined && { brandTone:           b.brandTone }),
-        ...(b.modulesEnabled    !== undefined && { modulesEnabled:      JSON.stringify(b.modulesEnabled) }),
-        ...(b.status            !== undefined && { status:              b.status }),
+        ...(b.modulesEnabled    !== undefined && {
+          modulesEnabled: JSON.stringify(Array.isArray(b.modulesEnabled) ? b.modulesEnabled : []),
+        }),
       })
-      .where(eq(clientOnboardingTable.id, req.params.id))
+      .where(ownedRow(req.params.id, userId))
       .returning();
 
     if (!row) return void res.status(404).json({ error: "Not found" });
@@ -127,53 +185,32 @@ router.put("/client-onboarding/:id", async (req, res) => {
   }
 });
 
-// ── POST /api/client-onboarding/:id/deploy ── readiness handoff ─────────────
+// Provisioning remains deliberately separate from staging ownership. This route
+// performs no provider setup and never creates/activates a canonical client.
 router.post("/client-onboarding/:id/deploy", async (req, res) => {
-  if (!requireAuth(req, res)) return;
-  try {
-    const [existing] = await db
-      .select()
-      .from(clientOnboardingTable)
-      .where(eq(clientOnboardingTable.id, req.params.id));
+  const userId = authenticatedUserId(req, res);
+  if (!userId) return;
 
-    if (!existing) return void res.status(404).json({ error: "Not found" });
-    if (existing.status === "active") return void res.status(400).json({ error: "Already active" });
-
-    const missingFields = [
-      ["businessName", existing.businessName], ["mainPhone", existing.mainPhone],
-      ["city", existing.city], ["state", existing.state], ["services", existing.services],
-    ].filter(([, value]) => !String(value ?? "").trim()).map(([field]) => field);
-    if (missingFields.length) return void res.status(422).json({
-      error: "Onboarding is not ready for provisioning", code: "ONBOARDING_VALIDATION_FAILED", missingFields,
-    });
-
-    const [row] = await db
-      .update(clientOnboardingTable)
-      .set({ status: "ready_for_provisioning" })
-      .where(eq(clientOnboardingTable.id, req.params.id))
-      .returning();
-
-    res.json({
-      success: true,
-      client: row,
-      status: "ready_for_provisioning",
-      nextAction: "Complete provider connections and provisioning steps, then record acceptance evidence.",
-      modulesRequested: JSON.parse(row.modulesEnabled ?? "[]"),
-      clientId: row.id,
-    });
-  } catch (err) {
-    console.error("[client-onboarding] deploy error:", err);
-    res.status(500).json({ error: "Deploy failed" });
-  }
+  res.status(409).json({
+    error: "canonical_provisioning_not_implemented",
+    code: "CLIENT_PROVISIONING_NOT_ACCEPTED",
+    message:
+      "This endpoint only manages operator-owned staging drafts. Canonical client provisioning requires a separate accepted target-tenant identity contract.",
+  });
 });
 
-// ── DELETE /api/client-onboarding/:id ── delete ─────────────────────────────
+// ── DELETE /api/client-onboarding/:id ── owned row only ──────────────────────
 router.delete("/client-onboarding/:id", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const userId = authenticatedUserId(req, res);
+  if (!userId || !(await requireOwnershipSchema(res))) return;
+
   try {
-    await db
+    const [row] = await db
       .delete(clientOnboardingTable)
-      .where(eq(clientOnboardingTable.id, req.params.id));
+      .where(ownedRow(req.params.id, userId))
+      .returning({ id: clientOnboardingTable.id });
+
+    if (!row) return void res.status(404).json({ error: "Not found" });
     res.json({ success: true });
   } catch (err) {
     console.error("[client-onboarding] delete error:", err);

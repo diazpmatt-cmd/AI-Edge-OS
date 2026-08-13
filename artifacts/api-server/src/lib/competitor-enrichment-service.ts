@@ -12,6 +12,7 @@
  * - Only the enrichment service calls updateScores() for canonical persistence
  *   when a real (non-mock) provider returns a verified score.
  * - Tenant isolation: every DB query filters on client_id.
+ * - Mock providers are never registered in production.
  *
  * P6.2 change:
  * - AiEdgeVisibilityProvider replaces MockAiVisibilityProvider.
@@ -59,6 +60,17 @@ export const ENRICHMENT_CATEGORIES: ObservationCategory[] = [
   "authority",
   "ai_visibility",
 ];
+
+/**
+ * Demo enrichment is useful in local development and tests, but it must never
+ * appear in a production client card. Keep this policy pure and exported so CI
+ * can permanently guard the production boundary.
+ */
+export function shouldRegisterCompetitorMockProviders(
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean {
+  return nodeEnv !== "production";
+}
 
 // ── DB row type ───────────────────────────────────────────────────────────────
 
@@ -332,10 +344,11 @@ export class CompetitorEnrichmentService {
  * Creates a CompetitorEnrichmentService with:
  *   - Real AiEdgeVisibilityProvider registered for the ai_visibility category.
  *   - Real EdgeAuthorityProvider (Path C) registered for the authority category.
- *   - Remaining mock providers for website_intel, local_presence, reviews.
+ *   - Non-production only: remaining mock providers for website_intel,
+ *     local_presence, and reviews so development/test fixtures remain useful.
  *   - MockAiVisibilityProvider and MockAuthorityProvider excluded.
  *
- * Call once at API server startup; reuse the instance across requests.
+ * Production invariant: no provider with isMock=true is registered.
  */
 export function createEnrichmentService(
   overridePool?: Pool,
@@ -345,17 +358,18 @@ export function createEnrichmentService(
   const activeDb   = overrideDb   ?? defaultDb;
   const registry   = new EnrichmentProviderRegistry();
 
-  // Register mock providers for categories that don't yet have a real provider.
-  const realCategories = new Set<string>(["ai_visibility", "authority"]);
-  const remainingMocks = ALL_MOCK_PROVIDERS.filter(
-    p => !realCategories.has(p.category),
-  ) as ReadonlyArray<CompetitorEnrichmentProvider<unknown>>;
+  if (shouldRegisterCompetitorMockProviders()) {
+    const realCategories = new Set<string>(["ai_visibility", "authority"]);
+    const remainingMocks = ALL_MOCK_PROVIDERS.filter(
+      p => !realCategories.has(p.category),
+    ) as ReadonlyArray<CompetitorEnrichmentProvider<unknown>>;
 
-  for (const provider of remainingMocks) {
-    registry.register(provider);
+    for (const provider of remainingMocks) {
+      registry.register(provider);
+    }
   }
 
-  // Register real providers.
+  // Register real providers in every environment.
   registry.register(new AiEdgeVisibilityProvider(activePool));
   // Path C: no live lookup adapter — returns sparse non-mock observations.
   registry.register(new EdgeAuthorityProvider());

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, pool, DrizzleTenantSafeReviewRepository } from "@workspace/db";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { getReviewRequestConfiguration } from "../lib/review-request-configuration.js";
 
 const router = Router();
 const DEFAULT_ELIGIBILITY_WINDOW_DAYS = 30;
@@ -49,13 +50,6 @@ function parseEligibilityWindowDays(raw: unknown): number {
   return Math.min(MAX_ELIGIBILITY_WINDOW_DAYS, Math.floor(parsed));
 }
 
-/**
- * Evidence-only Reviews overview.
- *
- * Reads only the canonical tenant-safe review summary table. These rows are
- * persisted by the GBP review importer after connection/location ownership is
- * verified. No external provider call or customer contact occurs here.
- */
 router.get("/reviews/overview", async (req, res) => {
   const tenant = await resolveTenant(req, res);
   if (!tenant) return;
@@ -81,23 +75,6 @@ router.get("/reviews/overview", async (req, res) => {
   }
 });
 
-/**
- * GET /api/reviews/eligibility
- *
- * Zero-send review eligibility queue derived exclusively from local
- * authoritative GorillaDesk snapshots. A row is eligible only when:
- *   - the job belongs to the authenticated tenant project slug;
- *   - the job is completed and has a completion timestamp;
- *   - the job has a stable external ID and customer ID;
- *   - the matching customer belongs to the same tenant project;
- *   - collected payment total covers the full positive job amount;
- *   - there is no prior review-request delivery evidence for this job in the
- *     tenant-scoped customer journey ledger.
- *
- * This endpoint NEVER sends a message and NEVER claims delivery readiness.
- * Delivery remains blocked until a verified tenant review URL is configured and
- * the Stage 2 send/dedupe path is accepted in production.
- */
 router.get("/reviews/eligibility", async (req, res) => {
   const tenant = await resolveTenant(req, res);
   if (!tenant) return;
@@ -105,6 +82,9 @@ router.get("/reviews/eligibility", async (req, res) => {
   const windowDays = parseEligibilityWindowDays(req.query.windowDays);
 
   try {
+    const configuration = await getReviewRequestConfiguration(tenant.slug);
+    const hasOwnerConfirmedReviewUrl = configuration.status === "owner_confirmed";
+
     const { rows } = await pool.query<EligibilityRow>(
       `SELECT
          j.external_id AS job_external_id,
@@ -161,7 +141,8 @@ router.get("/reviews/eligibility", async (req, res) => {
     );
 
     const candidates = rows.map(row => {
-      const blockers: string[] = ["verified_review_url_not_configured"];
+      const blockers: string[] = ["controlled_send_path_not_accepted"];
+      if (!hasOwnerConfirmedReviewUrl) blockers.unshift("verified_review_url_not_configured");
       if (!row.has_phone && !row.has_email) blockers.push("no_customer_contact_channel");
 
       return {
@@ -182,11 +163,15 @@ router.get("/reviews/eligibility", async (req, res) => {
           paidInFull: true,
           sameTenantProject: true,
           priorReviewRequestEvidence: false,
+          ownerConfirmedReviewUrl: hasOwnerConfirmedReviewUrl,
         },
         deliveryReady: false,
         blockers,
       };
     });
+
+    const globalBlockers = ["controlled_send_path_not_accepted"];
+    if (!hasOwnerConfirmedReviewUrl) globalBlockers.unshift("verified_review_url_not_configured");
 
     res.json({
       clientId: tenant.clientId,
@@ -197,7 +182,9 @@ router.get("/reviews/eligibility", async (req, res) => {
       candidateCount: candidates.length,
       deliveryReadyCount: 0,
       automationStatus: "not_activated",
-      globalBlockers: ["verified_review_url_not_configured"],
+      reviewConfigurationStatus: configuration.status,
+      reviewConfigurationConfirmedAt: configuration.confirmedAt,
+      globalBlockers,
       candidates,
     });
   } catch (err: any) {
@@ -218,8 +205,6 @@ function retired(_req: any, res: any): void {
   });
 }
 
-// Legacy manual stats and request-send/history paths are unsafe for a
-// multi-tenant production system. Intercept them before the older router.
 router.get("/reviews/stats", retired);
 router.put("/reviews/stats/:platform", retired);
 router.get("/reviews/requests", retired);

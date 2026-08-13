@@ -1,16 +1,11 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { and, count, desc, gte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { leadsTable, callsTable, smsConversationsTable } from "@workspace/db/schema";
+import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
-
-function requireAuth(req: any, res: any): boolean {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return false; }
-  return true;
-}
 
 function periodStart(period: string): Date {
   const now = new Date();
@@ -23,46 +18,53 @@ function periodStart(period: string): Date {
   return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/call-intelligence?period=today|7days|30days
-// ─────────────────────────────────────────────────────────────────────────────
-
 router.get("/call-intelligence", async (req, res) => {
-  if (!requireAuth(req, res)) return;
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   try {
+    const resolved = await resolveClientActiveCheck(userId);
+    if (!resolved.ok) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+
+    const clientId = resolved.clientId;
     const period = (req.query.period as string) || "30days";
     const since  = periodStart(period);
 
-    // ── Metrics from calls table (primary source) ─────────────────────────────
     const callRows = await db
       .select({ callType: callsTable.callType, outcome: callsTable.outcome, durationSecs: callsTable.durationSecs })
       .from(callsTable)
-      .where(gte(callsTable.createdAt, since));
+      .where(and(
+        eq(callsTable.clientId, clientId),
+        gte(callsTable.createdAt, since),
+      ));
 
     let c_total = 0, c_missed = 0, c_transferred = 0, c_callbacks = 0, c_voicemails = 0;
     for (const r of callRows) {
-      c_total++;                                           // every row is one call
+      c_total++;
       if (r.callType === "missed")      c_missed++;
       if (r.callType === "transferred") c_transferred++;
       if (r.callType === "callback")    c_callbacks++;
       if (r.callType === "voicemail")   c_voicemails++;
     }
 
-    // ── Historical fallback from leads table ──────────────────────────────────
-    // Used for: missed calls before calls table existed, and SMS / lead data
     const leadRows = await db
       .select({ eventType: leadsTable.eventType, status: leadsTable.status, phone: leadsTable.phone, message: leadsTable.message })
       .from(leadsTable)
       .where(
         and(
+          eq(leadsTable.clientId, clientId),
           gte(leadsTable.createdAt, since),
           sql`${leadsTable.phone} NOT LIKE '+1555%' AND ${leadsTable.phone} NOT LIKE '+10000000%'`
         )
       );
 
-    // Only count call-type leads that predate the calls table (avoid double-count)
-    // The calls table was created 2026-07-03; use leads only for SMS & lead capture
     let l_sms_inbound = 0, l_sms_outbound = 0, l_replies = 0, l_missed = 0;
     const uniquePhones = new Set<string>();
 
@@ -70,27 +72,24 @@ router.get("/call-intelligence", async (req, res) => {
       if (r.phone) uniquePhones.add(r.phone);
       const et = r.eventType ?? "";
       if (et === "sms" || et === "telnyx_sms_reply" || et === "message_received") l_sms_inbound++;
-      if (et === "telnyx_textback_sent")    l_sms_outbound++;
-      if (et === "telnyx_sms_reply")        l_replies++;
-      // Count historical missed calls not yet in calls table
+      if (et === "telnyx_textback_sent") l_sms_outbound++;
+      if (et === "telnyx_sms_reply") l_replies++;
       if (et === "missed_call" || et === "call_hangup_missed") l_missed++;
     }
 
-    // ── SMS counts from sms_conversations table ───────────────────────────────
     const [smsRow] = await db
       .select({ total: count() })
       .from(smsConversationsTable)
-      .where(gte(smsConversationsTable.createdAt, since));
+      .where(and(
+        eq(smsConversationsTable.clientId, clientId),
+        gte(smsConversationsTable.createdAt, since),
+      ));
 
     const sms_from_table = smsRow?.total ?? 0;
-    // Deduplicate: sms_conversations table is the authoritative source going forward;
-    // only add leads SMS count if conversations table is still empty (pre-launch)
     const sms_conversations = sms_from_table > 0
       ? sms_from_table
       : l_sms_inbound + l_sms_outbound;
 
-    // ── Combined metrics ──────────────────────────────────────────────────────
-    // total_calls = all rows in calls table + historical missed not yet there
     const total_calls       = c_total + l_missed;
     const missed_calls      = c_missed + l_missed;
     const transferred_calls = c_transferred;
@@ -101,20 +100,22 @@ router.get("/call-intelligence", async (req, res) => {
       ? Math.round(((l_replies + c_callbacks) / missed_calls) * 100)
       : null;
 
-    // ── Recent Call Activity ──────────────────────────────────────────────────
     const recentCalls = await db
       .select()
       .from(callsTable)
-      .where(gte(callsTable.createdAt, since))
+      .where(and(
+        eq(callsTable.clientId, clientId),
+        gte(callsTable.createdAt, since),
+      ))
       .orderBy(desc(callsTable.createdAt))
       .limit(50);
 
-    // Historical leads-based activity (for rows that predate calls table)
     const recentLeads = await db
       .select()
       .from(leadsTable)
       .where(
         and(
+          eq(leadsTable.clientId, clientId),
           gte(leadsTable.createdAt, since),
           sql`${leadsTable.eventType} IN ('missed_call','call_hangup_missed','telnyx_sms_reply','sms')`,
           sql`${leadsTable.phone} NOT LIKE '+1555%'`,
@@ -135,13 +136,13 @@ router.get("/call-intelligence", async (req, res) => {
     };
 
     const callActivity: ActivityRow[] = recentCalls.map(r => ({
-      id:            r.id,
-      timestamp:     r.createdAt.toISOString(),
+      id: r.id,
+      timestamp: r.createdAt.toISOString(),
       caller_number: r.callerNumber || "Unknown",
-      call_type:     r.callType,
-      outcome:       r.outcome,
+      call_type: r.callType,
+      outcome: r.outcome,
       duration_secs: r.durationSecs,
-      lead_status:   null,
+      lead_status: null,
     }));
 
     const leadActivity: ActivityRow[] = recentLeads.map(r => {
@@ -151,17 +152,16 @@ router.get("/call-intelligence", async (req, res) => {
       else if (et === "telnyx_sms_reply") { call_type = "sms"; outcome = "replied"; }
       else if (et === "sms") { call_type = "sms"; outcome = "received"; }
       return {
-        id:            r.id,
-        timestamp:     r.createdAt.toISOString(),
+        id: r.id,
+        timestamp: r.createdAt.toISOString(),
         caller_number: r.phone || "Unknown",
         call_type,
         outcome,
         duration_secs: null,
-        lead_status:   r.status ?? null,
+        lead_status: r.status ?? null,
       };
     });
 
-    // Merge and deduplicate (calls table is authoritative; leads fills historical gaps)
     const callIds = new Set(recentCalls.map(r => r.callerNumber + r.createdAt.toISOString().slice(0, 13)));
     const filteredLeadActivity = leadActivity.filter(r => {
       const key = r.caller_number + r.timestamp.slice(0, 13);

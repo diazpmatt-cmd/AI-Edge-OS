@@ -20,50 +20,33 @@ const TEST_PHONE_PREFIXES = ["+1555", "+10000000"];
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type TelnyxAnalytics = {
-  // ── Call metrics ────────────────────────────────────────────────────────────
   total_calls:        number;
   missed_calls:       number;
   answered_calls:     number;
   voicemail_calls:    number;
   callback_requests:  number;
-
-  // ── SMS / text-back metrics ─────────────────────────────────────────────────
   textbacks_sent:     number;
   textbacks_failed:   number;
   sms_received:       number;
   sms_replies:        number;
-
-  // ── Lead recovery ───────────────────────────────────────────────────────────
   recovered_leads:    number;
-  recovery_rate:      number | null;   // % of missed calls that became a reply
-
-  // ── After-hours ─────────────────────────────────────────────────────────────
+  recovery_rate:      number | null;
   after_hours_missed: number;
-
-  // ── Revenue estimate (clearly labeled) ─────────────────────────────────────
   avg_ticket_cents:                  number | null;
   estimated_missed_revenue_cents:    number | null;
   estimated_missed_revenue_fmt:      string | null;
   estimated_missed_revenue_note:     string | null;
-
-  // ── Reply breakdown ─────────────────────────────────────────────────────────
   reply_breakdown: {
     quote_request:       number;
     appointment_request: number;
     emergency_request:   number;
   };
-
-  // ── Data quality ────────────────────────────────────────────────────────────
   total_rows:          number;
   test_rows_excluded:  number;
   has_real_calls:      boolean;
   data_source:         "live";
   period:              string;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 function currentPeriod(): string {
   const now = new Date();
@@ -76,7 +59,6 @@ function centsToDisplay(cents: number): string {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-/** SQL condition that excludes known test/seed phone numbers and [TEST] messages */
 function realRowsFilter() {
   const phoneConditions = TEST_PHONE_PREFIXES.map(
     prefix => sql`${leadsTable.phone} NOT LIKE ${prefix + "%"}`
@@ -84,16 +66,10 @@ function realRowsFilter() {
   return sql`(${sql.join(phoneConditions, sql` AND `)} AND ${leadsTable.message} NOT LIKE '[TEST]%')`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main analytics query
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function computeTelnyxAnalytics(
+  clientId: string,
   projectId: string,
 ): Promise<TelnyxAnalytics> {
-  const clientName = process.env.TELNYX_CLIENT_NAME ?? "Bed Bugs & Beyond";
-
-  // ── 1. Aggregate counts by (event_type, status) excluding test rows ─────────
   const eventRows = await db
     .select({
       eventType: leadsTable.eventType,
@@ -102,7 +78,7 @@ export async function computeTelnyxAnalytics(
     })
     .from(leadsTable)
     .where(and(
-      eq(leadsTable.clientName, clientName),
+      eq(leadsTable.clientId, clientId),
       realRowsFilter(),
     ))
     .groupBy(leadsTable.eventType, leadsTable.status);
@@ -138,18 +114,17 @@ export async function computeTelnyxAnalytics(
     }
   }
 
-  const totalCalls     = missedCalls + answeredCalls;
+  const totalCalls      = missedCalls + answeredCalls;
   const recoveredLeads = quoteRequests + appointmentRequests + emergencyRequests;
   const recoveryRate   = missedCalls > 0
     ? Math.round((recoveredLeads / missedCalls) * 100)
     : null;
 
-  // ── 2. After-hours missed calls (Central Time) ──────────────────────────────
   const afterHoursRows = await db
     .select({ cnt: sql<number>`count(*)::int` })
     .from(leadsTable)
     .where(and(
-      eq(leadsTable.clientName, clientName),
+      eq(leadsTable.clientId, clientId),
       eq(leadsTable.eventType, "missed_call"),
       realRowsFilter(),
       sql`(
@@ -160,22 +135,20 @@ export async function computeTelnyxAnalytics(
     ));
   const afterHoursMissed = Number(afterHoursRows[0]?.cnt ?? 0);
 
-  // ── 3. Row count totals (for data quality reporting) ───────────────────────
   const [totalRowRes, testRowRes] = await Promise.all([
     db.select({ cnt: sql<number>`count(*)::int` })
       .from(leadsTable)
-      .where(eq(leadsTable.clientName, clientName)),
+      .where(eq(leadsTable.clientId, clientId)),
     db.select({ cnt: sql<number>`count(*)::int` })
       .from(leadsTable)
       .where(and(
-        eq(leadsTable.clientName, clientName),
+        eq(leadsTable.clientId, clientId),
         sql`(${leadsTable.phone} LIKE '+1555%' OR ${leadsTable.phone} LIKE '+10000000%' OR ${leadsTable.message} LIKE '[TEST]%')`,
       )),
   ]);
-  const totalRows       = Number(totalRowRes[0]?.cnt  ?? 0);
+  const totalRows        = Number(totalRowRes[0]?.cnt  ?? 0);
   const testRowsExcluded = Number(testRowRes[0]?.cnt ?? 0);
 
-  // ── 4. Revenue estimate from GorillaDesk avg ticket snapshot ───────────────
   let avgTicketCents: number | null = null;
   try {
     const snapRows = await db
@@ -206,41 +179,35 @@ export async function computeTelnyxAnalytics(
     : null;
 
   return {
-    total_calls:        totalCalls,
-    missed_calls:       missedCalls,
-    answered_calls:     answeredCalls,
-    voicemail_calls:    voicemailCalls,
-    callback_requests:  callbackRequests,
-
-    textbacks_sent:     textbacksSent,
-    textbacks_failed:   textbacksFailed,
-    sms_received:       smsReceived,
-    sms_replies:        smsReplies,
-
-    recovered_leads:    recoveredLeads,
-    recovery_rate:      recoveryRate,
-
+    total_calls: totalCalls,
+    missed_calls: missedCalls,
+    answered_calls: answeredCalls,
+    voicemail_calls: voicemailCalls,
+    callback_requests: callbackRequests,
+    textbacks_sent: textbacksSent,
+    textbacks_failed: textbacksFailed,
+    sms_received: smsReceived,
+    sms_replies: smsReplies,
+    recovered_leads: recoveredLeads,
+    recovery_rate: recoveryRate,
     after_hours_missed: afterHoursMissed,
-
-    avg_ticket_cents:               avgTicketCents,
+    avg_ticket_cents: avgTicketCents,
     estimated_missed_revenue_cents: estimatedMissedRevenueCents,
-    estimated_missed_revenue_fmt:   estimatedMissedRevenueCents !== null
+    estimated_missed_revenue_fmt: estimatedMissedRevenueCents !== null
       ? centsToDisplay(estimatedMissedRevenueCents)
       : null,
     estimated_missed_revenue_note: estimatedMissedRevenueCents !== null
       ? `Estimate: ${missedCalls} missed call${missedCalls !== 1 ? "s" : ""} × ${avgTicketFmt} avg ticket (GorillaDesk)`
       : null,
-
     reply_breakdown: {
-      quote_request:       quoteRequests,
+      quote_request: quoteRequests,
       appointment_request: appointmentRequests,
-      emergency_request:   emergencyRequests,
+      emergency_request: emergencyRequests,
     },
-
-    total_rows:          totalRows,
-    test_rows_excluded:  testRowsExcluded,
-    has_real_calls:      totalCalls > 0,
-    data_source:         "live",
-    period:              currentPeriod(),
+    total_rows: totalRows,
+    test_rows_excluded: testRowsExcluded,
+    has_real_calls: totalCalls > 0,
+    data_source: "live",
+    period: currentPeriod(),
   };
 }

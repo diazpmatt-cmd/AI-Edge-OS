@@ -1,5 +1,7 @@
 import { Router, type Response } from "express";
 import referralRouter from "./referrals-core.js";
+import { resolveReferralDeliveryConfig } from "../lib/referral-delivery.js";
+import { buildReferralPilotDeliveryReadiness } from "../lib/referral-pilot-readiness.js";
 
 const router = Router();
 
@@ -29,6 +31,9 @@ router.use((req, res, next) => {
             (blocker) => blocker !== "production_acceptance_incomplete",
           )
         : [];
+      const pilotDelivery = buildReferralPilotDeliveryReadiness(
+        resolveReferralDeliveryConfig(),
+      );
 
       return sendJson({
         ...response,
@@ -38,6 +43,7 @@ router.use((req, res, next) => {
           total: 8,
           complete: true,
         },
+        pilotDelivery,
         blockers,
       });
     }) as Response["json"];

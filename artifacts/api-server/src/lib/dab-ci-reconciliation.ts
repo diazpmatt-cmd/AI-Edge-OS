@@ -17,6 +17,7 @@ export function reconcileDabPullRequestCi(input:{prReceipt:DabGitPrReceipt;obser
 
 export function evaluateDabSameScopeRepair(input:{ci:DabCiReceipt;currentHeadSha:string;currentBaseSha:string;specHash:string;currentSpecHash:string;approvedPaths:readonly string[];proposedPaths:readonly string[];attempt:number;maxAttempts:number;repairAuthorizationUsable:boolean;killSwitch:boolean}){
   if(input.ci.outcome!=="blocked")return Object.freeze({allowed:false,reasonCode:"DAB_CI_REPAIR_NOT_REQUIRED"});
+  if(!input.ci.blockerCodes.some(code=>code.startsWith("trusted_check_failed:")))return Object.freeze({allowed:false,reasonCode:"DAB_CI_REPAIR_NO_FAILED_TRUSTED_CHECK"});
   if(input.currentHeadSha!==input.ci.headSha)return Object.freeze({allowed:false,reasonCode:"DAB_CI_REPAIR_HEAD_STALE"});
   if(input.currentBaseSha!==input.ci.baseSha)return Object.freeze({allowed:false,reasonCode:"DAB_CI_REPAIR_BASE_STALE"});
   if(input.specHash!==input.currentSpecHash)return Object.freeze({allowed:false,reasonCode:"DAB_CI_REPAIR_SPEC_STALE"});

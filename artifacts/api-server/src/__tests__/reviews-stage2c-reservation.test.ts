@@ -12,6 +12,10 @@ const eligibilitySource = readFileSync(
   resolve(apiRoot, "routes/reviews-safe.ts"),
   "utf8",
 );
+const configurationRouteSource = readFileSync(
+  resolve(apiRoot, "routes/reviews-configuration.ts"),
+  "utf8",
+);
 const routeIndexSource = readFileSync(
   resolve(apiRoot, "routes/index.ts"),
   "utf8",
@@ -29,6 +33,13 @@ describe("Reviews Stage 2C atomic reservation preview", () => {
     expect(preview).toContain("Lakeside Plumbing");
     expect(preview).toContain("https://g.page/r/example/review");
     expect(preview).not.toContain("Bed Bugs & Beyond");
+  });
+
+  it("requires explicit owner confirmation before configuration can become verified", () => {
+    expect(configurationRouteSource).toContain("const ownerConfirmed = req.body?.ownerConfirmed");
+    expect(configurationRouteSource).toContain("if (ownerConfirmed !== true)");
+    expect(configurationRouteSource).toContain('error: "owner_confirmation_required"');
+    expect(configurationRouteSource).toContain("Explicit owner confirmation is required");
   });
 
   it("requires owner-confirmed review configuration before reservation", () => {

@@ -27,6 +27,7 @@ services:
       TELNYX_API_KEY: ${TELNYX_API_KEY:-}
       TELNYX_FROM_NUMBER: ${TELNYX_FROM_NUMBER:-+12512863200}
       TELNYX_CLIENT_NAME: ${TELNYX_CLIENT_NAME:-Bed Bugs & Beyond}
+      TELNYX_PUBLIC_KEY: ${TELNYX_PUBLIC_KEY:-}
       OBJECT_STORAGE_PROVIDER: gcs-wif
       PRIVATE_OBJECT_DIR: /ai-edge-os-media-prod-bbb-4827/private
       LOCAL_MEDIA_DIR: /data/media

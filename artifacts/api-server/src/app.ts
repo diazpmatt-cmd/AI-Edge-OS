@@ -37,6 +37,7 @@ import {
 import { requireInternalPublishAdapter } from "./middlewares/internalPublishAdapterMiddleware";
 import { persistInternalPublishAdapterReceipts } from "./middlewares/internalPublishReceiptMiddleware";
 import { rejectPublishingPostMutation } from "./middlewares/publishingMutationGuardMiddleware";
+import { verifyTelnyxWebhookRequest } from "./middlewares/telnyxWebhookSignatureMiddleware";
 
 const pinoHttp = (pinoHttpImport as any).default ?? pinoHttpImport;
 const __filename = fileURLToPath(import.meta.url);
@@ -89,8 +90,10 @@ app.get("/api/version", (_req, res) => {
 });
 
 // PUBLIC routes — mounted before Clerk middleware (no auth required).
-// Lifecycle correlation runs before the existing Telnyx handlers and always
-// calls next(), preserving the current call-control and inbound intake flow.
+// Verify Telnyx's signed JSON event webhooks before they can create lead or
+// recovery state. TeXML voice-menu routes are intentionally excluded here.
+app.use("/api/telnyx/webhook", verifyTelnyxWebhookRequest);
+app.use("/api/telnyx/sms", verifyTelnyxWebhookRequest);
 app.use("/api", oauthCallbacksRouter);
 app.use("/api", leadDeliveryWebhooksRouter);
 app.use("/api", telnyxRouter);

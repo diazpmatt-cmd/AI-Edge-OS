@@ -24,7 +24,43 @@ interface ReviewOverview {
   summaries: ReviewSummary[];
 }
 
-const TABS = ["Overview", "Templates", "Response Library"] as const;
+interface ReviewEligibilityCandidate {
+  jobExternalId: string;
+  customerExternalId: string;
+  customerName: string;
+  serviceType: string | null;
+  jobAmountCents: number;
+  paidAmountCents: number;
+  completedAt: string;
+  lastPaidAt: string;
+  contactChannels: {
+    smsAvailable: boolean;
+    emailAvailable: boolean;
+  };
+  evidence: {
+    completedJob: true;
+    collectedPayment: true;
+    sameTenantProject: true;
+    priorReviewRequestEvidence: false;
+  };
+  deliveryReady: false;
+  blockers: string[];
+}
+
+interface ReviewEligibilityResponse {
+  clientId: string;
+  clientSlug: string;
+  clientName: string;
+  source: "gorilladesk_local_transaction_snapshots";
+  windowDays: number;
+  candidateCount: number;
+  deliveryReadyCount: 0;
+  automationStatus: "not_activated";
+  globalBlockers: string[];
+  candidates: ReviewEligibilityCandidate[];
+}
+
+const TABS = ["Overview", "Eligibility Queue", "Templates", "Response Library"] as const;
 type Tab = (typeof TABS)[number];
 
 const TEMPLATE_LIBRARY = [
@@ -87,10 +123,25 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function formatObservedAt(value: string): string {
+function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
   return date.toLocaleString();
+}
+
+function formatMoney(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+function blockerLabel(code: string): string {
+  switch (code) {
+    case "verified_review_url_not_configured": return "Verified review link required";
+    case "no_customer_contact_channel": return "No SMS/email contact available";
+    default: return code.replace(/_/g, " ");
+  }
 }
 
 export default function ReviewsEnginePage() {
@@ -100,6 +151,9 @@ export default function ReviewsEnginePage() {
   const [data, setData] = useState<ReviewOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eligibility, setEligibility] = useState<ReviewEligibilityResponse | null>(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,9 +168,28 @@ export default function ReviewsEnginePage() {
     }
   }, [apiFetch]);
 
+  const loadEligibility = useCallback(async () => {
+    setEligibilityLoading(true);
+    setEligibilityError(null);
+    try {
+      const response = await apiFetch<ReviewEligibilityResponse>("/reviews/eligibility");
+      setEligibility(response);
+    } catch (err) {
+      setEligibilityError(err instanceof Error ? err.message : "Failed to load review eligibility evidence.");
+    } finally {
+      setEligibilityLoading(false);
+    }
+  }, [apiFetch]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab === "Eligibility Queue" && !eligibility && !eligibilityLoading) {
+      void loadEligibility();
+    }
+  }, [tab, eligibility, eligibilityLoading, loadEligibility]);
 
   const totals = useMemo(() => {
     const summaries = data?.summaries ?? [];
@@ -145,7 +218,7 @@ export default function ReviewsEnginePage() {
           </div>
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 850 }}>⭐ Reviews Engine</h1>
           <p style={{ color: t.text2, fontSize: 14, margin: "6px 0 0" }}>
-            {data?.clientName ?? "Your business"} — verified review observations and safe response resources.
+            {data?.clientName ?? "Your business"} — verified review observations and post-job eligibility evidence.
           </p>
         </div>
 
@@ -155,8 +228,7 @@ export default function ReviewsEnginePage() {
             <div>
               <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 4 }}>Automated review requests are not activated yet</div>
               <div style={{ color: "#94A3B8", fontSize: 13, lineHeight: 1.55 }}>
-                AI Edge will not message a customer from this page. The next automation phase must prove a verified completed job,
-                tenant-specific review link, deduplication, and one-message delivery before live sending is enabled.
+                AI Edge can now identify completed-and-paid jobs that qualify for the future review workflow, but it will not contact customers from this page. Delivery stays blocked until a verified tenant review link and controlled one-message send path are proven.
               </div>
             </div>
           </div>
@@ -240,12 +312,96 @@ export default function ReviewsEnginePage() {
                               <td style={{ padding: "13px 16px", borderBottom: "1px solid rgba(30,41,59,0.7)" }}>{row.reviewCount}</td>
                               <td style={{ padding: "13px 16px", borderBottom: "1px solid rgba(30,41,59,0.7)" }}>{row.averageRating > 0 ? `${row.averageRating.toFixed(1)} ★` : "—"}</td>
                               <td style={{ padding: "13px 16px", borderBottom: "1px solid rgba(30,41,59,0.7)", color: "#94A3B8" }}>{row.geography}</td>
-                              <td style={{ padding: "13px 16px", borderBottom: "1px solid rgba(30,41,59,0.7)", color: "#94A3B8" }}>{formatObservedAt(row.observedAt)}</td>
+                              <td style={{ padding: "13px 16px", borderBottom: "1px solid rgba(30,41,59,0.7)", color: "#94A3B8" }}>{formatDateTime(row.observedAt)}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {tab === "Eligibility Queue" && (
+          <>
+            {eligibilityLoading && <div style={{ ...panel, padding: 24, color: "#94A3B8" }}>Checking completed-and-paid job evidence…</div>}
+
+            {!eligibilityLoading && eligibilityError && (
+              <div style={{ ...panel, padding: 22, borderColor: "rgba(239,68,68,0.4)" }}>
+                <div style={{ color: "#F87171", fontWeight: 800, marginBottom: 6 }}>Eligibility evidence unavailable</div>
+                <div style={{ color: "#94A3B8", fontSize: 13, marginBottom: 14 }}>{eligibilityError}</div>
+                <button onClick={() => void loadEligibility()} style={{ background: "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!eligibilityLoading && !eligibilityError && eligibility && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+                  {[
+                    ["Evidence window", `${eligibility.windowDays} days`],
+                    ["Eligible paid jobs", String(eligibility.candidateCount)],
+                    ["Ready to send", String(eligibility.deliveryReadyCount)],
+                    ["Automation", "Blocked / safe"],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ ...panel, padding: "16px 18px" }}>
+                      <div style={{ color: label === "Ready to send" ? "#FBBF24" : "#38BDF8", fontSize: 22, fontWeight: 850 }}>{value}</div>
+                      <div style={{ color: "#CBD5E1", fontSize: 12, marginTop: 4 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ ...panel, padding: 16, marginBottom: 16, borderColor: "rgba(245,158,11,0.35)" }}>
+                  <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 5 }}>Global delivery blocker</div>
+                  <div style={{ color: "#94A3B8", fontSize: 13 }}>
+                    A verified tenant-specific Google review URL has not been configured yet. Candidates below are evidence-qualified only; no message can be sent.
+                  </div>
+                </div>
+
+                {eligibility.candidates.length === 0 ? (
+                  <div style={{ ...panel, padding: 28, textAlign: "center" }}>
+                    <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>No eligible completed-and-paid jobs found</div>
+                    <div style={{ color: "#94A3B8", fontSize: 13, maxWidth: 650, margin: "0 auto" }}>
+                      The queue only includes jobs with a stable GorillaDesk job ID, matching tenant customer, completed timestamp, and collected payment evidence. Aggregate payment snapshots do not qualify.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {eligibility.candidates.map(candidate => (
+                      <div key={candidate.jobExternalId} style={{ ...panel, padding: 18 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div>
+                            <div style={{ fontWeight: 850, fontSize: 15 }}>{candidate.customerName}</div>
+                            <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 3 }}>
+                              {candidate.serviceType ?? "Service"} · completed {new Date(candidate.completedAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ color: "#22C55E", fontWeight: 850 }}>{formatMoney(candidate.paidAmountCents)} paid</div>
+                            <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Job {candidate.jobExternalId}</div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                          {["Completed job ✓", "Collected payment ✓", "Tenant match ✓", "No prior request ✓"].map(label => (
+                            <span key={label} style={{ border: "1px solid rgba(34,197,94,0.25)", background: "rgba(34,197,94,0.08)", color: "#6EE7B7", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 700 }}>{label}</span>
+                          ))}
+                          {candidate.contactChannels.smsAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>SMS available</span>}
+                          {candidate.contactChannels.emailAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>Email available</span>}
+                        </div>
+
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1E293B", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {candidate.blockers.map(code => (
+                            <span key={code} style={{ color: "#FBBF24", fontSize: 11, fontWeight: 700 }}>⚠ {blockerLabel(code)}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </>

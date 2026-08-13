@@ -4,12 +4,14 @@ import { and, db, eq, pool } from "@workspace/db";
 import {
   aiReceptionistSettingsTable,
   communicationEndpointsTable,
+  localPresenceProfilesTable,
 } from "@workspace/db/schema";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 import {
   assessTransferSafety,
   normalizeE164,
 } from "../lib/lead-recovery-transfer-safety.js";
+import { resolvePublicInboundEvidence } from "../lib/lead-recovery-public-phone-evidence.js";
 
 const router = Router();
 
@@ -48,7 +50,7 @@ router.get("/lead-recovery/readiness", async (req, res) => {
       process.env.TELNYX_FROM_NUMBER ?? "+12512863200",
     );
 
-    const [endpointRows, settingsRows, schemaDefaultNeutralized] = await Promise.all([
+    const [endpointRows, settingsRows, localPresenceRows, schemaDefaultNeutralized] = await Promise.all([
       db
         .select({
           id: communicationEndpointsTable.id,
@@ -74,11 +76,17 @@ router.get("/lead-recovery/readiness", async (req, res) => {
         .from(aiReceptionistSettingsTable)
         .where(eq(aiReceptionistSettingsTable.clientId, clientId))
         .limit(1),
+      db
+        .select({ phone: localPresenceProfilesTable.phone })
+        .from(localPresenceProfilesTable)
+        .where(eq(localPresenceProfilesTable.clientId, clientId))
+        .limit(1),
       transferDefaultSafetyBootstrap,
     ]);
 
     const endpoint = endpointRows[0] ?? null;
     const settings = settingsRows[0] ?? null;
+    const publicInboundEvidence = resolvePublicInboundEvidence(localPresenceRows[0]?.phone);
     const endpointReady = !!endpoint?.active && !!endpoint?.verified;
     const telnyxApiKeyConfigured = !!process.env.TELNYX_API_KEY?.trim();
     const telnyxPublicKeyConfigured = !!process.env.TELNYX_PUBLIC_KEY?.trim();
@@ -87,6 +95,7 @@ router.get("/lead-recovery/readiness", async (req, res) => {
     const transferSafety = assessTransferSafety({
       transferPhone: settings?.transferPhone,
       telnyxAiNumber: telnyxFromNumber,
+      canonicalPublicInboundPhone: publicInboundEvidence.phone,
     });
 
     const transferConfigured = transferSafety.configured;
@@ -109,6 +118,7 @@ router.get("/lead-recovery/readiness", async (req, res) => {
         purpose: endpoint?.purpose ?? null,
         ready: endpointReady,
       },
+      publicInboundEvidence,
       aiReceptionist: {
         settingsPresent: !!settings,
         businessName: settings?.businessName ?? null,

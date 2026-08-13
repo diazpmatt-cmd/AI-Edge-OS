@@ -1,18 +1,9 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import {
-  db,
-  DrizzleBacklinkRepository,
-  BACKLINK_MAX_PAGE_SIZE,
-} from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
-import {
-  rankBacklinkOpportunities,
-  selectBacklinkEvidencePreview,
-} from "../lib/backlink-opportunity-intelligence.js";
+import { buildBacklinkOpportunityReadModel } from "../lib/backlink-opportunity-read-model.js";
 
 const router = Router();
-const repo = new DrizzleBacklinkRepository(db);
 
 router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
   const { userId } = getAuth(req);
@@ -28,79 +19,11 @@ router.get("/api/backlinks/opportunities/intelligence", async (req, res) => {
   }
 
   const requestedLimit = Number(req.query.limit ?? 20);
-  const limit = Number.isFinite(requestedLimit)
-    ? Math.max(1, Math.min(BACKLINK_MAX_PAGE_SIZE, Math.floor(requestedLimit)))
-    : 20;
 
   try {
-    const listed = await repo.listOpportunities(resolved.client.id, {
-      limit: BACKLINK_MAX_PAGE_SIZE,
-      offset: 0,
-    });
-
-    const hydrated = await Promise.all(
-      listed.items.map(async ({ opportunity, workflow }) => ({
-        opportunity,
-        workflow,
-        prospect: await repo.getProspectById(opportunity.prospectId, resolved.client.id),
-      })),
-    );
-
-    const ranked = rankBacklinkOpportunities(hydrated, BACKLINK_MAX_PAGE_SIZE);
-    const opportunityById = new Map(
-      listed.items.map(({ opportunity }) => [opportunity.id, opportunity] as const),
-    );
-    const selected = ranked.slice(0, limit);
-    const competitorProspectIds = [
-      ...new Set(
-        selected
-          .filter((item) => item.reasonCodes.includes("competitor_gap"))
-          .map((item) => item.prospectId),
-      ),
-    ];
-    const evidenceByProspect = new Map(
-      await Promise.all(
-        competitorProspectIds.map(async (prospectId) => [
-          prospectId,
-          await repo.listEvidenceForProspect(prospectId, resolved.client.id),
-        ] as const),
-      ),
-    );
-    const items = selected.map((item) => {
-      if (!item.reasonCodes.includes("competitor_gap")) {
-        return { ...item, evidencePreview: [] };
-      }
-
-      const opportunity = opportunityById.get(item.opportunityId);
-      const evidence = evidenceByProspect.get(item.prospectId);
-      if (!opportunity || !evidence) {
-        return { ...item, evidencePreview: [] };
-      }
-
-      return {
-        ...item,
-        evidencePreview: selectBacklinkEvidencePreview(opportunity, evidence, 3),
-      };
-    });
-    const summary = {
-      totalActionable: ranked.length,
-      topPriority: ranked.filter((item) => item.priorityTier === "top").length,
-      highPriority: ranked.filter((item) => item.priorityTier === "high").length,
-      competitorGaps: ranked.filter((item) => item.reasonCodes.includes("competitor_gap")).length,
-      easyWins: ranked.filter((item) => item.reasonCodes.includes("easy_win")).length,
-    };
-
+    const data = await buildBacklinkOpportunityReadModel(resolved.client.id, requestedLimit);
     res.setHeader("Cache-Control", "no-store");
-    res.status(200).json({
-      clientId: resolved.client.id,
-      scoring: {
-        potentialValueWeight: 0.55,
-        attainabilityWeight: 0.45,
-        terminalWorkflowsExcluded: true,
-      },
-      summary,
-      items,
-    });
+    res.status(200).json(data);
   } catch (error) {
     console.error("[BACKLINK-OPPORTUNITY-INTELLIGENCE] read failed:", error);
     res.status(500).json({ error: "BACKLINK_OPPORTUNITY_INTELLIGENCE_READ_FAILED" });

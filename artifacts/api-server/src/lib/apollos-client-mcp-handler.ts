@@ -7,6 +7,11 @@ import {
   executeApollosControlPlaneMcpTool,
   isApollosControlPlaneMcpToolName,
 } from "./apollos-control-plane-mcp.js";
+import {
+  APOLLOS_WEEKLY_PUBLISHING_HEALTH_MCP_TOOL,
+  executeApollosWeeklyPublishingHealthMcpTool,
+  isApollosWeeklyPublishingHealthMcpToolName,
+} from "./apollos-weekly-publishing-health.js";
 
 interface JsonRpcMessage {
   readonly jsonrpc?: unknown;
@@ -87,6 +92,7 @@ export class ApollosClientMcpJsonRpcHandler {
       return result(message.id, Object.freeze({
         tools: Object.freeze([
           ...this.runtime.listTools(),
+          APOLLOS_WEEKLY_PUBLISHING_HEALTH_MCP_TOOL,
           ...APOLLOS_CONTROL_PLANE_MCP_TOOLS,
         ]),
       }));
@@ -98,18 +104,24 @@ export class ApollosClientMcpJsonRpcHandler {
         return error(message.id, -32602, "Invalid params", "APOLLOS_MCP_ARGUMENTS_INVALID");
       }
       try {
-        const execution = isApollosControlPlaneMcpToolName(params.name)
-          ? await executeApollosControlPlaneMcpTool({
-              toolName: params.name,
+        const execution = isApollosWeeklyPublishingHealthMcpToolName(params.name)
+          ? await executeApollosWeeklyPublishingHealthMcpTool({
               arguments: params.arguments,
               actorUserId: input.context.userId,
               actorReference: input.context.actorReference,
             })
-          : await this.runtime.execute({
-              context: input.context,
-              toolName: params.name,
-              arguments: params.arguments,
-            });
+          : isApollosControlPlaneMcpToolName(params.name)
+            ? await executeApollosControlPlaneMcpTool({
+                toolName: params.name,
+                arguments: params.arguments,
+                actorUserId: input.context.userId,
+                actorReference: input.context.actorReference,
+              })
+            : await this.runtime.execute({
+                context: input.context,
+                toolName: params.name,
+                arguments: params.arguments,
+              });
         return executionResult(message.id, execution);
       } catch (exception) {
         const reason = safeReason(exception);

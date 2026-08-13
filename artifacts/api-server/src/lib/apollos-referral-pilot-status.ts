@@ -2,6 +2,12 @@ import { pool } from "@workspace/db";
 import { resolveReferralDeliveryConfig } from "./referral-delivery.js";
 import { buildReferralPilotDeliveryReadiness } from "./referral-pilot-readiness.js";
 
+interface LocalGorillaDeskReadiness {
+  readonly available: boolean;
+  readonly customerCount: number | null;
+  readonly externalCalls: false;
+}
+
 function countValue(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -37,9 +43,9 @@ export async function getApollosReferralPilotStatus(clientId: string) {
 
   const invitation = invitationResult.rows[0] ?? {};
   const slug = typeof tenantResult.rows[0]?.slug === "string" ? tenantResult.rows[0].slug : null;
-  let localGorillaDesk = Object.freeze({
+  let localGorillaDesk: Readonly<LocalGorillaDeskReadiness> = Object.freeze({
     available: false,
-    customerCount: null as number | null,
+    customerCount: null,
     externalCalls: false as const,
   });
 

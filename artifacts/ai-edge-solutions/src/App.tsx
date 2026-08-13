@@ -55,7 +55,7 @@ const RevenueAttributionPage = lazy(() => import("./pages/RevenueAttributionPage
 const BBBOperationsCenterPage = lazy(() => import("./pages/BBBOperationsCenterPage"));
 const BBBExecutionPage = lazy(() => import("./pages/BBBExecutionPage"));
 const BBBContentAutopilotPage = lazy(() => import("./pages/BBBContentAutopilotPage"));
-const MediaEnginePage = lazy(() => import("./pages/MediaEnginePage"));
+const MediaEnginePage = lazy(() => import("./pages/MediaEngineReadinessPage"));
 const AssetLibraryPage = lazy(() => import("./pages/AssetLibraryPage"));
 const BBBSuccessPage = lazy(() => import("./pages/BBBSuccessPage"));
 const MorningBriefPage = lazy(() => import("./pages/MorningBriefPage"));

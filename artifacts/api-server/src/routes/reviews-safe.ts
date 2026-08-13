@@ -7,6 +7,7 @@ import { getReviewRequestConfiguration } from "../lib/review-request-configurati
 const router = Router();
 const DEFAULT_ELIGIBILITY_WINDOW_DAYS = 30;
 const MAX_ELIGIBILITY_WINDOW_DAYS = 90;
+const ACTIVE_RESERVATION_MINUTES = 15;
 
 type Tenant = {
   userId: string;
@@ -119,10 +120,16 @@ router.get("/reviews/eligibility", async (req, res) => {
            WHERE e.client_id = $3
              AND e.canonical_record_type = 'gorilladesk_job'
              AND e.canonical_record_id = j.external_id
-             AND e.event_type IN (
-               'review_request_sent',
-               'review_request_delivered',
-               'review_request_completed'
+             AND (
+               e.event_type IN (
+                 'review_request_sent',
+                 'review_request_delivered',
+                 'review_request_completed'
+               )
+               OR (
+                 e.event_type = 'review_request_reserved'
+                 AND e.occurred_at >= NOW() - ($4::int * INTERVAL '1 minute')
+               )
              )
          )
        GROUP BY
@@ -137,7 +144,7 @@ router.get("/reviews/eligibility", async (req, res) => {
        HAVING COALESCE(SUM(p.amount_cents), 0) >= j.amount_cents
        ORDER BY j.completed_at DESC
        LIMIT 100`,
-      [tenant.slug, windowDays, tenant.clientId],
+      [tenant.slug, windowDays, tenant.clientId, ACTIVE_RESERVATION_MINUTES],
     );
 
     const candidates = rows.map(row => {
@@ -163,6 +170,7 @@ router.get("/reviews/eligibility", async (req, res) => {
           paidInFull: true,
           sameTenantProject: true,
           priorReviewRequestEvidence: false,
+          noActiveReservation: true,
           ownerConfirmedReviewUrl: hasOwnerConfirmedReviewUrl,
         },
         deliveryReady: false,
@@ -179,6 +187,7 @@ router.get("/reviews/eligibility", async (req, res) => {
       clientName: tenant.clientName,
       source: "gorilladesk_local_transaction_snapshots",
       windowDays,
+      reservationLeaseMinutes: ACTIVE_RESERVATION_MINUTES,
       candidateCount: candidates.length,
       deliveryReadyCount: 0,
       automationStatus: "not_activated",

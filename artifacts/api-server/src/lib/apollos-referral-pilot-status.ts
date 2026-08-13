@@ -14,22 +14,24 @@ function countValue(value: unknown): number {
 }
 
 export async function getApollosReferralPilotStatus(clientId: string) {
-  const [invitationResult, failedResult, attributionResult, tenantResult] = await Promise.all([
+  const [invitationResult, attemptResult, attributionResult, tenantResult] = await Promise.all([
     pool.query(
       `SELECT
          COUNT(*)::int AS total,
-         COUNT(*) FILTER (WHERE status = 'approved' AND delivery_state = 'not_dispatched')::int AS approved_undispatched,
-         COUNT(*) FILTER (WHERE delivery_state = 'simulated')::int AS simulated,
-         COUNT(*) FILTER (WHERE delivery_state = 'delivered')::int AS delivered,
-         COUNT(*) FILTER (WHERE delivery_state = 'failed')::int AS failed
+         COUNT(*) FILTER (WHERE status = 'approved' AND delivery_state = 'not_dispatched')::int AS approved_undispatched
        FROM referral_invitations
        WHERE client_id = $1`,
       [clientId],
     ),
     pool.query(
-      `SELECT COUNT(*)::int AS count
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE status = 'simulated')::int AS simulated,
+         COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered,
+         COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+         COUNT(*) FILTER (WHERE status = 'dispatching')::int AS dispatching
        FROM referral_delivery_attempts
-       WHERE client_id = $1 AND status = 'failed'`,
+       WHERE client_id = $1`,
       [clientId],
     ),
     pool.query(
@@ -42,6 +44,7 @@ export async function getApollosReferralPilotStatus(clientId: string) {
   ]);
 
   const invitation = invitationResult.rows[0] ?? {};
+  const attempts = attemptResult.rows[0] ?? {};
   const slug = typeof tenantResult.rows[0]?.slug === "string" ? tenantResult.rows[0].slug : null;
   let localGorillaDesk: Readonly<LocalGorillaDeskReadiness> = Object.freeze({
     available: false,
@@ -77,12 +80,16 @@ export async function getApollosReferralPilotStatus(clientId: string) {
     invitations: Object.freeze({
       total: countValue(invitation.total),
       approvedUndispatched: countValue(invitation.approved_undispatched),
-      simulated: countValue(invitation.simulated),
-      delivered: countValue(invitation.delivered),
-      failed: countValue(invitation.failed),
+    }),
+    deliveryAttempts: Object.freeze({
+      total: countValue(attempts.total),
+      simulated: countValue(attempts.simulated),
+      dispatching: countValue(attempts.dispatching),
+      delivered: countValue(attempts.delivered),
+      failed: countValue(attempts.failed),
     }),
     evidence: Object.freeze({
-      failedDeliveryAttempts: countValue(failedResult.rows[0]?.count),
+      failedDeliveryAttempts: countValue(attempts.failed),
       confirmedAttributions: countValue(attributionResult.rows[0]?.count),
     }),
     externalCalls: false as const,

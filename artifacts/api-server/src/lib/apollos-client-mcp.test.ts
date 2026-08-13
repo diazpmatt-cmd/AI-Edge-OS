@@ -127,6 +127,8 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_prepare_activation",
       "apollos_execute_safe_action",
       "apollos_run_full_utilization_cycle",
+      "apollos_get_referral_pilot_status",
+      "apollos_dispatch_approved_referral_invitation",
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
       "apollos_clerk_get_user",
@@ -134,7 +136,7 @@ describe("ApollosClientMcpRuntime", () => {
     ]);
   });
 
-  it("keeps only bounded internal execution tools write-capable", () => {
+  it("separates read-only, internal-write, and external Referral dispatch tools", () => {
     const byName = new Map(APOLLOS_CLIENT_MCP_TOOLS.map((tool) => [tool.name, tool]));
     for (const name of [
       "apollos_list_clients",
@@ -144,6 +146,7 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_get_full_utilization",
       "apollos_get_capability_status",
       "apollos_prepare_activation",
+      "apollos_get_referral_pilot_status",
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
       "apollos_clerk_get_user",
@@ -161,6 +164,73 @@ describe("ApollosClientMcpRuntime", () => {
         openWorldHint: false,
       });
     }
+    expect(byName.get("apollos_dispatch_approved_referral_invitation")?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+  });
+
+  it("keeps Referral dispatch input bounded to one approved invitation", () => {
+    const tool = APOLLOS_CLIENT_MCP_TOOLS.find(
+      (candidate) => candidate.name === "apollos_dispatch_approved_referral_invitation",
+    );
+    expect(tool).toBeDefined();
+    const schema = tool!.inputSchema as any;
+    expect(schema.additionalProperties).toBe(false);
+    expect(Object.keys(schema.properties).sort()).toEqual([
+      "clientId",
+      "confirmDispatch",
+      "idempotencyKey",
+      "invitationId",
+      "requestedMode",
+    ]);
+    expect(schema.required).toEqual([
+      "invitationId",
+      "requestedMode",
+      "confirmDispatch",
+      "idempotencyKey",
+    ]);
+    expect(schema.properties.confirmDispatch.const).toBe(true);
+    expect(schema.properties.requestedMode.enum).toEqual(["dry_run", "live"]);
+  });
+
+  it("rejects arbitrary Referral destination or message input before tenant resolution", async () => {
+    const resolve = vi.fn();
+    const instance = runtime({ resolve: resolve as ApollosClientTargetResolver });
+    await expect(instance.execute({
+      context,
+      toolName: "apollos_dispatch_approved_referral_invitation",
+      arguments: {
+        invitationId: "11111111-1111-4111-8111-111111111111",
+        requestedMode: "live",
+        confirmDispatch: true,
+        idempotencyKey: "pilot:test-0001",
+        destination: "+12515550101",
+      },
+    })).rejects.toThrow("APOLLOS_MCP_ARGUMENTS_INVALID");
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("rejects viewer Referral dispatch before live coverage or delivery execution", async () => {
+    const build = vi.fn();
+    const resolve: ApollosClientTargetResolver = vi.fn(async () => ({
+      ok: true as const,
+      target: Object.freeze({ ...target, accessLevel: "viewer" as const }),
+    }));
+    const instance = runtime({ build, resolve });
+    await expect(instance.execute({
+      context,
+      toolName: "apollos_dispatch_approved_referral_invitation",
+      arguments: {
+        clientId: target.clientId,
+        invitationId: "11111111-1111-4111-8111-111111111111",
+        requestedMode: "live",
+        confirmDispatch: true,
+        idempotencyKey: "pilot:test-0002",
+      },
+    })).rejects.toThrow("APOLLOS_MCP_CLIENT_WRITE_UNAUTHORIZED");
+    expect(build).not.toHaveBeenCalled();
   });
 
   it("keeps client selection server-authorized instead of authoritative from tool arguments", async () => {

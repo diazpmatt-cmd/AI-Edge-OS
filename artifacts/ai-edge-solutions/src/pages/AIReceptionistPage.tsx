@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useApiFetch } from "@/lib/api";
 import { useTheme } from "@/contexts/theme-context";
@@ -80,8 +80,14 @@ type SimulationResult = {
 };
 
 type Tab = "overview" | "settings" | "test";
+type Tone = "good" | "warn" | "bad" | "neutral";
 
-type StatusTone = "good" | "warn" | "bad" | "neutral";
+type ReadinessRow = {
+  name: string;
+  status: string;
+  tone: Tone;
+  detail: string;
+};
 
 const EMPTY_SETTINGS: Settings = {
   id: null,
@@ -106,12 +112,12 @@ const AFTER_HOURS_OPTIONS = [
   { val: "closed", label: "Play Closed Message" },
 ];
 
-const TONE = {
+const TONES: Record<Tone, { color: string; bg: string; border: string }> = {
   good: { color: "#22C55E", bg: "rgba(34,197,94,0.10)", border: "rgba(34,197,94,0.28)" },
   warn: { color: "#F59E0B", bg: "rgba(245,158,11,0.10)", border: "rgba(245,158,11,0.30)" },
   bad: { color: "#EF4444", bg: "rgba(239,68,68,0.10)", border: "rgba(239,68,68,0.30)" },
   neutral: { color: "#94A3B8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.22)" },
-} satisfies Record<StatusTone, { color: string; bg: string; border: string }>;
+};
 
 function coerceSettings(raw: Partial<Settings> | null | undefined): Settings {
   return {
@@ -128,16 +134,46 @@ function coerceSettings(raw: Partial<Settings> | null | undefined): Settings {
   };
 }
 
-function transferSafetyCopy(readiness: LeadRecoveryReadiness | null): { title: string; detail: string; tone: StatusTone } {
+function safeMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function Pill({ label, tone }: { label: string; tone: Tone }) {
+  const style = TONES[tone];
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      border: `1px solid ${style.border}`,
+      background: style.bg,
+      color: style.color,
+      borderRadius: 999,
+      padding: "4px 9px",
+      fontSize: 11,
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function transferSafetyCopy(readiness: LeadRecoveryReadiness | null): { title: string; detail: string; tone: Tone } {
   if (!readiness) {
-    return { title: "Transfer safety not yet verified", detail: "Load readiness evidence before treating Press 1 as live.", tone: "neutral" };
+    return {
+      title: "Transfer safety not yet verified",
+      detail: "Load readiness evidence before treating Press 1 as live.",
+      tone: "neutral",
+    };
   }
 
   const safety = readiness.aiReceptionist.transferSafety;
+  const destination = readiness.aiReceptionist.transferPhone ?? "the saved destination";
+
   if (safety.status === "verified_non_looping") {
     return {
       title: "Transfer destination verified non-looping",
-      detail: `Press 1 is configured to ${readiness.aiReceptionist.transferPhone ?? "the saved destination"}, distinct from the canonical public inbound number.`,
+      detail: `Press 1 is configured to ${destination}, distinct from the canonical public inbound number.`,
       tone: "good",
     };
   }
@@ -169,7 +205,7 @@ function transferSafetyCopy(readiness: LeadRecoveryReadiness | null): { title: s
   if (safety.status === "manual_verification_required") {
     return {
       title: "Transfer destination needs routing verification",
-      detail: `The saved destination ${readiness.aiReceptionist.transferPhone ?? ""} is configured, but AI Edge does not yet have a canonical public inbound number to prove the route cannot loop.`,
+      detail: `The saved destination ${destination} is configured, but AI Edge does not yet have a canonical public inbound number to prove the route cannot loop.`,
       tone: "warn",
     };
   }
@@ -179,35 +215,6 @@ function transferSafetyCopy(readiness: LeadRecoveryReadiness | null): { title: s
     detail: "Save a separate human transfer destination, then verify its routing before a controlled live call test.",
     tone: "warn",
   };
-}
-
-function statusLabel(ok: boolean, good = "Ready", bad = "Needs attention") {
-  return { label: ok ? good : bad, tone: ok ? ("good" as const) : ("warn" as const) };
-}
-
-function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
-  const style = TONE[tone];
-  return (
-    <span style={{
-      display: "inline-flex",
-      alignItems: "center",
-      border: `1px solid ${style.border}`,
-      background: style.bg,
-      color: style.color,
-      borderRadius: 999,
-      padding: "4px 9px",
-      fontSize: 11,
-      fontWeight: 800,
-      whiteSpace: "nowrap",
-    }}>
-      {label}
-    </span>
-  );
-}
-
-function safeMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof Error)) return fallback;
-  return error.message || fallback;
 }
 
 export default function AIReceptionistPage() {
@@ -264,7 +271,7 @@ export default function AIReceptionistPage() {
   useEffect(() => {
     void loadSettings();
     void loadReadiness();
-  }, [loadReadiness, loadSettings]);
+  }, [loadSettings, loadReadiness]);
 
   const saveSettings = useCallback(async () => {
     setSaving(true);
@@ -333,7 +340,8 @@ export default function AIReceptionistPage() {
   };
 
   const transferCopy = transferSafetyCopy(readiness);
-  const transferTone = TONE[transferCopy.tone];
+  const transferTone = TONES[transferCopy.tone];
+  const dirty = JSON.stringify(form) !== JSON.stringify(settings);
 
   const controlledTestReady = Boolean(
     readiness?.readiness.inboundRoutingReady &&
@@ -343,53 +351,54 @@ export default function AIReceptionistPage() {
     !readiness?.recoveryOwnership.duplicateOwnerRisk,
   );
 
-  const overallStatus = readinessLoading
-    ? { label: "Checking readiness", tone: "neutral" as const }
+  const overallStatus: { label: string; tone: Tone } = readinessLoading
+    ? { label: "Checking readiness", tone: "neutral" }
     : readinessError
-      ? { label: "Readiness unavailable", tone: "bad" as const }
+      ? { label: "Readiness unavailable", tone: "bad" }
       : controlledTestReady
-        ? { label: "Ready for controlled live test", tone: "good" as const }
-        : { label: "Live test blocked", tone: "warn" as const };
+        ? { label: "Ready for controlled live test", tone: "good" }
+        : { label: "Live test blocked", tone: "warn" };
 
-  const systemRows = useMemo(() => {
-    if (!readiness) return [];
-    const transfer = readiness.aiReceptionist.transferSafety;
-    return [
-      {
-        label: "Telnyx endpoint",
-        ...statusLabel(readiness.communicationEndpoint.ready, "Verified", "Not ready"),
-        detail: readiness.communicationEndpoint.found
-          ? `${readiness.telnyx.fromNumber} · ${readiness.communicationEndpoint.purpose ?? "voice_sms"}`
-          : "No tenant endpoint found",
-      },
-      {
-        label: "Missed-call recovery",
-        ...statusLabel(readiness.readiness.missedCallRecoveryReady),
-        detail: readiness.recoveryOwnership.duplicateOwnerRisk
-          ? "Scheduler ownership conflicts with immediate webhook recovery"
-          : "Immediate webhook is the recovery owner",
-      },
-      {
-        label: "Signed Telnyx webhooks",
-        ...statusLabel(readiness.readiness.signedWebhookVerificationReady, "Configured", "Public key missing"),
-        detail: "Inbound webhook authenticity gate",
-      },
-      {
-        label: "Press 1 configuration",
-        ...statusLabel(readiness.readiness.receptionistTransferConfigurationReady, "Configured", "Not configured"),
-        detail: readiness.aiReceptionist.transferPhone ?? "No saved transfer destination",
-      },
-      {
-        label: "Press 1 routing safety",
-        labelValue: transfer.status,
-        label: "Press 1 routing safety",
-        tone: transfer.status === "verified_non_looping" ? "good" as const : transfer.status === "blocked" ? "bad" as const : "warn" as const,
-        detail: transfer.reason.replace(/_/g, " "),
-      },
-    ];
-  }, [readiness]);
-
-  const dirty = JSON.stringify(form) !== JSON.stringify(settings);
+  const readinessRows: ReadinessRow[] = readiness ? [
+    {
+      name: "Telnyx endpoint",
+      status: readiness.communicationEndpoint.ready ? "Verified" : "Not ready",
+      tone: readiness.communicationEndpoint.ready ? "good" : "warn",
+      detail: readiness.communicationEndpoint.found
+        ? `${readiness.telnyx.fromNumber} · ${readiness.communicationEndpoint.purpose ?? "voice_sms"}`
+        : "No tenant endpoint found",
+    },
+    {
+      name: "Missed-call recovery",
+      status: readiness.readiness.missedCallRecoveryReady ? "Ready" : "Needs attention",
+      tone: readiness.readiness.missedCallRecoveryReady ? "good" : "warn",
+      detail: readiness.recoveryOwnership.duplicateOwnerRisk
+        ? "Scheduler ownership conflicts with immediate webhook recovery"
+        : "Immediate webhook is the recovery owner",
+    },
+    {
+      name: "Signed Telnyx webhooks",
+      status: readiness.readiness.signedWebhookVerificationReady ? "Configured" : "Public key missing",
+      tone: readiness.readiness.signedWebhookVerificationReady ? "good" : "warn",
+      detail: "Inbound webhook authenticity gate",
+    },
+    {
+      name: "Press 1 configuration",
+      status: readiness.readiness.receptionistTransferConfigurationReady ? "Configured" : "Not configured",
+      tone: readiness.readiness.receptionistTransferConfigurationReady ? "good" : "warn",
+      detail: readiness.aiReceptionist.transferPhone ?? "No saved transfer destination",
+    },
+    {
+      name: "Press 1 routing safety",
+      status: readiness.aiReceptionist.transferSafety.status.replace(/_/g, " "),
+      tone: readiness.aiReceptionist.transferSafety.status === "verified_non_looping"
+        ? "good"
+        : readiness.aiReceptionist.transferSafety.status === "blocked"
+          ? "bad"
+          : "warn",
+      detail: readiness.aiReceptionist.transferSafety.reason.replace(/_/g, " "),
+    },
+  ] : [];
 
   return (
     <AppShell>
@@ -404,7 +413,7 @@ export default function AIReceptionistPage() {
               Configure the receptionist and verify its routing state from production evidence. This page does not claim a route is live until the readiness API proves it.
             </p>
           </div>
-          <StatusPill label={overallStatus.label} tone={overallStatus.tone} />
+          <Pill label={overallStatus.label} tone={overallStatus.tone} />
         </div>
 
         <div style={{ ...panel, padding: 16, marginBottom: 18, borderColor: transferTone.border, background: transferTone.bg }}>
@@ -482,20 +491,17 @@ export default function AIReceptionistPage() {
               <div style={{ padding: "15px 18px", borderBottom: `1px solid ${isDark ? "#1E293B" : "#E2E8F0"}`, fontWeight: 850 }}>Production readiness evidence</div>
               {readinessLoading ? (
                 <div style={{ padding: 22, color: "#94A3B8" }}>Checking Telnyx, endpoint, webhook, scheduler, and transfer evidence…</div>
-              ) : systemRows.length === 0 ? (
+              ) : readinessRows.length === 0 ? (
                 <div style={{ padding: 22, color: "#94A3B8" }}>No readiness evidence available.</div>
               ) : (
                 <div>
-                  {systemRows.map(row => {
-                    const displayLabel = row.labelValue ?? row.label;
-                    return (
-                      <div key={row.label} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) auto minmax(240px, 1.3fr)", gap: 14, alignItems: "center", padding: "13px 18px", borderBottom: `1px solid ${isDark ? "rgba(30,41,59,0.75)" : "#E2E8F0"}` }}>
-                        <div style={{ fontSize: 13, fontWeight: 750 }}>{row.label}</div>
-                        <StatusPill label={displayLabel === row.label ? (row as { label: string; labelValue?: string; tone: StatusTone }).labelValue ?? "" : displayLabel} tone={row.tone} />
-                        <div style={{ color: "#94A3B8", fontSize: 12, textAlign: "right" }}>{row.detail}</div>
-                      </div>
-                    );
-                  })}
+                  {readinessRows.map(row => (
+                    <div key={row.name} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) auto minmax(240px, 1.3fr)", gap: 14, alignItems: "center", padding: "13px 18px", borderBottom: `1px solid ${isDark ? "rgba(30,41,59,0.75)" : "#E2E8F0"}` }}>
+                      <div style={{ fontSize: 13, fontWeight: 750 }}>{row.name}</div>
+                      <Pill label={row.status} tone={row.tone} />
+                      <div style={{ color: "#94A3B8", fontSize: 12, textAlign: "right" }}>{row.detail}</div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -508,7 +514,7 @@ export default function AIReceptionistPage() {
                     A controlled live call should happen only after inbound routing, missed-call recovery, webhook verification, scheduler ownership, and transfer routing safety are all verified.
                   </div>
                 </div>
-                <StatusPill label={controlledTestReady ? "Gate open" : "Gate closed"} tone={controlledTestReady ? "good" : "warn"} />
+                <Pill label={controlledTestReady ? "Gate open" : "Gate closed"} tone={controlledTestReady ? "good" : "warn"} />
               </div>
             </div>
           </div>

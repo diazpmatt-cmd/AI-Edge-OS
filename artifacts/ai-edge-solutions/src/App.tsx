@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show } from "@clerk/react";
 import { ThemeProvider } from "@/contexts/theme-context";
@@ -80,6 +80,24 @@ const PageLoader = () => <div style={{ display: "flex", minHeight: "100vh", alig
 function Authenticated({ children }: { children: React.ReactNode }) { return <><Show when="signed-in"><Suspense fallback={<PageLoader />}>{children}</Suspense></Show><Show when="signed-out"><Redirect to="/admin/login" /></Show></>; }
 function SignInPage() { return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>; }
 function SignUpPage() { return <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#030612", padding: 16 }}><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/admin/login`} fallbackRedirectUrl={`${basePath}/admin/dashboard`} /></div>; }
+function AuthorityEngineLegacyRouter() {
+  const [, navigate] = useLocation();
+  return (
+    <div
+      onClickCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const button = target.closest("button");
+        if (!button?.textContent?.includes("Action Plan")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        navigate("/admin/authority-action-plan");
+      }}
+    >
+      <AuthorityEnginePage />
+    </div>
+  );
+}
 
 function AppRouter() {
   return <Suspense fallback={<PageLoader />}><Switch>
@@ -132,7 +150,7 @@ function AppRouter() {
     <Route path="/admin/apollos-coverage"><Authenticated><ApollosCoveragePage /></Authenticated></Route>
     <Route path="/admin/secrets"><Authenticated><SecretsPage /></Authenticated></Route>
     <Route path="/admin/competitor-intelligence"><Authenticated><CompetitorIntelligencePage /></Authenticated></Route>
-    <Route path="/admin/authority-engine"><Authenticated><AuthorityEnginePage /></Authenticated></Route>
+    <Route path="/admin/authority-engine"><Authenticated><AuthorityEngineLegacyRouter /></Authenticated></Route>
     <Route path="/admin/authority-action-plan"><Authenticated><AuthorityActionPlanPage /></Authenticated></Route>
     <Route path="/admin/edge-opportunities"><Authenticated><EdgeOpportunitiesPage /></Authenticated></Route>
     <Route path="/admin/web-leads"><Authenticated><WebLeadsPage /></Authenticated></Route>

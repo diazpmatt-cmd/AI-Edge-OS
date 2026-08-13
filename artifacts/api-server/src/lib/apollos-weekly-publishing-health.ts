@@ -6,10 +6,7 @@ import {
 } from "@workspace/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
-import {
-  resolveAuthorizedApollosClientTarget,
-  type ApollosClientTargetResolver,
-} from "./apollos-client-access.js";
+import { resolveAuthorizedApollosClientTarget } from "./apollos-client-access.js";
 import {
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
@@ -280,7 +277,7 @@ export async function executeApollosWeeklyPublishingHealthMcpTool(input: {
   readonly arguments: unknown;
   readonly actorUserId: string;
   readonly actorReference: string;
-  readonly resolveTarget?: ApollosClientTargetResolver;
+  readonly resolveTarget?: typeof resolveAuthorizedApollosClientTarget;
   readonly readHealth?: WeeklyPublishingHealthReader;
 }): Promise<Readonly<Record<string, unknown>>> {
   const actorUserId = input.actorUserId.trim();

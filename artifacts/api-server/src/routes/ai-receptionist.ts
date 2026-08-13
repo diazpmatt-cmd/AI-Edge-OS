@@ -137,8 +137,12 @@ router.put("/ai-receptionist/settings", async (req, res) => {
   }
 });
 
-// POST /api/ai-receptionist/test-sms — send a test text routing SMS
+// POST /api/ai-receptionist/test-sms — development-only test text routing SMS
 router.post("/ai-receptionist/test-sms", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(404).json({ error: "Not found" });
+  }
+
   const clientId = await resolveAuthorizedClientId(req, res);
   if (!clientId) return;
 

@@ -92,10 +92,24 @@ router.get("/lead-recovery/readiness", async (req, res) => {
     const telnyxPublicKeyConfigured = !!process.env.TELNYX_PUBLIC_KEY?.trim();
     const schedulerEnabled = process.env.SCHEDULER_ENABLED === "true";
 
+    const normalizedTransfer = normalizeE164(settings?.transferPhone);
+    const profilePhoneCollision = Boolean(
+      publicInboundEvidence.usableForCollisionDetection &&
+      publicInboundEvidence.phone &&
+      normalizedTransfer &&
+      publicInboundEvidence.phone === normalizedTransfer,
+    );
+
+    // The Local Presence phone is tenant-scoped but currently lacks phone-specific
+    // provider provenance. Use it to block an obvious collision only. A distinct
+    // number remains manual-verification-required until verified phone provenance
+    // exists; do not turn configured profile data into a false safety claim.
     const transferSafety = assessTransferSafety({
       transferPhone: settings?.transferPhone,
       telnyxAiNumber: telnyxFromNumber,
-      canonicalPublicInboundPhone: publicInboundEvidence.phone,
+      canonicalPublicInboundPhone: profilePhoneCollision
+        ? publicInboundEvidence.phone
+        : undefined,
     });
 
     const transferConfigured = transferSafety.configured;
@@ -118,7 +132,10 @@ router.get("/lead-recovery/readiness", async (req, res) => {
         purpose: endpoint?.purpose ?? null,
         ready: endpointReady,
       },
-      publicInboundEvidence,
+      publicInboundEvidence: {
+        ...publicInboundEvidence,
+        collisionWithTransfer: profilePhoneCollision,
+      },
       aiReceptionist: {
         settingsPresent: !!settings,
         businessName: settings?.businessName ?? null,
@@ -129,9 +146,11 @@ router.get("/lead-recovery/readiness", async (req, res) => {
           status: transferSafety.status,
           reason: transferSafety.reason,
           sameAsTelnyxAiNumber: transferSafety.sameAsTelnyxAiNumber,
-          sameAsCanonicalPublicInbound: transferSafety.sameAsCanonicalPublicInbound,
+          sameAsCanonicalPublicInbound: profilePhoneCollision,
           knownLegacyUnsafeDefaultDetected: transferSafety.knownLegacyUnsafeDefaultDetected,
-          canonicalPublicInboundPhone: transferSafety.canonicalPublicInboundPhone,
+          canonicalPublicInboundPhone: profilePhoneCollision
+            ? publicInboundEvidence.phone
+            : null,
           manualVerificationRequired:
             transferSafety.status === "manual_verification_required",
         },

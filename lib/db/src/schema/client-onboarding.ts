@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const clientOnboardingTable = pgTable("client_onboarding", {
   id:                  uuid("id").primaryKey().defaultRandom(),
+  createdByUserId:     text("created_by_user_id"),
   businessName:        text("business_name").notNull(),
   industry:            text("industry").notNull().default(""),
   website:             text("website").default(""),

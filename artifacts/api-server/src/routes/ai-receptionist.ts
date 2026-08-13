@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db, eq } from "@workspace/db";
 import { aiReceptionistSettingsTable } from "@workspace/db/schema";
+import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 
 const router = Router();
 
@@ -46,31 +47,50 @@ function rowToDto(row: typeof aiReceptionistSettingsTable.$inferSelect) {
   };
 }
 
+async function resolveAuthorizedClientId(req: any, res: any): Promise<string | null> {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+
+  try {
+    const resolved = await resolveClientActiveCheck(userId);
+    if (!resolved.ok) {
+      res.status(404).json({ error: "Client not found" });
+      return null;
+    }
+    return resolved.clientId;
+  } catch (err) {
+    console.error("[ai-receptionist] client resolution error:", err);
+    res.status(500).json({ error: "Server error" });
+    return null;
+  }
+}
+
 // GET /api/ai-receptionist/settings
 router.get("/ai-receptionist/settings", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const clientId = await resolveAuthorizedClientId(req, res);
+  if (!clientId) return;
 
-  const clientId = (req.query.clientId as string) || "default";
   try {
     const [row] = await db
       .select()
       .from(aiReceptionistSettingsTable)
       .where(eq(aiReceptionistSettingsTable.clientId, clientId));
 
-    return res.json(row ? rowToDto(row) : { ...DEFAULT_SETTINGS, id: null });
+    return res.json(row ? rowToDto(row) : { ...DEFAULT_SETTINGS, clientId, id: null });
   } catch (err) {
     console.error("[ai-receptionist] GET settings error:", err);
-    return res.json({ ...DEFAULT_SETTINGS, id: null });
+    return res.json({ ...DEFAULT_SETTINGS, clientId, id: null });
   }
 });
 
 // PUT /api/ai-receptionist/settings
 router.put("/ai-receptionist/settings", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const clientId = await resolveAuthorizedClientId(req, res);
+  if (!clientId) return;
 
-  const clientId = (req.query.clientId as string) || "default";
   const {
     businessName, transferPhone, greetingScript,
     callbackMessage, voicemailMessage, textRoutingMessage,
@@ -119,10 +139,10 @@ router.put("/ai-receptionist/settings", async (req, res) => {
 
 // POST /api/ai-receptionist/test-sms — send a test text routing SMS
 router.post("/ai-receptionist/test-sms", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const clientId = await resolveAuthorizedClientId(req, res);
+  if (!clientId) return;
 
-  const { to, message, clientId } = req.body;
+  const { to, message } = req.body;
   if (!to) return res.status(400).json({ error: "to is required" });
 
   const apiKey  = process.env.TELNYX_API_KEY;
@@ -132,15 +152,14 @@ router.post("/ai-receptionist/test-sms", async (req, res) => {
     return res.status(503).json({ error: "TELNYX_API_KEY not configured" });
   }
 
-  // Get the text routing message from settings if not provided
+  // Get the text routing message from the authenticated tenant's settings if not provided.
   let smsMessage = message;
   if (!smsMessage) {
     try {
-      const cid = clientId || "default";
       const [row] = await db
         .select()
         .from(aiReceptionistSettingsTable)
-        .where(eq(aiReceptionistSettingsTable.clientId, cid));
+        .where(eq(aiReceptionistSettingsTable.clientId, clientId));
       smsMessage = row?.textRoutingMessage ?? DEFAULT_SETTINGS.textRoutingMessage;
     } catch {
       smsMessage = DEFAULT_SETTINGS.textRoutingMessage;
@@ -169,19 +188,18 @@ router.post("/ai-receptionist/test-sms", async (req, res) => {
 
 // POST /api/ai-receptionist/test-call-flow — simulate a call flow step
 router.post("/ai-receptionist/test-call-flow", async (req, res) => {
-  const { userId } = getAuth(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const clientId = await resolveAuthorizedClientId(req, res);
+  if (!clientId) return;
 
-  const { digit, clientId } = req.body;
-  const cid = clientId || "default";
+  const { digit } = req.body;
 
   try {
     const [row] = await db
       .select()
       .from(aiReceptionistSettingsTable)
-      .where(eq(aiReceptionistSettingsTable.clientId, cid));
+      .where(eq(aiReceptionistSettingsTable.clientId, clientId));
 
-    const settings = row ? rowToDto(row) : DEFAULT_SETTINGS;
+    const settings = row ? rowToDto(row) : { ...DEFAULT_SETTINGS, clientId };
 
     const flows: Record<string, { action: string; response: string }> = {
       "1": { action: "Transfer",      response: `Transferring to ${settings.transferPhone}` },

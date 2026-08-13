@@ -25,7 +25,7 @@ router.get("/analytics/telnyx", async (req, res) => {
       return;
     }
 
-    const data = await computeTelnyxAnalytics(resolved.slug, resolved.clientId);
+    const data = await computeTelnyxAnalytics(resolved.clientId, resolved.slug);
     res.json(data);
   } catch (err) {
     console.error("[telnyx-analytics] Error computing analytics:", err);

@@ -9,6 +9,7 @@ export interface DabGitPushPrAdapter {
   pushCommit(input:{repositoryId:string;branchName:string;commitSha:string;expectedRemoteSha:string|null;idempotencyKey:string}):Promise<{branchName:string;headSha:string}>;
   observeBase(input:{repositoryId:string;baseBranch:string}):Promise<{baseSha:string}>;
   createPullRequest(input:{repositoryId:string;headBranch:string;headSha:string;baseBranch:string;baseSha:string;idempotencyKey:string}):Promise<{prNumber:number;headBranch:string;headSha:string;baseBranch:string;baseSha:string}>;
+  observePullRequest?(input:{repositoryId:string;prNumber:number}):Promise<{headSha:string;baseSha:string;mergeable:boolean}>;
 }
 const sha=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const goodSha=(v:string)=>/^[a-f0-9]{40}$/.test(v);
@@ -36,4 +37,20 @@ export async function createBoundPullRequest(input:{pushReceipt:DabGitPushReceip
   const base=await input.adapter.observeBase({repositoryId:material.repositoryId,baseBranch:material.baseBranch});if(base.baseSha!==material.baseSha)throw new Error("DAB_GIT_PR_BASE_SHA_MISMATCH");
   const pr=await input.adapter.createPullRequest({...material,idempotencyKey});if(!Number.isInteger(pr.prNumber)||pr.prNumber<=0||pr.headBranch!==material.headBranch||pr.headSha!==material.headSha||pr.baseBranch!==material.baseBranch||pr.baseSha!==material.baseSha)throw new Error("DAB_GIT_PR_VERIFICATION_FAILED");
   const receipt=Object.freeze({outcome:"verified" as const,repositoryId:material.repositoryId,prNumber:pr.prNumber,headBranch:material.headBranch,headSha:material.headSha,baseBranch:material.baseBranch,baseSha:material.baseSha,prAuthorizationRef:material.prAuthorizationRef,actorId:input.actorId.trim(),workloadIdentity:input.workloadIdentity.trim(),requestFingerprint,idempotencyKey,createdAt:(input.now??(()=>new Date()))().toISOString()});await input.receipts.save(receipt);return receipt;
+}
+
+export async function rebindBoundPullRequest(input:{priorPrReceipt:DabGitPrReceipt;pushReceipt:DabGitPushReceipt;prAuthorizationRef:string;authorizationUsable:boolean;killSwitch:boolean;adapterEnabled:boolean;handlerRegistered:boolean;actorId:string;workloadIdentity:string;adapter:DabGitPushPrAdapter;receipts:ReceiptStore<DabGitPrReceipt>;now?:()=>Date}):Promise<DabGitPrReceipt>{
+  if(input.priorPrReceipt.outcome!=="verified"||input.pushReceipt.outcome!=="verified")throw new Error("DAB_GIT_PR_REBIND_RECEIPT_INVALID");
+  if(input.priorPrReceipt.repositoryId!==input.pushReceipt.repositoryId||input.priorPrReceipt.headBranch!==input.pushReceipt.branchName)throw new Error("DAB_GIT_PR_REBIND_BRANCH_MISMATCH");
+  if(!goodSha(input.priorPrReceipt.baseSha)||!goodSha(input.priorPrReceipt.headSha)||!goodSha(input.pushReceipt.commitSha))throw new Error("DAB_GIT_PR_REBIND_SHA_INVALID");
+  if(!input.prAuthorizationRef.trim())throw new Error("DAB_GIT_PR_REBIND_AUTHORIZATION_REQUIRED");
+  const material={repositoryId:input.pushReceipt.repositoryId,prNumber:input.priorPrReceipt.prNumber,headBranch:input.pushReceipt.branchName,priorHeadSha:input.priorPrReceipt.headSha,headSha:input.pushReceipt.commitSha,baseBranch:input.priorPrReceipt.baseBranch,baseSha:input.priorPrReceipt.baseSha,prAuthorizationRef:input.prAuthorizationRef.trim()};
+  const requestFingerprint=sha(material),idempotencyKey=`dab-git-pr-rebind:${requestFingerprint}`;
+  const prior=await input.receipts.getByIdempotencyKey(idempotencyKey);if(prior)return prior;
+  enabled(input,"DAB_GIT_PR_REBIND");
+  if(!input.adapter.observePullRequest)throw new Error("DAB_GIT_PR_REBIND_HANDLER_MISSING");
+  const base=await input.adapter.observeBase({repositoryId:material.repositoryId,baseBranch:material.baseBranch});if(base.baseSha!==material.baseSha)throw new Error("DAB_GIT_PR_REBIND_BASE_SHA_MISMATCH");
+  const observed=await input.adapter.observePullRequest({repositoryId:material.repositoryId,prNumber:material.prNumber});
+  if(observed.headSha!==material.headSha||observed.baseSha!==material.baseSha)throw new Error("DAB_GIT_PR_REBIND_VERIFICATION_FAILED");
+  const receipt=Object.freeze({outcome:"verified" as const,repositoryId:material.repositoryId,prNumber:material.prNumber,headBranch:material.headBranch,headSha:material.headSha,baseBranch:material.baseBranch,baseSha:material.baseSha,prAuthorizationRef:material.prAuthorizationRef,actorId:input.actorId.trim(),workloadIdentity:input.workloadIdentity.trim(),requestFingerprint,idempotencyKey,createdAt:(input.now??(()=>new Date()))().toISOString()});await input.receipts.save(receipt);return receipt;
 }

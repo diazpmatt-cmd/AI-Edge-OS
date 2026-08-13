@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AssessmentsInboxPage from "../AssessmentsInboxPage";
 
@@ -29,7 +29,7 @@ const assessments = [
   },
 ];
 
-const apiFetch = vi.fn().mockResolvedValue({ assessments });
+const apiFetch = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   useApiFetch: () => apiFetch,
@@ -38,6 +38,24 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/components/app-shell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
+
+beforeEach(() => {
+  apiFetch.mockReset();
+  apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
+    if (path === "/assessments" && !options) return { assessments };
+    if (path === "/assessments/assessment-1" && options?.method === "PATCH") {
+      return JSON.parse(String(options.body ?? "{}"));
+    }
+    throw new Error(`Unexpected API call: ${path}`);
+  });
+});
+
+async function openAssessment() {
+  render(<AssessmentsInboxPage />);
+  await waitFor(() => expect(screen.getByText("Test Business")).toBeTruthy());
+  fireEvent.click(screen.getByText("Test Business"));
+  await waitFor(() => expect(screen.getByText("Pipeline Actions")).toBeTruthy());
+}
 
 describe("AssessmentsInboxPage truthful pipeline summaries", () => {
   it("uses existing lead stages and counts without fabricated monetary values", async () => {
@@ -54,5 +72,37 @@ describe("AssessmentsInboxPage truthful pipeline summaries", () => {
     expect(pageText).not.toMatch(/\$[\d,]+/);
     expect(pageText).not.toContain("Apple Business Connect");
     expect(pageText).not.toContain("missing schema markup");
+  });
+});
+
+describe("AssessmentsInboxPage persistence contract", () => {
+  it("PATCHes the selected assessment when its pipeline status changes", async () => {
+    await openAssessment();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark Contacted" }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith("/assessments/assessment-1", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "contacted" }),
+      });
+    });
+  });
+
+  it("PATCHes internal notes for the selected assessment", async () => {
+    await openAssessment();
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add Note" }));
+    fireEvent.change(screen.getByPlaceholderText("Add notes about this lead..."), {
+      target: { value: "Synthetic acceptance note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Notes" }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith("/assessments/assessment-1", {
+        method: "PATCH",
+        body: JSON.stringify({ notes: "Synthetic acceptance note" }),
+      });
+    });
   });
 });

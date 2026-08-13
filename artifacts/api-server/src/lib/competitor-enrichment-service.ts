@@ -12,6 +12,9 @@
  * - Only the enrichment service calls updateScores() for canonical persistence
  *   when a real (non-mock) provider returns a verified score.
  * - Tenant isolation: every DB query filters on client_id.
+ * - Mock providers are never registered in production.
+ * - Cached observations are filtered to the currently active provider registry,
+ *   so stale historical mock rows can never leak back into production output.
  *
  * P6.2 change:
  * - AiEdgeVisibilityProvider replaces MockAiVisibilityProvider.
@@ -59,6 +62,57 @@ export const ENRICHMENT_CATEGORIES: ObservationCategory[] = [
   "authority",
   "ai_visibility",
 ];
+
+/**
+ * Demo enrichment is useful in local development and tests, but it must never
+ * appear in a production client card. Keep this policy pure and exported so CI
+ * can permanently guard the production boundary.
+ */
+export function shouldRegisterCompetitorMockProviders(
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean {
+  return nodeEnv !== "production";
+}
+
+interface CachedProviderObservation {
+  provider_id: string;
+  observed_at: Date;
+}
+
+/**
+ * Keep only observations belonging to providers that are active right now.
+ * This intentionally excludes stale rows from providers that have been retired
+ * (especially historical mock providers persisted before the production policy
+ * was tightened).
+ */
+export function filterCachedObservationsToActiveProviders<T extends { provider_id: string }>(
+  rows: readonly T[],
+  providerIds: readonly string[],
+): T[] {
+  const active = new Set(providerIds);
+  return rows.filter(row => active.has(row.provider_id));
+}
+
+/**
+ * A cache is reusable only when every active provider has a fresh observation.
+ * The old implementation required all five historical categories, which would
+ * force repeated paid/live lookups after mock providers were removed from
+ * production. This policy follows the active registry instead.
+ */
+export function areCompetitorObservationsFreshForProviders(
+  rows: readonly CachedProviderObservation[],
+  providerIds: readonly string[],
+  nowMs: number = Date.now(),
+  freshnessMs: number = OBS_FRESHNESS_MS,
+): boolean {
+  if (providerIds.length === 0) return true;
+
+  return providerIds.every(providerId => {
+    const row = rows.find(candidate => candidate.provider_id === providerId);
+    if (!row) return false;
+    return nowMs - new Date(row.observed_at).getTime() < freshnessMs;
+  });
+}
 
 // ── DB row type ───────────────────────────────────────────────────────────────
 
@@ -146,15 +200,23 @@ export class CompetitorEnrichmentService {
     domain:       string,
     existingData: Record<string, unknown> = {},
   ): Promise<ProviderObservationSummary[]> {
-    // 1. Try the cache
+    const providers = this.registry.getAll();
+    const activeProviderIds = providers.map(provider => provider.providerId);
+
+    // 1. Try the cache, but only for providers that are active now. Historical
+    // mock observations may still exist in DB from development/older builds and
+    // must never be returned by the production service.
     const cached = await this.loadCached(clientId, competitorId);
-    if (this.isCacheFresh(cached)) {
-      return cached.map(rowToSummary);
+    const activeCached = filterCachedObservationsToActiveProviders(
+      cached,
+      activeProviderIds,
+    );
+    if (areCompetitorObservationsFreshForProviders(activeCached, activeProviderIds)) {
+      return activeCached.map(rowToSummary);
     }
 
     // 2. Run all active providers (parallel, non-fatal)
     const input: EnrichmentInput = { clientId, competitorId, domain, existingData };
-    const providers = this.registry.getAll();
     const settled = await Promise.allSettled(providers.map(p => p.enrich(input)));
 
     const observations: ProviderObservation<unknown>[] = [];
@@ -280,12 +342,6 @@ export class CompetitorEnrichmentService {
     return res.rows;
   }
 
-  private isCacheFresh(rows: ObsRow[]): boolean {
-    if (rows.length < ENRICHMENT_CATEGORIES.length) return false;
-    const now = Date.now();
-    return rows.every(r => now - new Date(r.observed_at).getTime() < OBS_FRESHNESS_MS);
-  }
-
   private async persist(
     observations: ProviderObservation<unknown>[],
   ): Promise<void> {
@@ -332,10 +388,11 @@ export class CompetitorEnrichmentService {
  * Creates a CompetitorEnrichmentService with:
  *   - Real AiEdgeVisibilityProvider registered for the ai_visibility category.
  *   - Real EdgeAuthorityProvider (Path C) registered for the authority category.
- *   - Remaining mock providers for website_intel, local_presence, reviews.
+ *   - Non-production only: remaining mock providers for website_intel,
+ *     local_presence, and reviews so development/test fixtures remain useful.
  *   - MockAiVisibilityProvider and MockAuthorityProvider excluded.
  *
- * Call once at API server startup; reuse the instance across requests.
+ * Production invariant: no provider with isMock=true is registered.
  */
 export function createEnrichmentService(
   overridePool?: Pool,
@@ -345,17 +402,18 @@ export function createEnrichmentService(
   const activeDb   = overrideDb   ?? defaultDb;
   const registry   = new EnrichmentProviderRegistry();
 
-  // Register mock providers for categories that don't yet have a real provider.
-  const realCategories = new Set<string>(["ai_visibility", "authority"]);
-  const remainingMocks = ALL_MOCK_PROVIDERS.filter(
-    p => !realCategories.has(p.category),
-  ) as ReadonlyArray<CompetitorEnrichmentProvider<unknown>>;
+  if (shouldRegisterCompetitorMockProviders()) {
+    const realCategories = new Set<string>(["ai_visibility", "authority"]);
+    const remainingMocks = ALL_MOCK_PROVIDERS.filter(
+      p => !realCategories.has(p.category),
+    ) as ReadonlyArray<CompetitorEnrichmentProvider<unknown>>;
 
-  for (const provider of remainingMocks) {
-    registry.register(provider);
+    for (const provider of remainingMocks) {
+      registry.register(provider);
+    }
   }
 
-  // Register real providers.
+  // Register real providers in every environment.
   registry.register(new AiEdgeVisibilityProvider(activePool));
   // Path C: no live lookup adapter — returns sparse non-mock observations.
   registry.register(new EdgeAuthorityProvider());

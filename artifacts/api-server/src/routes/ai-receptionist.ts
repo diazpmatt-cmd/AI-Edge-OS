@@ -8,7 +8,7 @@ const router = Router();
 const DEFAULT_SETTINGS = {
   clientId:           "default",
   businessName:       "Bed Bugs & Beyond",
-  transferPhone:      "+12513249090",
+  transferPhone:      "",
   greetingScript:     "Hi, thank you for calling Bed Bugs and Beyond Pest Control. To speak directly with us, press 1. To request a callback, press 2. To leave a voicemail, press 3. To receive a text with our info, press 4.",
   callbackMessage:    "Thank you! We have received your callback request and will call you back as soon as possible. Have a great day!",
   voicemailMessage:   "Please leave your name, phone number, and a brief description of the pest issue after the beep. Press star or hang up when finished.",

@@ -24,6 +24,21 @@ interface ReviewOverview {
   summaries: ReviewSummary[];
 }
 
+interface ReviewConfiguration {
+  status: "not_configured" | "owner_confirmed";
+  reviewUrl: string | null;
+  confirmedAt: string | null;
+}
+
+interface ReviewConfigurationResponse {
+  clientId: string;
+  clientSlug: string;
+  clientName: string;
+  configuration: ReviewConfiguration;
+  sendPathStatus: "not_accepted";
+  automationStatus: "not_activated";
+}
+
 interface ReviewEligibilityCandidate {
   jobExternalId: string;
   customerExternalId: string;
@@ -39,9 +54,11 @@ interface ReviewEligibilityCandidate {
   };
   evidence: {
     completedJob: true;
-    collectedPayment: true;
+    paidInFull: true;
     sameTenantProject: true;
     priorReviewRequestEvidence: false;
+    noActiveReservation: true;
+    ownerConfirmedReviewUrl: boolean;
   };
   deliveryReady: false;
   blockers: string[];
@@ -53,11 +70,42 @@ interface ReviewEligibilityResponse {
   clientName: string;
   source: "gorilladesk_local_transaction_snapshots";
   windowDays: number;
+  reservationLeaseMinutes: number;
   candidateCount: number;
   deliveryReadyCount: 0;
   automationStatus: "not_activated";
+  reviewConfigurationStatus: ReviewConfiguration["status"];
+  reviewConfigurationConfirmedAt: string | null;
   globalBlockers: string[];
   candidates: ReviewEligibilityCandidate[];
+}
+
+interface ReviewReservationResponse {
+  reservation: {
+    id: string;
+    jobExternalId: string;
+    reservedAt: string;
+    expiresAt: string;
+  };
+  customer: {
+    name: string;
+    smsAvailable: boolean;
+    emailAvailable: boolean;
+  };
+  evidence: {
+    completedJob: true;
+    paidInFull: true;
+    sameTenantProject: true;
+    noPriorActiveReservationOrDelivery: true;
+    ownerConfirmedReviewUrl: true;
+  };
+  preview: {
+    channel: "sms" | "email";
+    message: string;
+  };
+  deliveryReady: false;
+  sendPathStatus: "not_accepted";
+  blockers: string[];
 }
 
 const TABS = ["Overview", "Eligibility Queue", "Templates", "Response Library"] as const;
@@ -67,14 +115,14 @@ const TEMPLATE_LIBRARY = [
   {
     id: "post_service_sms",
     label: "Post-Service SMS",
-    timing: "Use only after a verified completed job",
+    timing: "Use only after a verified completed and paid job",
     body:
       "Hi [First Name]! Thanks for choosing [Business Name]. If our team took good care of you, a quick Google review would mean a lot and helps other local customers find a business they can trust.\n\n[Verified Google Review Link]\n\nThanks again — [Business Name]",
   },
   {
     id: "post_service_email",
     label: "Post-Service Email",
-    timing: "Use only after a verified completed job",
+    timing: "Use only after a verified completed and paid job",
     body:
       "Hi [First Name],\n\nThank you for choosing [Business Name]. If you were happy with your service, would you take a moment to leave a Google review? Your feedback helps other local customers make a confident choice.\n\n[Verified Google Review Link]\n\nIf anything was not right, please contact us directly so we can make it right.\n\nThank you,\n[Business Name]",
   },
@@ -102,8 +150,9 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
+      type="button"
       onClick={() => {
-        navigator.clipboard.writeText(text);
+        void navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
@@ -123,7 +172,8 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string | null): string {
+  if (!value) return "Not yet";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
   return date.toLocaleString();
@@ -139,21 +189,50 @@ function formatMoney(cents: number): string {
 function blockerLabel(code: string): string {
   switch (code) {
     case "verified_review_url_not_configured": return "Verified review link required";
+    case "controlled_send_path_not_accepted": return "Controlled send path not accepted";
     case "no_customer_contact_channel": return "No SMS/email contact available";
     default: return code.replace(/_/g, " ");
   }
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  if (err.message.includes("invalid_google_review_url")) {
+    return "Use the exact HTTPS Google review link for this business.";
+  }
+  if (err.message.includes("google_business_channel_not_initialized")) {
+    return "Google Business must be initialized for this tenant before a review link can be verified.";
+  }
+  if (err.message.includes("review_request_already_reserved_or_processed")) {
+    return "That job is already reserved or already has review-request evidence.";
+  }
+  return err.message || fallback;
 }
 
 export default function ReviewsEnginePage() {
   const { colors: t } = useTheme();
   const apiFetch = useApiFetch();
   const [tab, setTab] = useState<Tab>("Overview");
+
   const [data, setData] = useState<ReviewOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [configuration, setConfiguration] = useState<ReviewConfigurationResponse | null>(null);
+  const [configurationLoading, setConfigurationLoading] = useState(true);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [reviewUrlInput, setReviewUrlInput] = useState("");
+  const [ownerConfirmed, setOwnerConfirmed] = useState(false);
+  const [configurationSaving, setConfigurationSaving] = useState(false);
+  const [configurationSaved, setConfigurationSaved] = useState(false);
+
   const [eligibility, setEligibility] = useState<ReviewEligibilityResponse | null>(null);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
+
+  const [reservingJobId, setReservingJobId] = useState<string | null>(null);
+  const [reservationError, setReservationError] = useState<string | null>(null);
+  const [latestReservation, setLatestReservation] = useState<ReviewReservationResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,9 +241,23 @@ export default function ReviewsEnginePage() {
       const response = await apiFetch<ReviewOverview>("/reviews/overview");
       setData(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load review intelligence.");
+      setError(errorMessage(err, "Failed to load review intelligence."));
     } finally {
       setLoading(false);
+    }
+  }, [apiFetch]);
+
+  const loadConfiguration = useCallback(async () => {
+    setConfigurationLoading(true);
+    setConfigurationError(null);
+    try {
+      const response = await apiFetch<ReviewConfigurationResponse>("/reviews/configuration");
+      setConfiguration(response);
+      setReviewUrlInput(response.configuration.reviewUrl ?? "");
+    } catch (err) {
+      setConfigurationError(errorMessage(err, "Failed to load review configuration."));
+    } finally {
+      setConfigurationLoading(false);
     }
   }, [apiFetch]);
 
@@ -175,7 +268,7 @@ export default function ReviewsEnginePage() {
       const response = await apiFetch<ReviewEligibilityResponse>("/reviews/eligibility");
       setEligibility(response);
     } catch (err) {
-      setEligibilityError(err instanceof Error ? err.message : "Failed to load review eligibility evidence.");
+      setEligibilityError(errorMessage(err, "Failed to load review eligibility evidence."));
     } finally {
       setEligibilityLoading(false);
     }
@@ -183,13 +276,57 @@ export default function ReviewsEnginePage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadConfiguration();
+  }, [load, loadConfiguration]);
 
   useEffect(() => {
     if (tab === "Eligibility Queue" && !eligibility && !eligibilityLoading) {
       void loadEligibility();
     }
   }, [tab, eligibility, eligibilityLoading, loadEligibility]);
+
+  const saveConfiguration = useCallback(async () => {
+    if (!ownerConfirmed || !reviewUrlInput.trim()) return;
+    setConfigurationSaving(true);
+    setConfigurationSaved(false);
+    setConfigurationError(null);
+    try {
+      const response = await apiFetch<ReviewConfigurationResponse>("/reviews/configuration", {
+        method: "PUT",
+        body: JSON.stringify({
+          reviewUrl: reviewUrlInput.trim(),
+          ownerConfirmed: true,
+        }),
+      });
+      setConfiguration(response);
+      setReviewUrlInput(response.configuration.reviewUrl ?? reviewUrlInput.trim());
+      setOwnerConfirmed(false);
+      setConfigurationSaved(true);
+      setLatestReservation(null);
+      await loadEligibility();
+    } catch (err) {
+      setConfigurationError(errorMessage(err, "Failed to verify the review link."));
+    } finally {
+      setConfigurationSaving(false);
+    }
+  }, [apiFetch, loadEligibility, ownerConfirmed, reviewUrlInput]);
+
+  const reservePreview = useCallback(async (candidate: ReviewEligibilityCandidate) => {
+    setReservingJobId(candidate.jobExternalId);
+    setReservationError(null);
+    try {
+      const response = await apiFetch<ReviewReservationResponse>(
+        `/reviews/reservations/${encodeURIComponent(candidate.jobExternalId)}`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setLatestReservation(response);
+      await loadEligibility();
+    } catch (err) {
+      setReservationError(errorMessage(err, "Failed to reserve the review preview."));
+    } finally {
+      setReservingJobId(null);
+    }
+  }, [apiFetch, loadEligibility]);
 
   const totals = useMemo(() => {
     const summaries = data?.summaries ?? [];
@@ -209,6 +346,8 @@ export default function ReviewsEnginePage() {
     borderRadius: 14,
   };
 
+  const configurationReady = configuration?.configuration.status === "owner_confirmed";
+
   return (
     <AppShell>
       <div style={{ padding: "26px 30px", maxWidth: 1120, margin: "0 auto", color: t.text }}>
@@ -218,7 +357,7 @@ export default function ReviewsEnginePage() {
           </div>
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 850 }}>⭐ Reviews Engine</h1>
           <p style={{ color: t.text2, fontSize: 14, margin: "6px 0 0" }}>
-            {data?.clientName ?? "Your business"} — verified review observations and post-job eligibility evidence.
+            {data?.clientName ?? configuration?.clientName ?? "Your business"} — verified review observations and completed-paid-job eligibility evidence.
           </p>
         </div>
 
@@ -226,9 +365,9 @@ export default function ReviewsEnginePage() {
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <div style={{ fontSize: 22 }}>🛡️</div>
             <div>
-              <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 4 }}>Automated review requests are not activated yet</div>
+              <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 4 }}>Customer delivery is still disabled</div>
               <div style={{ color: "#94A3B8", fontSize: 13, lineHeight: 1.55 }}>
-                AI Edge can now identify completed-and-paid jobs that qualify for the future review workflow, but it will not contact customers from this page. Delivery stays blocked until a verified tenant review link and controlled one-message send path are proven.
+                AI Edge can verify a tenant review link, identify completed-and-paid jobs, reserve one job at a time, and show the exact message preview. This screen has no SMS or email send action. Live delivery remains a separate acceptance stage.
               </div>
             </div>
           </div>
@@ -237,6 +376,7 @@ export default function ReviewsEnginePage() {
         <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
           {TABS.map(item => (
             <button
+              type="button"
               key={item}
               onClick={() => setTab(item)}
               style={{
@@ -263,7 +403,7 @@ export default function ReviewsEnginePage() {
               <div style={{ ...panel, padding: 22, borderColor: "rgba(239,68,68,0.4)" }}>
                 <div style={{ color: "#F87171", fontWeight: 800, marginBottom: 6 }}>Review intelligence unavailable</div>
                 <div style={{ color: "#94A3B8", fontSize: 13, marginBottom: 14 }}>{error}</div>
-                <button onClick={() => void load()} style={{ background: "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>
+                <button type="button" onClick={() => void load()} style={{ background: "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>
                   Retry
                 </button>
               </div>
@@ -275,7 +415,7 @@ export default function ReviewsEnginePage() {
                   {[
                     ["Verified platforms", String(totals.platformCount)],
                     ["Observed reviews", String(totals.reviewCount)],
-                    ["Automation", "Not activated"],
+                    ["Review link", configurationReady ? "Verified" : "Not configured"],
                     ["Last observation", totals.latestObservedAt ? new Date(totals.latestObservedAt).toLocaleDateString() : "No data yet"],
                   ].map(([label, value]) => (
                     <div key={label} style={{ ...panel, padding: "16px 18px" }}>
@@ -327,13 +467,107 @@ export default function ReviewsEnginePage() {
 
         {tab === "Eligibility Queue" && (
           <>
+            <div style={{ ...panel, padding: 18, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 14 }}>
+                <div>
+                  <div style={{ color: "#38BDF8", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Step 1</div>
+                  <div style={{ fontWeight: 850, fontSize: 16, marginTop: 3 }}>Verify this tenant’s Google review link</div>
+                  <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 5, maxWidth: 680 }}>
+                    AI Edge never guesses a review URL. Paste the exact Google review link and explicitly confirm it belongs to this business.
+                  </div>
+                </div>
+                <span style={{ border: `1px solid ${configurationReady ? "rgba(34,197,94,0.35)" : "rgba(245,158,11,0.35)"}`, background: configurationReady ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)", color: configurationReady ? "#6EE7B7" : "#FBBF24", borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 800 }}>
+                  {configurationReady ? "Owner confirmed" : "Not configured"}
+                </span>
+              </div>
+
+              {configurationLoading ? (
+                <div style={{ color: "#94A3B8", fontSize: 13 }}>Loading review-link configuration…</div>
+              ) : (
+                <>
+                  {configurationReady && configuration?.configuration.reviewUrl && (
+                    <div style={{ border: "1px solid rgba(34,197,94,0.22)", background: "rgba(34,197,94,0.06)", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                      <div style={{ color: "#6EE7B7", fontWeight: 800, fontSize: 12 }}>Verified Google review link</div>
+                      <div style={{ color: "#CBD5E1", fontSize: 12, marginTop: 4, overflowWrap: "anywhere" }}>{configuration.configuration.reviewUrl}</div>
+                      <div style={{ color: "#64748B", fontSize: 11, marginTop: 4 }}>Confirmed {formatDateTime(configuration.configuration.confirmedAt)}</div>
+                    </div>
+                  )}
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <input
+                      aria-label="Google review link"
+                      value={reviewUrlInput}
+                      onChange={event => {
+                        setReviewUrlInput(event.target.value);
+                        setConfigurationSaved(false);
+                      }}
+                      placeholder="https://g.page/r/... or exact Google review URL"
+                      style={{ width: "100%", boxSizing: "border-box", background: "#111827", color: "#E2E8F0", border: "1px solid #334155", borderRadius: 9, padding: "10px 12px", fontSize: 13 }}
+                    />
+
+                    <label style={{ display: "flex", gap: 9, alignItems: "flex-start", color: "#CBD5E1", fontSize: 12, lineHeight: 1.45, cursor: "pointer" }}>
+                      <input
+                        aria-label="Confirm review link ownership"
+                        type="checkbox"
+                        checked={ownerConfirmed}
+                        onChange={event => setOwnerConfirmed(event.target.checked)}
+                        style={{ marginTop: 2 }}
+                      />
+                      I confirm this exact Google review link belongs to {configuration?.clientName ?? data?.clientName ?? "this tenant"}.
+                    </label>
+
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        disabled={configurationSaving || !ownerConfirmed || !reviewUrlInput.trim()}
+                        onClick={() => void saveConfiguration()}
+                        style={{ background: configurationSaving || !ownerConfirmed || !reviewUrlInput.trim() ? "#334155" : "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "9px 14px", cursor: configurationSaving || !ownerConfirmed || !reviewUrlInput.trim() ? "not-allowed" : "pointer", fontWeight: 800, fontSize: 12 }}
+                      >
+                        {configurationSaving ? "Verifying…" : configurationReady ? "Re-confirm review link" : "Verify review link"}
+                      </button>
+                      {configurationSaved && <span style={{ color: "#6EE7B7", fontSize: 12, fontWeight: 700 }}>✓ Saved with owner confirmation</span>}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {configurationError && <div role="alert" style={{ color: "#F87171", fontSize: 12, marginTop: 10 }}>{configurationError}</div>}
+            </div>
+
+            {latestReservation && (
+              <div style={{ ...panel, padding: 18, marginBottom: 16, borderColor: "rgba(56,189,248,0.35)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ color: "#38BDF8", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Preview reservation created</div>
+                    <div style={{ fontWeight: 850, marginTop: 4 }}>{latestReservation.customer.name}</div>
+                    <div style={{ color: "#94A3B8", fontSize: 11, marginTop: 3 }}>
+                      {latestReservation.preview.channel.toUpperCase()} preview · expires {formatDateTime(latestReservation.reservation.expiresAt)}
+                    </div>
+                  </div>
+                  <span style={{ border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)", color: "#FBBF24", borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 800 }}>
+                    Preview only — nothing sent
+                  </span>
+                </div>
+
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", color: "#E2E8F0", background: "#111827", border: "1px solid #1E293B", borderRadius: 10, padding: 14, lineHeight: 1.55, fontSize: 13, margin: "14px 0 10px" }}>{latestReservation.preview.message}</pre>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <CopyButton text={latestReservation.preview.message} />
+                  {latestReservation.blockers.map(code => (
+                    <span key={code} style={{ color: "#FBBF24", fontSize: 11, fontWeight: 700 }}>⚠ {blockerLabel(code)}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reservationError && <div role="alert" style={{ ...panel, padding: 14, marginBottom: 16, color: "#F87171", borderColor: "rgba(239,68,68,0.35)", fontSize: 12 }}>{reservationError}</div>}
+
             {eligibilityLoading && <div style={{ ...panel, padding: 24, color: "#94A3B8" }}>Checking completed-and-paid job evidence…</div>}
 
             {!eligibilityLoading && eligibilityError && (
               <div style={{ ...panel, padding: 22, borderColor: "rgba(239,68,68,0.4)" }}>
                 <div style={{ color: "#F87171", fontWeight: 800, marginBottom: 6 }}>Eligibility evidence unavailable</div>
                 <div style={{ color: "#94A3B8", fontSize: 13, marginBottom: 14 }}>{eligibilityError}</div>
-                <button onClick={() => void loadEligibility()} style={{ background: "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>
+                <button type="button" onClick={() => void loadEligibility()} style={{ background: "#00AEEF", color: "white", border: 0, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>
                   Retry
                 </button>
               </div>
@@ -345,8 +579,8 @@ export default function ReviewsEnginePage() {
                   {[
                     ["Evidence window", `${eligibility.windowDays} days`],
                     ["Eligible paid jobs", String(eligibility.candidateCount)],
+                    ["Reservation lease", `${eligibility.reservationLeaseMinutes} min`],
                     ["Ready to send", String(eligibility.deliveryReadyCount)],
-                    ["Automation", "Blocked / safe"],
                   ].map(([label, value]) => (
                     <div key={label} style={{ ...panel, padding: "16px 18px" }}>
                       <div style={{ color: label === "Ready to send" ? "#FBBF24" : "#38BDF8", fontSize: 22, fontWeight: 850 }}>{value}</div>
@@ -356,52 +590,69 @@ export default function ReviewsEnginePage() {
                 </div>
 
                 <div style={{ ...panel, padding: 16, marginBottom: 16, borderColor: "rgba(245,158,11,0.35)" }}>
-                  <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 5 }}>Global delivery blocker</div>
-                  <div style={{ color: "#94A3B8", fontSize: 13 }}>
-                    A verified tenant-specific Google review URL has not been configured yet. Candidates below are evidence-qualified only; no message can be sent.
+                  <div style={{ fontWeight: 800, color: "#FBBF24", marginBottom: 6 }}>Current safety blockers</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {eligibility.globalBlockers.map(code => (
+                      <span key={code} style={{ border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.06)", color: "#FBBF24", borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
+                        {blockerLabel(code)}
+                      </span>
+                    ))}
                   </div>
                 </div>
 
                 {eligibility.candidates.length === 0 ? (
                   <div style={{ ...panel, padding: 28, textAlign: "center" }}>
                     <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
-                    <div style={{ fontWeight: 800, marginBottom: 6 }}>No eligible completed-and-paid jobs found</div>
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>No currently reservable completed-and-paid jobs found</div>
                     <div style={{ color: "#94A3B8", fontSize: 13, maxWidth: 650, margin: "0 auto" }}>
-                      The queue only includes jobs with a stable GorillaDesk job ID, matching tenant customer, completed timestamp, and collected payment evidence. Aggregate payment snapshots do not qualify.
+                      The queue only includes same-tenant GorillaDesk jobs with stable IDs, completed status, paid-in-full evidence, customer identity, and no prior active review-request reservation or delivery evidence.
                     </div>
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: 12 }}>
-                    {eligibility.candidates.map(candidate => (
-                      <div key={candidate.jobExternalId} style={{ ...panel, padding: 18 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-                          <div>
-                            <div style={{ fontWeight: 850, fontSize: 15 }}>{candidate.customerName}</div>
-                            <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 3 }}>
-                              {candidate.serviceType ?? "Service"} · completed {new Date(candidate.completedAt).toLocaleDateString()}
+                    {eligibility.candidates.map(candidate => {
+                      const canReserve = configurationReady && (candidate.contactChannels.smsAvailable || candidate.contactChannels.emailAvailable);
+                      return (
+                        <div key={candidate.jobExternalId} style={{ ...panel, padding: 18 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                            <div>
+                              <div style={{ fontWeight: 850, fontSize: 15 }}>{candidate.customerName}</div>
+                              <div style={{ color: "#94A3B8", fontSize: 12, marginTop: 3 }}>
+                                {candidate.serviceType ?? "Service"} · completed {new Date(candidate.completedAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ color: "#22C55E", fontWeight: 850 }}>{formatMoney(candidate.paidAmountCents)} paid</div>
+                              <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Job {candidate.jobExternalId}</div>
                             </div>
                           </div>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ color: "#22C55E", fontWeight: 850 }}>{formatMoney(candidate.paidAmountCents)} paid</div>
-                            <div style={{ color: "#64748B", fontSize: 11, marginTop: 2 }}>Job {candidate.jobExternalId}</div>
+
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                            {["Completed job ✓", "Paid in full ✓", "Tenant match ✓", "No prior request ✓"].map(label => (
+                              <span key={label} style={{ border: "1px solid rgba(34,197,94,0.25)", background: "rgba(34,197,94,0.08)", color: "#6EE7B7", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 700 }}>{label}</span>
+                            ))}
+                            {candidate.contactChannels.smsAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>SMS available</span>}
+                            {candidate.contactChannels.emailAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>Email available</span>}
+                          </div>
+
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1E293B", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {candidate.blockers.map(code => (
+                                <span key={code} style={{ color: "#FBBF24", fontSize: 11, fontWeight: 700 }}>⚠ {blockerLabel(code)}</span>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!canReserve || reservingJobId === candidate.jobExternalId}
+                              onClick={() => void reservePreview(candidate)}
+                              style={{ background: canReserve ? "#0EA5E9" : "#334155", color: "white", border: 0, borderRadius: 8, padding: "8px 12px", cursor: canReserve && reservingJobId !== candidate.jobExternalId ? "pointer" : "not-allowed", fontWeight: 800, fontSize: 12 }}
+                            >
+                              {reservingJobId === candidate.jobExternalId ? "Reserving…" : "Reserve & Preview"}
+                            </button>
                           </div>
                         </div>
-
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                          {["Completed job ✓", "Collected payment ✓", "Tenant match ✓", "No prior request ✓"].map(label => (
-                            <span key={label} style={{ border: "1px solid rgba(34,197,94,0.25)", background: "rgba(34,197,94,0.08)", color: "#6EE7B7", borderRadius: 999, padding: "4px 8px", fontSize: 11, fontWeight: 700 }}>{label}</span>
-                          ))}
-                          {candidate.contactChannels.smsAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>SMS available</span>}
-                          {candidate.contactChannels.emailAvailable && <span style={{ border: "1px solid #334155", borderRadius: 999, padding: "4px 8px", fontSize: 11, color: "#CBD5E1" }}>Email available</span>}
-                        </div>
-
-                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #1E293B", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {candidate.blockers.map(code => (
-                            <span key={code} style={{ color: "#FBBF24", fontSize: 11, fontWeight: 700 }}>⚠ {blockerLabel(code)}</span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -412,7 +663,7 @@ export default function ReviewsEnginePage() {
         {tab === "Templates" && (
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ ...panel, padding: 16, color: "#94A3B8", fontSize: 13 }}>
-              These are copy references only. They do not send messages. Live templates will be tenant-generated after completed-job and verified-review-link controls are implemented.
+              These are copy references only. They do not send messages. The controlled preview path uses the tenant name and owner-confirmed review link while customer delivery remains disabled.
             </div>
             {TEMPLATE_LIBRARY.map(template => (
               <div key={template.id} style={{ ...panel, padding: 20 }}>

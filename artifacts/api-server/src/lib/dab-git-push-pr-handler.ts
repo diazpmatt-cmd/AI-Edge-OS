@@ -39,12 +39,13 @@ export async function createBoundPullRequest(input:{pushReceipt:DabGitPushReceip
   const receipt=Object.freeze({outcome:"verified" as const,repositoryId:material.repositoryId,prNumber:pr.prNumber,headBranch:material.headBranch,headSha:material.headSha,baseBranch:material.baseBranch,baseSha:material.baseSha,prAuthorizationRef:material.prAuthorizationRef,actorId:input.actorId.trim(),workloadIdentity:input.workloadIdentity.trim(),requestFingerprint,idempotencyKey,createdAt:(input.now??(()=>new Date()))().toISOString()});await input.receipts.save(receipt);return receipt;
 }
 
-export async function rebindBoundPullRequest(input:{priorPrReceipt:DabGitPrReceipt;pushReceipt:DabGitPushReceipt;prAuthorizationRef:string;authorizationUsable:boolean;killSwitch:boolean;adapterEnabled:boolean;handlerRegistered:boolean;actorId:string;workloadIdentity:string;adapter:DabGitPushPrAdapter;receipts:ReceiptStore<DabGitPrReceipt>;now?:()=>Date}):Promise<DabGitPrReceipt>{
-  if(input.priorPrReceipt.outcome!=="verified"||input.pushReceipt.outcome!=="verified")throw new Error("DAB_GIT_PR_REBIND_RECEIPT_INVALID");
-  if(input.priorPrReceipt.repositoryId!==input.pushReceipt.repositoryId||input.priorPrReceipt.headBranch!==input.pushReceipt.branchName)throw new Error("DAB_GIT_PR_REBIND_BRANCH_MISMATCH");
-  if(!goodSha(input.priorPrReceipt.baseSha)||!goodSha(input.priorPrReceipt.headSha)||!goodSha(input.pushReceipt.commitSha))throw new Error("DAB_GIT_PR_REBIND_SHA_INVALID");
+export async function rebindBoundPullRequest(input:{existingPrNumber:number;priorHeadSha:string;pushReceipt:DabGitPushReceipt;baseBranch:string;expectedBaseSha:string;prAuthorizationRef:string;authorizationUsable:boolean;killSwitch:boolean;adapterEnabled:boolean;handlerRegistered:boolean;actorId:string;workloadIdentity:string;adapter:DabGitPushPrAdapter;receipts:ReceiptStore<DabGitPrReceipt>;now?:()=>Date}):Promise<DabGitPrReceipt>{
+  if(input.pushReceipt.outcome!=="verified")throw new Error("DAB_GIT_PR_REBIND_PUSH_RECEIPT_INVALID");
+  if(!Number.isInteger(input.existingPrNumber)||input.existingPrNumber<=0)throw new Error("DAB_GIT_PR_REBIND_PR_NUMBER_INVALID");
+  if(!goodSha(input.priorHeadSha)||!goodSha(input.pushReceipt.commitSha)||!goodSha(input.expectedBaseSha))throw new Error("DAB_GIT_PR_REBIND_SHA_INVALID");
+  if(input.priorHeadSha===input.pushReceipt.commitSha)throw new Error("DAB_GIT_PR_REBIND_HEAD_UNCHANGED");
   if(!input.prAuthorizationRef.trim())throw new Error("DAB_GIT_PR_REBIND_AUTHORIZATION_REQUIRED");
-  const material={repositoryId:input.pushReceipt.repositoryId,prNumber:input.priorPrReceipt.prNumber,headBranch:input.pushReceipt.branchName,priorHeadSha:input.priorPrReceipt.headSha,headSha:input.pushReceipt.commitSha,baseBranch:input.priorPrReceipt.baseBranch,baseSha:input.priorPrReceipt.baseSha,prAuthorizationRef:input.prAuthorizationRef.trim()};
+  const material={repositoryId:input.pushReceipt.repositoryId,prNumber:input.existingPrNumber,headBranch:input.pushReceipt.branchName,priorHeadSha:input.priorHeadSha,headSha:input.pushReceipt.commitSha,baseBranch:input.baseBranch,baseSha:input.expectedBaseSha,prAuthorizationRef:input.prAuthorizationRef.trim()};
   const requestFingerprint=sha(material),idempotencyKey=`dab-git-pr-rebind:${requestFingerprint}`;
   const prior=await input.receipts.getByIdempotencyKey(idempotencyKey);if(prior)return prior;
   enabled(input,"DAB_GIT_PR_REBIND");

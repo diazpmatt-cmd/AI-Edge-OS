@@ -38,18 +38,20 @@ async function bootstrapLocalPresenceColumns(): Promise<void> {
 bootstrapLocalPresenceColumns().catch(e => console.warn("[local-presence] bootstrap:", e));
 
 // ── Default channels seeded for new clients ───────────────────────────────────
+// Generic tenant bootstrap must be evidence-neutral. Historical BB&B listing
+// progress belongs in tenant-owned rows, never in reusable code defaults.
 // Aligned with LOCAL_PRESENCE_PROVIDERS. Add entries here when extending
 // the provider registry in lib/db/src/local-presence-providers.ts.
 const DEFAULT_CHANNELS = [
-  { channelName: "google_business", status: "setup_in_progress", score: 0,  verificationStatus: "pending",     recommendedAction: "Connect Google Business Profile via OAuth in Connected Accounts" },
-  { channelName: "apple_business",  status: "setup_in_progress", score: 2,  verificationStatus: "pending",     recommendedAction: "Awaiting Apple verification — check business.apple.com" },
-  { channelName: "bing_places",     status: "verified_publishing",score: 10, verificationStatus: "verified",    recommendedAction: "Monitor Bing Places for live confirmation (7–12 days)" },
-  { channelName: "facebook",        status: "not_started",        score: 0,  verificationStatus: "not_started", recommendedAction: "Create Facebook Business page at facebook.com/pages/create" },
-  { channelName: "yelp",            status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Claim and verify at biz.yelp.com" },
-  { channelName: "nextdoor",        status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Claim business at business.nextdoor.com" },
-  { channelName: "waze",            status: "not_started",        score: 0,  verificationStatus: "not_started", recommendedAction: "Add business at business.waze.com after GBP is optimized" },
-  { channelName: "angi",            status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Complete Angi Pro profile at pro.angi.com" },
-  { channelName: "thumbtack",       status: "setup_in_progress",  score: 2,  verificationStatus: "pending",     recommendedAction: "Complete profile approval at thumbtack.com/pro" },
+  { channelName: "google_business", status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Connect Google Business Profile via OAuth in Connected Accounts" },
+  { channelName: "apple_business",  status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Set up or claim the business in Apple Business Connect" },
+  { channelName: "bing_places",     status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Set up or claim the business in Bing Places" },
+  { channelName: "facebook",        status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Connect or create the business Facebook Page" },
+  { channelName: "yelp",            status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Claim and verify the Yelp business profile" },
+  { channelName: "nextdoor",        status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Claim the business on Nextdoor" },
+  { channelName: "waze",            status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Add or verify the business listing in Waze" },
+  { channelName: "angi",            status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Set up or verify the Angi business profile" },
+  { channelName: "thumbtack",       status: "not_started", score: 0, verificationStatus: "not_started", recommendedAction: "Set up or verify the Thumbtack business profile" },
 ];
 
 // ── Tenant ownership guard ─────────────────────────────────────────────────────

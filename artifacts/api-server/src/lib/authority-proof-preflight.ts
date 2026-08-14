@@ -8,7 +8,9 @@ import {
   type AuthorityProofRunPreflight,
 } from "./authority-proof-run-policy.js";
 
-export type AuthorityProofCostEstimate = AuthorityProofDerivedCostEstimate;
+export type AuthorityProofCostEstimate =
+  | AuthorityProofDerivedCostEstimate
+  | { readonly available: false; readonly reason: "estimated_cost_unavailable" };
 
 export type AuthorityProofPreflightResult =
   | {

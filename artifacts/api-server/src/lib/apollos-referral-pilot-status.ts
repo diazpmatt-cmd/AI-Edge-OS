@@ -14,13 +14,40 @@ function countValue(value: unknown): number {
 }
 
 export async function getApollosReferralPilotStatus(clientId: string) {
-  const [invitationResult, attemptResult, attributionResult, tenantResult] = await Promise.all([
+  const [invitationResult, eligibleInvitationResult, attemptResult, attributionResult, tenantResult] = await Promise.all([
     pool.query(
       `SELECT
          COUNT(*)::int AS total,
          COUNT(*) FILTER (WHERE status = 'approved' AND delivery_state = 'not_dispatched')::int AS approved_undispatched
        FROM referral_invitations
        WHERE client_id = $1`,
+      [clientId],
+    ),
+    pool.query(
+      `SELECT ri.id
+       FROM referral_invitations ri
+       JOIN referral_contact_preferences rcp
+         ON rcp.client_id = ri.client_id
+        AND rcp.channel = ri.channel
+        AND rcp.destination = ri.recipient_destination
+       WHERE ri.client_id = $1
+         AND ri.status = 'approved'
+         AND ri.delivery_state = 'not_dispatched'
+         AND ri.consent_source IS NOT NULL
+         AND ri.consent_at IS NOT NULL
+         AND rcp.status = 'opted_in'
+         AND rcp.consent_source IS NOT NULL
+         AND rcp.consent_at IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM referral_delivery_attempts rda
+           WHERE rda.client_id = ri.client_id
+             AND rda.invitation_id = ri.id
+             AND rda.requested_mode = 'live'
+             AND rda.status IN ('dispatching', 'delivered')
+         )
+       ORDER BY ri.approved_at ASC NULLS LAST, ri.created_at ASC
+       LIMIT 10`,
       [clientId],
     ),
     pool.query(
@@ -44,6 +71,11 @@ export async function getApollosReferralPilotStatus(clientId: string) {
   ]);
 
   const invitation = invitationResult.rows[0] ?? {};
+  const eligibleInvitationIds = Object.freeze(
+    eligibleInvitationResult.rows
+      .map((row: { id?: unknown }) => typeof row.id === "string" ? row.id : null)
+      .filter((id: string | null): id is string => Boolean(id)),
+  );
   const attempts = attemptResult.rows[0] ?? {};
   const slug = typeof tenantResult.rows[0]?.slug === "string" ? tenantResult.rows[0].slug : null;
   let localGorillaDesk: Readonly<LocalGorillaDeskReadiness> = Object.freeze({
@@ -80,6 +112,8 @@ export async function getApollosReferralPilotStatus(clientId: string) {
     invitations: Object.freeze({
       total: countValue(invitation.total),
       approvedUndispatched: countValue(invitation.approved_undispatched),
+      eligibleForControlledPilot: eligibleInvitationIds.length,
+      eligibleInvitationIds,
     }),
     deliveryAttempts: Object.freeze({
       total: countValue(attempts.total),

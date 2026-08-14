@@ -1,14 +1,41 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { analyzeLead } from "../services/lead-analysis";
 import { reviewLead } from "../services/lead-review";
 import { sendApprovedLead } from "../services/lead-send";
 import { needsFollowUp } from "../services/lead-delivery";
+import { resolveClientContentContextFromDb } from "../lib/client-resolver";
 
 const router = Router();
+
+type ClientResolver = typeof resolveClientContentContextFromDb;
+type LeadOwnershipChecker = (clientId: string, leadId: string) => Promise<boolean>;
+
+async function defaultLeadOwnershipChecker(clientId: string, leadId: string): Promise<boolean> {
+  const [lead] = await db
+    .select({ id: leadsTable.id })
+    .from(leadsTable)
+    .where(and(eq(leadsTable.id, leadId), eq(leadsTable.clientId, clientId)))
+    .limit(1);
+  return Boolean(lead);
+}
+
+async function resolveLeadClientId(
+  userId: string,
+  res: any,
+  resolver: ClientResolver = resolveClientContentContextFromDb,
+): Promise<string | null> {
+  const resolved = await resolver(userId);
+  if (resolved.found) return resolved.client.id;
+  if (resolved.reason === "registry_unavailable") { res.status(503).json({ error: "client_context_unavailable" }); return null; }
+  if (resolved.reason === "inactive") { res.status(403).json({ error: "client_inactive" }); return null; }
+  if (resolved.reason === "not_found") { res.status(404).json({ error: "client_not_found" }); return null; }
+  res.status(422).json({ error: "client_context_invalid" });
+  return null;
+}
 
 function parseWebLeadMessage(msg: string | null) {
   const result = { email: null, business: null, industry: null, services: null, packageLabel: null, note: null } as {
@@ -34,17 +61,14 @@ function parseWebLeadMessage(msg: string | null) {
 router.get("/leads/web", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
   const rows = await db.select().from(leadsTable).where(sql`
     ${leadsTable.clientName} = ${"AI Edge Solutions"}
     AND ${leadsTable.source} = ${"contact-form"}
   `).orderBy(desc(leadsTable.createdAt));
-
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const active = rows.filter(r => r.status === "new" || r.status === "contacted").length;
   const thisMonth = rows.filter(r => new Date(r.createdAt) >= startOfMonth).length;
-
   res.json({
     leads: rows.map(r => {
       const parsed = parseWebLeadMessage(r.message);
@@ -64,14 +88,15 @@ router.get("/leads/web", async (req, res) => {
 router.get("/leads", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
+  const clientId = await resolveLeadClientId(userId, res);
+  if (!clientId) return;
   const rows = await db.select().from(leadsTable).where(sql`
-    ${leadsTable.phone} NOT LIKE ${"+1555%"}
+    ${leadsTable.clientId} = ${clientId}
+    AND ${leadsTable.phone} NOT LIKE ${"+1555%"}
     AND ${leadsTable.phone} NOT LIKE ${"+10000000%"}
     AND ${leadsTable.message} NOT LIKE ${"[TEST]%"}
     AND ${leadsTable.clientName} != ${"AI Edge Solutions"}
   `).orderBy(desc(leadsTable.createdAt));
-
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const active = rows.filter(r => r.status === "new" || r.status === "contacted").length;
@@ -81,17 +106,24 @@ router.get("/leads", async (req, res) => {
   res.json({ leads: rows.map(rowToDto), stats: { total: rows.length, active, thisMonth, withMessages, followUpDue } });
 });
 
-export function createLeadAnalysisHandler(analyzeLeadFn: typeof analyzeLead = analyzeLead, getAuthFn: typeof getAuth = getAuth) {
+export function createLeadAnalysisHandler(
+  analyzeLeadFn: typeof analyzeLead = analyzeLead,
+  getAuthFn: typeof getAuth = getAuth,
+  resolveClientFn: ClientResolver = resolveClientContentContextFromDb,
+  ownsLeadFn: LeadOwnershipChecker = defaultLeadOwnershipChecker,
+) {
   return async (req: Parameters<typeof getAuth>[0] & { params: { id: string } }, res: any) => {
     const { userId } = getAuthFn(req);
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
     try {
-      const result = await analyzeLeadFn(req.params.id);
+      const clientId = await resolveLeadClientId(userId, res, resolveClientFn);
+      if (!clientId) return;
+      if (!(await ownsLeadFn(clientId, req.params.id))) { res.status(404).json({ error: "lead_not_found" }); return; }
+      const result = await analyzeLeadFn(clientId, req.params.id);
       if (result.status === "not_found") { res.status(404).json({ error: result.error }); return; }
       if (result.status === "failed") {
         const statusCode = result.error === "provider_failure" ? 503 : result.error === "invalid_ai_output" ? 422 : 500;
-        res.status(statusCode).json({ error: result.error, lead: rowToDto(result.lead) });
-        return;
+        res.status(statusCode).json({ error: result.error, lead: rowToDto(result.lead) }); return;
       }
       res.json({ lead: rowToDto(result.lead), analysis: { summary: result.analysis.summary, missingInformation: result.analysis.missingInformation } });
     } catch { res.status(500).json({ error: "analysis_unavailable" }); }
@@ -100,17 +132,22 @@ export function createLeadAnalysisHandler(analyzeLeadFn: typeof analyzeLead = an
 
 router.post("/leads/:id/analyze", createLeadAnalysisHandler() as any);
 
-export function createLeadReviewHandler(reviewLeadFn: typeof reviewLead = reviewLead, getAuthFn: typeof getAuth = getAuth) {
+export function createLeadReviewHandler(
+  reviewLeadFn: typeof reviewLead = reviewLead,
+  getAuthFn: typeof getAuth = getAuth,
+  resolveClientFn: ClientResolver = resolveClientContentContextFromDb,
+  ownsLeadFn: LeadOwnershipChecker = defaultLeadOwnershipChecker,
+) {
   return async (req: Parameters<typeof getAuth>[0] & { params: { id: string }; body: unknown }, res: any) => {
     const { userId } = getAuthFn(req);
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
     try {
-      const result = await reviewLeadFn(req.params.id, req.body);
+      const clientId = await resolveLeadClientId(userId, res, resolveClientFn);
+      if (!clientId) return;
+      if (!(await ownsLeadFn(clientId, req.params.id))) { res.status(404).json({ error: "lead_not_found" }); return; }
+      const result = await reviewLeadFn(clientId, req.params.id, req.body);
       if (result.status === "not_found") { res.status(404).json({ error: result.error }); return; }
-      if (result.status === "invalid") {
-        res.status(result.error === "draft_not_ready" ? 409 : 422).json({ error: result.error });
-        return;
-      }
+      if (result.status === "invalid") { res.status(result.error === "draft_not_ready" ? 409 : 422).json({ error: result.error }); return; }
       if (result.status === "failed") { res.status(500).json({ error: result.error }); return; }
       res.json({ action: result.status, lead: rowToDto(result.lead) });
     } catch { res.status(500).json({ error: "review_unavailable" }); }
@@ -119,21 +156,27 @@ export function createLeadReviewHandler(reviewLeadFn: typeof reviewLead = review
 
 router.patch("/leads/:id/review", createLeadReviewHandler() as any);
 
-export function createLeadSendHandler(sendFn: typeof sendApprovedLead = sendApprovedLead, getAuthFn: typeof getAuth = getAuth) {
+export function createLeadSendHandler(
+  sendFn: typeof sendApprovedLead = sendApprovedLead,
+  getAuthFn: typeof getAuth = getAuth,
+  resolveClientFn: ClientResolver = resolveClientContentContextFromDb,
+  ownsLeadFn: LeadOwnershipChecker = defaultLeadOwnershipChecker,
+) {
   return async (req: Parameters<typeof getAuth>[0] & { params: { id: string } }, res: any) => {
     const { userId } = getAuthFn(req);
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
     try {
-      const result = await sendFn(req.params.id);
+      const clientId = await resolveLeadClientId(userId, res, resolveClientFn);
+      if (!clientId) return;
+      if (!(await ownsLeadFn(clientId, req.params.id))) { res.status(404).json({ error: "lead_not_found" }); return; }
+      const result = await sendFn(clientId, req.params.id);
       if (result.status === "not_found") { res.status(404).json({ error: result.error }); return; }
       if (result.status === "invalid") {
         const statusCode = result.error === "already_sent" || result.error === "send_in_progress" ? 409 : 422;
-        res.status(statusCode).json({ error: result.error });
-        return;
+        res.status(statusCode).json({ error: result.error }); return;
       }
       if (result.status === "failed") {
-        res.status(503).json({ error: result.error, detail: result.detail, lead: result.lead ? rowToDto(result.lead) : null });
-        return;
+        res.status(503).json({ error: result.error, detail: result.detail, lead: result.lead ? rowToDto(result.lead) : null }); return;
       }
       res.json({ action: "sent", messageId: result.messageId, lead: rowToDto(result.lead) });
     } catch { res.status(500).json({ error: "send_unavailable" }); }
@@ -145,13 +188,15 @@ router.post("/leads/:id/send", createLeadSendHandler() as any);
 router.patch("/leads/:id", async (req, res) => {
   const { userId } = getAuth(req);
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const clientId = await resolveLeadClientId(userId, res);
+  if (!clientId) return;
   const body = req.body as { status?: string; notes?: string };
   const updated = await db.update(leadsTable).set({
     ...(body.status !== undefined && { status: body.status }),
     ...(body.notes !== undefined && { notes: body.notes }),
     updatedAt: new Date(),
-  }).where(eq(leadsTable.id, req.params.id)).returning();
-  if (!updated[0]) { res.status(404).send(); return; }
+  }).where(and(eq(leadsTable.id, req.params.id), eq(leadsTable.clientId, clientId))).returning();
+  if (!updated[0]) { res.status(404).json({ error: "lead_not_found" }); return; }
   res.json(rowToDto(updated[0]));
 });
 
@@ -167,11 +212,8 @@ function rowToDto(r: typeof leadsTable.$inferSelect) {
     status: r.status, notes: r.notes, service: r.service, location: r.location,
     urgency: r.urgency, sourceMessageId: r.sourceMessageId,
     draftResponse: r.draftResponse, responseStatus: r.responseStatus,
-    receivedAt: r.receivedAt.toISOString(),
-    lastFollowUpAt: r.lastFollowUpAt?.toISOString() ?? null,
-    outcome: r.outcome,
-    deliveryStatus: deliveryStatus(r.outcome),
-    needsFollowUp: needsFollowUp(r),
+    receivedAt: r.receivedAt.toISOString(), lastFollowUpAt: r.lastFollowUpAt?.toISOString() ?? null,
+    outcome: r.outcome, deliveryStatus: deliveryStatus(r.outcome), needsFollowUp: needsFollowUp(r),
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   };
 }

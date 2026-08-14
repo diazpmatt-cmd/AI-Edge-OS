@@ -3,8 +3,9 @@ import type { AuthorizationCategory, ApprovalRecord } from "../../../../lib/deve
 import { applyPreparedArtifact, type DabGitApplyReceipt } from "./dab-git-apply-handler.js";
 import { buildDabGitApplyBinding } from "./dab-git-apply-policy.js";
 import { buildDabGitCommitBinding, commitAppliedArtifact, type DabGitCommitReceipt } from "./dab-git-commit-handler.js";
-import { createBoundPullRequest, pushCommittedArtifact, type DabGitPrReceipt, type DabGitPushReceipt } from "./dab-git-push-pr-handler.js";
-import { reconcileDabPullRequestCi, type DabCiReceipt } from "./dab-ci-reconciliation.js";
+import { createBoundPullRequest, pushCommittedArtifact, rebindBoundPullRequest, type DabGitPrReceipt, type DabGitPushReceipt } from "./dab-git-push-pr-handler.js";
+import { evaluateDabSameScopeRepair, reconcileDabPullRequestCi, type DabCiReceipt } from "./dab-ci-reconciliation.js";
+import { isDabGitCiRepairApprovalUsable, persistDabGitCiRepairHandoff, type DabGitCiRepairHandoffReceipt } from "./dab-git-ci-repair-handoff.js";
 import { mergeBoundPullRequest, type DabGitMergeReceipt } from "./dab-git-merge-handler.js";
 import type { DabGitWorkspaceAdapter } from "./dab-git-workspace-adapter.js";
 import type { DabGitHubTransportAdapter } from "./dab-github-transport-adapter.js";
@@ -14,6 +15,8 @@ import { verifyDabPostMerge, type DabPostMergeReceipt } from "./dab-post-merge-v
 export const DAB_GIT_MUTATION_AUTHORIZATIONS = Object.freeze([
   "editing", "committing", "pushing", "pull_request_creation", "merging",
 ] as const satisfies readonly AuthorizationCategory[]);
+
+const MAX_CI_REPAIR_ATTEMPTS = 2;
 
 export type DabGitMissionAuthorizationMap = Readonly<Record<(typeof DAB_GIT_MUTATION_AUTHORIZATIONS)[number], ApprovalRecord>>;
 export type DabResolvedGitMission = Readonly<{
@@ -30,6 +33,10 @@ export type DabResolvedGitMission = Readonly<{
   branchName: string;
   authorizedFiles: readonly string[];
   approvals: DabGitMissionAuthorizationMap;
+  repairApproval: ApprovalRecord | null;
+  repairAttempt: number;
+  expectedRemoteSha: string | null;
+  existingPrNumber: number | null;
 }>;
 
 export interface DabGitPostMergeObserver {
@@ -41,15 +48,16 @@ export interface DabGitPostMergeObserver {
   }>;
 }
 
-export type DabGitMissionStep = "apply" | "commit" | "push" | "pull_request" | "ci" | "merge" | "post_merge" | "complete";
+export type DabGitMissionStep = "apply" | "commit" | "push" | "pull_request" | "ci" | "ci_repair" | "merge" | "post_merge" | "complete";
 export type DabGitMissionResult = Readonly<{
-  status: "progressed" | "waiting_ci" | "complete";
+  status: "progressed" | "waiting_ci" | "repair_requested" | "complete";
   step: DabGitMissionStep;
   applyReceipt: DabGitApplyReceipt | null;
   commitReceipt: DabGitCommitReceipt | null;
   pushReceipt: DabGitPushReceipt | null;
   prReceipt: DabGitPrReceipt | null;
   ciReceipt: DabCiReceipt | null;
+  repairHandoffReceipt: DabGitCiRepairHandoffReceipt | null;
   mergeReceipt: DabGitMergeReceipt | null;
   postMergeReceipt: DabPostMergeReceipt | null;
 }>;
@@ -75,6 +83,16 @@ function exactFilesAuthorized(mission: DabResolvedGitMission, files: readonly { 
   if (JSON.stringify(actual) !== JSON.stringify(allowed)) throw new Error("DAB_GIT_MISSION_FILE_SCOPE_MISMATCH");
 }
 
+function assertRepairContext(mission: DabResolvedGitMission): void {
+  if (!Number.isInteger(mission.repairAttempt) || mission.repairAttempt < 0 || mission.repairAttempt > MAX_CI_REPAIR_ATTEMPTS) throw new Error("DAB_GIT_MISSION_REPAIR_ATTEMPT_INVALID");
+  const hasRemote = mission.expectedRemoteSha !== null;
+  const hasPr = mission.existingPrNumber !== null;
+  if (mission.repairAttempt === 0 && (hasRemote || hasPr)) throw new Error("DAB_GIT_MISSION_REPAIR_CONTEXT_UNEXPECTED");
+  if (mission.repairAttempt > 0 && (!hasRemote || !hasPr)) throw new Error("DAB_GIT_MISSION_REPAIR_CONTEXT_MISSING");
+  if (mission.expectedRemoteSha !== null && !/^[a-f0-9]{40}$/.test(mission.expectedRemoteSha)) throw new Error("DAB_GIT_MISSION_REPAIR_REMOTE_SHA_INVALID");
+  if (mission.existingPrNumber !== null && (!Number.isInteger(mission.existingPrNumber) || mission.existingPrNumber <= 0)) throw new Error("DAB_GIT_MISSION_REPAIR_PR_INVALID");
+}
+
 export class DabGitMissionRunner {
   private readonly stores;
   constructor(private readonly input: {
@@ -94,6 +112,7 @@ export class DabGitMissionRunner {
     if (this.input.killSwitch) throw new Error("DAB_GIT_MISSION_KILL_SWITCH");
     if (!this.input.actorId.trim() || !this.input.workloadIdentity.trim()) throw new Error("DAB_GIT_MISSION_IDENTITY_REQUIRED");
     assertDabGitMissionAuthorizations(this.input.mission, this.now());
+    assertRepairContext(this.input.mission);
   }
   private binding() {
     const m = this.input.mission;
@@ -122,32 +141,38 @@ export class DabGitMissionRunner {
 
   async runOne(): Promise<DabGitMissionResult> {
     this.assertReady();
+    const mission = this.input.mission;
     const binding = this.binding();
-    exactFilesAuthorized(this.input.mission, binding.files);
+    exactFilesAuthorized(mission, binding.files);
     const manifestFiles = this.manifestFiles();
     let applyReceipt = await this.stores.apply.getByIdempotencyKey(binding.idempotencyKey);
     if (!applyReceipt) {
       applyReceipt = await applyPreparedArtifact({ binding, manifestFiles, editingAuthorizationUsable: true, adapterEnabled: true, killSwitch: false, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.workspace, receipts: this.stores.apply, now: () => this.now() });
       return this.result("progressed", "apply", { applyReceipt });
     }
-    const commitBinding = buildDabGitCommitBinding({ applyReceipt, parentSha: binding.expectedBaseSha, committingAuthorizationRef: authorizationRef(this.input.mission.approvals.committing) });
+    const commitBinding = buildDabGitCommitBinding({ applyReceipt, parentSha: binding.expectedBaseSha, committingAuthorizationRef: authorizationRef(mission.approvals.committing) });
     let commitReceipt = await this.stores.commit.getByIdempotencyKey(commitBinding.idempotencyKey);
     if (!commitReceipt) {
       await this.rehydrateApply(binding);
       commitReceipt = await commitAppliedArtifact({ binding: commitBinding, applyReceipt, committingAuthorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.workspace, receipts: this.stores.commit, now: () => this.now() });
       return this.result("progressed", "commit", { applyReceipt, commitReceipt });
     }
-    const pushKey = `dab-git-push:${hash({ repositoryId: commitReceipt.repositoryId, branchName: commitReceipt.branchName, commitSha: commitReceipt.commitSha, expectedRemoteSha: null, pushAuthorizationRef: authorizationRef(this.input.mission.approvals.pushing) })}`;
+    const pushKey = `dab-git-push:${hash({ repositoryId: commitReceipt.repositoryId, branchName: commitReceipt.branchName, commitSha: commitReceipt.commitSha, expectedRemoteSha: mission.expectedRemoteSha, pushAuthorizationRef: authorizationRef(mission.approvals.pushing) })}`;
     let pushReceipt = await this.stores.push.getByIdempotencyKey(pushKey);
     if (!pushReceipt) {
       await this.reconstructCommit(binding, applyReceipt, commitReceipt);
-      pushReceipt = await pushCommittedArtifact({ commitReceipt, expectedRemoteSha: null, defaultBranch: "main", pushAuthorizationRef: authorizationRef(this.input.mission.approvals.pushing), authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.push, now: () => this.now() });
+      pushReceipt = await pushCommittedArtifact({ commitReceipt, expectedRemoteSha: mission.expectedRemoteSha, defaultBranch: "main", pushAuthorizationRef: authorizationRef(mission.approvals.pushing), authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.push, now: () => this.now() });
       return this.result("progressed", "push", { applyReceipt, commitReceipt, pushReceipt });
     }
-    const prKey = `dab-git-pr:${hash({ repositoryId: pushReceipt.repositoryId, headBranch: pushReceipt.branchName, headSha: pushReceipt.commitSha, baseBranch: "main", baseSha: binding.expectedBaseSha, prAuthorizationRef: authorizationRef(this.input.mission.approvals.pull_request_creation) })}`;
+    const prAuthorizationRef = authorizationRef(mission.approvals.pull_request_creation);
+    const prKey = mission.existingPrNumber === null
+      ? `dab-git-pr:${hash({ repositoryId: pushReceipt.repositoryId, headBranch: pushReceipt.branchName, headSha: pushReceipt.commitSha, baseBranch: "main", baseSha: binding.expectedBaseSha, prAuthorizationRef })}`
+      : `dab-git-pr-rebind:${hash({ repositoryId: pushReceipt.repositoryId, prNumber: mission.existingPrNumber, headBranch: pushReceipt.branchName, priorHeadSha: mission.expectedRemoteSha, headSha: pushReceipt.commitSha, baseBranch: "main", baseSha: binding.expectedBaseSha, prAuthorizationRef })}`;
     let prReceipt = await this.stores.pullRequest.getByIdempotencyKey(prKey);
     if (!prReceipt) {
-      prReceipt = await createBoundPullRequest({ pushReceipt, baseBranch: "main", expectedBaseSha: binding.expectedBaseSha, prAuthorizationRef: authorizationRef(this.input.mission.approvals.pull_request_creation), authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.pullRequest, now: () => this.now() });
+      prReceipt = mission.existingPrNumber === null
+        ? await createBoundPullRequest({ pushReceipt, baseBranch: "main", expectedBaseSha: binding.expectedBaseSha, prAuthorizationRef, authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.pullRequest, now: () => this.now() })
+        : await rebindBoundPullRequest({ existingPrNumber: mission.existingPrNumber, priorHeadSha: mission.expectedRemoteSha!, pushReceipt, baseBranch: "main", expectedBaseSha: binding.expectedBaseSha, prAuthorizationRef, authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.pullRequest, now: () => this.now() });
       return this.result("progressed", "pull_request", { applyReceipt, commitReceipt, pushReceipt, prReceipt });
     }
     const observedCi = await this.input.transport.observeTrustedCi({ repositoryId: prReceipt.repositoryId, prNumber: prReceipt.prNumber, headSha: prReceipt.headSha, baseSha: prReceipt.baseSha });
@@ -155,12 +180,16 @@ export class DabGitMissionRunner {
     if (ciReceipt.outcome === "blocked") {
       const waiting = ciReceipt.blockerCodes.length > 0 && ciReceipt.blockerCodes.every((code) => code.startsWith("trusted_check_pending:") || code.startsWith("trusted_check_missing:"));
       if (waiting) return this.result("waiting_ci", "ci", { applyReceipt, commitReceipt, pushReceipt, prReceipt, ciReceipt });
-      throw new Error(`DAB_GIT_MISSION_CI_BLOCKED:${ciReceipt.blockerCodes.join(",")}`);
+      const repairAuthorizationUsable = isDabGitCiRepairApprovalUsable({ approval: mission.repairApproval, normalEditingApprovalId: mission.approvals.editing.approvalId, taskId: mission.taskId, specificationRevision: mission.specificationRevision, specificationHash: mission.specificationHash, expectedBaseSha: mission.expectedBaseSha, now: this.now() });
+      const repairDecision = evaluateDabSameScopeRepair({ ci: ciReceipt, currentHeadSha: prReceipt.headSha, currentBaseSha: prReceipt.baseSha, specHash: mission.specificationHash, currentSpecHash: mission.specificationHash, approvedPaths: mission.authorizedFiles, proposedPaths: binding.files.map((file) => file.path), attempt: mission.repairAttempt, maxAttempts: MAX_CI_REPAIR_ATTEMPTS, repairAuthorizationUsable, killSwitch: this.input.killSwitch });
+      if (!repairDecision.allowed || !mission.repairApproval) throw new Error(`DAB_GIT_MISSION_CI_REPAIR_BLOCKED:${repairDecision.reasonCode}`);
+      const repairHandoffReceipt = await persistDabGitCiRepairHandoff({ taskId: mission.taskId, specificationRevision: mission.specificationRevision, specificationHash: mission.specificationHash, expectedBaseSha: mission.expectedBaseSha, authorizedFiles: mission.authorizedFiles, sourcePreparationJobId: mission.preparationJobId, sourceProposalId: mission.proposalId, ciReceipt, attempt: mission.repairAttempt + 1, maxAttempts: MAX_CI_REPAIR_ATTEMPTS, repairAuthorizationRef: authorizationRef(mission.repairApproval), receipts: this.stores.repairHandoff, now: () => this.now() });
+      return this.result("repair_requested", "ci_repair", { applyReceipt, commitReceipt, pushReceipt, prReceipt, ciReceipt, repairHandoffReceipt });
     }
-    const mergeKey = `dab-git-merge:${hash({ repositoryId: prReceipt.repositoryId, prNumber: prReceipt.prNumber, headSha: prReceipt.headSha, baseSha: prReceipt.baseSha, mergeMethod: "squash", mergeAuthorizationRef: authorizationRef(this.input.mission.approvals.merging), ciEvidenceDigest: ciReceipt.evidenceDigest })}`;
+    const mergeKey = `dab-git-merge:${hash({ repositoryId: prReceipt.repositoryId, prNumber: prReceipt.prNumber, headSha: prReceipt.headSha, baseSha: prReceipt.baseSha, mergeMethod: "squash", mergeAuthorizationRef: authorizationRef(mission.approvals.merging), ciEvidenceDigest: ciReceipt.evidenceDigest })}`;
     let mergeReceipt = await this.stores.merge.getByIdempotencyKey(mergeKey);
     if (!mergeReceipt) {
-      mergeReceipt = await mergeBoundPullRequest({ prReceipt, ciReceipt, mergeMethod: "squash", mergeAuthorizationRef: authorizationRef(this.input.mission.approvals.merging), authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.merge, now: () => this.now() });
+      mergeReceipt = await mergeBoundPullRequest({ prReceipt, ciReceipt, mergeMethod: "squash", mergeAuthorizationRef: authorizationRef(mission.approvals.merging), authorizationUsable: true, killSwitch: false, adapterEnabled: true, handlerRegistered: true, actorId: this.input.actorId, workloadIdentity: this.input.workloadIdentity, adapter: this.input.transport, receipts: this.stores.merge, now: () => this.now() });
       return this.result("progressed", "merge", { applyReceipt, commitReceipt, pushReceipt, prReceipt, ciReceipt, mergeReceipt });
     }
     const approvedFiles = applyReceipt.files.map(({ path, sha256 }) => ({ path, sha256 }));
@@ -170,6 +199,6 @@ export class DabGitMissionRunner {
   }
 
   private result(status: DabGitMissionResult["status"], step: DabGitMissionStep, values: Partial<Omit<DabGitMissionResult, "status" | "step">>): DabGitMissionResult {
-    return Object.freeze({ status, step, applyReceipt: null, commitReceipt: null, pushReceipt: null, prReceipt: null, ciReceipt: null, mergeReceipt: null, postMergeReceipt: null, ...values });
+    return Object.freeze({ status, step, applyReceipt: null, commitReceipt: null, pushReceipt: null, prReceipt: null, ciReceipt: null, repairHandoffReceipt: null, mergeReceipt: null, postMergeReceipt: null, ...values });
   }
 }

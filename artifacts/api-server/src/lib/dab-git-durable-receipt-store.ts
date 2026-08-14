@@ -1,10 +1,11 @@
 import type { DabGitApplyReceipt, DabGitApplyReceiptStore } from "./dab-git-apply-handler.js";
+import type { DabGitCiRepairHandoffReceipt } from "./dab-git-ci-repair-handoff.js";
 import type { DabGitCommitReceipt, DabGitCommitReceiptStore } from "./dab-git-commit-handler.js";
 import type { DabGitMergeReceipt } from "./dab-git-merge-handler.js";
 import type { DabGitPrReceipt, DabGitPushReceipt, ReceiptStore } from "./dab-git-push-pr-handler.js";
 
-export type DabDurableGitReceiptOperation = "apply" | "commit" | "push" | "pull_request" | "merge";
-export type DabDurableGitReceipt = DabGitApplyReceipt | DabGitCommitReceipt | DabGitPushReceipt | DabGitPrReceipt | DabGitMergeReceipt;
+export type DabDurableGitReceiptOperation = "apply" | "commit" | "push" | "pull_request" | "repair_handoff" | "merge";
+export type DabDurableGitReceipt = DabGitApplyReceipt | DabGitCommitReceipt | DabGitPushReceipt | DabGitPrReceipt | DabGitCiRepairHandoffReceipt | DabGitMergeReceipt;
 
 export interface DabDurableGitReceiptRepositoryLike {
   get<T>(input: { taskId: string; operation: DabDurableGitReceiptOperation; idempotencyKey: string }): Promise<{ receipt: T } | null>;
@@ -53,6 +54,7 @@ export function createDabGitReceiptStores(repository: DabDurableGitReceiptReposi
   commit: DabGitCommitReceiptStore;
   push: ReceiptStore<DabGitPushReceipt>;
   pullRequest: ReceiptStore<DabGitPrReceipt>;
+  repairHandoff: ReceiptStore<DabGitCiRepairHandoffReceipt>;
   merge: ReceiptStore<DabGitMergeReceipt>;
 }> {
   return Object.freeze({
@@ -60,6 +62,7 @@ export function createDabGitReceiptStores(repository: DabDurableGitReceiptReposi
     commit: new DurableReceiptStore<DabGitCommitReceipt>(repository, taskId, "commit"),
     push: new DurableReceiptStore<DabGitPushReceipt>(repository, taskId, "push"),
     pullRequest: new DurableReceiptStore<DabGitPrReceipt>(repository, taskId, "pull_request"),
+    repairHandoff: new DurableReceiptStore<DabGitCiRepairHandoffReceipt>(repository, taskId, "repair_handoff"),
     merge: new DurableReceiptStore<DabGitMergeReceipt>(repository, taskId, "merge"),
   });
 }

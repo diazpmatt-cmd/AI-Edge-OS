@@ -12,6 +12,7 @@ export const DEVELOPMENT_GIT_RECEIPT_OPERATIONS = [
   "commit",
   "push",
   "pull_request",
+  "repair_handoff",
   "merge",
 ] as const;
 export type DevelopmentGitReceiptOperation = typeof DEVELOPMENT_GIT_RECEIPT_OPERATIONS[number];

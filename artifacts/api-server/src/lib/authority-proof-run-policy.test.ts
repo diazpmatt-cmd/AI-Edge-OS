@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AUTHORITY_PROOF_ARM_TTL_MS,
   AUTHORITY_PROOF_MAX_COST_USD,
+  AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS,
+  AUTHORITY_PROOF_MAX_PROVIDER_ROWS,
   AUTHORITY_PROOF_MAX_REQUESTS,
   AUTHORITY_PROOF_MAX_RESULTS,
   buildAuthorityProofPayloadHash,
@@ -24,7 +26,9 @@ function material(overrides: Partial<AuthorityProofRunMaterial> = {}): Authority
     geography: "Baldwin County, Alabama",
     resultLimit: 50,
     requestCount: 1,
-    estimatedCostUsd: 0.03,
+    providerRequestRows: 200,
+    httpAttemptCount: 1,
+    estimatedCostUsd: 0.0312,
     ...overrides,
   };
 }
@@ -41,6 +45,8 @@ describe("Authority one-shot proof arm policy", () => {
       maxCostUsd: AUTHORITY_PROOF_MAX_COST_USD,
       maxRequests: AUTHORITY_PROOF_MAX_REQUESTS,
       maxResults: AUTHORITY_PROOF_MAX_RESULTS,
+      maxProviderRows: AUTHORITY_PROOF_MAX_PROVIDER_ROWS,
+      maxHttpAttempts: AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS,
     });
   });
 
@@ -53,10 +59,12 @@ describe("Authority one-shot proof arm policy", () => {
     expect(second).toBe(first);
   });
 
-  it("changes the hash when material execution scope changes", () => {
+  it("changes the hash when material execution or billing scope changes", () => {
     const first = buildAuthorityProofPayloadHash(material());
     expect(buildAuthorityProofPayloadHash(material({ resultLimit: 25 }))).not.toBe(first);
     expect(buildAuthorityProofPayloadHash(material({ geography: "Mobile County, Alabama" }))).not.toBe(first);
+    expect(buildAuthorityProofPayloadHash(material({ providerRequestRows: 100 }))).not.toBe(first);
+    expect(buildAuthorityProofPayloadHash(material({ httpAttemptCount: 2 }))).not.toBe(first);
   });
 
   it("blocks every provider except the canonical DataForSEO backlinks provider", () => {
@@ -92,11 +100,23 @@ describe("Authority one-shot proof arm policy", () => {
     expect(result.blockers).toContain("result_limit_exceeded");
   });
 
-  it("requires exactly one provider request and also trips the shared budget guard above one", () => {
+  it("requires exactly one logical provider request", () => {
     const result = buildAuthorityProofRunPreflight(material({ requestCount: 2 }), now);
     expect(result.allowed).toBe(false);
     expect(result.blockers).toContain("request_count_must_equal_one");
     expect(result.blockers).toContain("budget_max_request_count_exceeded");
+  });
+
+  it("blocks provider billing rows above the arm-bound ceiling", () => {
+    const result = buildAuthorityProofRunPreflight(material({ providerRequestRows: 201 }), now);
+    expect(result.allowed).toBe(false);
+    expect(result.blockers).toContain("provider_row_limit_exceeded");
+  });
+
+  it("requires exactly one HTTP attempt so retries cannot hide inside one logical request", () => {
+    const result = buildAuthorityProofRunPreflight(material({ httpAttemptCount: 2 }), now);
+    expect(result.allowed).toBe(false);
+    expect(result.blockers).toContain("http_attempt_count_must_equal_one");
   });
 
   it("blocks an estimated cost above the hard $0.25 ceiling", () => {

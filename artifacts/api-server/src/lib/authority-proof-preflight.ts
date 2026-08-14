@@ -1,12 +1,14 @@
 import type { AuthorityScheduledExecutionPlan } from "./authority-scheduled-execution-plan.js";
 import {
+  deriveAuthorityProofCostEstimate,
+  type AuthorityProofDerivedCostEstimate,
+} from "./authority-proof-cost-estimate.js";
+import {
   buildAuthorityProofRunPreflight,
   type AuthorityProofRunPreflight,
 } from "./authority-proof-run-policy.js";
 
-export type AuthorityProofCostEstimate =
-  | { readonly available: true; readonly estimatedCostUsd: number; readonly source: string }
-  | { readonly available: false; readonly reason: "estimated_cost_unavailable" };
+export type AuthorityProofCostEstimate = AuthorityProofDerivedCostEstimate;
 
 export type AuthorityProofPreflightResult =
   | {
@@ -63,7 +65,7 @@ export function buildAuthorityProofPreflight(input: {
       ok: false,
       executionAllowed: false,
       providerCallMade: false,
-      code: "AUTHORITY_PROOF_ESTIMATED_COST_UNAVAILABLE",
+      code: `AUTHORITY_PROOF_${input.costEstimate.reason.toUpperCase()}`,
       plan,
       costEstimate: input.costEstimate,
       proof: null,
@@ -81,6 +83,8 @@ export function buildAuthorityProofPreflight(input: {
     geography: [plan.discovery.city, plan.discovery.region].filter(Boolean).join(", "),
     resultLimit: plan.discovery.limit,
     requestCount: 1,
+    providerRequestRows: input.costEstimate.providerRequestRows,
+    httpAttemptCount: input.costEstimate.httpAttemptCount,
     estimatedCostUsd: input.costEstimate.estimatedCostUsd,
   }, input.now);
 
@@ -103,5 +107,22 @@ export function buildAuthorityProofPreflight(input: {
     plan,
     proof,
     costEstimate: input.costEstimate,
+  });
+}
+
+/**
+ * Zero-cost canonical entry point for #471 Phase A/B preflight.
+ * Pricing is derived locally from the dated official pricing contract; this
+ * function cannot execute DataForSEO and always preserves providerCallMade=false.
+ */
+export function buildAuthorityProofPreflightFromCurrentPricing(input: {
+  readonly plan: AuthorityScheduledExecutionPlan;
+  readonly now?: Date;
+}): AuthorityProofPreflightResult {
+  const now = input.now ?? new Date();
+  return buildAuthorityProofPreflight({
+    plan: input.plan,
+    costEstimate: deriveAuthorityProofCostEstimate(input.plan, now),
+    now,
   });
 }

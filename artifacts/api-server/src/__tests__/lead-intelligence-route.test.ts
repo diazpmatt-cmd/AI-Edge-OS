@@ -70,7 +70,7 @@ describe("manual lead analysis route", () => {
     const response = makeResponse();
     await handlerFor(analyze as any)(request, response);
     expect(ownsLead).toHaveBeenCalledWith(clientId, lead.id);
-    expect(analyze).toHaveBeenCalledWith(lead.id);
+    expect(analyze).toHaveBeenCalledWith(clientId, lead.id);
     expect(response.statusCode).toBe(200);
     expect(response.body).toMatchObject({ lead: { id: lead.id, responseStatus: "ready_for_review" }, analysis: { summary: "Customer reports bed bugs on a couch in Daphne." } });
     expect(response.body).not.toHaveProperty("sent");

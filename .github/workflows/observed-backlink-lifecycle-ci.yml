@@ -1,0 +1,62 @@
+name: Observed Backlink Lifecycle CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/db/package.json"
+      - "lib/db/src/observed-backlinks.ts"
+      - "lib/db/src/observed-backlink-lifecycle.ts"
+      - "lib/db/src/observed-backlink-lifecycle.test.ts"
+      - "lib/db/src/observed-backlink-repository.ts"
+      - "lib/db/src/observed-backlink-repository.test.ts"
+      - "lib/db/src/schema/observed-backlinks.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/migrations/0012_observed_backlink_lifecycle.sql"
+      - "artifacts/api-server/src/lib/observed-backlink-migrate.ts"
+      - "artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/observed-backlink-lifecycle-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: observed-backlink-lifecycle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck and lifecycle persistence tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/observed_backlink_ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run lifecycle and persistence tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest
+          --root ../..
+          run
+          lib/db/src/observed-backlink-lifecycle.test.ts
+          lib/db/src/observed-backlink-repository.test.ts
+          artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts
+      - name: Verify clean diff formatting
+        run: git diff --check

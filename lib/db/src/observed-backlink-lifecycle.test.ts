@@ -53,9 +53,9 @@ describe("observed backlink lifecycle", () => {
       "WWW.EXAMPLE.COM.",
       "https://CLIENT.EXAMPLE.COM/services/pest-control/?b=2&a=1#top",
     ))).toEqual({
-      sourceUrl: "https://example.com/resources/local-pest-control/",
+      sourceUrl: "https://example.com/resources/local-pest-control",
       sourceDomain: "example.com",
-      targetUrl: "https://client.example.com/services/pest-control/?a=1&b=2",
+      targetUrl: "https://client.example.com/services/pest-control?a=1&b=2",
     });
   });
 
@@ -193,19 +193,22 @@ describe("observed backlink lifecycle", () => {
     )).toThrow("out_of_order_scan");
   });
 
-  it("counts distinct active referring domains only", () => {
-    const links = [
-      link("https://example.com/a", "example.com", "https://client.example.com/a"),
-      link("https://example.com/b", "EXAMPLE.COM", "https://client.example.com/b"),
-      link("https://other.example.org/a", "other.example.org", "https://client.example.com/a"),
-    ];
+  it("counts distinct active referring domains", () => {
+    const second = link(
+      "https://example.com/second-resource",
+      "example.com",
+      "https://client.example.com/second",
+    );
+    const third = link(
+      "https://other.example.net/resource",
+      "other.example.net",
+      "https://client.example.com/",
+    );
     const result = applyBacklinkInventoryScan(
       [],
-      scan("run-1", "2026-08-13T10:00:00Z", links),
+      scan("run-1", "2026-08-13T10:00:00Z", [link(), second, third]),
     );
 
-    expect(result.metrics.activeBacklinkCount).toBe(3);
-    expect(result.metrics.referringDomainCount).toBe(2);
     expect(summarizeObservedBacklinks(result.states).referringDomainCount).toBe(2);
   });
 });

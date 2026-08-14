@@ -2,10 +2,8 @@ import { OAuth2Client } from "google-auth-library";
 import { pool } from "@workspace/db";
 import { logger } from "./lib/logger.js";
 import {
-  createGmailFetch,
+  createGmailReadClient,
   extractGmailText,
-  gmailMessagePath,
-  listGmailMessageIds,
 } from "./lib/lead-email-gmail-client.js";
 import {
   advanceMarketplaceCheckpoint,
@@ -98,7 +96,7 @@ async function main(): Promise<void> {
 
   const oauth = new OAuth2Client(required("GMAIL_CLIENT_ID"), required("GMAIL_CLIENT_SECRET"));
   oauth.setCredentials({ refresh_token: required("GMAIL_REFRESH_TOKEN") });
-  const gmailFetch = createGmailFetch({ userId: gmailUserId, requestTimeoutMs });
+  const gmail = createGmailReadClient({ userId: gmailUserId, requestTimeoutMs });
 
   while (!stopping) {
     try {
@@ -108,7 +106,7 @@ async function main(): Promise<void> {
       const token = await oauth.getAccessToken();
       if (!token.token) throw new Error("GMAIL_ACCESS_TOKEN_UNAVAILABLE");
 
-      const listing = await listGmailMessageIds({ gmailFetch, accessToken: token.token, query, maxPages });
+      const listing = await gmail.listMessageIds({ accessToken: token.token, query, maxPages });
       const processedDates: number[] = [];
       let created = 0;
       let duplicate = 0;
@@ -118,7 +116,7 @@ async function main(): Promise<void> {
 
       for (const messageId of [...listing.ids].reverse()) {
         if (stopping) break;
-        const message = await gmailFetch(gmailMessagePath(messageId), token.token);
+        const message = await gmail.getFullMessage({ accessToken: token.token, messageId });
         const internalDateMs = Number(message.internalDate);
         if (!Number.isFinite(internalDateMs) || internalDateMs < 0) {
           rejected += 1;

@@ -8,16 +8,20 @@ export type GmailApiError = Error & {
   retryAfterMs?: number;
 };
 
+export interface GmailListMessageIdsInput {
+  accessToken: string;
+  query: string;
+  maxPages: number;
+}
+
+export interface GmailGetFullMessageInput {
+  accessToken: string;
+  messageId: string;
+}
+
 export interface GmailReadClient {
-  listMessageIds(input: {
-    accessToken: string;
-    query: string;
-    maxPages: number;
-  }): Promise<{ ids: string[]; capped: boolean }>;
-  getFullMessage(input: {
-    accessToken: string;
-    messageId: string;
-  }): Promise<any>;
+  listMessageIds(input: GmailListMessageIdsInput): Promise<{ ids: string[]; capped: boolean }>;
+  getFullMessage(input: GmailGetFullMessageInput): Promise<any>;
 }
 
 export const MAX_GMAIL_MESSAGES_PER_PAGE = 50;
@@ -124,7 +128,7 @@ export function createGmailReadClient(input: {
   };
 
   return Object.freeze({
-    async listMessageIds({ accessToken, query, maxPages }) {
+    async listMessageIds({ accessToken, query, maxPages }: GmailListMessageIdsInput) {
       if (!Number.isInteger(maxPages) || maxPages < 1) throw new Error("maxPages must be positive");
       const normalizedQuery = query.trim();
       if (!normalizedQuery || normalizedQuery.length > MAX_GMAIL_QUERY_CHARS) {
@@ -154,7 +158,7 @@ export function createGmailReadClient(input: {
       return { ids, capped: true };
     },
 
-    async getFullMessage({ accessToken, messageId }) {
+    async getFullMessage({ accessToken, messageId }: GmailGetFullMessageInput) {
       if (!isValidGmailMessageId(messageId)) throw new Error("Invalid Gmail message ID");
       return requestJson(`/messages/${encodeURIComponent(messageId)}?format=full`, accessToken);
     },

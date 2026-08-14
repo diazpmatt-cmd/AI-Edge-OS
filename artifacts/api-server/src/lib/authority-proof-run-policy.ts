@@ -4,6 +4,8 @@ import { BudgetGuard } from "@workspace/db";
 export const AUTHORITY_PROOF_MAX_COST_USD = 0.25;
 export const AUTHORITY_PROOF_MAX_REQUESTS = 1;
 export const AUTHORITY_PROOF_MAX_RESULTS = 50;
+export const AUTHORITY_PROOF_MAX_PROVIDER_ROWS = 200;
+export const AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS = 1;
 export const AUTHORITY_PROOF_ARM_TTL_MS = 15 * 60 * 1000;
 
 export interface AuthorityProofRunMaterial {
@@ -17,6 +19,8 @@ export interface AuthorityProofRunMaterial {
   readonly geography: string;
   readonly resultLimit: number;
   readonly requestCount: number;
+  readonly providerRequestRows: number;
+  readonly httpAttemptCount: number;
   readonly estimatedCostUsd: number;
 }
 
@@ -30,6 +34,8 @@ export interface AuthorityProofRunPreflight {
     readonly maxCostUsd: number;
     readonly maxRequests: number;
     readonly maxResults: number;
+    readonly maxProviderRows: number;
+    readonly maxHttpAttempts: number;
   };
 }
 
@@ -55,11 +61,15 @@ export function buildAuthorityProofPayloadHash(material: AuthorityProofRunMateri
       geography: material.geography.trim(),
       resultLimit: material.resultLimit,
       requestCount: material.requestCount,
+      providerRequestRows: material.providerRequestRows,
+      httpAttemptCount: material.httpAttemptCount,
       estimatedCostUsd: Number(material.estimatedCostUsd.toFixed(6)),
       limits: {
         maxCostUsd: AUTHORITY_PROOF_MAX_COST_USD,
         maxRequests: AUTHORITY_PROOF_MAX_REQUESTS,
         maxResults: AUTHORITY_PROOF_MAX_RESULTS,
+        maxProviderRows: AUTHORITY_PROOF_MAX_PROVIDER_ROWS,
+        maxHttpAttempts: AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS,
       },
     }))
     .digest("hex");
@@ -83,6 +93,16 @@ export function buildAuthorityProofRunPreflight(
   }
   if (!Number.isInteger(material.requestCount) || material.requestCount !== AUTHORITY_PROOF_MAX_REQUESTS) {
     blockers.push("request_count_must_equal_one");
+  }
+  if (
+    !Number.isInteger(material.providerRequestRows) ||
+    material.providerRequestRows < 1 ||
+    material.providerRequestRows > AUTHORITY_PROOF_MAX_PROVIDER_ROWS
+  ) {
+    blockers.push("provider_row_limit_exceeded");
+  }
+  if (!Number.isInteger(material.httpAttemptCount) || material.httpAttemptCount !== AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS) {
+    blockers.push("http_attempt_count_must_equal_one");
   }
   if (!Number.isFinite(material.estimatedCostUsd) || material.estimatedCostUsd < 0) {
     blockers.push("estimated_cost_invalid");
@@ -110,6 +130,8 @@ export function buildAuthorityProofRunPreflight(
       maxCostUsd: AUTHORITY_PROOF_MAX_COST_USD,
       maxRequests: AUTHORITY_PROOF_MAX_REQUESTS,
       maxResults: AUTHORITY_PROOF_MAX_RESULTS,
+      maxProviderRows: AUTHORITY_PROOF_MAX_PROVIDER_ROWS,
+      maxHttpAttempts: AUTHORITY_PROOF_MAX_HTTP_ATTEMPTS,
     }),
   });
 }

@@ -15,7 +15,13 @@ const dbMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@workspace/db", () => ({ pool: dbMocks.pool, db: dbMocks.db }));
+vi.mock("@workspace/db", () => ({
+  pool: dbMocks.pool,
+  db: dbMocks.db,
+  DrizzleBacklinkRepository: class DrizzleBacklinkRepository {
+    constructor(_db: unknown) {}
+  },
+}));
 
 import {
   APOLLOS_CONTROL_PLANE_MCP_TOOLS,

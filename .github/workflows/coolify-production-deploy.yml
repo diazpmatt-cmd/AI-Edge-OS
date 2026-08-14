@@ -1,6 +1,9 @@
 name: Coolify production deploy
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/coolify-production-deploy.yml
   workflow_run:
     workflows: ["GHCR production images"]
     types: [completed]
@@ -16,16 +19,40 @@ permissions:
   statuses: read
 
 concurrency:
-  group: coolify-production-deploy
+  group: coolify-production-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
   cancel-in-progress: false
 
 jobs:
+  validate-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Prove bounded deployment contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/coolify-production-deploy.yml
+          grep -Fq 'COOLIFY_APP_UUID: a6y7jyyedbgfwvlh7vag7xh8' "$workflow"
+          grep -Fq 'context == "ghcr/published"' "$workflow"
+          grep -Fq 'if [[ "$TARGET_SHA" != "$CURRENT_MAIN_SHA" ]]' "$workflow"
+          grep -Fq 'key:"IMAGE_TAG"' "$workflow"
+          grep -Fq '"$base/api/v1/applications/$COOLIFY_APP_UUID/envs"' "$workflow"
+          grep -Fq '"$base/api/v1/deploy"' "$workflow"
+          grep -Fq '"$base/api/v1/deployments/$deployment_uuid"' "$workflow"
+          if grep -Eq '/(stop|restart|delete)(["/?]|$)' "$workflow"; then
+            echo "Forbidden broad Coolify control found in bounded deployment workflow." >&2
+            exit 1
+          fi
+          echo "Bounded Coolify deployment contract validated."
+
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

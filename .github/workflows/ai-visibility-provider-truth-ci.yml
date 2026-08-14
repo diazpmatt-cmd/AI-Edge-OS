@@ -6,6 +6,8 @@ on:
     paths:
       - "artifacts/api-server/src/lib/ai-query-provider-registry.ts"
       - "artifacts/api-server/src/lib/ai-query-provider-registry.test.ts"
+      - "artifacts/api-server/src/lib/ai-query-production-provider-descriptors.ts"
+      - "artifacts/api-server/src/lib/ai-query-production-provider-descriptors.test.ts"
       - "artifacts/api-server/src/lib/openai-ai-query-provider.ts"
       - "artifacts/api-server/src/__tests__/ai-visibility-provider-label.test.ts"
       - ".github/workflows/ai-visibility-provider-truth-ci.yml"
@@ -43,6 +45,10 @@ jobs:
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
       - name: Run provider-truth tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/lib/ai-query-provider-registry.test.ts src/__tests__/ai-visibility-provider-label.test.ts
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/lib/ai-query-provider-registry.test.ts
+          src/lib/ai-query-production-provider-descriptors.test.ts
+          src/__tests__/ai-visibility-provider-label.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

@@ -14,6 +14,7 @@ on:
       - "artifacts/api-server/src/lib/authority-proof-execution.test.ts"
       - "artifacts/api-server/src/lib/authority-proof-ingestion-executor.ts"
       - "artifacts/api-server/src/lib/authority-proof-ingestion-executor.test.ts"
+      - "artifacts/api-server/src/lib/dataforseo-backlink-proof-mode.test.ts"
       - "artifacts/api-server/src/lib/authority-scheduled-execution-plan.ts"
       - "artifacts/api-server/src/routes/backlink-scheduled-safety.ts"
       - "artifacts/api-server/src/routes/backlinks.ts"
@@ -24,7 +25,6 @@ on:
       - "lib/db/src/discovery-budget-guard.ts"
       - "lib/db/src/backlink-provider-config.ts"
       - "lib/db/src/dataforseo-backlink-adapter.ts"
-      - "lib/db/src/dataforseo-backlink-proof-mode.test.ts"
       - "lib/db/src/index.ts"
       - ".github/workflows/authority-proof-policy-ci.yml"
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
       - name: Run DataForSEO strict proof adapter tests
-        run: pnpm --filter @workspace/api-server exec vitest run ../../lib/db/src/dataforseo-backlink-proof-mode.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/lib/dataforseo-backlink-proof-mode.test.ts
       - name: Run Authority proof pricing, policy, execution, and isolation tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run

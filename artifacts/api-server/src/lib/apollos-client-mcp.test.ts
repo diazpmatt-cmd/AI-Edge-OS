@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,6 +16,11 @@ import {
   ApollosSafeActionExecutor,
   type ApollosAiVisibilityRunner,
 } from "./apollos-safe-action-executor";
+
+const referralPilotStatusSource = readFileSync(
+  new URL("./apollos-referral-pilot-status.ts", import.meta.url),
+  "utf8",
+).replace(/\s+/g, " ");
 
 function liveClient(name = "Boatliner Company", clientId = "client-boatliner"): ApollosLiveCoverageSuccess {
   const coverage = buildApollosClientCoverage({
@@ -193,6 +199,24 @@ describe("ApollosClientMcpRuntime", () => {
     ]);
     expect(schema.properties.confirmDispatch.const).toBe(true);
     expect(schema.properties.requestedMode.enum).toEqual(["dry_run", "live"]);
+  });
+
+  it("keeps the Referral status selector capped, consent-backed, and opaque", () => {
+    expect(referralPilotStatusSource).toContain("SELECT ri.id");
+    expect(referralPilotStatusSource).toContain("LIMIT 10");
+    expect(referralPilotStatusSource).toContain("ri.status = 'approved'");
+    expect(referralPilotStatusSource).toContain("ri.delivery_state = 'not_dispatched'");
+    expect(referralPilotStatusSource).toContain("ri.consent_source IS NOT NULL");
+    expect(referralPilotStatusSource).toContain("ri.consent_at IS NOT NULL");
+    expect(referralPilotStatusSource).toContain("rcp.status = 'opted_in'");
+    expect(referralPilotStatusSource).toContain("rcp.consent_source IS NOT NULL");
+    expect(referralPilotStatusSource).toContain("rcp.consent_at IS NOT NULL");
+    expect(referralPilotStatusSource).toContain("rda.requested_mode = 'live'");
+    expect(referralPilotStatusSource).toContain("rda.status IN ('dispatching', 'delivered')");
+    expect(referralPilotStatusSource).toContain("eligibleInvitationIds");
+    expect(referralPilotStatusSource).not.toContain("recipientName:");
+    expect(referralPilotStatusSource).not.toContain("recipientDestination:");
+    expect(referralPilotStatusSource).not.toContain("initialMessage:");
   });
 
   it("rejects arbitrary Referral destination or message input before tenant resolution", async () => {

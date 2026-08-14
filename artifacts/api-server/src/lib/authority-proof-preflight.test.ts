@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AuthorityScheduledExecutionPlan } from "./authority-scheduled-execution-plan.js";
-import { buildAuthorityProofPreflight } from "./authority-proof-preflight.js";
+import {
+  buildAuthorityProofPreflight,
+  buildAuthorityProofPreflightFromCurrentPricing,
+} from "./authority-proof-preflight.js";
 
 const plan: AuthorityScheduledExecutionPlan = Object.freeze({
   mode: "scheduled",
@@ -23,6 +26,15 @@ const plan: AuthorityScheduledExecutionPlan = Object.freeze({
   providerExecutionAllowed: false,
 });
 
+const trustedEstimate = Object.freeze({
+  available: true as const,
+  estimatedCostUsd: 0.0312,
+  source: "provider_pricing_contract",
+  providerRequestRows: 200,
+  httpAttemptCount: 1 as const,
+  pricingVerifiedAt: "2026-08-14T13:30:00.000Z",
+});
+
 describe("Authority proof preflight", () => {
   it("fails closed when a trusted cost estimate is unavailable", () => {
     const result = buildAuthorityProofPreflight({
@@ -38,26 +50,64 @@ describe("Authority proof preflight", () => {
     });
   });
 
-  it("derives the bounded proof only from the canonical plan and trusted cost estimate", () => {
+  it("derives the bounded proof only from canonical plan plus billing and retry scope", () => {
     const result = buildAuthorityProofPreflight({
       plan,
-      costEstimate: { available: true, estimatedCostUsd: 0.03, source: "provider_pricing_contract" },
-      now: new Date("2026-08-14T04:15:00.000Z"),
+      costEstimate: trustedEstimate,
+      now: new Date("2026-08-14T14:15:00.000Z"),
     });
     expect(result.ok).toBe(true);
     expect(result.executionAllowed).toBe(false);
     expect(result.providerCallMade).toBe(false);
     if (result.ok) {
       expect(result.proof.allowed).toBe(true);
-      expect(result.proof.limits).toEqual({ maxCostUsd: 0.25, maxRequests: 1, maxResults: 50 });
+      expect(result.proof.limits).toEqual({
+        maxCostUsd: 0.25,
+        maxRequests: 1,
+        maxResults: 50,
+        maxProviderRows: 200,
+        maxHttpAttempts: 1,
+      });
       expect(result.proof.confirmationText).toMatch(/^ARM AUTHORITY [0-9a-f]{12}$/);
     }
+  });
+
+  it("builds a zero-cost preflight directly from the current dated pricing contract", () => {
+    const result = buildAuthorityProofPreflightFromCurrentPricing({
+      plan,
+      now: new Date("2026-08-14T14:15:00.000Z"),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      executionAllowed: false,
+      providerCallMade: false,
+      costEstimate: {
+        available: true,
+        estimatedCostUsd: 0.0312,
+        providerRequestRows: 200,
+        httpAttemptCount: 1,
+      },
+    });
+  });
+
+  it("fails closed when the dated pricing contract has expired its review window", () => {
+    const result = buildAuthorityProofPreflightFromCurrentPricing({
+      plan,
+      now: new Date("2026-09-14T14:15:00.000Z"),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      executionAllowed: false,
+      providerCallMade: false,
+      code: "AUTHORITY_PROOF_PRICING_CONTRACT_STALE",
+      proof: null,
+    });
   });
 
   it("blocks a cost estimate above the proof ceiling without execution", () => {
     const result = buildAuthorityProofPreflight({
       plan,
-      costEstimate: { available: true, estimatedCostUsd: 0.251, source: "provider_pricing_contract" },
+      costEstimate: { ...trustedEstimate, estimatedCostUsd: 0.251 },
     });
     expect(result.ok).toBe(false);
     expect(result.executionAllowed).toBe(false);
@@ -68,10 +118,21 @@ describe("Authority proof preflight", () => {
     }
   });
 
+  it("blocks a hidden provider retry even when logical request count remains one", () => {
+    const result = buildAuthorityProofPreflight({
+      plan,
+      costEstimate: { ...trustedEstimate, httpAttemptCount: 2 as never },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.proof?.blockers).toContain("http_attempt_count_must_equal_one");
+    }
+  });
+
   it("refuses any non-allowlisted provider even when a cost estimate exists", () => {
     const result = buildAuthorityProofPreflight({
       plan: { ...plan, providerId: "fixture_backlinks" },
-      costEstimate: { available: true, estimatedCostUsd: 0, source: "fixture" },
+      costEstimate: trustedEstimate,
     });
     expect(result).toMatchObject({
       ok: false,
@@ -85,7 +146,7 @@ describe("Authority proof preflight", () => {
     const unsafePlan = { ...plan, providerExecutionAllowed: true } as unknown as AuthorityScheduledExecutionPlan;
     const result = buildAuthorityProofPreflight({
       plan: unsafePlan,
-      costEstimate: { available: true, estimatedCostUsd: 0.03, source: "provider_pricing_contract" },
+      costEstimate: trustedEstimate,
     });
     expect(result).toMatchObject({
       ok: false,

@@ -21,6 +21,10 @@ const referralPilotStatusSource = readFileSync(
   new URL("./apollos-referral-pilot-status.ts", import.meta.url),
   "utf8",
 ).replace(/\s+/g, " ");
+const leadRecoveryReadinessSource = readFileSync(
+  new URL("./lead-recovery-readiness.ts", import.meta.url),
+  "utf8",
+).replace(/\s+/g, " ");
 
 function liveClient(name = "Boatliner Company", clientId = "client-boatliner"): ApollosLiveCoverageSuccess {
   const coverage = buildApollosClientCoverage({
@@ -134,6 +138,7 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_execute_safe_action",
       "apollos_run_full_utilization_cycle",
       "apollos_get_referral_pilot_status",
+      "apollos_get_lead_recovery_readiness",
       "apollos_dispatch_approved_referral_invitation",
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
@@ -153,6 +158,7 @@ describe("ApollosClientMcpRuntime", () => {
       "apollos_get_capability_status",
       "apollos_prepare_activation",
       "apollos_get_referral_pilot_status",
+      "apollos_get_lead_recovery_readiness",
       "apollos_clerk_get_oauth_settings",
       "apollos_clerk_list_oauth_applications",
       "apollos_clerk_get_user",
@@ -217,6 +223,27 @@ describe("ApollosClientMcpRuntime", () => {
     expect(referralPilotStatusSource).not.toContain("recipientName:");
     expect(referralPilotStatusSource).not.toContain("recipientDestination:");
     expect(referralPilotStatusSource).not.toContain("initialMessage:");
+  });
+
+  it("keeps Lead Recovery readiness sanitized and side-effect free", () => {
+    const tool = APOLLOS_CLIENT_MCP_TOOLS.find(
+      (candidate) => candidate.name === "apollos_get_lead_recovery_readiness",
+    );
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: true,
+      openWorldHint: false,
+    });
+    expect((tool?.inputSchema as any)?.additionalProperties).toBe(false);
+    expect(leadRecoveryReadinessSource).toContain("apiKeyConfigured");
+    expect(leadRecoveryReadinessSource).toContain("publicKeyConfigured");
+    expect(leadRecoveryReadinessSource).toContain("transferSafety");
+    expect(leadRecoveryReadinessSource).toContain("duplicateOwnerRisk");
+    expect(leadRecoveryReadinessSource).toContain("externalCalls: false");
+    expect(leadRecoveryReadinessSource).toContain("sideEffects: false");
+    expect(leadRecoveryReadinessSource).not.toContain("apiKey:");
+    expect(leadRecoveryReadinessSource).not.toContain("publicKey:");
+    expect(leadRecoveryReadinessSource).not.toContain("messagesTable");
+    expect(leadRecoveryReadinessSource).not.toContain("callsTable");
   });
 
   it("rejects arbitrary Referral destination or message input before tenant resolution", async () => {

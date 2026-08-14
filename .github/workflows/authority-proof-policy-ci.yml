@@ -12,15 +12,19 @@ on:
       - "artifacts/api-server/src/lib/authority-proof-preflight.test.ts"
       - "artifacts/api-server/src/lib/authority-proof-execution.ts"
       - "artifacts/api-server/src/lib/authority-proof-execution.test.ts"
+      - "artifacts/api-server/src/lib/authority-proof-ingestion-executor.ts"
+      - "artifacts/api-server/src/lib/authority-proof-ingestion-executor.test.ts"
       - "artifacts/api-server/src/lib/authority-scheduled-execution-plan.ts"
       - "artifacts/api-server/src/routes/backlink-scheduled-safety.ts"
       - "artifacts/api-server/src/routes/backlinks.ts"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/api-server/src/__tests__/backlink-scheduled-route-ownership.test.ts"
       - "artifacts/api-server/src/__tests__/authority-proof-execution-isolation.test.ts"
+      - "artifacts/api-server/src/__tests__/authority-proof-ingestion-executor-isolation.test.ts"
       - "lib/db/src/discovery-budget-guard.ts"
       - "lib/db/src/backlink-provider-config.ts"
       - "lib/db/src/dataforseo-backlink-adapter.ts"
+      - "lib/db/src/dataforseo-backlink-proof-mode.test.ts"
       - "lib/db/src/index.ts"
       - ".github/workflows/authority-proof-policy-ci.yml"
   workflow_dispatch:
@@ -56,6 +60,8 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run DataForSEO strict proof adapter tests
+        run: pnpm --filter @workspace/db exec vitest run src/dataforseo-backlink-proof-mode.test.ts
       - name: Run Authority proof pricing, policy, execution, and isolation tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
@@ -63,7 +69,9 @@ jobs:
           src/lib/authority-proof-run-policy.test.ts
           src/lib/authority-proof-preflight.test.ts
           src/lib/authority-proof-execution.test.ts
+          src/lib/authority-proof-ingestion-executor.test.ts
           src/__tests__/backlink-scheduled-route-ownership.test.ts
           src/__tests__/authority-proof-execution-isolation.test.ts
+          src/__tests__/authority-proof-ingestion-executor-isolation.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

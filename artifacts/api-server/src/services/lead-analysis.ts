@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { db } from "@workspace/db";
 import { leadsTable, type Lead } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 
 export const leadUrgencySchema = z.preprocess((value) => {
@@ -39,11 +39,7 @@ export const leadAnalysisOutputSchema = z.object({
   const completeOutput = JSON.stringify(value);
   for (const pattern of unsafeLanguage) {
     if (pattern.test(completeOutput)) {
-      context.addIssue({
-        code: "custom",
-        message: "AI output contains prohibited or unverified language",
-        path: ["draftResponse"],
-      });
+      context.addIssue({ code: "custom", message: "AI output contains prohibited or unverified language", path: ["draftResponse"] });
       break;
     }
   }
@@ -58,39 +54,22 @@ export interface LeadAnalysisProvider {
 }
 
 export interface LeadAnalysisRepository {
-  findById(leadId: string): Promise<Lead | null>;
-  saveAnalysis(
-    leadId: string,
-    analysis: Pick<Lead, "service" | "location" | "urgency" | "draftResponse" | "responseStatus">,
-  ): Promise<Lead | null>;
-  setResponsePending(leadId: string): Promise<Lead | null>;
+  findById(clientId: string, leadId: string): Promise<Lead | null>;
+  saveAnalysis(clientId: string, leadId: string, analysis: Pick<Lead, "service" | "location" | "urgency" | "draftResponse" | "responseStatus">): Promise<Lead | null>;
+  setResponsePending(clientId: string, leadId: string): Promise<Lead | null>;
 }
 
-export type AnalyzeLeadOptions = {
-  timeoutMs?: number;
-};
+export type AnalyzeLeadOptions = { timeoutMs?: number };
 
 export type LeadAnalysisResult =
   | { status: "ready_for_review"; lead: Lead; analysis: LeadAnalysisOutput }
   | { status: "not_found"; lead: null; error: "lead_not_found" }
-  | {
-      status: "failed";
-      lead: Lead;
-      error: "provider_failure" | "invalid_ai_output" | "persistence_failure";
-    };
+  | { status: "failed"; lead: Lead; error: "provider_failure" | "invalid_ai_output" | "persistence_failure" };
 
 function parseProviderOutput(output: unknown): unknown {
   if (typeof output !== "string") return output;
-  const cleaned = output
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/, "")
-    .replace(/\s*```$/, "");
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return output;
-  }
+  const cleaned = output.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+  try { return JSON.parse(cleaned); } catch { return output; }
 }
 
 function buildPrompt(lead: Lead): string {
@@ -121,71 +100,41 @@ Rules:
 - Do not include markdown, commentary, or additional JSON fields.`;
 
 function buildOpenAiModel() {
-  const baseURL =
-    process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ??
-    process.env.OPENAI_BASE_URL ??
-    "https://api.openai.com/v1";
-  const key =
-    process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
-    process.env.OPENAI_API_KEY;
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!key) throw new Error("Lead analysis AI provider is not configured");
-  const gateway = createOpenAICompatible({
-    name: "openai",
-    baseURL,
-    headers: { Authorization: `Bearer ${key}` },
-  });
+  const gateway = createOpenAICompatible({ name: "openai", baseURL, headers: { Authorization: `Bearer ${key}` } });
   return gateway(process.env.OPENAI_MODEL ?? "gpt-4o-mini");
 }
 
 export class OpenAiLeadAnalysisProvider implements LeadAnalysisProvider {
   readonly name = "openai";
   readonly model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-
   async generate(lead: Lead, options: { timeoutMs?: number } = {}): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000);
     try {
-      const result = await generateText({
-        model: buildOpenAiModel(),
-        system: systemPrompt,
-        prompt: buildPrompt(lead),
-        abortSignal: controller.signal,
-      });
+      const result = await generateText({ model: buildOpenAiModel(), system: systemPrompt, prompt: buildPrompt(lead), abortSignal: controller.signal });
       return result.text;
-    } finally {
-      clearTimeout(timer);
-    }
+    } finally { clearTimeout(timer); }
   }
 }
 
-export function createDrizzleLeadAnalysisRepository(
-  database: typeof db = db,
-): LeadAnalysisRepository {
+export function createDrizzleLeadAnalysisRepository(database: typeof db = db): LeadAnalysisRepository {
   return {
-    async findById(leadId) {
-      const [lead] = await database
-        .select()
-        .from(leadsTable)
-        .where(eq(leadsTable.id, leadId))
-        .limit(1);
+    async findById(clientId, leadId) {
+      const [lead] = await database.select().from(leadsTable)
+        .where(and(eq(leadsTable.id, leadId), eq(leadsTable.clientId, clientId))).limit(1);
       return lead ?? null;
     },
-
-    async saveAnalysis(leadId, analysis) {
-      const [lead] = await database
-        .update(leadsTable)
-        .set({ ...analysis, updatedAt: new Date() })
-        .where(eq(leadsTable.id, leadId))
-        .returning();
+    async saveAnalysis(clientId, leadId, analysis) {
+      const [lead] = await database.update(leadsTable).set({ ...analysis, updatedAt: new Date() })
+        .where(and(eq(leadsTable.id, leadId), eq(leadsTable.clientId, clientId))).returning();
       return lead ?? null;
     },
-
-    async setResponsePending(leadId) {
-      const [lead] = await database
-        .update(leadsTable)
-        .set({ responseStatus: "pending", updatedAt: new Date() })
-        .where(eq(leadsTable.id, leadId))
-        .returning();
+    async setResponsePending(clientId, leadId) {
+      const [lead] = await database.update(leadsTable).set({ responseStatus: "pending", updatedAt: new Date() })
+        .where(and(eq(leadsTable.id, leadId), eq(leadsTable.clientId, clientId))).returning();
       return lead ?? null;
     },
   };
@@ -197,28 +146,24 @@ export class LeadAnalysisService {
     private readonly provider: LeadAnalysisProvider = new OpenAiLeadAnalysisProvider(),
   ) {}
 
-  async analyzeLead(
-    leadId: string,
-    options: AnalyzeLeadOptions = {},
-  ): Promise<LeadAnalysisResult> {
-    const lead = await this.repository.findById(leadId);
+  async analyzeLead(clientId: string, leadId: string, options: AnalyzeLeadOptions = {}): Promise<LeadAnalysisResult> {
+    const lead = await this.repository.findById(clientId, leadId);
     if (!lead) return { status: "not_found", lead: null, error: "lead_not_found" };
 
     let providerOutput: unknown;
-    try {
-      providerOutput = await this.provider.generate(lead, options);
-    } catch {
-      const pendingLead = await this.keepPending(lead);
+    try { providerOutput = await this.provider.generate(lead, options); }
+    catch {
+      const pendingLead = await this.keepPending(clientId, lead);
       return { status: "failed", lead: pendingLead, error: "provider_failure" };
     }
 
     const parsed = leadAnalysisOutputSchema.safeParse(parseProviderOutput(providerOutput));
     if (!parsed.success) {
-      const pendingLead = await this.keepPending(lead);
+      const pendingLead = await this.keepPending(clientId, lead);
       return { status: "failed", lead: pendingLead, error: "invalid_ai_output" };
     }
 
-    const updatedLead = await this.repository.saveAnalysis(lead.id, {
+    const updatedLead = await this.repository.saveAnalysis(clientId, lead.id, {
       service: parsed.data.service,
       location: parsed.data.location,
       urgency: parsed.data.urgency,
@@ -226,31 +171,20 @@ export class LeadAnalysisService {
       responseStatus: "ready_for_review",
     });
     if (!updatedLead) {
-      const pendingLead = await this.keepPending(lead);
+      const pendingLead = await this.keepPending(clientId, lead);
       return { status: "failed", lead: pendingLead, error: "persistence_failure" };
     }
 
-    return {
-      status: "ready_for_review",
-      lead: updatedLead,
-      analysis: parsed.data,
-    };
+    return { status: "ready_for_review", lead: updatedLead, analysis: parsed.data };
   }
 
-  private async keepPending(lead: Lead): Promise<Lead> {
+  private async keepPending(clientId: string, lead: Lead): Promise<Lead> {
     if (lead.responseStatus === "pending") return lead;
-    return await this.repository.setResponsePending(lead.id) ?? {
-      ...lead,
-      responseStatus: "pending",
-    };
+    return await this.repository.setResponsePending(clientId, lead.id) ?? { ...lead, responseStatus: "pending" };
   }
 }
 
 const defaultLeadAnalysisService = new LeadAnalysisService();
-
-export async function analyzeLead(
-  leadId: string,
-  options?: AnalyzeLeadOptions,
-): Promise<LeadAnalysisResult> {
-  return defaultLeadAnalysisService.analyzeLead(leadId, options);
+export async function analyzeLead(clientId: string, leadId: string, options?: AnalyzeLeadOptions): Promise<LeadAnalysisResult> {
+  return defaultLeadAnalysisService.analyzeLead(clientId, leadId, options);
 }

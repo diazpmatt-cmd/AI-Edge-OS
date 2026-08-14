@@ -3,7 +3,6 @@ import {
   APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
   APOLLOS_MCP_READ_ONLY_ANNOTATIONS,
 } from "./apollos-client-mcp-auth.js";
-import { buildCompetitiveEdgeReadModel } from "./competitive-edge-read-model.js";
 
 const CLIENT_ID_PROPERTY = Object.freeze({ type: "string", minLength: 1, maxLength: 100 });
 
@@ -56,6 +55,10 @@ export async function executeApollosCompetitiveEdgeMcpTool(input: {
     throw new Error(`APOLLOS_MCP_CLIENT_${resolution.reason.toUpperCase()}`);
   }
 
+  // Keep database-backed Competitive Edge dependencies out of the MCP module's
+  // import-time path. Existing control-plane tests deliberately mock @workspace/db;
+  // the read model is needed only after identity + tenant authorization succeeds.
+  const { buildCompetitiveEdgeReadModel } = await import("./competitive-edge-read-model.js");
   const target = resolution.target;
   const data = await buildCompetitiveEdgeReadModel({
     clientId: target.clientId,

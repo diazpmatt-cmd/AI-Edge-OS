@@ -18,7 +18,6 @@ import {
   calcNextRunAt,
   BACKLINK_SCHEDULE_FREQUENCIES,
   computePeriodSummaries,
-  computeEdgeAuthorityScore,
   type BacklinkWorkflowStatus,
   type BacklinkOpportunityCategory,
   type BacklinkProviderHealthState,
@@ -27,7 +26,6 @@ import {
 } from "@workspace/db";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver.js";
 import { SCHEDULER_SECRET } from "../lib/scheduler-secret.js";
-import { countVerifiedAuthorityWins } from "../lib/authority-verified-win-measurement.js";
 
 const router = Router();
 const repo   = new DrizzleBacklinkRepository(db);
@@ -181,116 +179,6 @@ router.put("/api/backlinks/schedule", async (req, res): Promise<void> => {
     if (isRelationMissingError(err)) { res.status(503).json({ error: "schema_not_ready" }); return; }
     console.error("[backlinks] putSchedule error:", err);
     res.status(500).json({ error: "db_error" });
-  }
-});
-
-// ── POST /api/backlinks/ingest/scheduled ─────────────────────────────────────
-// Scheduler-secret authenticated endpoint.  Selects the best available provider
-// (highest-priority configured one from the registry) and runs ingest.
-// When no live provider is available, falls through to fixture and always succeeds.
-
-router.post("/api/backlinks/ingest/scheduled", async (req, res): Promise<void> => {
-  if (req.headers["x-scheduler-secret"] !== SCHEDULER_SECRET) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const clientId = req.headers["x-scheduler-client-id"];
-  if (!clientId || typeof clientId !== "string" || !clientId.trim()) {
-    res.status(400).json({ error: "x-scheduler-client-id header required" });
-    return;
-  }
-
-  const now      = new Date();
-  const provider = _backlinkRegistry.resolve();
-  if (!provider) {
-    // No live provider configured — skip ingest rather than fabricating fixture data.
-    res.json({
-      ok: true,
-      providerStatus: _backlinkRegistry.healthReport(),
-      reason: "no_provider_configured",
-      outcome: "skipped",
-    });
-    return;
-  }
-  const providerHealth = "configured";
-
-  try {
-    const result = await ingestFixtureBacklinks({
-      trustedClientId:     clientId.trim(),
-      provider,
-      discovery: {
-        clientId:          clientId.trim(),
-        clientDomain:      "bedbugsbeyond.com",
-        competitorDomains: [],
-        serviceIds:        [...BBB_BACKLINK_ALLOWED_SERVICES],
-        city:              "Foley",
-        region:            "Baldwin County, Alabama",
-        limit:             50,
-      },
-      normalizationPolicy: {
-        allowedServiceIds: BBB_BACKLINK_ALLOWED_SERVICES,
-        blockedPhrases:    [...BBB_BACKLINK_BLOCKED_PHRASES],
-        now,
-      },
-      repository: new DrizzleBacklinkRepository(db),
-      now,
-    });
-
-    // Record a score history snapshot after a successful scheduled run.
-    // Best-effort — never blocks the response.
-    const summary = "outcome" in result && result.outcome === "in_progress" ? null : result as import("@workspace/db").ManualBacklinkIngestionSummary;
-    const snapshotDate = now.toISOString().slice(0, 10);
-    if (summary) {
-      void (async () => {
-        try {
-          const verifiedWonCount = await countVerifiedAuthorityWins(clientId.trim());
-          // Compute AI Edge Authority Score from real provider data. Only durable,
-          // human-verified acquisitions are allowed into the win component.
-          // Returns null when backlinkCount=0 AND referringDomainCount=0 (fail-closed).
-          const edgeScore = computeEdgeAuthorityScore({
-            backlinkCount:        summary.prospectIds.length,
-            referringDomainCount: 0, // v1: live DA provider required for real value
-            opportunityCount:     summary.opportunityIds.length,
-            wonCount:             verifiedWonCount,
-          });
-          await pool.query(
-            `INSERT INTO backlink_score_history
-               (client_id, snapshot_date, authority_score, backlink_count, opportunity_count,
-                won_count, new_count, lost_count, referring_domain_count, edge_authority_score)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (client_id, snapshot_date) DO UPDATE SET
-               authority_score         = EXCLUDED.authority_score,
-               backlink_count          = EXCLUDED.backlink_count,
-               opportunity_count       = EXCLUDED.opportunity_count,
-               won_count               = EXCLUDED.won_count,
-               new_count               = EXCLUDED.new_count,
-               lost_count              = EXCLUDED.lost_count,
-               referring_domain_count  = EXCLUDED.referring_domain_count,
-               edge_authority_score    = EXCLUDED.edge_authority_score`,
-            [
-              clientId.trim(),
-              snapshotDate,
-              0, // authority_score: v1 placeholder (third-party DA requires live DA provider)
-              summary.prospectIds.length,
-              summary.opportunityIds.length,
-              verifiedWonCount,
-              0, // new_count: v1 placeholder (requires live provider delta tracking)
-              0, // lost_count: v1 placeholder (requires live provider delta tracking)
-              0, // referring_domain_count: v1 placeholder (requires live DA provider)
-              edgeScore, // null when no qualifying backlink evidence — honest, not fabricated
-            ],
-          );
-        } catch (e) {
-          console.error("[backlinks] score snapshot insert error:", e);
-        }
-      })();
-    }
-
-    res.json({ ok: true, providerStatus: providerHealth, ...result });
-  } catch (err: any) {
-    console.error("[backlinks] scheduled ingest error:", err);
-    res.status(500).json({ ok: false, error: "ingest_failed", message: err?.message ?? "Unknown error" });
   }
 });
 

@@ -2,6 +2,7 @@ import {
   DataForSEOBacklinkAdapter,
   ingestBacklinks,
   type BacklinkDataProvider,
+  type BacklinkDiscoveryInput,
   type BacklinkRepository,
   type DataForSEOBacklinkConfig,
 } from "@workspace/db";
@@ -44,7 +45,9 @@ export function createAuthorityProofIngestionExecutor(input: {
   const proofConfig = buildAuthorityProofDataForSEOConfig(input.baseConfig);
 
   return Object.freeze({
-    async executeIngestion({ plan, now }) {
+    async executeIngestion(
+      { plan, now }: { readonly plan: AuthorityScheduledExecutionPlan; readonly now: Date },
+    ) {
       if (plan.providerId !== "dataforseo_backlinks") {
         throw new Error("Authority proof executor only supports the canonical DataForSEO backlinks provider.");
       }
@@ -70,7 +73,7 @@ export function createAuthorityProofIngestionExecutor(input: {
       const instrumentedProvider: BacklinkDataProvider = Object.freeze({
         name: strictProvider.name,
         capabilities: strictProvider.capabilities,
-        async discover(discovery) {
+        async discover(discovery: BacklinkDiscoveryInput) {
           providerCallMade = true;
           return strictProvider.discover(discovery);
         },

@@ -15,7 +15,10 @@ type Action = typeof ACTIONS[number];
 
 export const APOLLOS_CONTENT_AUTOPILOT_CONTROL_MCP_TOOL = Object.freeze({
   securitySchemes: APOLLOS_MCP_OAUTH_SECURITY_SCHEMES,
-  annotations: APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
+  annotations: Object.freeze({
+    ...APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
+    idempotentHint: true,
+  }),
   name: "apollos_set_content_autopilot_control",
   description: "Change one fixed, reversible Content Autopilot control for an authorized AI Edge client and verify the canonical state afterward. Supports Continuous Generation, Automatic Media, pause, and resume only. Does not approve or publish content, call external providers, change OAuth/accounts, or authorize spend.",
   inputSchema: Object.freeze({

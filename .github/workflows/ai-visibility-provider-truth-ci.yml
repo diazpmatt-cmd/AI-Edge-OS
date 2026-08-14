@@ -1,0 +1,46 @@
+name: AI Visibility Provider Truth CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/lib/ai-query-provider-registry.ts"
+      - "artifacts/api-server/src/lib/ai-query-provider-registry.test.ts"
+      - ".github/workflows/ai-visibility-provider-truth-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-visibility-provider-truth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck and provider-truth tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ai_visibility_provider_truth_ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run provider-truth tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/lib/ai-query-provider-registry.test.ts
+      - name: Verify clean diff formatting
+        run: git diff --check

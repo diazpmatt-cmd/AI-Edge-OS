@@ -20,6 +20,7 @@ import {
 import { getApollosHetznerInfrastructure } from "./apollos-hetzner-readonly.js";
 import { getApollosReferralPilotStatus } from "./apollos-referral-pilot-status.js";
 import { dispatchApollosApprovedReferralInvitation } from "./apollos-referral-dispatch.js";
+import { buildLeadRecoveryReadiness } from "./lead-recovery-readiness.js";
 import {
   APOLLOS_MCP_EXTERNAL_WRITE_ANNOTATIONS,
   APOLLOS_MCP_INTERNAL_WRITE_ANNOTATIONS,
@@ -155,6 +156,16 @@ export const APOLLOS_CLIENT_MCP_TOOLS = Object.freeze([
     ...TOOL_AUTH,
     name: "apollos_get_referral_pilot_status",
     description: "Return non-PII Referral pilot readiness, local GorillaDesk aggregate sync evidence, invitation counts, and delivery/attribution evidence for one authorized client.",
+    inputSchema: {
+      type: "object",
+      properties: { clientId: CLIENT_ID_PROPERTY },
+      additionalProperties: false,
+    },
+  },
+  {
+    ...TOOL_AUTH,
+    name: "apollos_get_lead_recovery_readiness",
+    description: "Return sanitized Lead Recovery and AI Receptionist production readiness for one authorized client, including Telnyx config presence, endpoint state, transfer safety, recovery ownership, and live-test readiness. Never returns credential values or customer communications.",
     inputSchema: {
       type: "object",
       properties: { clientId: CLIENT_ID_PROPERTY },
@@ -523,6 +534,9 @@ export class ApollosClientMcpRuntime {
       }
       case "apollos_get_referral_pilot_status":
         data = await getApollosReferralPilotStatus(resolution.target.clientId);
+        break;
+      case "apollos_get_lead_recovery_readiness":
+        data = await buildLeadRecoveryReadiness(resolution.target.clientId);
         break;
       case "apollos_dispatch_approved_referral_invitation": {
         if (!referralDispatch) throw new Error("APOLLOS_MCP_ARGUMENTS_INVALID");

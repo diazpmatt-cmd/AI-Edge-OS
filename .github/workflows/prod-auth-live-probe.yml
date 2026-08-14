@@ -70,6 +70,7 @@ jobs:
           COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL || secrets.COOLIFY_BASE_URL }}
           COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
           COOLIFY_APP_UUID: a6y7jyyedbgfwvlh7vag7xh8
+          APOLLOS_TUNNEL_UUID: cqy9xj3w6qarzmdkyiksklht
         run: |
           set -euo pipefail
 
@@ -78,59 +79,105 @@ jobs:
             exit 0
           fi
 
-          response="$(mktemp)"
-          logs="$(mktemp)"
-          trap 'rm -f "$response" "$logs"' EXIT
+          count_pattern() {
+            local file="$1"
+            local label="$2"
+            local pattern="$3"
+            local count
+            count="$(grep -Eic "$pattern" "$file" || true)"
+            echo "${label}=${count}"
+          }
 
+          fetch_logs() {
+            local uuid="$1"
+            local prefix="$2"
+            local response
+            local logs
+            local rc
+            response="$(mktemp)"
+            logs="$(mktemp)"
+
+            set +e
+            curl --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+              -H "Accept: application/json" \
+              "${COOLIFY_BASE_URL%/}/api/v1/applications/${uuid}/logs?lines=500" \
+              -o "$response"
+            rc=$?
+            set -e
+
+            echo "${prefix}_log_api_curl_exit=${rc}"
+            if [ "$rc" -ne 0 ] || ! jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+              echo "${prefix}_log_payload=unavailable"
+              rm -f "$response" "$logs"
+              return 1
+            fi
+
+            jq -r '.logs' "$response" > "$logs"
+            echo "${prefix}_log_payload=available"
+            echo "${prefix}_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
+            printf '%s' "$logs"
+            rm -f "$response"
+          }
+
+          # Canonical app logs currently surface the web/Nginx side. Emit only counts.
+          app_logs="$(mktemp)"
+          tunnel_logs="$(mktemp)"
+          trap 'rm -f "$app_logs" "$tunnel_logs"' EXIT
+
+          fetch_logs "$COOLIFY_APP_UUID" "app" > "$app_logs.meta" 2>/dev/null || true
+          # Fetch again directly into local scratch without printing raw content.
+          response="$(mktemp)"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=500" \
+            -o "$response"
+          jq -r '.logs // ""' "$response" > "$app_logs"
+          rm -f "$response"
+
+          echo "app_log_bytes=$(wc -c < "$app_logs" | tr -d ' ')"
+          count_pattern "$app_logs" "server_listening_count" 'Server listening'
+          count_pattern "$app_logs" "startup_failure_count" 'Startup migration or publishing guard failed'
+          count_pattern "$app_logs" "listen_error_count" 'Error listening on port'
+          count_pattern "$app_logs" "database_auth_failure_count" 'password authentication failed|database authentication failed'
+          count_pattern "$app_logs" "required_config_failure_count" 'required but was not provided|DATABASE_URL.*required|CLERK_PUBLISHABLE_KEY.*required|CLERK_SECRET_KEY.*required|SCHEDULER_SECRET.*required|GORILLADESK_API_KEY.*required'
+          count_pattern "$app_logs" "module_load_failure_count" 'Cannot find module|ERR_MODULE_NOT_FOUND'
+          count_pattern "$app_logs" "filesystem_failure_count" 'ENOENT'
+          count_pattern "$app_logs" "nginx_502_count" ' 502 '
+          count_pattern "$app_logs" "upstream_connect_failed_count" 'connect\(\) failed'
+          count_pattern "$app_logs" "upstream_no_route_count" 'No route to host'
+          count_pattern "$app_logs" "upstream_network_unreachable_count" 'Network is unreachable'
+          count_pattern "$app_logs" "upstream_connection_refused_count" 'Connection refused|connection refused|ECONNREFUSED'
+          count_pattern "$app_logs" "upstream_timeout_count" 'upstream timed out|Connection timed out'
+          count_pattern "$app_logs" "upstream_host_not_found_count" 'host not found in upstream'
+          count_pattern "$app_logs" "upstream_no_live_count" 'no live upstreams'
+          count_pattern "$app_logs" "upstream_premature_close_count" 'upstream prematurely closed connection'
+
+          # Apollos tunnel sits on the external coolify network and targets http://api:3000.
+          # If it has expected OAuth/401 evidence without connection failures, the API is alive
+          # and only the web/default-network path is broken.
+          response="$(mktemp)"
           set +e
           curl --silent --show-error \
             --connect-timeout 10 --max-time 20 \
             -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
             -H "Accept: application/json" \
-            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=500" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${APOLLOS_TUNNEL_UUID}/logs?lines=500" \
             -o "$response"
-          rc=$?
+          tunnel_rc=$?
           set -e
-
-          echo "coolify_log_api_curl_exit=${rc}"
-          if [ "$rc" -ne 0 ]; then
-            exit 0
+          echo "tunnel_log_api_curl_exit=${tunnel_rc}"
+          if [ "$tunnel_rc" -eq 0 ] && jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+            jq -r '.logs' "$response" > "$tunnel_logs"
+            echo "tunnel_log_payload=available"
+            echo "tunnel_log_bytes=$(wc -c < "$tunnel_logs" | tr -d ' ')"
+            count_pattern "$tunnel_logs" "tunnel_expected_auth_count" 'Unauthorized|401|oauth'
+            count_pattern "$tunnel_logs" "tunnel_ready_count" 'ready|readyz|PASS'
+            count_pattern "$tunnel_logs" "tunnel_connection_failed_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable|dial tcp.*failed'
+            count_pattern "$tunnel_logs" "tunnel_api_target_count" 'api:3000'
+          else
+            echo "tunnel_log_payload=unavailable"
           fi
-
-          if ! jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
-            echo "coolify_log_payload=unavailable"
-            exit 0
-          fi
-
-          jq -r '.logs' "$response" > "$logs"
-
-          count_pattern() {
-            local label="$1"
-            local pattern="$2"
-            local count
-            count="$(grep -Eic "$pattern" "$logs" || true)"
-            echo "${label}=${count}"
-          }
-
-          echo "coolify_log_payload=available"
-          echo "coolify_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
-
-          # API process indicators. Counts only; never print raw log lines.
-          count_pattern "server_listening_count" 'Server listening'
-          count_pattern "startup_failure_count" 'Startup migration or publishing guard failed'
-          count_pattern "listen_error_count" 'Error listening on port'
-          count_pattern "database_auth_failure_count" 'password authentication failed|database authentication failed'
-          count_pattern "required_config_failure_count" 'required but was not provided|DATABASE_URL.*required|CLERK_PUBLISHABLE_KEY.*required|CLERK_SECRET_KEY.*required|SCHEDULER_SECRET.*required|GORILLADESK_API_KEY.*required'
-          count_pattern "module_load_failure_count" 'Cannot find module|ERR_MODULE_NOT_FOUND'
-          count_pattern "filesystem_failure_count" 'ENOENT'
-
-          # Nginx/upstream indicators. Counts only; never print request URIs or log lines.
-          count_pattern "nginx_502_count" ' 502 '
-          count_pattern "api_upstream_reference_count" 'api:3000'
-          count_pattern "upstream_host_not_found_count" 'host not found in upstream'
-          count_pattern "upstream_connect_failed_count" 'connect\(\) failed'
-          count_pattern "upstream_connection_refused_count" 'connection refused|ECONNREFUSED'
-          count_pattern "upstream_no_live_count" 'no live upstreams'
-          count_pattern "upstream_timeout_count" 'upstream timed out'
-          count_pattern "upstream_premature_close_count" 'upstream prematurely closed connection'
-          count_pattern "upstream_resolver_count" 'could not be resolved|resolver'
+          rm -f "$response" "$app_logs.meta"

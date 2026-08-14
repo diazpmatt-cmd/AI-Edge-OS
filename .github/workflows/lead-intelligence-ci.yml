@@ -68,6 +68,8 @@ jobs:
           src/__tests__/lead-intelligence-route.test.ts
           src/__tests__/lead-intelligence-review.test.ts
           src/__tests__/lead-intelligence-send.test.ts
+          src/__tests__/lead-intelligence-tenant-isolation.test.ts
+          src/lib/marketplace-email-intake-parser.test.ts
           src/__tests__/lead-intelligence-delivery.test.ts
           src/__tests__/lead-intelligence-conversion.test.ts
           src/__tests__/telnyx-webhook-security.test.ts

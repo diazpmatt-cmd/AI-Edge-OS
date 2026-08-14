@@ -36,15 +36,17 @@ export interface DerivedContentAutopilotControls {
   readonly nextGenerationAt: Date | null;
 }
 
+export type ContentAutopilotControlUpdate = Partial<{
+  autopilotEnabled: string;
+  autoMediaEnabled: string;
+  enginePaused: string;
+  nextGenerationAt: Date | null;
+  updatedAt: Date;
+}>;
+
 export interface ContentAutopilotControlStore {
   read(ownerUserId: string): Promise<ContentAutopilotControlRow | null>;
-  update(ownerUserId: string, values: Partial<{
-    autopilotEnabled: string;
-    autoMediaEnabled: string;
-    enginePaused: string;
-    nextGenerationAt: Date | null;
-    updatedAt: Date;
-  }>): Promise<boolean>;
+  update(ownerUserId: string, values: ContentAutopilotControlUpdate): Promise<boolean>;
 }
 
 export interface ContentAutopilotTenantGate {
@@ -142,7 +144,7 @@ export function deriveContentAutopilotControls(input: {
 }
 
 export const DEFAULT_CONTENT_AUTOPILOT_CONTROL_STORE: ContentAutopilotControlStore = Object.freeze({
-  async read(ownerUserId) {
+  async read(ownerUserId: string) {
     const [row] = await db
       .select({
         autopilotEnabled: autoContentSettingsTable.autopilotEnabled,
@@ -156,7 +158,7 @@ export const DEFAULT_CONTENT_AUTOPILOT_CONTROL_STORE: ContentAutopilotControlSto
     return row ?? null;
   },
 
-  async update(ownerUserId, values) {
+  async update(ownerUserId: string, values: ContentAutopilotControlUpdate) {
     const rows = await db
       .update(autoContentSettingsTable)
       .set(values)
@@ -167,14 +169,14 @@ export const DEFAULT_CONTENT_AUTOPILOT_CONTROL_STORE: ContentAutopilotControlSto
 });
 
 export const DEFAULT_CONTENT_AUTOPILOT_TENANT_GATE: ContentAutopilotTenantGate = Object.freeze({
-  async active(ownerUserId) {
+  async active(ownerUserId: string) {
     const result = await resolveClientActiveCheck(ownerUserId);
     return result.ok
       ? Object.freeze({ ok: true as const, clientId: result.clientId, clientName: result.clientName })
       : result;
   },
 
-  async registryReady(ownerUserId) {
+  async registryReady(ownerUserId: string) {
     const result = await resolveClientContentContextFromDb(ownerUserId);
     return result.found
       ? Object.freeze({ ok: true as const })
@@ -256,13 +258,7 @@ export async function executeContentAutopilotControl(
   }
 
   const before = toState(currentRow);
-  let update: Partial<{
-    autopilotEnabled: string;
-    autoMediaEnabled: string;
-    enginePaused: string;
-    nextGenerationAt: Date | null;
-    updatedAt: Date;
-  }>;
+  let update: ContentAutopilotControlUpdate;
 
   switch (input.action) {
     case "set_continuous_generation": {

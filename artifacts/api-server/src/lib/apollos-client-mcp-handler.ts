@@ -12,6 +12,11 @@ import {
   executeApollosWeeklyPublishingHealthMcpTool,
   isApollosWeeklyPublishingHealthMcpToolName,
 } from "./apollos-weekly-publishing-health.js";
+import {
+  APOLLOS_COMPETITIVE_EDGE_MCP_TOOL,
+  executeApollosCompetitiveEdgeMcpTool,
+  isApollosCompetitiveEdgeMcpToolName,
+} from "./competitive-edge-mcp.js";
 
 interface JsonRpcMessage {
   readonly jsonrpc?: unknown;
@@ -93,6 +98,7 @@ export class ApollosClientMcpJsonRpcHandler {
         tools: Object.freeze([
           ...this.runtime.listTools(),
           APOLLOS_WEEKLY_PUBLISHING_HEALTH_MCP_TOOL,
+          APOLLOS_COMPETITIVE_EDGE_MCP_TOOL,
           ...APOLLOS_CONTROL_PLANE_MCP_TOOLS,
         ]),
       }));
@@ -110,6 +116,12 @@ export class ApollosClientMcpJsonRpcHandler {
               actorUserId: input.context.userId,
               actorReference: input.context.actorReference,
             })
+          : isApollosCompetitiveEdgeMcpToolName(params.name)
+            ? await executeApollosCompetitiveEdgeMcpTool({
+                arguments: params.arguments,
+                actorUserId: input.context.userId,
+                actorReference: input.context.actorReference,
+              })
           : isApollosControlPlaneMcpToolName(params.name)
             ? await executeApollosControlPlaneMcpTool({
                 toolName: params.name,

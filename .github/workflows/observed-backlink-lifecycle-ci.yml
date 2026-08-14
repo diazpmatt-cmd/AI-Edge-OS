@@ -13,6 +13,8 @@ on:
       - "lib/db/src/schema/observed-backlinks.ts"
       - "lib/db/src/schema/index.ts"
       - "lib/db/migrations/0012_observed_backlink_lifecycle.sql"
+      - "artifacts/api-server/src/lib/observed-backlink-migrate.ts"
+      - "artifacts/api-server/src/index.ts"
       - ".github/workflows/observed-backlink-lifecycle-ci.yml"
   workflow_dispatch:
 
@@ -45,6 +47,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck shared libraries
         run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
       - name: Run lifecycle and persistence tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest

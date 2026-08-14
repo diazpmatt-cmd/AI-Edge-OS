@@ -74,7 +74,7 @@ export interface ContentAutopilotControlExecution {
   readonly verified: true;
   readonly before: ContentAutopilotControlState;
   readonly after: ContentAutopilotControlState;
-  readonly approvalBoundary: "human_approval_required";
+  readonly approvalBoundary: "human_approval_required" | "legacy_non_approval_required";
   readonly externalSideEffects: false;
   readonly providerCalls: false;
   readonly spendAuthorized: false;
@@ -96,12 +96,15 @@ function toState(row: ContentAutopilotControlRow): ContentAutopilotControlState 
 }
 
 /**
- * Canonical derivation shared with the existing PUT /auto-content/settings route.
- * It deliberately preserves the route's current behavior:
+ * Canonical bounded derivation for the operator-control path. It intentionally
+ * mirrors the existing PUT /auto-content/settings control semantics:
  * - enabling continuous generation unpauses the engine;
  * - first-time enable initializes nextGenerationAt;
  * - disabling continuous generation does not erase the existing schedule timestamp;
  * - omitted controls preserve their current values.
+ *
+ * The HTTP route is not refactored in A1; parity is regression-tested here so
+ * this slice remains small and reversible.
  */
 export function deriveContentAutopilotControls(input: {
   readonly existing: Pick<ContentAutopilotControlRow,
@@ -236,7 +239,7 @@ export async function executeContentAutopilotControl(
   if (requiresRegistry(input.action)) {
     const registry = await tenantGate.registryReady(ownerUserId);
     if (!registry.ok) {
-      throw new Error(`APOLLOS_MCP_CONTENT_AUTOPILOT_REGISTRY_${registry.reason.toUpperCase()}`);
+      throw new Error(`APOLLOS_MCP_CONTENT_AUTOPILOT_${registry.reason.toUpperCase()}`);
     }
   }
 
@@ -328,7 +331,9 @@ export async function executeContentAutopilotControl(
     verified: true as const,
     before,
     after,
-    approvalBoundary: "human_approval_required" as const,
+    approvalBoundary: after.approvalMode === "approval_required"
+      ? "human_approval_required" as const
+      : "legacy_non_approval_required" as const,
     externalSideEffects: false as const,
     providerCalls: false as const,
     spendAuthorized: false as const,

@@ -61,7 +61,7 @@ jobs:
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
       - name: Run DataForSEO strict proof adapter tests
-        run: pnpm --filter @workspace/db exec vitest run src/dataforseo-backlink-proof-mode.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run ../../lib/db/src/dataforseo-backlink-proof-mode.test.ts
       - name: Run Authority proof pricing, policy, execution, and isolation tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run

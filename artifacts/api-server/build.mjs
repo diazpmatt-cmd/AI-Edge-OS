@@ -23,6 +23,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/dab-git-worker.ts"),
       path.resolve(artifactDir, "src/apollos-campaign-worker.ts"),
       path.resolve(artifactDir, "src/apollos-repair-worker.ts"),
+      path.resolve(artifactDir, "src/lead-email-worker.ts"),
     ],
     platform: "node",
     bundle: true,

@@ -8,6 +8,7 @@ import { migrateAuthorityOutreachDrafts } from "./lib/authority-outreach-draft-m
 import { migrateAuthorityTargetContacts } from "./lib/authority-target-contact-migrate.js";
 import { migrateAuthorityBacklinkWinEvidence } from "./lib/authority-backlink-win-evidence-migrate.js";
 import { migrateObservedBacklinks } from "./lib/observed-backlink-migrate.js";
+import { migrateBacklinkMeasurementHistory } from "./lib/backlink-measurement-migrate.js";
 import { migrateSchema } from "./lib/schema-migrate.js";
 import { startPublishingInterruptionRecoveryMonitor } from "./lib/publishing-interruption-recovery.js";
 import { bootstrapPublishingMutationGuard } from "./lib/publishing-mutation-guard.js";
@@ -28,6 +29,7 @@ if (Number.isNaN(port) || port <= 0) {
 
 migrateSchema()
   .then(() => migrateObservedBacklinks())
+  .then(() => migrateBacklinkMeasurementHistory())
   .then(() => migrateLeadAuditEvents())
   .then(() => migrateAgentTasks())
   .then(() => migrateAuthorityOutreachDrafts())

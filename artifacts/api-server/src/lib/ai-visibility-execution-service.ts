@@ -29,6 +29,7 @@ import {
   socialConnectionsTable,
   type AiVisibilityReadModel,
   type AiVisibilityAuthorizedScope,
+  type AiVisibilityCoverageDiagnostic,
   type LocalPresenceProfile,
   type LocalPresenceChannel,
   type ConnectedGoogleSummary,
@@ -81,45 +82,70 @@ interface MinimalPlatformDelivery {
   createdAt:     Date;
 }
 
-// ── Pure helper: build authorised scope from profile + service IDs ─────────────
+function parseServiceAreas(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed
+      .filter((item): item is string => typeof item === "string")
+      .map(item => item.trim())
+      .filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+// ── Pure helper: build authorised scope from canonical service areas ──────────
 
 export function buildAuthorizedScope(
   clientId:   string,
   serviceIds: readonly string[],
   profile:    LocalPresenceProfile | null,
+  clientServiceAreasJson: string | null = null,
 ): AiVisibilityAuthorizedScope {
-  const geographies: string[] = [];
-
-  // Prefer service areas JSON over city/state fallback.
-  if (profile?.serviceAreasJson) {
-    try {
-      const parsed = JSON.parse(profile.serviceAreasJson);
-      if (Array.isArray(parsed)) {
-        geographies.push(...parsed.filter((g): g is string => typeof g === "string" && g.length > 0));
-      }
-    } catch { /* ignore malformed JSON */ }
-  }
-
-  if (!geographies.length && profile?.city && profile?.state) {
-    geographies.push(`${profile.city}, ${profile.state}`);
-  }
-
-  // Guarantee at least one value so geography-bearing observations are not
-  // uniformly rejected. "unspecified" is a valid normalised geography token.
-  if (!geographies.length) geographies.push("unspecified");
+  // Geography resolution intentionally mirrors AiQueryScanService:
+  //   1. local_presence_profiles.service_areas_json
+  //   2. clients.service_areas
+  // HQ city/state is not an authorization source, and no synthetic geography
+  // such as "unspecified" may be introduced.
+  const profileAreas = parseServiceAreas(profile?.serviceAreasJson);
+  const clientAreas = profileAreas.length ? [] : parseServiceAreas(clientServiceAreasJson);
+  const geographies = profileAreas.length ? profileAreas : clientAreas;
 
   return {
     clientId,
-    activeServiceIds:     Object.freeze([...serviceIds]),
+    activeServiceIds:      Object.freeze([...serviceIds]),
     authorizedGeographies: Object.freeze(geographies),
-    prohibitedPhrases:    Object.freeze([] as string[]),
+    prohibitedPhrases:     Object.freeze([] as string[]),
   };
 }
 
 // ── Pure helper: derive primary geography string ───────────────────────────────
 
-export function derivePrimaryGeography(scope: AiVisibilityAuthorizedScope): string {
-  return scope.authorizedGeographies[0] ?? "unspecified";
+export function derivePrimaryGeography(scope: AiVisibilityAuthorizedScope): string | null {
+  return scope.authorizedGeographies[0] ?? null;
+}
+
+const GEOGRAPHY_SCOPED_SOURCES: readonly AiVisibilityCoverageDiagnostic["source"][] = Object.freeze([
+  "local_presence",
+  "google_business",
+  "discovery",
+  "backlink",
+  "reviews",
+  "content",
+  "google_search_console",
+  "google_analytics",
+  "ai_query",
+]);
+
+function noAuthorizedGeographyCoverage(): AiVisibilityCoverageDiagnostic[] {
+  return GEOGRAPHY_SCOPED_SOURCES.map(source => ({
+    source,
+    status: "no_observation",
+    detail: "AI Visibility execution skipped because no canonical authorized service geography exists in Local Presence service areas or clients.service_areas.",
+    observedAt: null,
+  }));
 }
 
 // ── Execution service ─────────────────────────────────────────────────────────
@@ -139,17 +165,34 @@ export class AiVisibilityExecutionService {
     // ── 1. Resolve service keys from client_services table ────────────────────
     const serviceIds = await this.queryActiveServiceKeys(clientId);
 
-    // ── 2. Query local presence sources (profile + channels) ──────────────────
-    const [profiles, channels] = await Promise.all([
+    // ── 2. Query canonical geography sources + Local Presence channels ────────
+    const [profiles, channels, clientServiceAreasJson] = await Promise.all([
       this.db.select().from(localPresenceProfilesTable)
         .where(eq(localPresenceProfilesTable.clientId, clientId))
         .limit(1),
       this.db.select().from(localPresenceChannelsTable)
         .where(eq(localPresenceChannelsTable.clientId, clientId)),
+      this.queryClientServiceAreas(clientId),
     ]);
-    const profile  = profiles[0] ?? null;
-    const scope    = buildAuthorizedScope(clientId, serviceIds, profile);
+    const profile   = profiles[0] ?? null;
+    const scope     = buildAuthorizedScope(clientId, serviceIds, profile, clientServiceAreasJson);
     const geography = derivePrimaryGeography(scope);
+
+    // Geography is an authorization boundary. Do not query downstream adapters,
+    // provider-backed importers, or stored AI-query evidence under an invented
+    // location when neither canonical service-area source has a value.
+    if (!geography) {
+      const model = composeAiVisibilityReadModel({
+        scope,
+        observations: [],
+        coverage: noAuthorizedGeographyCoverage(),
+        generatedAt,
+      });
+      this.persistResult(clientId, model, generatedAt).catch(err =>
+        console.error("[ai-visibility] persist error:", err),
+      );
+      return model;
+    }
 
     // ── 3. Parallel canonical queries ─────────────────────────────────────────
     const aiQuerySvc    = new AiQueryScanService(this.pool, this.db);
@@ -282,6 +325,22 @@ export class AiVisibilityExecutionService {
       if (err?.code === "42P01") return [];
       console.warn("[ai-visibility] service key query warning:", err?.message);
       return [];
+    }
+  }
+
+  // ── Private: canonical client service-area fallback ──────────────────────────
+
+  private async queryClientServiceAreas(clientId: string): Promise<string | null> {
+    try {
+      const { rows } = await this.pool.query<{ service_areas: string | null }>(
+        `SELECT service_areas FROM clients WHERE id = $1 LIMIT 1`,
+        [clientId],
+      );
+      return rows[0]?.service_areas ?? null;
+    } catch (err: any) {
+      if (err?.code === "42P01") return null;
+      console.warn("[ai-visibility] client service-area query warning:", err?.message);
+      return null;
     }
   }
 

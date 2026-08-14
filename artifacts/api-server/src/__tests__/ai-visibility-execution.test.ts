@@ -105,38 +105,49 @@ const MOCK_GOOGLE_CONN = {
 // ── Unit tests: pure helpers ──────────────────────────────────────────────────
 
 describe("buildAuthorizedScope", () => {
-  it("uses serviceAreasJson when present", () => {
-    const scope = buildAuthorizedScope(CLIENT_ID, ["bed_bug_treatment"], FOLEY_PROFILE);
+  it("uses Local Presence serviceAreasJson when present", () => {
+    const scope = buildAuthorizedScope(CLIENT_ID, ["bed_bug_treatment"], FOLEY_PROFILE, '["Mobile, AL"]');
     expect(scope.clientId).toBe(CLIENT_ID);
     expect(scope.activeServiceIds).toContain("bed_bug_treatment");
-    expect(scope.authorizedGeographies).toContain("Foley, AL");
-    expect(scope.authorizedGeographies).toContain("Gulf Shores, AL");
+    expect(scope.authorizedGeographies).toEqual(["Foley, AL", "Gulf Shores, AL"]);
     expect(scope.prohibitedPhrases).toHaveLength(0);
   });
 
-  it("falls back to city/state when serviceAreasJson is absent", () => {
+  it("falls back only to canonical clients.service_areas", () => {
     const profile = { ...FOLEY_PROFILE, serviceAreasJson: null } as unknown as LocalPresenceProfile;
-    const scope = buildAuthorizedScope(CLIENT_ID, [], profile);
-    expect(scope.authorizedGeographies).toContain("Foley, AL");
+    const scope = buildAuthorizedScope(CLIENT_ID, [], profile, '["Mobile, AL","Daphne, AL"]');
+    expect(scope.authorizedGeographies).toEqual(["Mobile, AL", "Daphne, AL"]);
+    expect(scope.authorizedGeographies).not.toContain("Foley, AL");
   });
 
-  it("uses 'unspecified' when profile has no geographic data", () => {
-    const profile = { ...FOLEY_PROFILE, city: null, state: null, serviceAreasJson: null } as unknown as LocalPresenceProfile;
-    const scope = buildAuthorizedScope(CLIENT_ID, [], profile);
-    expect(scope.authorizedGeographies).toContain("unspecified");
+  it("does not authorize HQ city/state when explicit service areas are absent", () => {
+    const profile = { ...FOLEY_PROFILE, serviceAreasJson: null } as unknown as LocalPresenceProfile;
+    const scope = buildAuthorizedScope(CLIENT_ID, [], profile, null);
+    expect(scope.authorizedGeographies).toEqual([]);
   });
 
-  it("uses 'unspecified' when profile is null", () => {
-    const scope = buildAuthorizedScope(CLIENT_ID, [], null);
-    expect(scope.authorizedGeographies).toContain("unspecified");
-    expect(scope.authorizedGeographies.length).toBeGreaterThan(0);
+  it("does not synthesize unspecified when profile and client service areas are absent", () => {
+    const scope = buildAuthorizedScope(CLIENT_ID, [], null, null);
+    expect(scope.authorizedGeographies).toEqual([]);
+    expect(scope.authorizedGeographies).not.toContain("unspecified");
+  });
+
+  it("ignores malformed service-area JSON rather than authorizing a fallback geography", () => {
+    const profile = { ...FOLEY_PROFILE, serviceAreasJson: "not-json" } as unknown as LocalPresenceProfile;
+    const scope = buildAuthorizedScope(CLIENT_ID, [], profile, "also-not-json");
+    expect(scope.authorizedGeographies).toEqual([]);
   });
 });
 
 describe("derivePrimaryGeography", () => {
-  it("returns first geography from scope", () => {
+  it("returns first canonical geography from scope", () => {
     const scope = buildAuthorizedScope(CLIENT_ID, [], FOLEY_PROFILE);
     expect(derivePrimaryGeography(scope)).toBe("Foley, AL");
+  });
+
+  it("returns null when no authorized geography exists", () => {
+    const scope = buildAuthorizedScope(CLIENT_ID, [], null, null);
+    expect(derivePrimaryGeography(scope)).toBeNull();
   });
 });
 
@@ -176,18 +187,23 @@ describe("AiVisibilityExecutionService.execute", () => {
     expect(Array.isArray(model.coverage)).toBe(true);
   });
 
-  it("emits no_observation / not_connected / not_implemented when client has no data", async () => {
+  it("fails closed with explicit unavailable coverage when canonical geography is missing", async () => {
     const model = await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
-    const statuses = model.coverage.map(c => c.status);
-    expect(statuses.every(s => s !== "available")).toBe(true);
+    expect(model.recommendations).toEqual([]);
+    expect(model.rejected).toEqual([]);
+    expect(model.coverage).toHaveLength(9);
+    expect(model.coverage.every(item => item.status === "no_observation")).toBe(true);
+    expect(model.coverage.every(item => item.detail.includes("no canonical authorized service geography"))).toBe(true);
+    expect(model.summary.availableSourceCount).toBe(0);
+  });
 
-    // C9R-6: reviews now report not_connected (no GBP social connection in mock),
-    // never the legacy not_tenant_safe status.
-    const reviewCov = model.coverage.find(c => c.source === "reviews");
-    expect(reviewCov?.status).toBe("not_connected");
-
-    const scCov = model.coverage.find(c => c.source === "google_search_console");
-    expect(scCov?.status).toBe("not_implemented");
+  it("does not invoke downstream geography-scoped data sources when geography is absent", async () => {
+    await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
+    expect(mockSelectFn).toHaveBeenCalledTimes(2); // profile + channels only
+    const sqlCalls = mockPoolQuery.mock.calls.map(([sql]: [string]) => String(sql));
+    expect(sqlCalls.some(sql => sql.includes("ai_query_scans"))).toBe(false);
+    expect(sqlCalls.some(sql => sql.includes("platform_deliveries"))).toBe(false);
+    expect(sqlCalls.some(sql => sql.includes("backlink_opportunities"))).toBe(false);
   });
 
   it("emits available local_presence coverage and a recommendation when channel exists", async () => {
@@ -240,6 +256,11 @@ describe("AiVisibilityExecutionService.execute", () => {
     mockSelectFn.mockImplementation(() => ({
       from: vi.fn(() => {
         callIdx++;
+        if (callIdx === 1) {
+          return {
+            where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([FOLEY_PROFILE])) })),
+          };
+        }
         const empty: object[] = [];
         const google = callIdx === 5 ? [MOCK_GOOGLE_CONN] : empty;
         return {
@@ -272,7 +293,7 @@ describe("AiVisibilityExecutionService.execute", () => {
   });
 
   it("resolves without throwing when pool queries fail with 42P01", async () => {
-    // All pool queries (client_services, backlinks, persist) fail with table-not-found.
+    // All pool queries (client_services, clients service areas, persist) fail with table-not-found.
     // The service must not crash — it degrades gracefully and still returns a valid model.
     const pgError = Object.assign(new Error("relation missing"), { code: "42P01" });
     mockPoolQuery.mockRejectedValue(pgError);
@@ -412,7 +433,7 @@ describe("AiVisibilityExecutionService — service_key column regression (C9R-7)
         { service_key: "bed_bug_inspection" },
         { service_key: "roaches" },
       ] })
-      .mockResolvedValue({ rows: [] }); // all subsequent calls (backlinks, persist, etc.)
+      .mockResolvedValue({ rows: [] }); // all subsequent calls (client service areas, persist, etc.)
 
     const model = await svc.execute({ clientId: CLIENT_ID, userId: USER_ID });
     expect(model).toHaveProperty("recommendations");

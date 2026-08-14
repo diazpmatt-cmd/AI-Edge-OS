@@ -7,8 +7,11 @@ on:
       - "lib/db/src/backlink-inventory-provider.ts"
       - "lib/db/src/dataforseo-backlink-inventory-adapter.ts"
       - "lib/db/src/dataforseo-backlink-inventory-adapter.test.ts"
+      - "lib/db/src/backlink-inventory-cycle.ts"
+      - "lib/db/src/backlink-inventory-cycle.test.ts"
       - "lib/db/src/observed-backlinks.ts"
       - "lib/db/src/observed-backlink-lifecycle.ts"
+      - "lib/db/src/observed-backlink-repository.ts"
       - "lib/db/src/backlink-provider-config.ts"
       - ".github/workflows/backlink-inventory-provider-ci.yml"
   workflow_dispatch:
@@ -22,7 +25,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck and inventory completeness tests
+    name: Typecheck and inventory orchestration tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -42,12 +45,13 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck shared libraries
         run: pnpm run typecheck:libs
-      - name: Run inventory-provider and lifecycle safety tests
+      - name: Run inventory-provider, orchestration, and lifecycle safety tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest
           --root ../..
           run
           lib/db/src/dataforseo-backlink-inventory-adapter.test.ts
+          lib/db/src/backlink-inventory-cycle.test.ts
           lib/db/src/observed-backlink-lifecycle.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

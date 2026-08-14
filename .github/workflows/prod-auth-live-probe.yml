@@ -63,7 +63,7 @@ jobs:
 
           echo "probe_failures=${failures}"
 
-      - name: Inspect sanitized Coolify startup signals
+      - name: Inspect sanitized Coolify startup and upstream signals
         if: always()
         shell: bash
         env:
@@ -87,7 +87,7 @@ jobs:
             --connect-timeout 10 --max-time 20 \
             -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
             -H "Accept: application/json" \
-            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=300" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=500" \
             -o "$response"
           rc=$?
           set -e
@@ -114,11 +114,23 @@ jobs:
 
           echo "coolify_log_payload=available"
           echo "coolify_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
+
+          # API process indicators. Counts only; never print raw log lines.
           count_pattern "server_listening_count" 'Server listening'
           count_pattern "startup_failure_count" 'Startup migration or publishing guard failed'
           count_pattern "listen_error_count" 'Error listening on port'
-          count_pattern "connection_refused_count" 'ECONNREFUSED|connection refused'
           count_pattern "database_auth_failure_count" 'password authentication failed|database authentication failed'
           count_pattern "required_config_failure_count" 'required but was not provided|DATABASE_URL.*required|CLERK_PUBLISHABLE_KEY.*required|CLERK_SECRET_KEY.*required|SCHEDULER_SECRET.*required|GORILLADESK_API_KEY.*required'
           count_pattern "module_load_failure_count" 'Cannot find module|ERR_MODULE_NOT_FOUND'
           count_pattern "filesystem_failure_count" 'ENOENT'
+
+          # Nginx/upstream indicators. Counts only; never print request URIs or log lines.
+          count_pattern "nginx_502_count" ' 502 '
+          count_pattern "api_upstream_reference_count" 'api:3000'
+          count_pattern "upstream_host_not_found_count" 'host not found in upstream'
+          count_pattern "upstream_connect_failed_count" 'connect\(\) failed'
+          count_pattern "upstream_connection_refused_count" 'connection refused|ECONNREFUSED'
+          count_pattern "upstream_no_live_count" 'no live upstreams'
+          count_pattern "upstream_timeout_count" 'upstream timed out'
+          count_pattern "upstream_premature_close_count" 'upstream prematurely closed connection'
+          count_pattern "upstream_resolver_count" 'could not be resolved|resolver'

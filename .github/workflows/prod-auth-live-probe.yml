@@ -19,32 +19,37 @@ jobs:
         run: |
           set -euo pipefail
 
+          failures=0
+
           probe() {
             local label="$1"
             local url="$2"
             local body
             local headers
+            local rc
+            local status
             body="$(mktemp)"
             headers="$(mktemp)"
 
             echo "=== ${label} ==="
-            if ! curl --fail-with-body --silent --show-error \
+            set +e
+            curl --silent --show-error \
               --connect-timeout 10 --max-time 20 \
               --dump-header "$headers" --output "$body" \
-              "$url"; then
-              rc=$?
-              status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' "$headers")"
-              echo "curl_exit=${rc}"
-              echo "status=${status:-unavailable}"
-              grep -iE '^(content-type|location|server|via|x-request-id):' "$headers" || true
-              rm -f "$body" "$headers"
-              return 1
-            fi
+              "$url"
+            rc=$?
+            set -e
 
             status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' "$headers")"
+            echo "curl_exit=${rc}"
             echo "status=${status:-unavailable}"
             grep -iE '^(content-type|location|server|via|x-request-id):' "$headers" || true
             echo "body_bytes=$(wc -c < "$body" | tr -d ' ')"
+
+            if [ "$rc" -ne 0 ] || [ -z "$status" ] || [ "$status" -ge 500 ]; then
+              failures=$((failures + 1))
+            fi
+
             rm -f "$body" "$headers"
           }
 
@@ -52,5 +57,68 @@ jobs:
           probe "admin_login" "https://aiedgesolutions.online/admin/login"
           probe "admin_dashboard" "https://aiedgesolutions.online/admin/dashboard"
           probe "competitor_intelligence" "https://aiedgesolutions.online/admin/competitor-intelligence"
+          probe "api_health" "https://aiedgesolutions.online/api/healthz"
           probe "api_version" "https://aiedgesolutions.online/api/version"
           probe "clerk_environment" "https://aiedgesolutions.online/api/__clerk/v1/environment"
+
+          echo "probe_failures=${failures}"
+
+      - name: Inspect sanitized Coolify startup signals
+        if: always()
+        shell: bash
+        env:
+          COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL || secrets.COOLIFY_BASE_URL }}
+          COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          COOLIFY_APP_UUID: a6y7jyyedbgfwvlh7vag7xh8
+        run: |
+          set -euo pipefail
+
+          if [ -z "${COOLIFY_BASE_URL:-}" ] || [ -z "${COOLIFY_DEPLOY_TOKEN:-}" ]; then
+            echo "coolify_log_probe=config_unavailable"
+            exit 0
+          fi
+
+          response="$(mktemp)"
+          logs="$(mktemp)"
+          trap 'rm -f "$response" "$logs"' EXIT
+
+          set +e
+          curl --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=300" \
+            -o "$response"
+          rc=$?
+          set -e
+
+          echo "coolify_log_api_curl_exit=${rc}"
+          if [ "$rc" -ne 0 ]; then
+            exit 0
+          fi
+
+          if ! jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+            echo "coolify_log_payload=unavailable"
+            exit 0
+          fi
+
+          jq -r '.logs' "$response" > "$logs"
+
+          count_pattern() {
+            local label="$1"
+            local pattern="$2"
+            local count
+            count="$(grep -Eic "$pattern" "$logs" || true)"
+            echo "${label}=${count}"
+          }
+
+          echo "coolify_log_payload=available"
+          echo "coolify_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
+          count_pattern "server_listening_count" 'Server listening'
+          count_pattern "startup_failure_count" 'Startup migration or publishing guard failed'
+          count_pattern "listen_error_count" 'Error listening on port'
+          count_pattern "connection_refused_count" 'ECONNREFUSED|connection refused'
+          count_pattern "database_auth_failure_count" 'password authentication failed|database authentication failed'
+          count_pattern "required_config_failure_count" 'required but was not provided|DATABASE_URL.*required|CLERK_PUBLISHABLE_KEY.*required|CLERK_SECRET_KEY.*required|SCHEDULER_SECRET.*required|GORILLADESK_API_KEY.*required'
+          count_pattern "module_load_failure_count" 'Cannot find module|ERR_MODULE_NOT_FOUND'
+          count_pattern "filesystem_failure_count" 'ENOENT'

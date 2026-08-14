@@ -6,6 +6,9 @@ on:
     paths:
       - "artifacts/api-server/src/lib/authority-proof-run-policy.ts"
       - "artifacts/api-server/src/lib/authority-proof-run-policy.test.ts"
+      - "artifacts/api-server/src/lib/authority-proof-preflight.ts"
+      - "artifacts/api-server/src/lib/authority-proof-preflight.test.ts"
+      - "artifacts/api-server/src/lib/authority-scheduled-execution-plan.ts"
       - "lib/db/src/discovery-budget-guard.ts"
       - "lib/db/src/index.ts"
       - ".github/workflows/authority-proof-policy-ci.yml"
@@ -42,7 +45,10 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
-      - name: Run Authority proof policy tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/lib/authority-proof-run-policy.test.ts
+      - name: Run Authority proof policy and preflight tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/lib/authority-proof-run-policy.test.ts
+          src/lib/authority-proof-preflight.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

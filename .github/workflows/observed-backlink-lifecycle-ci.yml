@@ -14,6 +14,7 @@ on:
       - "lib/db/src/schema/index.ts"
       - "lib/db/migrations/0012_observed_backlink_lifecycle.sql"
       - "artifacts/api-server/src/lib/observed-backlink-migrate.ts"
+      - "artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts"
       - "artifacts/api-server/src/index.ts"
       - ".github/workflows/observed-backlink-lifecycle-ci.yml"
   workflow_dispatch:
@@ -56,5 +57,6 @@ jobs:
           run
           lib/db/src/observed-backlink-lifecycle.test.ts
           lib/db/src/observed-backlink-repository.test.ts
+          artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

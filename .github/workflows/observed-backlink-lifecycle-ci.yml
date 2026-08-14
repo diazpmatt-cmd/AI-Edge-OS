@@ -13,9 +13,16 @@ on:
       - "lib/db/src/schema/observed-backlinks.ts"
       - "lib/db/src/schema/index.ts"
       - "lib/db/migrations/0012_observed_backlink_lifecycle.sql"
+      - "lib/db/migrations/0013_backlink_measurement_provenance.sql"
       - "artifacts/api-server/src/lib/observed-backlink-migrate.ts"
+      - "artifacts/api-server/src/lib/backlink-measurement-migrate.ts"
+      - "artifacts/api-server/src/lib/observed-backlink-measurement.ts"
+      - "artifacts/api-server/src/lib/observed-backlink-measurement.test.ts"
+      - "artifacts/api-server/src/routes/backlink-measurement.ts"
       - "artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts"
+      - "artifacts/api-server/src/__tests__/backlink-measurement-read-surface.test.ts"
       - "artifacts/api-server/src/index.ts"
+      - "artifacts/api-server/src/app.ts"
       - ".github/workflows/observed-backlink-lifecycle-ci.yml"
   workflow_dispatch:
 
@@ -28,7 +35,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck and lifecycle persistence tests
+    name: Typecheck and lifecycle Measurement tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -50,7 +57,7 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
-      - name: Run lifecycle and persistence tests
+      - name: Run lifecycle, persistence, snapshot, and read-surface tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest
           --root ../..
@@ -58,5 +65,7 @@ jobs:
           lib/db/src/observed-backlink-lifecycle.test.ts
           lib/db/src/observed-backlink-repository.test.ts
           artifacts/api-server/src/__tests__/observed-backlink-bootstrap.test.ts
+          artifacts/api-server/src/lib/observed-backlink-measurement.test.ts
+          artifacts/api-server/src/__tests__/backlink-measurement-read-surface.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

@@ -125,14 +125,31 @@ describe("Apollos Referral pilot implementation safety", () => {
     expect(dispatchSource).toContain("dispatchReferralDelivery");
   });
 
-  it("keeps readiness aggregate-only and local GorillaDesk inspection read-only", () => {
+  it("keeps readiness non-PII and local GorillaDesk inspection read-only", () => {
     expect(statusSource).toContain("COUNT(*)::int");
     expect(statusSource).toContain("FROM gorilladesk_customers WHERE project_id = $1");
     expect(statusSource).toContain("externalCalls: false");
     expect(statusSource).toContain("sideEffects: false");
-    expect(statusSource).not.toContain("recipient_destination");
     expect(statusSource).not.toContain("referred_phone");
     expect(statusSource).not.toContain("referred_email");
     expect(statusSource).not.toContain("external_id");
+  });
+
+  it("selects at most ten opaque invitations only when approval and consent are still valid", () => {
+    expect(statusSource).toContain("SELECT ri.id");
+    expect(statusSource).toContain("LIMIT 10");
+    expect(statusSource).toContain("ri.status = 'approved'");
+    expect(statusSource).toContain("ri.delivery_state = 'not_dispatched'");
+    expect(statusSource).toContain("ri.consent_source IS NOT NULL");
+    expect(statusSource).toContain("ri.consent_at IS NOT NULL");
+    expect(statusSource).toContain("rcp.status = 'opted_in'");
+    expect(statusSource).toContain("rcp.consent_source IS NOT NULL");
+    expect(statusSource).toContain("rcp.consent_at IS NOT NULL");
+    expect(statusSource).toContain("rda.requested_mode = 'live'");
+    expect(statusSource).toContain("rda.status IN ('dispatching', 'delivered')");
+    expect(statusSource).toContain("eligibleInvitationIds");
+    expect(statusSource).not.toContain("recipientName:");
+    expect(statusSource).not.toContain("recipientDestination:");
+    expect(statusSource).not.toContain("initialMessage:");
   });
 });

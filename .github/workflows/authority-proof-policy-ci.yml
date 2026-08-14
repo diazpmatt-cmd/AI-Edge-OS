@@ -1,0 +1,48 @@
+name: Authority Proof Policy CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/lib/authority-proof-run-policy.ts"
+      - "artifacts/api-server/src/lib/authority-proof-run-policy.test.ts"
+      - "lib/db/src/discovery-budget-guard.ts"
+      - "lib/db/src/index.ts"
+      - ".github/workflows/authority-proof-policy-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authority-proof-policy-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck and proof-policy tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/authority_proof_ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run Authority proof policy tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/lib/authority-proof-run-policy.test.ts
+      - name: Verify clean diff formatting
+        run: git diff --check

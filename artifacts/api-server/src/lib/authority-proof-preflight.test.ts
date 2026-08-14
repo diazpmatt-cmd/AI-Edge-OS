@@ -7,7 +7,7 @@ const plan: AuthorityScheduledExecutionPlan = Object.freeze({
   clientId: "00000000-0000-4000-8000-000000000001",
   providerId: "dataforseo_backlinks",
   providerRevision: "dataforseo-backlinks-v1",
-  capabilities: Object.freeze(["referring_domains"]),
+  capabilities: Object.freeze(["referring_domains"] as const),
   discovery: Object.freeze({
     clientId: "00000000-0000-4000-8000-000000000001",
     clientDomain: "bedbugsbeyond.com",

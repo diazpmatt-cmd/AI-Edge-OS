@@ -25,6 +25,7 @@ export * from "./service-registry";
 export * from "./discovery";
 export * from "./discovery-schedules";
 export * from "./backlinks";
+export * from "./observed-backlinks";
 export * from "./authority-outreach-drafts";
 export * from "./authority-target-contacts";
 export * from "./authority-profiles";

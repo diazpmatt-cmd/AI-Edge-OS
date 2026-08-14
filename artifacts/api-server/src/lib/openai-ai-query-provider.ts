@@ -42,7 +42,11 @@ const SYSTEM_PROMPT =
 // ── Provider implementation ───────────────────────────────────────────────────
 
 export class OpenAiQueryProvider implements AiQueryProvider {
-  readonly name = "openai";
+  /**
+   * This is a model-only observation, not a direct measurement of the ChatGPT
+   * product or any web-grounded OpenAI search surface.
+   */
+  readonly name = "openai_model_observation";
   readonly model: string;
 
   constructor() {

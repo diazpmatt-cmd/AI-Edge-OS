@@ -4,6 +4,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "lib/db/package.json"
+      - "lib/db/src/observed-backlinks.ts"
       - "lib/db/src/observed-backlink-lifecycle.ts"
       - "lib/db/src/observed-backlink-lifecycle.test.ts"
       - "lib/db/src/observed-backlink-repository.ts"
@@ -45,8 +47,10 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Run lifecycle and persistence tests
         run: >-
-          pnpm --filter @workspace/api-server exec vitest run
-          ../../lib/db/src/observed-backlink-lifecycle.test.ts
-          ../../lib/db/src/observed-backlink-repository.test.ts
+          pnpm --filter @workspace/api-server exec vitest
+          --root ../..
+          run
+          lib/db/src/observed-backlink-lifecycle.test.ts
+          lib/db/src/observed-backlink-repository.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

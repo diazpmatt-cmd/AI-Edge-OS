@@ -17,6 +17,11 @@ import {
   executeApollosCompetitiveEdgeMcpTool,
   isApollosCompetitiveEdgeMcpToolName,
 } from "./competitive-edge-mcp.js";
+import {
+  APOLLOS_CONTENT_AUTOPILOT_CONTROL_MCP_TOOL,
+  executeApollosContentAutopilotControlMcpTool,
+  isApollosContentAutopilotControlMcpToolName,
+} from "./content-autopilot-control-mcp.js";
 
 interface JsonRpcMessage {
   readonly jsonrpc?: unknown;
@@ -99,6 +104,7 @@ export class ApollosClientMcpJsonRpcHandler {
           ...this.runtime.listTools(),
           APOLLOS_WEEKLY_PUBLISHING_HEALTH_MCP_TOOL,
           APOLLOS_COMPETITIVE_EDGE_MCP_TOOL,
+          APOLLOS_CONTENT_AUTOPILOT_CONTROL_MCP_TOOL,
           ...APOLLOS_CONTROL_PLANE_MCP_TOOLS,
         ]),
       }));
@@ -118,6 +124,12 @@ export class ApollosClientMcpJsonRpcHandler {
             })
           : isApollosCompetitiveEdgeMcpToolName(params.name)
             ? await executeApollosCompetitiveEdgeMcpTool({
+                arguments: params.arguments,
+                actorUserId: input.context.userId,
+                actorReference: input.context.actorReference,
+              })
+          : isApollosContentAutopilotControlMcpToolName(params.name)
+            ? await executeApollosContentAutopilotControlMcpTool({
                 arguments: params.arguments,
                 actorUserId: input.context.userId,
                 actorReference: input.context.actorReference,

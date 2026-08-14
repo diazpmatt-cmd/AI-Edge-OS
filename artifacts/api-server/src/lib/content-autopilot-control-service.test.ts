@@ -183,7 +183,7 @@ describe("executeContentAutopilotControl", () => {
     expect(fake.updateCalls).toBe(0);
   });
 
-  it("still permits safety-reducing actions on a legacy approval row", async () => {
+  it("still permits safety-reducing actions on a legacy approval row without relabeling it safe", async () => {
     const fake = fakeStore(row({
       approvalMode: "auto_schedule",
       autopilotEnabled: "true",
@@ -198,6 +198,7 @@ describe("executeContentAutopilotControl", () => {
 
     expect(disabled.after.autopilotEnabled).toBe(false);
     expect(disabled.after.approvalMode).toBe("auto_schedule");
+    expect(disabled.approvalBoundary).toBe("legacy_non_approval_required");
   });
 
   it("rejects a cross-client owner mapping before mutation", async () => {
@@ -238,7 +239,7 @@ describe("executeContentAutopilotControl", () => {
     }, {
       store: fake.store,
       tenantGate: tenantGate({ registryReady: async () => ({ ok: false, reason: "registry_invalid" }) }),
-    })).rejects.toThrow("APOLLOS_MCP_CONTENT_AUTOPILOT_REGISTRY_REGISTRY_INVALID");
+    })).rejects.toThrow("APOLLOS_MCP_CONTENT_AUTOPILOT_REGISTRY_INVALID");
     expect(fake.updateCalls).toBe(0);
   });
 });

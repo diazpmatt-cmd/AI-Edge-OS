@@ -14,6 +14,7 @@ on:
       - lib/**
       - deploy/**
       - .github/workflows/ghcr-production-images.yml
+      - .github/workflows/coolify-production-deploy.yml
   push:
     branches: [main]
     paths:
@@ -28,6 +29,7 @@ on:
       - lib/**
       - deploy/**
       - .github/workflows/ghcr-production-images.yml
+      - .github/workflows/coolify-production-deploy.yml
   workflow_dispatch:
 
 permissions:

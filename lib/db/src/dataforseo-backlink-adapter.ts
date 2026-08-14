@@ -38,6 +38,11 @@ import { BacklinkProviderError, buildBacklinkAuthHeader } from "./backlink-provi
 
 type FetchFn = typeof globalThis.fetch;
 
+export interface DataForSEOBacklinkAdapterOptions {
+  /** Proof-only fail-closed mode. Default false preserves normal best-effort discovery semantics. */
+  readonly strictFailures?: boolean;
+}
+
 // ── Spam threshold ────────────────────────────────────────────────────────────
 
 /** Domains with spam_score above this are excluded from results. */
@@ -300,6 +305,7 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
   constructor(
     private readonly config:   DataForSEOBacklinkConfig,
     private readonly fetchFn:  FetchFn = globalThis.fetch,
+    private readonly options:  DataForSEOBacklinkAdapterOptions = {},
   ) {}
 
   async discover(input: BacklinkDiscoveryInput): Promise<RawBacklinkEvidence[]> {
@@ -331,7 +337,8 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
           url, payload, this.config, this.fetchFn,
         );
         used++;
-        const task  = envelope.tasks[0];
+        const task = envelope.tasks[0];
+        this._assertStrictTask(task, "referring_domains");
         if (!task || task.status_code !== 20000 || !task.result?.length) continue;
         const items = task.result[0]?.items ?? [];
         for (const item of items) {
@@ -339,7 +346,7 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
           results.push(referringDomainItemToEvidence(item, target, discoveredAt));
         }
       } catch (err) {
-        if (isFatal(err)) throw err;
+        if (this.options.strictFailures || isFatal(err)) throw err;
         console.warn(
           `[dataforseo_backlinks] referring_domains failed for "${target}":`,
           (err as Error).message ?? err,
@@ -364,7 +371,8 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
           url, payload, this.config, this.fetchFn,
         );
         used++;
-        const task  = envelope.tasks[0];
+        const task = envelope.tasks[0];
+        this._assertStrictTask(task, "domain_intersection");
         if (task?.status_code === 20000 && task.result?.length) {
           const items = task.result[0]?.items ?? [];
           for (const item of items) {
@@ -373,7 +381,7 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
           }
         }
       } catch (err) {
-        if (isFatal(err)) throw err;
+        if (this.options.strictFailures || isFatal(err)) throw err;
         console.warn(
           "[dataforseo_backlinks] domain_intersection failed:",
           (err as Error).message ?? err,
@@ -393,6 +401,22 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
     return deduped.slice(0, input.limit);
   }
 
+  private _assertStrictTask(task: DFSTask<unknown> | undefined, operation: string): void {
+    if (!this.options.strictFailures) return;
+    if (!task) {
+      throw new BacklinkProviderError("malformed_response", `DataForSEO ${operation} response is missing a task.`);
+    }
+    if (task.status_code !== 20000) {
+      throw new BacklinkProviderError(
+        "provider_error",
+        `DataForSEO ${operation} task failed with status ${task.status_code}.`,
+      );
+    }
+    if (task.result === null) {
+      throw new BacklinkProviderError("malformed_response", `DataForSEO ${operation} task returned a null result.`);
+    }
+  }
+
   private _guardEnabled(): void {
     if (!this.config.enabled) {
       throw new BacklinkProviderError(
@@ -406,7 +430,7 @@ export class DataForSEOBacklinkAdapter implements BacklinkDataProvider {
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-/** Fatal errors should always propagate; non-fatal errors per-competitor are swallowed. */
+/** Fatal errors should always propagate; non-fatal errors per-competitor are swallowed unless strictFailures is enabled. */
 function isFatal(err: unknown): boolean {
   if (!(err instanceof BacklinkProviderError)) return false;
   return (

@@ -34,7 +34,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 20
+          node-version: 24
       - name: Enable pnpm
         run: |
           corepack enable
@@ -45,8 +45,8 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Run lifecycle and persistence tests
         run: >-
-          pnpm --filter @workspace/db exec vitest run
-          src/observed-backlink-lifecycle.test.ts
-          src/observed-backlink-repository.test.ts
+          pnpm --filter @workspace/api-server exec vitest run
+          ../../lib/db/src/observed-backlink-lifecycle.test.ts
+          ../../lib/db/src/observed-backlink-repository.test.ts
       - name: Verify clean diff formatting
         run: git diff --check

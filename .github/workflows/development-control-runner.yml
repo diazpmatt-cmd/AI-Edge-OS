@@ -24,7 +24,7 @@ jobs:
       - run: pnpm --filter @workspace/development-control-runner test
       - run: git diff --check
 
-  inspect-production-deployments:
+  inspect-production-runtime:
     if: github.head_ref == 'diag/prod-auth-live-probe'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -32,85 +32,88 @@ jobs:
       COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL || secrets.COOLIFY_BASE_URL }}
       COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
       COOLIFY_APP_UUID: a6y7jyyedbgfwvlh7vag7xh8
+      APOLLOS_TUNNEL_UUID: cqy9xj3w6qarzmdkyiksklht
+      FAILED_DEPLOY_UUID: oex6dw97z4kn8j3hgzzcc7br
+      RECOVERY_DEPLOY_UUID: bzgmlad19t8y4awndequ4qg4
     steps:
-      - name: Inspect sanitized deployment history
+      - name: Cross-check API reachability and failed deployment metadata
         shell: bash
         run: |
           set -euo pipefail
           test -n "${COOLIFY_BASE_URL:-}"
           test -n "${COOLIFY_DEPLOY_TOKEN:-}"
           base="${COOLIFY_BASE_URL%/}"
-          history="$(mktemp)"
-          all="$(mktemp)"
-          trap 'rm -f "$history" "$all"' EXIT
 
-          set +e
-          curl --silent --show-error --connect-timeout 10 --max-time 30 \
-            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
-            -H "Accept: application/json" \
-            "$base/api/v1/deployments/applications/$COOLIFY_APP_UUID" \
-            -o "$history"
-          history_rc=$?
-          set -e
-          echo "app_deployment_history_curl_exit=$history_rc"
-          if [ "$history_rc" -eq 0 ]; then
-            echo "app_deployment_history_type=$(jq -r 'type' "$history" 2>/dev/null || echo invalid)"
-            echo "app_deployment_history_count=$(jq -r 'if type=="array" then length else 0 end' "$history" 2>/dev/null || echo 0)"
-            jq -r '
-              if type=="array" then
-                sort_by(.created_at // "") | reverse | .[:12][] |
-                [
-                  (.deployment_uuid // .uuid // "unknown"),
-                  (.status // "unknown"),
-                  ((.is_webhook // false)|tostring),
-                  ((.is_api // false)|tostring),
-                  ((.rollback // false)|tostring),
-                  (.created_at // "unknown"),
-                  (.updated_at // "unknown"),
-                  ((.logs // "")|tostring|length|tostring)
-                ] | @tsv
-              else empty end
-            ' "$history" | while IFS=$'\t' read -r uuid status webhook api rollback created updated logbytes; do
-              echo "deployment uuid=$uuid status=$status webhook=$webhook api=$api rollback=$rollback created=$created updated=$updated log_bytes=$logbytes"
-            done
-
-            jq -r 'if type=="array" then .[] | select((.logs // "") != "") | (.logs|tostring) else empty end' "$history" > "$all"
-          fi
-
-          if [ ! -s "$all" ]; then
-            set +e
-            curl --silent --show-error --connect-timeout 10 --max-time 30 \
-              -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
-              -H "Accept: application/json" \
-              "$base/api/v1/deployments" \
-              -o "$history"
-            all_rc=$?
-            set -e
-            echo "all_deployments_curl_exit=$all_rc"
-            if [ "$all_rc" -eq 0 ]; then
-              echo "all_deployments_type=$(jq -r 'type' "$history" 2>/dev/null || echo invalid)"
-              echo "all_deployments_count=$(jq -r 'if type=="array" then length else 0 end' "$history" 2>/dev/null || echo 0)"
-              jq -r 'if type=="array" then .[] | select((.logs // "") != "") | (.logs|tostring) else empty end' "$history" > "$all"
-            fi
-          fi
-
-          count() {
-            local label="$1" pattern="$2"
-            echo "${label}=$(grep -Eic "$pattern" "$all" || true)"
+          count_file() {
+            local file="$1" label="$2" pattern="$3"
+            echo "${label}=$(grep -Eic "$pattern" "$file" || true)"
           }
 
-          echo "sanitized_deployment_log_bytes=$(wc -c < "$all" | tr -d ' ')"
-          count "nginx_emerg_count" 'nginx: \[emerg\]|emerg'
-          count "network_not_found_count" 'network .* not found|network.*does not exist'
-          count "service_unhealthy_count" 'unhealthy|health check failed|healthcheck failed'
-          count "container_exit_count" 'exited with code|exit code|container.*exited'
-          count "api_start_failure_count" 'Startup migration or publishing guard failed|Error listening on port'
-          count "required_config_count" 'required but was not provided|is required'
-          count "name_resolution_count" 'host not found|could not be resolved|name or service not known|temporary failure in name resolution|EAI_AGAIN|ENOTFOUND'
-          count "connection_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable'
-          count "compose_error_count" 'compose.*error|service .* failed|failed to start|failed to create'
-          count "port_conflict_count" 'address already in use|port is already allocated'
-          count "pull_error_count" 'pull access denied|manifest unknown|not found.*manifest|unauthorized'
-          count "oom_count" 'out of memory|oom|killed process'
-          count "bind_mount_count" 'bind source path does not exist|invalid mount config|mount.*failed|not a directory'
-          count "health_dependency_count" 'dependency failed to start|depends_on|service_healthy'
+          # Tunnel logs are from a separate running application and contain no
+          # AI Edge secrets in the counters emitted below.
+          response="$(mktemp)"
+          tunnel_logs="$(mktemp)"
+          trap 'rm -f "$response" "$tunnel_logs"' EXIT
+          set +e
+          tunnel_http="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 20 \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "$base/api/v1/applications/$APOLLOS_TUNNEL_UUID/logs?lines=500")"
+          tunnel_rc=$?
+          set -e
+          echo "tunnel_logs_curl_exit=$tunnel_rc"
+          echo "tunnel_logs_http=$tunnel_http"
+          if [ "$tunnel_rc" -eq 0 ] && [ "$tunnel_http" = "200" ] && jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+            jq -r '.logs' "$response" > "$tunnel_logs"
+            echo "tunnel_log_bytes=$(wc -c < "$tunnel_logs" | tr -d ' ')"
+            count_file "$tunnel_logs" "tunnel_auth_evidence_count" 'Unauthorized|401|oauth'
+            count_file "$tunnel_logs" "tunnel_api_target_count" 'api:3000'
+            count_file "$tunnel_logs" "tunnel_connection_failure_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable|dial tcp.*failed|timeout'
+          fi
+
+          # Classify why application logs are unavailable without printing the
+          # provider's message or raw logs.
+          set +e
+          app_http="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 20 \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "$base/api/v1/applications/$COOLIFY_APP_UUID/logs?lines=100")"
+          app_rc=$?
+          set -e
+          echo "app_logs_curl_exit=$app_rc"
+          echo "app_logs_http=$app_http"
+          if jq -e '.message | type == "string"' "$response" >/dev/null 2>&1; then
+            msg="$(jq -r '.message' "$response" | tr '[:upper:]' '[:lower:]')"
+            [[ "$msg" == *"container"* ]] && echo "app_logs_message_container_related=true" || echo "app_logs_message_container_related=false"
+            [[ "$msg" == *"running"* || "$msg" == *"not running"* ]] && echo "app_logs_message_running_state_related=true" || echo "app_logs_message_running_state_related=false"
+            [[ "$msg" == *"token"* || "$msg" == *"unauth"* ]] && echo "app_logs_message_auth_related=true" || echo "app_logs_message_auth_related=false"
+            [[ "$msg" == *"not found"* || "$msg" == *"resource"* ]] && echo "app_logs_message_resource_related=true" || echo "app_logs_message_resource_related=false"
+          fi
+
+          for item in "failed:$FAILED_DEPLOY_UUID" "recovery:$RECOVERY_DEPLOY_UUID"; do
+            label="${item%%:*}"
+            uuid="${item#*:}"
+            set +e
+            dep_http="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+              --connect-timeout 10 --max-time 20 \
+              -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+              -H "Accept: application/json" \
+              "$base/api/v1/deployments/$uuid")"
+            dep_rc=$?
+            set -e
+            echo "${label}_deployment_curl_exit=$dep_rc"
+            echo "${label}_deployment_http=$dep_http"
+            if [ "$dep_http" = "200" ]; then
+              echo "${label}_deployment_status=$(jq -r '.status // "unknown"' "$response")"
+              echo "${label}_deployment_is_api=$(jq -r '(.is_api // false)|tostring' "$response")"
+              echo "${label}_deployment_is_webhook=$(jq -r '(.is_webhook // false)|tostring' "$response")"
+              echo "${label}_deployment_rollback=$(jq -r '(.rollback // false)|tostring' "$response")"
+              echo "${label}_deployment_restart_only=$(jq -r '(.restart_only // false)|tostring' "$response")"
+              echo "${label}_deployment_created_at=$(jq -r '.created_at // "unknown"' "$response")"
+              echo "${label}_deployment_updated_at=$(jq -r '.updated_at // "unknown"' "$response")"
+              echo "${label}_deployment_has_logs=$(jq -r 'has("logs")' "$response")"
+              echo "${label}_deployment_keys=$(jq -r 'keys | join(",")' "$response")"
+            fi
+          done

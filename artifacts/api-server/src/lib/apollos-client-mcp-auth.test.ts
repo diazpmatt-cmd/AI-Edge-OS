@@ -105,7 +105,7 @@ describe("Apollos MCP OAuth contract", () => {
       );
   });
 
-  it("requires OAuth on every tool and marks only bounded execution tools write-capable", () => {
+  it("requires OAuth on every tool and classifies read, internal-write, and external-write surfaces", () => {
     for (const tool of APOLLOS_CLIENT_MCP_TOOLS) {
       expect(tool.securitySchemes).toEqual([{ type: "oauth2", scopes: APOLLOS_MCP_OAUTH_SCOPES }]);
       if (
@@ -117,6 +117,13 @@ describe("Apollos MCP OAuth contract", () => {
           destructiveHint: false,
           idempotentHint: false,
           openWorldHint: false,
+        });
+      } else if (tool.name === "apollos_dispatch_approved_referral_invitation") {
+        expect(tool.annotations).toEqual({
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
         });
       } else {
         expect(tool.annotations).toEqual({

@@ -13,7 +13,6 @@ import { isSecretsPreviewAvailable } from "@/lib/development-preview";
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
 const OAuthClosePage = lazy(() => import("./pages/OAuthClosePage"));
 const HomePage = lazy(() => import("./pages/marketing/HomePage"));
@@ -170,5 +169,5 @@ function AppRouter() {
   </Switch></Suspense>;
 }
 
-function App() { return <ThemeProvider><BusinessProvider><ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl}><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><AppRouter /><Toaster /></WouterRouter></TooltipProvider></QueryClientProvider></ClerkProvider></BusinessProvider></ThemeProvider>; }
+function App() { return <ThemeProvider><BusinessProvider><ClerkProvider publishableKey={clerkPubKey}><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={basePath}><AppRouter /><Toaster /></WouterRouter></TooltipProvider></QueryClientProvider></ClerkProvider></BusinessProvider></ThemeProvider>; }
 export default App;

@@ -24,7 +24,7 @@ jobs:
       - run: pnpm --filter @workspace/development-control-runner test
       - run: git diff --check
 
-  recover-production:
+  resume-production:
     if: github.head_ref == 'diag/prod-auth-live-probe'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -35,7 +35,7 @@ jobs:
       DATABASE_UUID: ypg0krkeij7h7u9inur0aq9e
       RECOVERY_SHA: 4c8cf8ecb9000a5d172c16e31477abd3a240e425
     steps:
-      - name: Require unhealthy database before restart
+      - name: Require PostgreSQL healthy
         shell: bash
         run: |
           set -euo pipefail
@@ -47,63 +47,10 @@ jobs:
             -H "Accept: application/json" \
             "$base/api/v1/databases/$DATABASE_UUID")"
           status="$(printf '%s' "$response" | jq -r '.status // "unknown"')"
-          echo "database_before=$status"
-          case "$status" in
-            *unhealthy*) exit 0 ;;
-            running:healthy)
-              echo "Database already healthy; restart is unnecessary."
-              exit 0
-              ;;
-            *)
-              echo "Unexpected database state '$status'; refusing restart." >&2
-              exit 1
-              ;;
-          esac
+          echo "database_state=$status"
+          test "$status" = "running:healthy"
 
-      - name: Restart PostgreSQL once
-        shell: bash
-        run: |
-          set -euo pipefail
-          base="${COOLIFY_BASE_URL%/}"
-          response="$(curl --fail-with-body --silent --show-error \
-            -X POST \
-            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
-            -H "Accept: application/json" \
-            "$base/api/v1/databases/$DATABASE_UUID/restart")"
-          echo "Database restart request accepted."
-
-      - name: Require PostgreSQL healthy
-        shell: bash
-        run: |
-          set -euo pipefail
-          base="${COOLIFY_BASE_URL%/}"
-          last="unknown"
-          for attempt in $(seq 1 60); do
-            response="$(curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
-              -H "Accept: application/json" \
-              "$base/api/v1/databases/$DATABASE_UUID")"
-            status="$(printf '%s' "$response" | jq -r '.status // "unknown"')"
-            if [ "$status" != "$last" ]; then
-              echo "database_state=$status"
-              last="$status"
-            fi
-            if [ "$status" = "running:healthy" ]; then
-              echo "PostgreSQL is healthy."
-              exit 0
-            fi
-            case "$status" in
-              exited:*|stopped:*|error:*|failed:*)
-                echo "PostgreSQL entered failure state '$status'." >&2
-                exit 1
-                ;;
-            esac
-            sleep 5
-          done
-          echo "PostgreSQL did not become healthy within 5 minutes; stopping recovery." >&2
-          exit 1
-
-      - name: Re-pin verified recovery images
+      - name: Verify and pin known-good images
         shell: bash
         run: |
           set -euo pipefail
@@ -118,9 +65,9 @@ jobs:
             -H "Content-Type: application/json" \
             --data "$payload" \
             "$base/api/v1/applications/$COOLIFY_APP_UUID/envs" >/dev/null
-          echo "Recovery image tag verified and pinned."
+          echo "Known-good image tag verified and pinned."
 
-      - name: Deploy canonical application once
+      - name: Deploy canonical API and web stack once
         id: deploy
         shell: bash
         run: |
@@ -136,9 +83,9 @@ jobs:
           deployment_uuid="$(printf '%s' "$response" | jq -r '.deployments[0].deployment_uuid // empty')"
           test -n "$deployment_uuid"
           echo "deployment_uuid=$deployment_uuid" >> "$GITHUB_OUTPUT"
-          echo "Canonical recovery deployment queued."
+          echo "Canonical lean recovery deployment queued."
 
-      - name: Require terminal application success
+      - name: Require terminal Coolify success
         shell: bash
         run: |
           set -euo pipefail
@@ -151,20 +98,20 @@ jobs:
             status="$(printf '%s' "$response" | jq -r '.status // "unknown"')"
             case "$status" in
               finished|success|succeeded|completed)
-                echo "Application recovery deployment succeeded."
+                echo "Canonical lean recovery deployment succeeded."
                 exit 0
                 ;;
               failed|error|cancelled|cancelled-by-user)
-                echo "Application recovery deployment ended with status '$status'." >&2
+                echo "Canonical lean recovery ended with status '$status'." >&2
                 exit 1
                 ;;
               *) sleep 10 ;;
             esac
           done
-          echo "Application recovery deployment timed out." >&2
+          echo "Canonical lean recovery timed out." >&2
           exit 1
 
-      - name: Verify canonical public recovery
+      - name: Verify public site and API recovery
         shell: bash
         run: |
           set -euo pipefail

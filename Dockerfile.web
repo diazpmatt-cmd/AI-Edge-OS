@@ -3,12 +3,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 COPY . .
 ARG VITE_CLERK_PUBLISHABLE_KEY
-ARG VITE_CLERK_PROXY_URL
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
-# Canonical production auth is same-origin. Clerk requires the production
-# proxy URL to be a full public URL, not the internal container hop or a stale
-# Replit host.
-ENV VITE_CLERK_PROXY_URL=https://aiedgesolutions.online/api/__clerk
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @workspace/ai-edge-solutions run build
 

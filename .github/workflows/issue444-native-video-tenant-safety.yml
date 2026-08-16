@@ -1,0 +1,46 @@
+name: Issue 444 native video tenant safety
+
+on:
+  push:
+    branches:
+      - fix/444-tenant-safe-native-video
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: fix/444-tenant-safe-native-video
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: corepack enable
+      - name: Apply bounded patch
+        run: python3 .github/scripts/issue444-native-video-tenant-safety.py
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Run focused tenant policy tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/video-generation-tenant-policy.test.ts
+      - name: Diff check
+        run: git diff --check
+      - name: Commit product patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/auto-content.ts artifacts/api-server/src/lib/native-video-renderer.ts
+          if git diff --cached --quiet; then
+            echo "No product patch required"
+            exit 0
+          fi
+          git commit -m "fix: fail closed native video outside BB&B"
+          git push origin HEAD:fix/444-tenant-safe-native-video

@@ -253,11 +253,11 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {([
                 { key: "goal",     label: "Campaign Goal",         value: goal,     set: setGoal,     ph: "e.g. Drive service bookings, increase brand awareness" },
-                { key: "audience", label: "Target Audience",        value: audience, set: setAudience, ph: "e.g. Homeowners in Baldwin County, AL aged 30–60" },
-                { key: "offer",    label: "Offer / Promotion",      value: offer,    set: setOffer,    ph: "e.g. Free inspection + 20% off first treatment" },
-                { key: "service",  label: "Service or Product",     value: service,  set: setService,  ph: "e.g. Bed bug extermination, pest control service" },
-                { key: "location", label: "Location / Service Area", value: location, set: setLocation, ph: "e.g. Baldwin County, Gulf Shores, Foley AL" },
-                { key: "cta",      label: "Call to Action",          value: cta,      set: setCta,      ph: "e.g. Call Today, Book Now, Get a Free Quote" },
+                { key: "audience", label: "Target Audience",        value: audience, set: setAudience, ph: "e.g. Homeowners in the verified service area" },
+                { key: "offer",    label: "Offer / Promotion",      value: offer,    set: setOffer,    ph: "e.g. Enter a verified current offer, or leave blank" },
+                { key: "service",  label: "Service or Product",     value: service,  set: setService,  ph: "e.g. Select or enter an enabled client service" },
+                { key: "location", label: "Location / Service Area", value: location, set: setLocation, ph: "e.g. Enter a verified city or service area" },
+                { key: "cta",      label: "Call to Action",          value: cta,      set: setCta,      ph: "e.g. Enter the client-approved call to action" },
               ] as { key: string; label: string; value: string; set: (v: string) => void; ph: string }[]).map(f => (
                 <div key={f.key}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: "#00AEEF", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 5 }}>
@@ -470,30 +470,30 @@ const DEFAULT_VIDEO_SCENES: VideoScene[] = [
   {
     id: "hook",
     title: "Hook",
-    visual: "Pest infestation close-up — quick cuts, high energy",
-    onscreen: "Are pests taking over your home?",
-    voiceover: "Bed bugs, roaches, rodents — they don't sleep, and neither should your protection.",
+    visual: "Show the customer's problem in a clear, respectful local-service scenario",
+    onscreen: "Need help with a problem at home or work?",
+    voiceover: "Start with the problem your customer wants solved and why it matters now.",
   },
   {
     id: "problem",
     title: "Problem",
-    visual: "Worried homeowner inspecting walls and furniture",
-    onscreen: "Don't let pests ruin your peace of mind.",
-    voiceover: "Every day you wait, the problem gets worse. Baldwin County homeowners trust one name.",
+    visual: "Show the real-world impact of the problem without exaggeration or unsupported claims",
+    onscreen: "A small problem can become a bigger interruption.",
+    voiceover: "Explain the customer's challenge using only facts that are true for this business and service.",
   },
   {
     id: "solution",
     title: "Solution",
-    visual: "BB&B technician treating home, logo visible, professional uniform",
-    onscreen: "Bed Bugs & Beyond — Guaranteed Results.",
-    voiceover: "Bed Bugs and Beyond delivers fast, effective, guaranteed pest control. Licensed, local, and here for you.",
+    visual: "Show the service process, team, equipment, or approved brand visuals",
+    onscreen: "Professional local service, built around your needs.",
+    voiceover: "Describe how the business helps, using the selected service and approved client information.",
   },
   {
     id: "cta",
     title: "Call to Action",
-    visual: "Happy family in clean, pest-free home — bright, warm lighting",
-    onscreen: "Call Today — Free Inspection!",
-    voiceover: "Call Bed Bugs and Beyond today for your free inspection. Your pest-free life starts now.",
+    visual: "Show an approved call-to-action screen using the client's configured contact details",
+    onscreen: "Ready for the next step?",
+    voiceover: "Use the client's configured call to action. Do not invent discounts, guarantees, free offers, or contact details.",
   },
 ];
 
@@ -621,6 +621,14 @@ function VideoStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
 
         {/* LEFT: Brief + Type + Duration + Transitions + Music */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          <div style={{
+            padding: "10px 12px", borderRadius: 9,
+            background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.16)",
+            color: "#94A3B8", fontSize: 11, lineHeight: 1.55,
+          }}>
+            Scene text is a neutral drafting template, not a factual claim about the active client. Replace it with verified service, offer, location, review, and CTA details before approval or generation.
+          </div>
 
           {/* Video Brief Builder */}
           <Panel label="Video Brief Builder" accent="#A78BFA">

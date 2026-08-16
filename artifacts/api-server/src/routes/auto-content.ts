@@ -87,18 +87,14 @@ function parseApprovedWeeklyPayload(raw: unknown): ApprovedWeeklyPayload {
 }
 
 export function resolveOpenAiBaseUrl(): string {
-  const configured = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim()
-    || process.env.OPENAI_BASE_URL?.trim()
+  const configured = process.env.OPENAI_BASE_URL?.trim()
     || "https://api.openai.com/v1";
   return configured.replace(/\/+$/, "");
 }
 
 function getAiModel() {
-  // Prefer Replit-managed integration when it has a usable URL; blank Coolify
-  // placeholders must fall back to the direct OpenAI endpoint.
   const baseURL = resolveOpenAiBaseUrl();
-  const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
-    ?? process.env.OPENAI_API_KEY;
+  const key = resolveOpenAiApiKey();
   if (!key) throw new Error("No OpenAI API key configured. Add OPENAI_API_KEY to Secrets.");
   const gw = createOpenAICompatible({
     name: "openai",
@@ -110,11 +106,10 @@ function getAiModel() {
 
 /**
  * Canonical OpenAI API-key resolver for direct fetch calls (image generation).
- * Priority: AI_INTEGRATIONS_OPENAI_API_KEY (Replit-managed) → OPENAI_API_KEY (direct).
  * Never log the returned value.
  */
 export function resolveOpenAiApiKey(): string {
-  return process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+  return process.env.OPENAI_API_KEY ?? "";
 }
 
 const DEFAULT_SERVICE_AREAS = [
@@ -1976,7 +1971,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   }
   const clientId = resolved.client.id;
 
-  // [S2] API key fail-fast — canonical resolver (AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY)
+  // [S2] API key fail-fast — canonical direct OpenAI resolver
   const baseURL = resolveOpenAiBaseUrl();
   const apiKey  = resolveOpenAiApiKey();
   if (!apiKey) {

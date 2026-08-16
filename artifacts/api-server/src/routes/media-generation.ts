@@ -2,9 +2,18 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
 import { createProductionMediaGenerationRegistry } from "../lib/media-generation-provider.js";
+import { createConfiguredOpenAiImageProvider } from "../lib/openai-image-generation-provider.js";
 
 const router = Router();
 const mediaRegistry = createProductionMediaGenerationRegistry();
+
+// Registration is deliberately separate from general OPENAI_API_KEY presence.
+// The dedicated flag is an owner-controlled spend/authority gate for Media
+// Engine image generation. When the flag is absent, production remains exactly
+// as before: no provider is registered and generation stays blocked.
+if (process.env.MEDIA_OPENAI_IMAGE_ENABLED === "true") {
+  mediaRegistry.register(createConfiguredOpenAiImageProvider());
+}
 
 router.get("/media-generation/readiness", async (req, res) => {
   const { userId } = getAuth(req);

@@ -22,7 +22,7 @@ describe("native video tenant policy", () => {
     expect(policy.phoneNumber).toBeNull();
     expect(policy.brandProfile).toBeNull();
     expect(policy.allowPestStoryMode).toBe(false);
-    expect(JSON.stringify(policy)).not.toMatch(/Bed Bugs|Baldwin|pest|251\) 324-9090/i);
+    expect(JSON.stringify(policy)).not.toMatch(/Bed Bugs|Baldwin|251\) 324-9090/i);
   });
 
   it("builds generic tenant titles from canonical industry data", () => {

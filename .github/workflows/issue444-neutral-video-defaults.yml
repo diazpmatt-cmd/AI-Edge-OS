@@ -21,7 +21,8 @@ jobs:
         with:
           node-version: '22'
       - run: corepack enable
-      - run: python3 .github/scripts/issue444-neutral-video-defaults.py
+      - name: Apply tenant-neutral Video Studio defaults
+        run: python3 .github/scripts/issue444-neutral-video-defaults.py
       - run: pnpm install --frozen-lockfile
       - name: Build web
         run: pnpm --filter @workspace/ai-edge-solutions run build

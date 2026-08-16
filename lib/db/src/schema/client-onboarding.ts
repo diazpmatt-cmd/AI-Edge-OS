@@ -5,6 +5,8 @@ import { z } from "zod/v4";
 export const clientOnboardingTable = pgTable("client_onboarding", {
   id:                  uuid("id").primaryKey().defaultRandom(),
   createdByUserId:     text("created_by_user_id"),
+  provisionedClientId:  uuid("provisioned_client_id"),
+  provisionedAt:        timestamp("provisioned_at", { withTimezone: true }),
   businessName:        text("business_name").notNull(),
   industry:            text("industry").notNull().default(""),
   website:             text("website").default(""),
@@ -30,7 +32,7 @@ export const clientOnboardingTable = pgTable("client_onboarding", {
 });
 
 export const insertClientOnboardingSchema = createInsertSchema(clientOnboardingTable).omit({
-  id: true, createdAt: true, updatedAt: true,
+  id: true, provisionedClientId: true, provisionedAt: true, createdAt: true, updatedAt: true,
 });
 export type InsertClientOnboarding = z.infer<typeof insertClientOnboardingSchema>;
 export type ClientOnboarding = typeof clientOnboardingTable.$inferSelect;

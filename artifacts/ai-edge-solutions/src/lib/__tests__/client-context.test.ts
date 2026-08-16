@@ -753,21 +753,22 @@ describe("T-A2-7: Generate route building-block characterization", () => {
   });
 
   describe("partial config overrides only what is supplied", () => {
-    it("supplying only clientName overrides the name but keeps BB&B geography", () => {
+    it("supplying only clientName does not inherit BB&B geography or registry", () => {
       const ctx = buildClientContentContext({ clientName: "Gulf Pest Pros" });
       expect(ctx.clientName).toBe("Gulf Pest Pros");
-      // All Alabama service areas → still derives BB&B region
-      expect(ctx.region).toBe(BBB_REGION);
-      expect(ctx.registry).toBe(bbbRegistryProvider);
+      expect(ctx.serviceAreas).toEqual([]);
+      expect(ctx.region).toBe("the local area");
+      expect(ctx.registry).not.toBe(bbbRegistryProvider);
     });
 
-    it("supplying only serviceAreas keeps clientName default", () => {
+    it("supplying only serviceAreas uses a neutral non-BB&B identity", () => {
       const ctx = buildClientContentContext({
         serviceAreas: ["Austin, TX", "Round Rock, TX"],
       });
-      expect(ctx.clientName).toBe("Bed Bugs & Beyond");
+      expect(ctx.clientName).toBe("Local Business");
       expect(ctx.serviceAreas).toEqual(["Austin, TX", "Round Rock, TX"]);
-      expect(ctx.region).not.toContain("Baldwin County");
+      expect(ctx.region).toBe("Austin area, TX");
+      expect(ctx.registry).not.toBe(bbbRegistryProvider);
     });
   });
 });
@@ -811,14 +812,16 @@ describe("T-A2-8: Canonical geography protection", () => {
     expect(ctx.region).toBe(BBB_REGION);
   });
 
-  it("empty serviceAreas array falls back to BBB_DEFAULT_SERVICE_AREAS", () => {
+  it("empty serviceAreas on an explicit tenant config stays empty", () => {
     const ctx = buildClientContentContext({ serviceAreas: [] });
-    expect(ctx.serviceAreas).toEqual(BBB_DEFAULT_SERVICE_AREAS);
+    expect(ctx.serviceAreas).toEqual([]);
+    expect(ctx.region).toBe("the local area");
   });
 
-  it("null serviceAreas falls back to BBB_DEFAULT_SERVICE_AREAS", () => {
+  it("null serviceAreas on an explicit tenant config stays empty", () => {
     const ctx = buildClientContentContext({ serviceAreas: null });
-    expect(ctx.serviceAreas).toEqual(BBB_DEFAULT_SERVICE_AREAS);
+    expect(ctx.serviceAreas).toEqual([]);
+    expect(ctx.region).toBe("the local area");
   });
 
   it("non-Alabama service areas derive a non-BB&B region string", () => {
@@ -830,11 +833,11 @@ describe("T-A2-8: Canonical geography protection", () => {
     expect(ctx.region).not.toContain("Alabama");
   });
 
-  it("Alabama service areas always derive the canonical BB&B region string", () => {
-    // Any subset of Alabama cities should produce the canonical BB&B region
+  it("non-BB&B Alabama service areas derive a tenant-neutral region", () => {
     const ctx = buildClientContentContext({
       serviceAreas: ["Mobile, AL", "Huntsville, AL"],
     });
-    expect(ctx.region).toBe(BBB_REGION);
+    expect(ctx.region).toBe("Mobile area, AL");
+    expect(ctx.region).not.toBe(BBB_REGION);
   });
 });

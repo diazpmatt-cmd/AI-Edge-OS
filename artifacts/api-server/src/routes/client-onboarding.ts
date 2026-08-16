@@ -4,6 +4,8 @@ import { db, pool } from "@workspace/db";
 import { clientOnboardingTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { buildStagingRowPreflight } from "../lib/client-onboarding-staging-preflight.js";
+import { isApollosAdminUser } from "../lib/apollos-admin-access-policy.js";
+import { CanonicalProvisioningError, provisionCanonicalClient } from "../lib/client-onboarding-provisioning.js";
 
 const router = Router();
 
@@ -15,11 +17,17 @@ const router = Router();
 const onboardingOwnershipBootstrapReady: Promise<boolean> = pool
   .query(`
     ALTER TABLE client_onboarding
-      ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+      ADD COLUMN IF NOT EXISTS created_by_user_id TEXT,
+      ADD COLUMN IF NOT EXISTS provisioned_client_id UUID,
+      ADD COLUMN IF NOT EXISTS provisioned_at TIMESTAMPTZ;
 
     CREATE INDEX IF NOT EXISTS client_onboarding_created_by_user_id_idx
       ON client_onboarding (created_by_user_id)
       WHERE created_by_user_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS client_onboarding_provisioned_client_id_idx
+      ON client_onboarding (provisioned_client_id)
+      WHERE provisioned_client_id IS NOT NULL;
   `)
   .then(() => {
     console.log("[client-onboarding] operator ownership schema ready");
@@ -94,7 +102,9 @@ router.get("/client-onboarding/:id/preflight", async (req, res) => {
       onboardingId: row.id,
       stagingStatus: row.status,
       preflight,
-      provisioningStatus: "not_accepted",
+      provisioningStatus: row.provisionedClientId ? "provisioned" : "not_accepted",
+      canonicalClientId: row.provisionedClientId ?? null,
+      provisionedAt: row.provisionedAt?.toISOString?.() ?? row.provisionedAt ?? null,
       safety: {
         stagingRowMutated: false,
         canonicalClientCreated: false,
@@ -217,18 +227,48 @@ router.put("/client-onboarding/:id", async (req, res) => {
   }
 });
 
-// Provisioning remains deliberately separate from staging ownership. This route
-// performs no provider setup and never creates/activates a canonical client.
+// Canonical provisioning is an internal, no-provider transaction. The target
+// tenant identity is accepted only from an explicitly allowlisted Apollos admin.
+// Provider activation, phone ordering, messaging, publishing, billing and OAuth
+// remain outside this endpoint and are returned as readiness-only work.
 router.post("/client-onboarding/:id/deploy", async (req, res) => {
   const userId = authenticatedUserId(req, res);
-  if (!userId) return;
+  if (!userId || !(await requireOwnershipSchema(res))) return;
 
-  res.status(409).json({
-    error: "canonical_provisioning_not_implemented",
-    code: "CLIENT_PROVISIONING_NOT_ACCEPTED",
-    message:
-      "This endpoint only manages operator-owned staging drafts. Canonical client provisioning requires a separate accepted target-tenant identity contract.",
-  });
+  if (!isApollosAdminUser(userId)) {
+    return void res.status(403).json({
+      error: "Forbidden",
+      code: "APOLLOS_ADMIN_REQUIRED",
+    });
+  }
+
+  const targetIdentitySource = String(req.body?.targetIdentitySource ?? "").trim();
+  if (targetIdentitySource !== "clerk_user_id") {
+    return void res.status(400).json({
+      error: "trusted_target_identity_required",
+      code: "TRUSTED_TARGET_IDENTITY_REQUIRED",
+      message: "targetIdentitySource must be clerk_user_id and targetUserId must be supplied by an allowlisted admin.",
+    });
+  }
+
+  try {
+    const result = await provisionCanonicalClient({
+      stagingId: req.params.id,
+      actorUserId: userId,
+      targetUserId: req.body?.targetUserId,
+    });
+    return void res.status(result.idempotent ? 200 : 201).json(result);
+  } catch (error) {
+    if (error instanceof CanonicalProvisioningError) {
+      return void res.status(error.status).json({
+        error: error.message,
+        code: error.code,
+        ...(error.details !== undefined && { details: error.details }),
+      });
+    }
+    console.error("[client-onboarding] deploy error:", error);
+    return void res.status(500).json({ error: "Canonical provisioning failed" });
+  }
 });
 
 // ── DELETE /api/client-onboarding/:id ── owned row only ──────────────────────

@@ -7,7 +7,6 @@ import {
   validateTopicForGeneration,
   getDefaultTopics,
   getServicePromptRules,
-  matchServiceByTopic,
   BBB_DEFAULT_APPROVAL_MODE,
   BBB_SERVICES,
   BBB_AUDIENCES,
@@ -32,6 +31,7 @@ import { resolveClientContentContextFromDb, resolveClientActiveCheck } from "../
 import { objectStorageClient } from "../lib/objectStorage.js";
 import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
 import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";
+import { buildTenantImagePrompt, resolveImageBrandPolicy } from "../lib/image-generation-brand-policy.js";
 import {
   assertWeeklyGenerationContract,
   findWeeklyGenerationJobForDraft,
@@ -1758,16 +1758,17 @@ const SIGNED_URL_EXPIRY_SECONDS     = 15 * 60; // 15 minutes
  * authorized service name or geography.
  */
 export function buildImagePrompt(opts: {
+  industryLabel?: string;
   serviceDisplayName: string;
   city?: string;
   creativeBrief?: string;
 }): string {
-  const parts: string[] = [
-    `Professional pest control marketing image for ${opts.serviceDisplayName}`,
-  ];
-  if (opts.city?.trim()) parts.push(`serving ${opts.city.trim()}`);
-  if (opts.creativeBrief?.trim()) parts.push(`Creative brief: ${opts.creativeBrief.trim()}`);
-  return parts.join(". ");
+  return buildTenantImagePrompt({
+    industryLabel: opts.industryLabel ?? "pest control",
+    serviceDisplayName: opts.serviceDisplayName,
+    city: opts.city,
+    creativeBrief: opts.creativeBrief,
+  });
 }
 
 function parseBucketPath(privateDir: string): { bucketName: string; bucketPrefix: string } {
@@ -2066,7 +2067,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     // Also reject keys not present in the registry at all —
     // validateTopic allows unknown topics by design (forward-compat), but
     // image generation must be explicitly authorized via a known serviceId.
-    const svcRecord = matchServiceByTopic(serviceKey);
+    const svcRecord = resolved.context.registry.matchByTopic(serviceKey);
     if (!svcRecord) {
       res.status(422).json({
         error: "unknown_service",
@@ -2082,6 +2083,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
   let effectivePrompt: string;
   if (serviceKey && resolvedServiceDisplayName) {
     effectivePrompt = buildImagePrompt({
+      industryLabel: resolved.client.industryLabel,
       serviceDisplayName: resolvedServiceDisplayName,
       city: city?.trim(),
       creativeBrief: prompt?.trim(),
@@ -2104,6 +2106,12 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     res.status(400).json({ error: "prompt contains a prohibited service or claim" });
     return;
   }
+
+  const brandPolicy = resolveImageBrandPolicy({
+    clientSlug: resolved.client.slug,
+    clientName: resolved.client.clientName,
+    effectivePrompt,
+  });
 
   // [S5] Size allow-list
   const validSizes = ["1024x1024", "1536x1024", "1024x1536"];
@@ -2247,7 +2255,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       },
       body: JSON.stringify({
         model: "gpt-image-1",
-        prompt: `${effectivePrompt}. Use this exact brand palette throughout the artwork: deep navy ${BBB_BRAND.navy}, ocean blue ${BBB_BRAND.oceanBlue}, aqua ${BBB_BRAND.aqua}, coral orange ${BBB_BRAND.coralOrange}, and white. Leave the lower-right safe area visually clean for the official logo overlay. Do not generate, imitate, spell, or approximate any logo or business name.`,
+        prompt: brandPolicy.providerPrompt,
         size,
         n: 1,
       }),
@@ -2323,18 +2331,22 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
     return;
   }
 
-  // Exact brand asset is mandatory. Never save or publish unbranded provider art.
-  let brandedImageBuffer: Buffer;
-  try {
-    brandedImageBuffer = await applyBbbBranding(imageBuffer, size);
-  } catch (brandErr: any) {
-    console.error("[auto-content/generate-image] branding error:", sanitizeProviderDiagnostic(brandErr?.message ?? "unknown"));
-    await markFailed("brand_overlay_failed");
-    res.status(500).json({
-      error: "Official branding could not be applied",
-      message: "The artwork was generated, but the official Bed Bugs & Beyond logo could not be embedded. Nothing was saved or queued.",
-    });
-    return;
+  // The canonical BB&B tenant retains its exact logo overlay. Other tenants
+  // remain explicitly unbranded until a tenant-owned brand kit is configured;
+  // they must never inherit BB&B brand assets or palette.
+  let finalImageBuffer: Buffer = imageBuffer;
+  if (brandPolicy.requiresOverlay) {
+    try {
+      finalImageBuffer = await applyBbbBranding(imageBuffer, size);
+    } catch (brandErr: any) {
+      console.error("[auto-content/generate-image] branding error:", sanitizeProviderDiagnostic(brandErr?.message ?? "unknown"));
+      await markFailed("brand_overlay_failed");
+      res.status(500).json({
+        error: "Official branding could not be applied",
+        message: "The artwork was generated, but the official Bed Bugs & Beyond logo could not be embedded. Nothing was saved or queued.",
+      });
+      return;
+    }
   }
 
   // ── Persist generated image ───────────────────────────────────────────────
@@ -2353,10 +2365,10 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       await mkdir(uploadsDir, { recursive: true });
       localDataPath = join(uploadsDir, imageId);
       localMetadataPath = `${localDataPath}.json`;
-      await writeFile(localDataPath, brandedImageBuffer, { flag: "wx" });
+      await writeFile(localDataPath, finalImageBuffer, { flag: "wx" });
       await writeFile(
         localMetadataPath,
-        JSON.stringify({ contentType: "image/png", byteSize: brandedImageBuffer.length, brand: "bed-bugs-and-beyond-v1" }),
+        JSON.stringify({ contentType: "image/png", byteSize: finalImageBuffer.length, brand: brandPolicy.metadataBrand }),
         { encoding: "utf8", flag: "wx" },
       );
       storageKey = `uploads/${imageId}`;
@@ -2365,7 +2377,7 @@ router.post("/auto-content/generate-image", async (req, res): Promise<void> => {
       const { bucketName, bucketPrefix } = parseBucketPath(privateDir);
       const objectPath = makeObjectPath(bucketPrefix, imageId);
       await objectStorageClient.bucket(bucketName).file(objectPath)
-        .save(brandedImageBuffer, { contentType: "image/png", resumable: false });
+        .save(finalImageBuffer, { contentType: "image/png", resumable: false });
       gcsLocation = { bucketName, objectPath };
       storageKey = `generated-images/${imageId}.png`;
     }

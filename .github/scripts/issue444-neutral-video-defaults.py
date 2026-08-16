@@ -64,16 +64,28 @@ new = '''const DEFAULT_VIDEO_SCENES: VideoScene[] = [
   },
 ];
 '''
-if old not in text:
+if old in text:
+    text = text.replace(old, new, 1)
+elif new not in text:
     raise SystemExit("default video scenes anchor not found")
-text = text.replace(old, new, 1)
 
-anchor = '''          <Panel label="Video Brief" accent="#8B5CF6">\n'''
-notice = '''          <div style={{\n            padding: "10px 12px", borderRadius: 9, marginBottom: 12,\n            background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.16)",\n            color: "#94A3B8", fontSize: 11, lineHeight: 1.55,\n          }}>\n            Scene text below is a neutral drafting template, not a factual claim about the active client. Replace it with verified service, offer, location, review, and CTA details before approval or generation.\n          </div>\n\n'''
+anchor = '''          {/* Video Brief Builder */}\n          <Panel label="Video Brief Builder" accent="#A78BFA">\n'''
+notice = '''          <div style={{\n            padding: "10px 12px", borderRadius: 9,\n            background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.16)",\n            color: "#94A3B8", fontSize: 11, lineHeight: 1.55,\n          }}>\n            Scene text is a neutral drafting template, not a factual claim about the active client. Replace it with verified service, offer, location, review, and CTA details before approval or generation.\n          </div>\n\n'''
 if notice not in text:
     if anchor not in text:
         raise SystemExit("video brief anchor not found")
     text = text.replace(anchor, notice + anchor, 1)
+
+replacements = {
+    'ph: "e.g. Homeowners in Baldwin County, AL aged 30–60"': 'ph: "e.g. Homeowners in the verified service area"',
+    'ph: "e.g. Free inspection + 20% off first treatment"': 'ph: "e.g. Enter a verified current offer, or leave blank"',
+    'ph: "e.g. Bed bug extermination, pest control service"': 'ph: "e.g. Select or enter an enabled client service"',
+    'ph: "e.g. Baldwin County, Gulf Shores, Foley AL"': 'ph: "e.g. Enter a verified city or service area"',
+    'ph: "e.g. Call Today, Book Now, Get a Free Quote"': 'ph: "e.g. Enter the client-approved call to action"',
+}
+for source, target in replacements.items():
+    if source in text:
+        text = text.replace(source, target, 1)
 
 path.write_text(text)
 print("patched neutral Video Studio defaults")

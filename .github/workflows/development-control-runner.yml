@@ -17,13 +17,16 @@ jobs:
         with:
           ref: feat/440-canonical-client-provisioning
       - name: Apply bounded patch
-        run: python scripts/issue-440-patch.py
+        run: |
+          python scripts/issue-440-patch.py
+          python scripts/issue-440-tenant-safety-patch.py
       - name: Validate patch shape
         run: |
           git diff --check
           grep -q 'provisionCanonicalClient' artifacts/api-server/src/routes/client-onboarding.ts
           grep -q 'clientBootstrapReady' artifacts/api-server/src/lib/client-resolver.ts
           grep -q 'region:        client.region' lib/db/src/client-context.ts
+          grep -q 'unconfiguredRegistryProvider' lib/db/src/client-context.ts
           git diff --stat
       - name: Install dependencies
         run: |
@@ -44,6 +47,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/api-server/src/routes/client-onboarding.ts artifacts/api-server/src/lib/client-resolver.ts lib/db/src/client-context.ts lib/db/src/schema/client-onboarding.ts
+          git add artifacts/api-server/src/routes/client-onboarding.ts artifacts/api-server/src/lib/client-resolver.ts lib/db/src/client-context.ts lib/db/src/schema/client-onboarding.ts artifacts/ai-edge-solutions/src/lib/__tests__/client-context.test.ts
           git commit -m "Provision canonical clients from trusted onboarding drafts"
           git push origin HEAD:feat/440-canonical-client-provisioning

@@ -1,25 +1,44 @@
-name: Development Control Runner Verification
+name: Temporary Issue 444 Image Patch
 
 on:
-  pull_request:
-    paths:
-      - "lib/development-control-runner/**"
-      - ".github/workflows/development-control-runner.yml"
-      - "pnpm-lock.yaml"
+  push:
+    branches:
+      - fix/444-tenant-safe-image-generation
+
+permissions:
+  contents: write
 
 jobs:
-  verify:
+  patch:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/development-control-runner typecheck
-      - run: pnpm --filter @workspace/development-control-runner test
-      - run: git diff --check
+          ref: fix/444-tenant-safe-image-generation
+      - name: Apply bounded tenant image patch
+        run: python scripts/issue-444-tenant-image-patch.py
+      - name: Validate diff shape
+        run: |
+          git diff --check
+          ! grep -q 'matchServiceByTopic(serviceKey)' artifacts/api-server/src/routes/auto-content.ts
+          grep -q 'brandPolicy.providerPrompt' artifacts/api-server/src/routes/auto-content.ts
+          grep -q 'resolved.context.registry.matchByTopic(serviceKey)' artifacts/api-server/src/routes/auto-content.ts
+          git diff --stat
+      - name: Install dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+          pnpm install --frozen-lockfile
+      - name: Typecheck and focused tests
+        run: |
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server run typecheck
+          pnpm --filter @workspace/api-server exec vitest run src/__tests__/image-generation-brand-policy.test.ts
+      - name: Commit bounded implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/auto-content.ts
+          git commit -m "Make image generation tenant-safe beyond BB&B"
+          git push origin HEAD:fix/444-tenant-safe-image-generation

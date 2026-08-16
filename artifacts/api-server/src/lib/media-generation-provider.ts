@@ -18,17 +18,27 @@ export interface MediaGenerationRequest {
   idempotencyKey: string;
 }
 
+/**
+ * A provider may either return an asynchronous provider job identifier or a
+ * terminal result immediately. This keeps the contract truthful for providers
+ * such as OpenAI Images, which return image bytes synchronously and do not
+ * expose a native job id that can be polled later.
+ */
 export interface MediaGenerationStartResult {
   providerId: string;
-  providerJobId: string;
+  providerJobId?: string;
   status: MediaGenerationStatus;
-}
-
-export interface MediaGenerationPollResult extends MediaGenerationStartResult {
-  outputUrl?: string;
-  contentType?: string;
+  output?: MediaGenerationOutput;
   failureReason?: string;
 }
+
+export interface MediaGenerationOutput {
+  contentType: string;
+  bytes?: Buffer;
+  outputUrl?: string;
+}
+
+export interface MediaGenerationPollResult extends MediaGenerationStartResult {}
 
 export interface MediaProviderReadiness {
   ready: boolean;
@@ -41,6 +51,10 @@ export interface MediaGenerationProvider {
   readonly capabilities: readonly MediaCapability[];
   getReadiness(): Promise<MediaProviderReadiness>;
   start(request: MediaGenerationRequest): Promise<MediaGenerationStartResult>;
+  /**
+   * Poll an asynchronous provider job. Synchronous providers should reject
+   * calls to poll instead of inventing an in-memory or fake provider job id.
+   */
   poll(providerJobId: string): Promise<MediaGenerationPollResult>;
 }
 

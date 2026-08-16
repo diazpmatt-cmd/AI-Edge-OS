@@ -141,6 +141,23 @@ export const bbbRegistryProvider: ServiceRegistryProvider = {
   },
 };
 
+/**
+ * Fail-closed registry used only when an explicit tenant config is supplied
+ * without a resolved tenant registry. It intentionally exposes no BB&B service
+ * data and allows no content-generation topics.
+ */
+export const unconfiguredRegistryProvider: ServiceRegistryProvider = {
+  getGeneratableServices: () => [],
+  matchByTopic: () => undefined,
+  getPromptRules: () => "",
+  validateTopic: () => "SERVICE_NOT_GENERATABLE",
+  selectWeeklySlots: () => [],
+  normalizeTopics: () => [],
+  getDefaultTopics: () => [],
+  getSystemBusinessRules: () =>
+    "BUSINESS RULES (MUST FOLLOW):\n- No tenant service registry is configured. Do not generate or publish client-specific service claims.",
+};
+
 // ── ClientContentContext ───────────────────────────────────────────────────────
 
 /**
@@ -207,6 +224,7 @@ export interface PartialClientConfig {
   clientName?: string | null;
   industry?: string | null;
   serviceAreas?: string[] | null;
+  region?: string | null;
   topics?: string[] | null;
   toneStyle?: string[] | null;
   postAngles?: string[] | null;
@@ -239,9 +257,6 @@ function deriveIndustryLabel(industry: string): string {
  * becomes a fallback for legacy rows only.
  */
 function deriveRegion(serviceAreas: string[]): string {
-  if (serviceAreas.some(a => a.toLowerCase().includes(", al"))) {
-    return BBB_REGION;
-  }
   const firstArea = serviceAreas[0] ?? "";
   const [city, state] = firstArea.split(",").map(s => s.trim());
   if (state) return `${city} area, ${state}`;
@@ -262,20 +277,22 @@ export function buildClientContentContext(
   config: PartialClientConfig | null,
   registryOverride?: ServiceRegistryProvider,
 ): ClientContentContext {
-  const registry = registryOverride ?? bbbRegistryProvider;
+  const registry = registryOverride ?? (config === null ? bbbRegistryProvider : unconfiguredRegistryProvider);
+  const hasConfig = config !== null;
 
-  const clientName    = config?.clientName    || "Bed Bugs & Beyond";
-  const industry      = config?.industry      || "pest_control";
-  const approvalMode  = config?.approvalMode  || "approval_required";
-  const ctaText       = config?.ctaText       || "Call Now \u2014 (251) 324-9090";
-  const ctaPreference = config?.ctaPreference || "call_now";
-  const frequency     = config?.frequency     || "every_other_day";
+  const clientName    = config?.clientName?.trim()    || (hasConfig ? "Local Business" : "Bed Bugs & Beyond");
+  const industry      = config?.industry?.trim()      || (hasConfig ? "local_service" : "pest_control");
+  const approvalMode  = config?.approvalMode?.trim()  || "approval_required";
+  const ctaText       = config?.ctaText?.trim()       || (hasConfig ? `Contact ${clientName}` : "Call Now — (251) 324-9090");
+  const ctaPreference = config?.ctaPreference?.trim() || (hasConfig ? "contact_business" : "call_now");
+  const frequency     = config?.frequency?.trim()     || "every_other_day";
 
   // Every array field is spread-copied so that mutating one context's fields
-  // cannot affect another context or the exported constant arrays.
-  const serviceAreas = (config?.serviceAreas?.length)
-    ? [...config.serviceAreas]
-    : [...BBB_DEFAULT_SERVICE_AREAS];
+  // cannot affect another context or the exported constant arrays. An explicit
+  // tenant config never inherits BB&B geography when service areas are empty.
+  const serviceAreas = config === null
+    ? [...BBB_DEFAULT_SERVICE_AREAS]
+    : [...(config.serviceAreas ?? [])];
 
   const topics = (config?.topics?.length)
     ? [...config.topics]
@@ -297,7 +314,7 @@ export function buildClientContentContext(
     ? [...config.platforms]
     : ["facebook"];
 
-  const region = deriveRegion(serviceAreas);
+  const region = config === null ? BBB_REGION : (config.region?.trim() || deriveRegion(serviceAreas));
 
   return {
     clientName,
@@ -440,6 +457,7 @@ export function buildContextFromRecords(
     clientName:    client.clientName,
     industry:      client.industry,
     serviceAreas:  parseJsonSafe<string[]>(client.serviceAreas, []),
+    region:        client.region,
     approvalMode:  settings?.approvalMode  ?? null,
     frequency:     settings?.frequency     ?? null,
     postingTimes:  parseJsonSafe<string[]>(settings?.postingTimes, []),

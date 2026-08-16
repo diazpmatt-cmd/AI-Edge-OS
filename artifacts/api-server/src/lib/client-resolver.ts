@@ -42,7 +42,7 @@ export type { ClientResolveResult };
 
 // ── Table bootstrap (idempotent) ───────────────────────────────────────────────
 
-(async () => {
+export const clientBootstrapReady: Promise<boolean> = (async () => {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clients (
@@ -86,8 +86,10 @@ export type { ClientResolveResult };
     `);
 
     console.log("[CLIENT-RESOLVER] clients table ready");
+    return true;
   } catch (err) {
     console.error("[CLIENT-RESOLVER] Bootstrap failed:", err);
+    return false;
   }
 })();
 

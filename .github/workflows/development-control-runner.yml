@@ -30,11 +30,16 @@ jobs:
           corepack enable
           corepack prepare pnpm@10 --activate
           pnpm install --frozen-lockfile
-      - name: Typecheck and focused tests
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck affected apps
         run: |
-          pnpm --filter @workspace/api-server typecheck
-          pnpm --filter @workspace/api-server test -- client-onboarding-provisioning-plan.test.ts
-          pnpm --filter @workspace/ai-edge-solutions test -- client-context-tenant-isolation-regression.test.ts client-context.test.ts
+          pnpm --filter @workspace/api-server run typecheck
+          pnpm --filter @workspace/ai-edge-solutions run typecheck
+      - name: Run focused tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/__tests__/client-onboarding-provisioning-plan.test.ts
+          pnpm --filter @workspace/ai-edge-solutions exec vitest run src/lib/__tests__/client-context-tenant-isolation-regression.test.ts src/lib/__tests__/client-context.test.ts
       - name: Commit bounded implementation
         run: |
           git config user.name "github-actions[bot]"

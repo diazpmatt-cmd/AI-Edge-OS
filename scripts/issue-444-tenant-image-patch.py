@@ -10,10 +10,7 @@ def replace_once(old: str, new: str) -> None:
     assert count == 1, f"expected one match, found {count}: {old[:120]!r}"
     source = source.replace(old, new, 1)
 
-replace_once(
-    "  matchServiceByTopic,\n",
-    "",
-)
+replace_once("  matchServiceByTopic,\n", "")
 replace_once(
     'import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";\n',
     'import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";\nimport { buildTenantImagePrompt, resolveImageBrandPolicy } from "../lib/image-generation-brand-policy.js";\n',
@@ -95,7 +92,7 @@ replace_once(
     '''  // The canonical BB&B tenant retains its exact logo overlay. Other tenants
   // remain explicitly unbranded until a tenant-owned brand kit is configured;
   // they must never inherit BB&B brand assets or palette.
-  let finalImageBuffer = imageBuffer;
+  let finalImageBuffer: Buffer = imageBuffer;
   if (brandPolicy.requiresOverlay) {
     try {
       finalImageBuffer = await applyBbbBranding(imageBuffer, size);

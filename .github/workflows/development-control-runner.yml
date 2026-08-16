@@ -1,25 +1,93 @@
-name: Development Control Runner Verification
+name: Temporary Issue 513 Patch
 
 on:
-  pull_request:
-    paths:
-      - "lib/development-control-runner/**"
-      - ".github/workflows/development-control-runner.yml"
-      - "pnpm-lock.yaml"
+  push:
+    branches:
+      - fix/513-remove-replit-openai-fallback-v2
+
+permissions:
+  contents: write
 
 jobs:
-  verify:
+  patch:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/development-control-runner typecheck
-      - run: pnpm --filter @workspace/development-control-runner test
-      - run: git diff --check
+          ref: fix/513-remove-replit-openai-fallback-v2
+      - name: Apply bounded Replit fallback cleanup
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("artifacts/api-server/src/routes/auto-content.ts")
+          source = path.read_text(encoding="utf-8")
+
+          old_runtime = '''export function resolveOpenAiBaseUrl(): string {
+            const configured = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim()
+              || process.env.OPENAI_BASE_URL?.trim()
+              || "https://api.openai.com/v1";
+            return configured.replace(/\\/+$/, "");
+          }
+
+          function getAiModel() {
+            // Prefer Replit-managed integration when it has a usable URL; blank Coolify
+            // placeholders must fall back to the direct OpenAI endpoint.
+            const baseURL = resolveOpenAiBaseUrl();
+            const key = process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+              ?? process.env.OPENAI_API_KEY;
+          '''
+          new_runtime = '''export function resolveOpenAiBaseUrl(): string {
+            const configured = process.env.OPENAI_BASE_URL?.trim()
+              || "https://api.openai.com/v1";
+            return configured.replace(/\\/+$/, "");
+          }
+
+          function getAiModel() {
+            const baseURL = resolveOpenAiBaseUrl();
+            const key = resolveOpenAiApiKey();
+          '''
+
+          old_key = '''/**
+           * Canonical OpenAI API-key resolver for direct fetch calls (image generation).
+           * Priority: AI_INTEGRATIONS_OPENAI_API_KEY (Replit-managed) → OPENAI_API_KEY (direct).
+           * Never log the returned value.
+           */
+          export function resolveOpenAiApiKey(): string {
+            return process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+          }
+          '''
+          new_key = '''/**
+           * Canonical OpenAI API-key resolver for direct fetch calls (image generation).
+           * Never log the returned value.
+           */
+          export function resolveOpenAiApiKey(): string {
+            return process.env.OPENAI_API_KEY ?? "";
+          }
+          '''
+
+          old_comment = "  // [S2] API key fail-fast — canonical resolver (AI_INTEGRATIONS_OPENAI_API_KEY → OPENAI_API_KEY)"
+          new_comment = "  // [S2] API key fail-fast — canonical direct OpenAI resolver"
+
+          assert source.count(old_runtime) == 1, "expected one legacy runtime block"
+          assert source.count(old_key) == 1, "expected one legacy API-key block"
+          assert source.count(old_comment) == 1, "expected one legacy image-route comment"
+
+          updated = source.replace(old_runtime, new_runtime).replace(old_key, new_key).replace(old_comment, new_comment)
+          assert "AI_INTEGRATIONS_OPENAI_" not in updated, "legacy Replit OpenAI env references remain"
+          assert "process.env.OPENAI_BASE_URL?.trim()" in updated
+          assert 'return process.env.OPENAI_API_KEY ?? "";' in updated
+          path.write_text(updated, encoding="utf-8")
+      - name: Validate bounded diff
+        run: |
+          git diff --check
+          ! grep -q 'AI_INTEGRATIONS_OPENAI_' artifacts/api-server/src/routes/auto-content.ts
+          git diff -- artifacts/api-server/src/routes/auto-content.ts
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/auto-content.ts
+          git commit -m "Remove dormant Replit OpenAI fallback"
+          git push origin HEAD:fix/513-remove-replit-openai-fallback-v2

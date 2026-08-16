@@ -1,52 +1,25 @@
-name: Temporary Issue 440 Patch
+name: Development Control Runner Verification
 
 on:
-  push:
-    branches:
-      - feat/440-canonical-client-provisioning
-
-permissions:
-  contents: write
+  pull_request:
+    paths:
+      - "lib/development-control-runner/**"
+      - ".github/workflows/development-control-runner.yml"
+      - "pnpm-lock.yaml"
 
 jobs:
-  patch:
-    if: github.actor != 'github-actions[bot]'
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          ref: feat/440-canonical-client-provisioning
-      - name: Apply bounded patch
-        run: |
-          python scripts/issue-440-patch.py
-          python scripts/issue-440-tenant-safety-patch.py
-      - name: Validate patch shape
-        run: |
-          git diff --check
-          grep -q 'provisionCanonicalClient' artifacts/api-server/src/routes/client-onboarding.ts
-          grep -q 'clientBootstrapReady' artifacts/api-server/src/lib/client-resolver.ts
-          grep -q 'region:        client.region' lib/db/src/client-context.ts
-          grep -q 'unconfiguredRegistryProvider' lib/db/src/client-context.ts
-          git diff --stat
-      - name: Install dependencies
-        run: |
-          corepack enable
-          corepack prepare pnpm@10 --activate
-          pnpm install --frozen-lockfile
-      - name: Typecheck shared libraries
-        run: pnpm run typecheck:libs
-      - name: Typecheck affected apps
-        run: |
-          pnpm --filter @workspace/api-server run typecheck
-          pnpm --filter @workspace/ai-edge-solutions run typecheck
-      - name: Run focused tests
-        run: |
-          pnpm --filter @workspace/api-server exec vitest run src/__tests__/client-onboarding-provisioning-plan.test.ts
-          pnpm --filter @workspace/ai-edge-solutions exec vitest run src/lib/__tests__/client-context-tenant-isolation-regression.test.ts src/lib/__tests__/client-context.test.ts
-      - name: Commit bounded implementation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/api-server/src/routes/client-onboarding.ts artifacts/api-server/src/lib/client-resolver.ts lib/db/src/client-context.ts lib/db/src/schema/client-onboarding.ts artifacts/ai-edge-solutions/src/lib/__tests__/client-context.test.ts
-          git commit -m "Provision canonical clients from trusted onboarding drafts"
-          git push origin HEAD:feat/440-canonical-client-provisioning
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/development-control-runner typecheck
+      - run: pnpm --filter @workspace/development-control-runner test
+      - run: git diff --check

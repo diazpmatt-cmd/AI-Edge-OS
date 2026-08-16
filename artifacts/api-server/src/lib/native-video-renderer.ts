@@ -21,7 +21,8 @@ export type NativeVideoRenderInput = {
   cta: string;
   openAiBaseUrl: string;
   openAiApiKey: string;
-  phoneNumber?: string;
+  brandProfile: "bed-bugs-and-beyond-v1";
+  phoneNumber: string;
   videoMode?: "professional" | "pest-story";
 };
 
@@ -111,6 +112,8 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
   const privateDir = process.env.PRIVATE_OBJECT_DIR?.trim() ?? "";
   if (!localMediaDir && !privateDir) throw new Error("storage_not_configured");
   if (!input.openAiApiKey) throw new Error("tts_provider_not_configured");
+  if (input.brandProfile !== "bed-bugs-and-beyond-v1") throw new Error("unsupported_video_brand_profile");
+  if (!input.phoneNumber.trim()) throw new Error("video_phone_number_required");
 
   const workDir = await mkdtemp(path.join(tmpdir(), "aie-video-"));
   const imageFile = path.join(workDir, "campaign.png");
@@ -168,7 +171,7 @@ export async function renderNativeCampaignVideo(input: NativeVideoRenderInput): 
     if (!Number.isFinite(measuredDuration)) throw new Error("invalid_audio_duration");
     const duration = Math.min(VIDEO_MAX_SECONDS, Math.max(VIDEO_MIN_SECONDS, measuredDuration));
 
-    const phoneNumber = input.phoneNumber?.trim() || "(251) 324-9090";
+    const phoneNumber = input.phoneNumber.trim();
     const storyMode = input.videoMode === "pest-story";
     const sceneTwo = storyMode ? "THEY FOUND THE KITCHEN..." : "KNOW THE WARNING SIGNS";
     const sceneThree = storyMode ? "TIME FOR AN EVICTION" : "EARLY ACTION MATTERS";

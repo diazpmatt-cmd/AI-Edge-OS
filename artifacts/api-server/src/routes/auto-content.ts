@@ -32,6 +32,7 @@ import { objectStorageClient } from "../lib/objectStorage.js";
 import { renderNativeCampaignVideo } from "../lib/native-video-renderer.js";
 import { BBB_BRAND, BBB_LOGO_PNG_BASE64 } from "../lib/bbb-brand.js";
 import { buildTenantImagePrompt, resolveImageBrandPolicy } from "../lib/image-generation-brand-policy.js";
+import { buildTenantSafeVideoTitle, resolveNativeVideoTenantPolicy } from "../lib/video-generation-tenant-policy.js";
 import {
   assertWeeklyGenerationContract,
   findWeeklyGenerationJobForDraft,
@@ -2636,6 +2637,15 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   const post = postResult.rows[0];
   if (!post) { res.status(404).json({ error: "Post not found" }); return; }
   if (post.user_id !== userId) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const videoTenantPolicy = resolveNativeVideoTenantPolicy(resolved.client.slug);
+  if (!videoTenantPolicy.allowed || !videoTenantPolicy.brandProfile || !videoTenantPolicy.phoneNumber) {
+    res.status(422).json({
+      error: videoTenantPolicy.reason ?? "tenant_video_branding_not_configured",
+      message: "Native video generation is blocked until this client has a tenant-owned video brand profile.",
+    });
+    return;
+  }
   if (approvedWeeklyPayload) {
     try {
       const draftPlatforms = JSON.parse(post.platforms) as unknown;
@@ -2717,7 +2727,12 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   }
 
   const generationId = existing.rows[0]?.id ?? randomUUID();
-  const title = (post.youtube_title?.trim() || `${post.ai_topic ?? "Local Pest Control"} | ${resolved.context.clientName}`).slice(0, 100);
+  const title = buildTenantSafeVideoTitle({
+    explicitTitle: post.youtube_title,
+    topic: post.ai_topic,
+    industryLabel: resolved.context.industryLabel,
+    clientName: resolved.context.clientName,
+  });
   const cta = (post.cta_value?.trim() || resolved.context.ctaText).slice(0, 160);
   let narration: string;
   try {
@@ -2729,7 +2744,7 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   } catch {
     res.status(422).json({
       error: "narration_safety_block",
-      message: "The video script referenced a service Bed Bugs & Beyond does not offer. The video was not generated.",
+      message: "The video script referenced a service that is not enabled for this client. The video was not generated.",
     });
     return;
   }
@@ -2751,7 +2766,10 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
   }
 
   try {
-    const requestedVideoMode = req.body?.videoMode === "pest-story" ? "pest-story" : "professional";
+    const requestedVideoMode =
+      req.body?.videoMode === "pest-story" && videoTenantPolicy.allowPestStoryMode
+        ? "pest-story"
+        : "professional";
     const rendered = await renderNativeCampaignVideo({
       generationId,
       imagePath,
@@ -2759,7 +2777,8 @@ router.post("/auto-content/generate-video", async (req, res): Promise<void> => {
       title,
       clientName: resolved.context.clientName,
       cta,
-      phoneNumber: "(251) 324-9090",
+      brandProfile: videoTenantPolicy.brandProfile,
+      phoneNumber: videoTenantPolicy.phoneNumber,
       videoMode: requestedVideoMode,
       openAiBaseUrl: resolveOpenAiBaseUrl(),
       openAiApiKey: resolveOpenAiApiKey(),

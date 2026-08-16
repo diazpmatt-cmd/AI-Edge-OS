@@ -76,11 +76,14 @@ async function request(method: string, path: string, body?: unknown) {
 }
 
 describe("Client Onboarding operator ownership", () => {
-  it("bootstraps the ownership column and partial index idempotently", () => {
+  it("bootstraps ownership and canonical-link columns/indexes idempotently", () => {
     expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
     const sql = String(mocks.poolQuery.mock.calls[0]?.[0] ?? "");
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS created_by_user_id TEXT");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS provisioned_client_id UUID");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS provisioned_at TIMESTAMPTZ");
     expect(sql).toContain("CREATE INDEX IF NOT EXISTS client_onboarding_created_by_user_id_idx");
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS client_onboarding_provisioned_client_id_idx");
   });
 
   it("rejects unauthenticated staging access before touching the database", async () => {
@@ -134,11 +137,14 @@ describe("Client Onboarding operator ownership", () => {
     expect(query.params).toContain("operator-1");
   });
 
-  it("keeps canonical provisioning disabled with no database write", async () => {
-    const response = await request("POST", "/client-onboarding/draft-1/deploy", {});
-    expect(response.status).toBe(409);
+  it("requires an allowlisted Apollos admin before canonical provisioning", async () => {
+    const response = await request("POST", "/client-onboarding/draft-1/deploy", {
+      targetIdentitySource: "clerk_user_id",
+      targetUserId: "user_second_client",
+    });
+    expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
-      code: "CLIENT_PROVISIONING_NOT_ACCEPTED",
+      code: "APOLLOS_ADMIN_REQUIRED",
     });
     expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();

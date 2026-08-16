@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTheme } from "@/contexts/theme-context";
+import { useApiFetch } from "@/lib/api";
 
 type Studio = "image" | "video" | "audio" | "ad" | "integrations";
 type Brand  = "bbb" | "aie";
@@ -75,6 +76,22 @@ const STUDIOS: { id: Studio; icon: string; label: string; tagline: string; accen
 function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; seed?: StudioSeed }) {
   const [format, setFormat] = useState<"social" | "ad" | "banner">(seed?.format ?? "social");
   const [style, setStyle]   = useState(seed?.style ?? "modern");
+  const apiFetch = useApiFetch();
+  const [imageReady, setImageReady] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const generationKeyRef = useRef<{ fingerprint: string; key: string } | null>(null);
+
+  // MEDIA_STUDIO_IMAGE_EXECUTION_V2: fail closed unless the authenticated
+  // server readiness boundary proves the image provider is explicitly enabled.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ readiness?: { capabilities?: { image?: boolean } } }>("/media-generation/readiness")
+      .then(result => { if (!cancelled) setImageReady(result.readiness?.capabilities?.image === true); })
+      .catch(() => { if (!cancelled) setImageReady(false); });
+    return () => { cancelled = true; };
+  }, [apiFetch]);
 
   // Prompt Builder fields
   const [goal,     setGoal]     = useState(seed?.prompt ? "" : "");
@@ -122,6 +139,39 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
     navigator.clipboard.writeText(generatedPrompt).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function generateImage() {
+    if (!imageReady || (!hasBuilderInput && !seed?.prompt) || generating) return;
+    setGenerating(true);
+    setGenerationError(null);
+    try {
+      const size = format === "social" ? "1024x1024" : "1536x1024";
+      const fingerprint = `${size}:${generatedPrompt}`;
+      if (!generationKeyRef.current || generationKeyRef.current.fingerprint !== fingerprint) {
+        generationKeyRef.current = {
+          fingerprint,
+          key: `media-studio:${crypto.randomUUID()}`,
+        };
+      }
+      const generated = await apiFetch<{ generationId: string }>("/auto-content/generate-image", {
+        method: "POST",
+        body: JSON.stringify({
+          prompt: generatedPrompt,
+          size,
+          idempotencyKey: generationKeyRef.current.key,
+        }),
+      });
+      const access = await apiFetch<{ signedUrl: string }>(
+        `/auto-content/generate-image/${generated.generationId}/signed-url`,
+      );
+      setGeneratedImageUrl(access.signedUrl);
+    } catch (error) {
+      setGeneratedImageUrl(null);
+      setGenerationError(error instanceof Error ? error.message : "Image generation failed");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   const placeholders = [
@@ -254,30 +304,31 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
             </div>
           </Panel>
 
-          {/* Brand kit */}
-          <Panel label="Brand Kit" accent="#00AEEF">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {[
-                { label: "Primary Color", value: "#00AEEF" },
-                { label: "Secondary",     value: "#C0C0C0" },
-                { label: "Background",    value: "#030612" },
-                { label: "Accent",        value: "#FFFFFF" },
-              ].map(c => (
-                <div key={c.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: 5, background: c.value, border: "1px solid rgba(255,255,255,0.15)" }} />
-                  <span style={{ fontSize: 11.5, color: "#94A3B8" }}>{c.label}</span>
-                </div>
-              ))}
+          {/* Brand handling is enforced server-side from canonical tenant policy. */}
+          <Panel label="Brand Handling" accent="#00AEEF">
+            <div style={{ fontSize: 11.5, color: "#94A3B8", lineHeight: 1.6 }}>
+              Brand rules come from the active client context. Bed Bugs & Beyond receives its official overlay; other tenants stay unbranded until their own brand kit is configured.
             </div>
           </Panel>
 
-          {/* Export */}
+          {/* Export is available only for a real provider-confirmed asset. */}
           <Panel label="Export" accent="#00AEEF">
-            <div style={{ display: "flex", gap: 12 }}>
-              <ExportButton label="PNG" accent="#00AEEF" />
-              <ExportButton label="JPG" accent="#00AEEF" />
-              <ExportButton label="SVG" accent="#00AEEF" />
-            </div>
+            {generatedImageUrl ? (
+              <a
+                href={generatedImageUrl}
+                download="ai-edge-generated-image.png"
+                style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  padding: "9px 14px", borderRadius: 8, textDecoration: "none",
+                  background: "rgba(0,174,239,0.1)", border: "1px solid rgba(0,174,239,0.3)",
+                  color: "#00AEEF", fontSize: 12, fontWeight: 700,
+                }}
+              >
+                Download PNG
+              </a>
+            ) : (
+              <span style={{ fontSize: 11.5, color: "#64748B" }}>Generate an image before export is available.</span>
+            )}
           </Panel>
         </div>
 
@@ -287,16 +338,7 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
           {/* Mock Generated Image Preview */}
           <Panel label="AI Image Output" accent="#00AEEF">
             <div style={{ position: "relative" }}>
-              {/* Coming Soon badge */}
-              <div style={{
-                position: "absolute", top: 12, right: 12, zIndex: 2,
-                padding: "4px 10px", borderRadius: 6, fontSize: 9, fontWeight: 800, letterSpacing: "0.6px",
-                background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.35)", color: "#FBBF24",
-              }}>
-                COMING SOON
-              </div>
-
-              {/* Preview card */}
+              {/* Real provider result is rendered only after the signed asset URL is returned. */}
               <div style={{
                 aspectRatio: format === "banner" ? "16 / 5" : format === "ad" ? "1200 / 628" : "1 / 1",
                 background: "linear-gradient(135deg, #071828 0%, #091E32 40%, #071222 100%)",
@@ -304,6 +346,13 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                 gap: 12, padding: 20, position: "relative", overflow: "hidden",
               }}>
+                {generatedImageUrl && (
+                  <img
+                    src={generatedImageUrl}
+                    alt="Generated campaign creative"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 3 }}
+                  />
+                )}
                 {/* Decorative background grid */}
                 <div style={{
                   position: "absolute", inset: 0, opacity: 0.04,
@@ -341,6 +390,17 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
               </div>
             </div>
 
+            {generationError && (
+              <div style={{ marginTop: 10, fontSize: 11, color: "#FCA5A5", lineHeight: 1.5 }}>
+                Generation blocked or failed: {generationError}
+              </div>
+            )}
+            {!imageReady && (
+              <div style={{ marginTop: 10, fontSize: 11, color: "#FBBF24", lineHeight: 1.5 }}>
+                Image generation remains disabled until the server-side provider gate is explicitly enabled.
+              </div>
+            )}
+
             {/* Prompt Actions row */}
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
               <button
@@ -358,21 +418,20 @@ function ImageStudio({ t, seed }: { t: ReturnType<typeof useTheme>["colors"]; se
                 {copied ? "✓ Copied!" : "📋 Copy Prompt"}
               </button>
               <button
-                disabled
-                title="AI generation coming in next release"
+                onClick={() => void generateImage()}
+                disabled={!imageReady || (!hasBuilderInput && !seed?.prompt) || generating}
+                title={imageReady ? "Generate a real provider-backed image" : "Image provider is not enabled"}
                 style={{
                   flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                  padding: "10px", borderRadius: 9, cursor: "not-allowed",
-                  background: "rgba(0,174,239,0.04)", border: "1.5px solid rgba(0,174,239,0.15)",
-                  color: "#334155", fontSize: 12, fontWeight: 700,
+                  padding: "10px", borderRadius: 9,
+                  cursor: imageReady && (hasBuilderInput || seed?.prompt) && !generating ? "pointer" : "not-allowed",
+                  background: imageReady ? "rgba(0,174,239,0.1)" : "rgba(0,174,239,0.04)",
+                  border: "1.5px solid rgba(0,174,239,0.2)",
+                  color: imageReady ? "#00AEEF" : "#475569", fontSize: 12, fontWeight: 700,
                 }}
               >
                 <span style={{ fontSize: 13 }}>✨</span>
-                Generate Image
-                <span style={{
-                  padding: "2px 7px", borderRadius: 4, fontSize: 9, fontWeight: 800,
-                  background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#FBBF24",
-                }}>SOON</span>
+                {generating ? "Generating…" : "Generate Image"}
               </button>
             </div>
           </Panel>

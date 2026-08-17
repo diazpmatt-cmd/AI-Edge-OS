@@ -78,6 +78,7 @@ jobs:
           src/__tests__/lead-intelligence-conversion.test.ts
           src/lib/web-leads-access-policy.test.ts
           src/lib/assessments-access-policy.test.ts
+          src/routes/assessments.test.ts
           src/lib/revenue-leak-read-model.test.ts
           src/routes/revenue-leaks.test.ts
           src/__tests__/telnyx-webhook-security.test.ts

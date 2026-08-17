@@ -12,12 +12,14 @@ jobs:
   verify-contact-capture:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-node@1e60f620b9541d036759a207c0f2472c05b2d7c8
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
       - name: Enable pnpm
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck API server

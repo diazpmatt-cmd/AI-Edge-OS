@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export const CONVERSION_STAGES = [
   "appointment_requested",
@@ -24,6 +24,7 @@ export function suppressFollowUpForStage(stage: string | null | undefined): bool
 }
 
 export async function updateLeadConversionStage(
+  clientId: string,
   leadId: string,
   stage: unknown,
   note?: unknown,
@@ -32,7 +33,12 @@ export async function updateLeadConversionStage(
     return { status: "invalid" as const, error: "invalid_conversion_stage" as const };
   }
 
-  const existing = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId)).limit(1);
+  const ownershipFilter = and(
+    eq(leadsTable.clientId, clientId),
+    eq(leadsTable.id, leadId),
+  );
+
+  const existing = await db.select().from(leadsTable).where(ownershipFilter).limit(1);
   if (!existing[0]) return { status: "not_found" as const, error: "lead_not_found" as const };
 
   const now = new Date();
@@ -46,7 +52,8 @@ export async function updateLeadConversionStage(
     notes: previousNote ? `${previousNote}\n${stageNote}` : stageNote,
     ...(suppressFollowUpForStage(stage) ? { lastFollowUpAt: now } : {}),
     updatedAt: now,
-  }).where(eq(leadsTable.id, leadId)).returning();
+  }).where(ownershipFilter).returning();
 
+  if (!updated[0]) return { status: "not_found" as const, error: "lead_not_found" as const };
   return { status: "updated" as const, lead: updated[0] };
 }

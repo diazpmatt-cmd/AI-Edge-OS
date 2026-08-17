@@ -57,7 +57,7 @@ describe("buildRevenueLeakReadModel", () => {
       lead(),
       lead({ id: "00000000-0000-4000-8000-000000000002", status: "booked" }),
       lead({ id: "00000000-0000-4000-8000-000000000003", lastFollowUpAt: new Date("2026-08-16T12:00:00.000Z") }),
-      lead({ id: "00000000-0000-4000-8000-000000000004", outcome: "inbound_reply" }),
+      lead({ id: "00000000-0000-4000-8000-000000000004", outcome: "sms_replied:provider-message-id" }),
     ], [], NOW);
 
     expect(model.summary.revenueRisks).toBe(1);

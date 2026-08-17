@@ -1,0 +1,28 @@
+name: Revenue Proof contact verification
+
+on:
+  push:
+    branches:
+      - fix/revenue-proof-contact-capture
+
+permissions:
+  contents: read
+
+jobs:
+  verify-contact-capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@1e60f620b9541d036759a207c0f2472c05b2d7c8
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run contact capture tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/contact-capture.test.ts
+      - name: Check diff whitespace
+        run: git diff --check origin/main...HEAD

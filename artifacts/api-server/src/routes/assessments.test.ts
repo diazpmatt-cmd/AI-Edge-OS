@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assessmentMutationSchema,
   assessmentSubmissionSchema,
   createAssessmentSubmissionHandler,
   deriveAssessmentDedupeKey,
@@ -59,6 +60,22 @@ describe("assessmentSubmissionSchema", () => {
       unexpected: "field",
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("assessmentMutationSchema", () => {
+  it("allows only canonical pipeline statuses and bounded notes", () => {
+    expect(assessmentMutationSchema.parse({ status: "qualified", notes: "Called owner" })).toEqual({
+      status: "qualified",
+      notes: "Called owner",
+    });
+    expect(assessmentMutationSchema.safeParse({ status: "invented_stage" }).success).toBe(false);
+    expect(assessmentMutationSchema.safeParse({ notes: "x".repeat(5001) }).success).toBe(false);
+  });
+
+  it("rejects empty and unknown mutations", () => {
+    expect(assessmentMutationSchema.safeParse({}).success).toBe(false);
+    expect(assessmentMutationSchema.safeParse({ status: "contacted", unexpected: true }).success).toBe(false);
   });
 });
 

@@ -33,6 +33,21 @@ export const assessmentSubmissionSchema = z.object({
   scoreReviewStrength: optionalScore,
 }).strict();
 
+export const assessmentMutationSchema = z.object({
+  status: z.enum([
+    "new",
+    "contacted",
+    "qualified",
+    "strategy_call_booked",
+    "proposal_sent",
+    "won",
+    "lost",
+  ]).optional(),
+  notes: z.string().max(5000).optional(),
+}).strict().refine(value => value.status !== undefined || value.notes !== undefined, {
+  message: "At least one assessment field is required",
+});
+
 export type AssessmentSubmission = z.infer<typeof assessmentSubmissionSchema>;
 type AssessmentCaptureResult = { id: string; duplicate: boolean };
 export type AssessmentCaptureFn = (
@@ -196,13 +211,18 @@ router.patch("/assessments/:id", async (req, res) => {
   const access = authorizeAssessmentsAccess(userId);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
 
+  const parsed = assessmentMutationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(422).json({ error: "invalid_assessment_mutation" });
+    return;
+  }
+
   try {
-    const body = req.body as { status?: string; notes?: string };
     const [updated] = await db
       .update(assessmentsTable)
       .set({
-        ...(body.status !== undefined && { status: body.status }),
-        ...(body.notes  !== undefined && { notes:  body.notes  }),
+        ...(parsed.data.status !== undefined && { status: parsed.data.status }),
+        ...(parsed.data.notes !== undefined && { notes: parsed.data.notes }),
       })
       .where(eq(assessmentsTable.id, req.params.id))
       .returning();

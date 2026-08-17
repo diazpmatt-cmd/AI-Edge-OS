@@ -76,4 +76,5 @@ jobs:
           src/__tests__/lead-email-worker-safety.test.ts
           src/__tests__/lead-intelligence-delivery.test.ts
           src/__tests__/lead-intelligence-conversion.test.ts
+          src/lib/web-leads-access-policy.test.ts
           src/__tests__/telnyx-webhook-security.test.ts

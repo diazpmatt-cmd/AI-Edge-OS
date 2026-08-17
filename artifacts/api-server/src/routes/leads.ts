@@ -8,6 +8,7 @@ import { reviewLead } from "../services/lead-review";
 import { sendApprovedLead } from "../services/lead-send";
 import { needsFollowUp } from "../services/lead-delivery";
 import { resolveClientContentContextFromDb } from "../lib/client-resolver";
+import { authorizeWebLeadsAccess } from "../lib/web-leads-access-policy.js";
 
 const router = Router();
 
@@ -60,7 +61,8 @@ function parseWebLeadMessage(msg: string | null) {
 
 router.get("/leads/web", async (req, res) => {
   const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const access = authorizeWebLeadsAccess(userId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const rows = await db.select().from(leadsTable).where(sql`
     ${leadsTable.clientName} = ${"AI Edge Solutions"}
     AND ${leadsTable.source} = ${"contact-form"}

@@ -104,7 +104,7 @@ describe("public contact revenue capture", () => {
       firstName: "  JANE  ",
       lastName: "DOE",
       email: "JANE@EXAMPLE.COM",
-      phone: "+1 251-324-9090",
+      phone: "251-324-9090",
       business: "EXAMPLE SERVICES LLC",
       industry: "hvac",
       services: ["lead recovery ai", "AI RECEPTIONIST"],

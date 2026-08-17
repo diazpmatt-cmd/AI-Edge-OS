@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { assessmentsTable } from "@workspace/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { authorizeAssessmentsAccess } from "../lib/assessments-access-policy.js";
 
 const router = Router();
 
@@ -53,10 +54,11 @@ router.post("/assessments", async (req, res) => {
   }
 });
 
-// PROTECTED — requires Clerk auth (admin CRM view)
+// PROTECTED — company assessment CRM requires canonical Apollos admin access.
 router.get("/assessments", async (req, res) => {
   const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const access = authorizeAssessmentsAccess(userId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
 
   try {
     const rows = await db
@@ -71,10 +73,11 @@ router.get("/assessments", async (req, res) => {
   }
 });
 
-// PROTECTED — update status and/or notes
+// PROTECTED — company assessment CRM writes require canonical Apollos admin access.
 router.patch("/assessments/:id", async (req, res) => {
   const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const access = authorizeAssessmentsAccess(userId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
 
   try {
     const body = req.body as { status?: string; notes?: string };

@@ -29,6 +29,37 @@ export interface LeadsResponse {
   stats: LeadsStats;
 }
 
+// ── Revenue Leak Detector ─────────────────────────────────────────────────────
+
+export type RevenueLeakKind = "follow_up_due" | "attribution_unresolved";
+export type RevenueLeakClass = "revenue_risk" | "proof_gap";
+
+export interface RevenueLeakItem {
+  id: string;
+  kind: RevenueLeakKind;
+  classification: RevenueLeakClass;
+  priority: "high" | "medium";
+  title: string;
+  observedAt: string;
+  leadId: string | null;
+  source: string | null;
+  customerName: string | null;
+  verifiedRevenue: number | null;
+  evidence: Record<string, string | number | boolean | null>;
+  recommendedAction: string;
+}
+
+export interface RevenueLeaksResponse {
+  generatedAt: string;
+  summary: {
+    total: number;
+    revenueRisks: number;
+    proofGaps: number;
+    verifiedRevenueAtIssue: number;
+  };
+  items: RevenueLeakItem[];
+}
+
 // ── Social Posts ──────────────────────────────────────────────────────────────
 // Shape returned by rowToDto() in api-server/src/routes/social-posts.ts
 // platforms is a parsed JSON string[] — not a raw string.

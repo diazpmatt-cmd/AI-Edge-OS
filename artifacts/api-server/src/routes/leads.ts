@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { leadsTable } from "@workspace/db/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
+import { z } from "zod";
 import { analyzeLead } from "../services/lead-analysis";
 import { reviewLead } from "../services/lead-review";
 import { sendApprovedLead } from "../services/lead-send";
@@ -84,6 +85,44 @@ router.get("/leads/web", async (req, res) => {
       };
     }),
     stats: { total: rows.length, active, thisMonth },
+  });
+});
+
+export const webLeadMutationSchema = z.object({
+  status: z.enum(["new", "contacted", "closed", "lost"]).optional(),
+  notes: z.string().max(5000).optional(),
+}).strict().refine(value => value.status !== undefined || value.notes !== undefined, {
+  message: "At least one mutation field is required",
+});
+
+router.patch("/leads/web/:id", async (req, res) => {
+  const { userId } = getAuth(req);
+  const access = authorizeWebLeadsAccess(userId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const parsed = webLeadMutationSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(422).json({ error: "invalid_web_lead_mutation" }); return; }
+
+  const [updated] = await db.update(leadsTable).set({
+    ...(parsed.data.status !== undefined && { status: parsed.data.status }),
+    ...(parsed.data.notes !== undefined && { notes: parsed.data.notes }),
+    updatedAt: new Date(),
+  }).where(and(
+    eq(leadsTable.id, req.params.id),
+    eq(leadsTable.clientName, "AI Edge Solutions"),
+    eq(leadsTable.source, "contact-form"),
+  )).returning();
+
+  if (!updated) { res.status(404).json({ error: "web_lead_not_found" }); return; }
+
+  const contact = parseWebLeadMessage(updated.message);
+  res.json({
+    id: updated.id, customerName: updated.customerName ?? null, phone: updated.phone,
+    email: contact.email, business: contact.business, industry: contact.industry,
+    services: contact.services, packageLabel: contact.packageLabel,
+    packageKey: updated.eventType.startsWith("contact-form:") ? updated.eventType.replace("contact-form:", "") : null,
+    note: contact.note, status: updated.status, notes: updated.notes,
+    createdAt: updated.createdAt.toISOString(), updatedAt: updated.updatedAt.toISOString(),
   });
 });
 

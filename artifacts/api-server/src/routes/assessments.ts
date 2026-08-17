@@ -41,6 +41,12 @@ export type AssessmentCaptureFn = (
   now?: Date,
 ) => Promise<AssessmentCaptureResult>;
 
+function normalizePhoneIdentity(phone: string | null | undefined): string {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return digits;
+}
+
 function normalizedAssessmentFingerprint(submission: {
   businessName: string;
   industry: string;
@@ -71,7 +77,7 @@ function normalizedAssessmentFingerprint(submission: {
     instagramUrl: (submission.instagramUrl ?? "").trim().toLowerCase(),
     contactName: submission.contactName.trim().toLowerCase(),
     contactEmail: submission.contactEmail.trim().toLowerCase(),
-    contactPhone: (submission.contactPhone ?? "").replace(/\D/g, ""),
+    contactPhone: normalizePhoneIdentity(submission.contactPhone),
     contactMethod: (submission.contactMethod ?? "email").trim().toLowerCase(),
     scoreOverall: submission.scoreOverall ?? null,
     scoreLeadRecovery: submission.scoreLeadRecovery ?? null,

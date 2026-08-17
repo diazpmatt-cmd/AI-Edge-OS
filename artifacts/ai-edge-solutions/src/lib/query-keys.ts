@@ -4,6 +4,9 @@ export const queryKeys = {
   leads: {
     all: ["leads"] as const,
   },
+  revenueLeaks: {
+    all: ["revenue-leaks"] as const,
+  },
   socialPosts: {
     all: ["social-posts"] as const,
   },

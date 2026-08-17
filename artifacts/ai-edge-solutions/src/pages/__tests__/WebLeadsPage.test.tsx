@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("../WebLeadsPage.tsx", import.meta.url), "utf8");
+const source = readFileSync("src/pages/WebLeadsPage.tsx", "utf8");
 
 describe("Web Leads production acceptance boundaries", () => {
   it("never renders a read failure as a confirmed zero-lead state", () => {

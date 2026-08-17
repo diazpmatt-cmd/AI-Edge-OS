@@ -81,9 +81,11 @@ jobs:
           src/routes/assessments.test.ts
           src/lib/revenue-leak-read-model.test.ts
           src/routes/revenue-leaks.test.ts
+          src/routes/web-leads-mutation.test.ts
           src/__tests__/telnyx-webhook-security.test.ts
 
       - name: Run assessment inbox persistence test
         run: >-
           pnpm --filter @workspace/ai-edge-solutions exec vitest run
           src/pages/__tests__/AssessmentsInboxPage.test.tsx
+          src/pages/__tests__/WebLeadsPage.test.tsx

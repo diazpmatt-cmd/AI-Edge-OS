@@ -1,0 +1,183 @@
+name: Production auth live probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/prod-auth-live-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe canonical production admin and Clerk proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          failures=0
+
+          probe() {
+            local label="$1"
+            local url="$2"
+            local body
+            local headers
+            local rc
+            local status
+            body="$(mktemp)"
+            headers="$(mktemp)"
+
+            echo "=== ${label} ==="
+            set +e
+            curl --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              --dump-header "$headers" --output "$body" \
+              "$url"
+            rc=$?
+            set -e
+
+            status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' "$headers")"
+            echo "curl_exit=${rc}"
+            echo "status=${status:-unavailable}"
+            grep -iE '^(content-type|location|server|via|x-request-id):' "$headers" || true
+            echo "body_bytes=$(wc -c < "$body" | tr -d ' ')"
+
+            if [ "$rc" -ne 0 ] || [ -z "$status" ] || [ "$status" -ge 500 ]; then
+              failures=$((failures + 1))
+            fi
+
+            rm -f "$body" "$headers"
+          }
+
+          probe "home" "https://aiedgesolutions.online/"
+          probe "admin_login" "https://aiedgesolutions.online/admin/login"
+          probe "admin_dashboard" "https://aiedgesolutions.online/admin/dashboard"
+          probe "competitor_intelligence" "https://aiedgesolutions.online/admin/competitor-intelligence"
+          probe "api_health" "https://aiedgesolutions.online/api/healthz"
+          probe "api_version" "https://aiedgesolutions.online/api/version"
+          probe "clerk_environment" "https://aiedgesolutions.online/api/__clerk/v1/environment"
+
+          echo "probe_failures=${failures}"
+
+      - name: Inspect sanitized Coolify startup and upstream signals
+        if: always()
+        shell: bash
+        env:
+          COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL || secrets.COOLIFY_BASE_URL }}
+          COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          COOLIFY_APP_UUID: a6y7jyyedbgfwvlh7vag7xh8
+          APOLLOS_TUNNEL_UUID: cqy9xj3w6qarzmdkyiksklht
+        run: |
+          set -euo pipefail
+
+          if [ -z "${COOLIFY_BASE_URL:-}" ] || [ -z "${COOLIFY_DEPLOY_TOKEN:-}" ]; then
+            echo "coolify_log_probe=config_unavailable"
+            exit 0
+          fi
+
+          count_pattern() {
+            local file="$1"
+            local label="$2"
+            local pattern="$3"
+            local count
+            count="$(grep -Eic "$pattern" "$file" || true)"
+            echo "${label}=${count}"
+          }
+
+          fetch_logs() {
+            local uuid="$1"
+            local prefix="$2"
+            local response
+            local logs
+            local rc
+            response="$(mktemp)"
+            logs="$(mktemp)"
+
+            set +e
+            curl --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+              -H "Accept: application/json" \
+              "${COOLIFY_BASE_URL%/}/api/v1/applications/${uuid}/logs?lines=500" \
+              -o "$response"
+            rc=$?
+            set -e
+
+            echo "${prefix}_log_api_curl_exit=${rc}"
+            if [ "$rc" -ne 0 ] || ! jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+              echo "${prefix}_log_payload=unavailable"
+              rm -f "$response" "$logs"
+              return 1
+            fi
+
+            jq -r '.logs' "$response" > "$logs"
+            echo "${prefix}_log_payload=available"
+            echo "${prefix}_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
+            printf '%s' "$logs"
+            rm -f "$response"
+          }
+
+          # Canonical app logs currently surface the web/Nginx side. Emit only counts.
+          app_logs="$(mktemp)"
+          tunnel_logs="$(mktemp)"
+          trap 'rm -f "$app_logs" "$tunnel_logs"' EXIT
+
+          fetch_logs "$COOLIFY_APP_UUID" "app" > "$app_logs.meta" 2>/dev/null || true
+          # Fetch again directly into local scratch without printing raw content.
+          response="$(mktemp)"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${COOLIFY_APP_UUID}/logs?lines=500" \
+            -o "$response"
+          jq -r '.logs // ""' "$response" > "$app_logs"
+          rm -f "$response"
+
+          echo "app_log_bytes=$(wc -c < "$app_logs" | tr -d ' ')"
+          count_pattern "$app_logs" "server_listening_count" 'Server listening'
+          count_pattern "$app_logs" "startup_failure_count" 'Startup migration or publishing guard failed'
+          count_pattern "$app_logs" "listen_error_count" 'Error listening on port'
+          count_pattern "$app_logs" "database_auth_failure_count" 'password authentication failed|database authentication failed'
+          count_pattern "$app_logs" "required_config_failure_count" 'required but was not provided|DATABASE_URL.*required|CLERK_PUBLISHABLE_KEY.*required|CLERK_SECRET_KEY.*required|SCHEDULER_SECRET.*required|GORILLADESK_API_KEY.*required'
+          count_pattern "$app_logs" "module_load_failure_count" 'Cannot find module|ERR_MODULE_NOT_FOUND'
+          count_pattern "$app_logs" "filesystem_failure_count" 'ENOENT'
+          count_pattern "$app_logs" "nginx_502_count" ' 502 '
+          count_pattern "$app_logs" "upstream_connect_failed_count" 'connect\(\) failed'
+          count_pattern "$app_logs" "upstream_no_route_count" 'No route to host'
+          count_pattern "$app_logs" "upstream_network_unreachable_count" 'Network is unreachable'
+          count_pattern "$app_logs" "upstream_connection_refused_count" 'Connection refused|connection refused|ECONNREFUSED'
+          count_pattern "$app_logs" "upstream_timeout_count" 'upstream timed out|Connection timed out'
+          count_pattern "$app_logs" "upstream_host_not_found_count" 'host not found in upstream'
+          count_pattern "$app_logs" "upstream_no_live_count" 'no live upstreams'
+          count_pattern "$app_logs" "upstream_premature_close_count" 'upstream prematurely closed connection'
+
+          # Apollos tunnel sits on the external coolify network and targets http://api:3000.
+          # If it has expected OAuth/401 evidence without connection failures, the API is alive
+          # and only the web/default-network path is broken.
+          response="$(mktemp)"
+          set +e
+          curl --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${APOLLOS_TUNNEL_UUID}/logs?lines=500" \
+            -o "$response"
+          tunnel_rc=$?
+          set -e
+          echo "tunnel_log_api_curl_exit=${tunnel_rc}"
+          if [ "$tunnel_rc" -eq 0 ] && jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+            jq -r '.logs' "$response" > "$tunnel_logs"
+            echo "tunnel_log_payload=available"
+            echo "tunnel_log_bytes=$(wc -c < "$tunnel_logs" | tr -d ' ')"
+            count_pattern "$tunnel_logs" "tunnel_expected_auth_count" 'Unauthorized|401|oauth'
+            count_pattern "$tunnel_logs" "tunnel_ready_count" 'ready|readyz|PASS'
+            count_pattern "$tunnel_logs" "tunnel_connection_failed_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable|dial tcp.*failed'
+            count_pattern "$tunnel_logs" "tunnel_api_target_count" 'api:3000'
+          else
+            echo "tunnel_log_payload=unavailable"
+          fi
+          rm -f "$response" "$app_logs.meta"

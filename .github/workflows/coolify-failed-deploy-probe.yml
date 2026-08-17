@@ -1,0 +1,84 @@
+name: Coolify failed deploy probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/coolify-failed-deploy-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      COOLIFY_BASE_URL: ${{ vars.COOLIFY_BASE_URL || secrets.COOLIFY_BASE_URL }}
+      COOLIFY_DEPLOY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+      DEPLOYMENT_UUID: oex6dw97z4kn8j3hgzzcc7br
+      APP_UUID: a6y7jyyedbgfwvlh7vag7xh8
+    steps:
+      - name: Classify failed deployment without printing raw logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${COOLIFY_BASE_URL:-}" ] || [ -z "${COOLIFY_DEPLOY_TOKEN:-}" ]; then
+            echo "coolify_config=unavailable"
+            exit 0
+          fi
+
+          response="$(mktemp)"
+          logs="$(mktemp)"
+          app_response="$(mktemp)"
+          app_logs="$(mktemp)"
+          trap 'rm -f "$response" "$logs" "$app_response" "$app_logs"' EXIT
+
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/deployments/${DEPLOYMENT_UUID}" \
+            -o "$response"
+
+          echo "deployment_status=$(jq -r '.status // "unknown"' "$response")"
+          echo "deployment_logs_field_type=$(jq -r 'if has("logs") then (.logs|type) else "missing" end' "$response")"
+          echo "deployment_error_field_present=$(jq -r 'has("error") or has("message")' "$response")"
+
+          if jq -e '.logs | type == "string"' "$response" >/dev/null 2>&1; then
+            jq -r '.logs' "$response" > "$logs"
+          elif jq -e '.logs | type == "array"' "$response" >/dev/null 2>&1; then
+            jq -r '.logs[]? | if type == "string" then . else (.message // .output // .log // empty) end' "$response" > "$logs"
+          else
+            : > "$logs"
+          fi
+
+          count() {
+            local file="$1" label="$2" pattern="$3"
+            echo "${label}=$(grep -Eic "$pattern" "$file" || true)"
+          }
+
+          echo "deployment_log_bytes=$(wc -c < "$logs" | tr -d ' ')"
+          count "$logs" "deploy_nginx_emerg_count" 'nginx: \[emerg\]|emerg'
+          count "$logs" "deploy_nginx_error_count" 'nginx: \[error\]|nginx.*error'
+          count "$logs" "deploy_network_not_found_count" 'network .* not found|network.*does not exist'
+          count "$logs" "deploy_service_unhealthy_count" 'unhealthy|health check failed|healthcheck failed'
+          count "$logs" "deploy_container_exit_count" 'exited with code|exit code|container.*exited'
+          count "$logs" "deploy_api_start_failure_count" 'Startup migration or publishing guard failed|Error listening on port'
+          count "$logs" "deploy_required_config_count" 'required but was not provided|is required'
+          count "$logs" "deploy_name_resolution_count" 'host not found|could not be resolved|name or service not known|temporary failure in name resolution'
+          count "$logs" "deploy_connection_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable'
+          count "$logs" "deploy_compose_error_count" 'compose.*error|service .* failed|failed to start|failed to create'
+          count "$logs" "deploy_port_conflict_count" 'address already in use|port is already allocated'
+          count "$logs" "deploy_pull_error_count" 'pull access denied|manifest unknown|not found.*manifest|unauthorized'
+          count "$logs" "deploy_oom_count" 'out of memory|oom|killed process'
+
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${COOLIFY_DEPLOY_TOKEN}" \
+            -H "Accept: application/json" \
+            "${COOLIFY_BASE_URL%/}/api/v1/applications/${APP_UUID}/logs?lines=500" \
+            -o "$app_response"
+          jq -r '.logs // ""' "$app_response" > "$app_logs"
+          echo "app_log_bytes=$(wc -c < "$app_logs" | tr -d ' ')"
+          count "$app_logs" "app_nginx_emerg_count" 'nginx: \[emerg\]|emerg'
+          count "$app_logs" "app_restart_count_signal" 'restarting|restart'
+          count "$app_logs" "app_dns_signal_count" 'host not found|could not be resolved|name or service not known|temporary failure in name resolution'
+          count "$app_logs" "app_upstream_connect_count" 'connect\(\) failed|connection refused|ECONNREFUSED|No route to host|Network is unreachable'

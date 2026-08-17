@@ -271,6 +271,14 @@ function nodeHeaders(request: IncomingMessage): Headers {
   return headers;
 }
 
+interface NodeResponseView {
+  readonly status: number;
+  readonly headers: {
+    forEach(callback: (value: string, name: string) => void): void;
+  };
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
 export function createDab3cNodeHandler(
   dependencies: Dab3cActivationDependencies,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
@@ -299,8 +307,9 @@ export function createDab3cNodeHandler(
     } catch {
       webResponse = unavailable();
     }
-    response.statusCode = webResponse.status;
-    webResponse.headers.forEach((value, name) => response.setHeader(name, value));
-    response.end(Buffer.from(await webResponse.arrayBuffer()));
+    const nodeResponse = webResponse as unknown as NodeResponseView;
+    response.statusCode = nodeResponse.status;
+    nodeResponse.headers.forEach((value, name) => response.setHeader(name, value));
+    response.end(Buffer.from(await nodeResponse.arrayBuffer()));
   };
 }

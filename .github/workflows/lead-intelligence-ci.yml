@@ -1,4 +1,4 @@
-# Verification workflow for Lead Intelligence review, sending, delivery, follow-up, conversion, and production readiness.
+# Verification workflow for Lead Intelligence review, sending, delivery, follow-up, conversion, revenue-leak detection, and production readiness.
 name: Lead Intelligence CI
 
 on:
@@ -77,4 +77,6 @@ jobs:
           src/__tests__/lead-intelligence-delivery.test.ts
           src/__tests__/lead-intelligence-conversion.test.ts
           src/lib/web-leads-access-policy.test.ts
+          src/lib/revenue-leak-read-model.test.ts
+          src/routes/revenue-leaks.test.ts
           src/__tests__/telnyx-webhook-security.test.ts

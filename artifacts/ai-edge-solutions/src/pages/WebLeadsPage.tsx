@@ -131,7 +131,7 @@ export default function WebLeadsPage() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
-  const { data, isLoading } = useQuery<WebLeadsResponse>({
+  const { data, isLoading, isError, refetch } = useQuery<WebLeadsResponse>({
     queryKey: ["web-leads"],
     queryFn: () => authFetch<WebLeadsResponse>("/leads/web"),
     staleTime: 30_000,
@@ -140,9 +140,10 @@ export default function WebLeadsPage() {
 
   const patchMut = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: { status?: string; notes?: string } }) =>
-      authFetch(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+      authFetch(`/leads/web/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["web-leads"] });
+      setEditingNotes(false);
       toast.success("Lead updated");
     },
     onError: () => toast.error("Failed to update lead"),
@@ -170,7 +171,6 @@ export default function WebLeadsPage() {
 
   function saveNotes(id: string) {
     patchMut.mutate({ id, patch: { notes: notesDraft } });
-    setEditingNotes(false);
   }
 
   return (
@@ -196,11 +196,31 @@ export default function WebLeadsPage() {
           </p>
         </div>
 
+        {isError && (
+          <div role="alert" style={{
+            marginBottom: 18, padding: "14px 16px", borderRadius: 12,
+            border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)",
+            color: "#FCA5A5", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14,
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 3 }}>Web Leads could not be loaded.</div>
+              <div style={{ fontSize: 12, lineHeight: 1.5 }}>The displayed pipeline is unavailable; this is not a confirmed zero-lead state.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              style={{ padding: "7px 13px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.4)", background: "transparent", color: "#FCA5A5", fontWeight: 700, cursor: "pointer" }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* ── KPI Cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 28 }}>
-          <KPICard icon="📬" label="Total Submissions"  value={stats.total}     color="#00AEEF" />
-          <KPICard icon="🔥" label="Active (Open)"      value={stats.active}    color="#F59E0B" />
-          <KPICard icon="📅" label="This Month"         value={stats.thisMonth} color="#22C55E" />
+          <KPICard icon="📬" label="Total Submissions"  value={isError ? "—" : stats.total}     color="#00AEEF" />
+          <KPICard icon="🔥" label="Active (Open)"      value={isError ? "—" : stats.active}    color="#F59E0B" />
+          <KPICard icon="📅" label="This Month"         value={isError ? "—" : stats.thisMonth} color="#22C55E" />
         </div>
 
         {/* ── Filters ── */}
@@ -260,7 +280,9 @@ export default function WebLeadsPage() {
               ))}
             </div>
 
-            {isLoading ? (
+            {isError ? (
+              <div style={{ padding: 32, textAlign: "center", color: "#FCA5A5", fontSize: 13 }}>Lead data is unavailable. Retry the request above.</div>
+            ) : isLoading ? (
               <div style={{ padding: 32, textAlign: "center", color: "#475569", fontSize: 13 }}>Loading…</div>
             ) : visible.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center" }}>

@@ -22,6 +22,8 @@ jobs:
           corepack prepare pnpm@10 --activate
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared libraries
+        run: pnpm run typecheck:libs
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server run typecheck
       - name: Run contact capture tests

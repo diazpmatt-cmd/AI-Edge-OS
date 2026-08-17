@@ -1,0 +1,34 @@
+name: Revenue Proof conversion tenant verification
+
+on:
+  push:
+    branches:
+      - fix/revenue-proof-conversion-tenant-scope
+
+permissions:
+  contents: read
+
+jobs:
+  verify-conversion-tenant-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build shared libraries
+        run: pnpm run typecheck:libs
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+      - name: Run tenant-boundary tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/__tests__/lead-conversion-tenant-scope.test.ts
+      - name: Check diff whitespace
+        run: git diff --check origin/main...HEAD

@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { useSocialPostsQuery } from "@/hooks/useSocialPostsQuery";
 import { useLeadsQuery } from "@/hooks/useLeadsQuery";
 import { useCallIntelligenceQuery } from "@/hooks/useCallIntelligenceQuery";
+import { useRevenueLeaksQuery } from "@/hooks/useRevenueLeaksQuery";
 
 const URGENCY_CONFIG = {
   urgent:     { label: "Urgent",     color: "#EF4444", bg: "rgba(239,68,68,0.1)",  border: "rgba(239,68,68,0.25)"  },
@@ -86,11 +87,12 @@ function ActionItemCard({ icon, title, reason, impact, urgency, module: mod, lin
 }
 
 export function ActionCenter() {
+  const { data: revenueLeaksData, isLoading: revenueLeaksLoading } = useRevenueLeaksQuery();
   const { data: postsData, isLoading: postsLoading } = useSocialPostsQuery();
   const { data: leadsData, isLoading: leadsLoading } = useLeadsQuery();
   const { data: ciData, isLoading: ciLoading } = useCallIntelligenceQuery("30days");
 
-  const loading = postsLoading || leadsLoading || ciLoading;
+  const loading = revenueLeaksLoading || postsLoading || leadsLoading || ciLoading;
 
   const pendingPosts = (postsData ?? []).filter(p => p.status === "generated" || p.status === "draft");
   const newLeads = (leadsData?.leads ?? []).filter(l => l.status === "new" || l.status === "active").slice(0, 3);
@@ -108,6 +110,34 @@ export function ActionCenter() {
 
   const actions: ActionItem[] = [];
 
+  for (const leak of (revenueLeaksData?.items ?? []).slice(0, 3)) {
+    if (leak.kind === "follow_up_due") {
+      actions.push({
+        icon: "💰",
+        title: leak.customerName ? `Revenue Risk: Follow Up With ${leak.customerName}` : "Revenue Risk: Lead Follow-Up Is Due",
+        reason: leak.recommendedAction,
+        impact: "high",
+        urgency: "urgent",
+        module: "Revenue Leak Detector",
+        link: "/admin/lead-intelligence",
+      });
+      continue;
+    }
+
+    const verifiedRevenue = leak.verifiedRevenue == null
+      ? ""
+      : ` $${leak.verifiedRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} is recorded on this unresolved attribution.`;
+    actions.push({
+      icon: "🔎",
+      title: "Proof Gap: Revenue Attribution Needs Reconciliation",
+      reason: `${leak.recommendedAction}${verifiedRevenue}`,
+      impact: "medium",
+      urgency: "today",
+      module: "Revenue Proof",
+      link: "/admin/revenue-attribution",
+    });
+  }
+
   if (missedCalls > 0) {
     actions.push({
       icon: "📞",
@@ -115,6 +145,18 @@ export function ActionCenter() {
       reason: `Lead Recovery AI detected ${missedCalls} unanswered call${missedCalls !== 1 ? "s" : ""}. Follow up now to maximize conversion.`,
       impact: "high",
       urgency: "urgent",
+      module: "Lead Recovery",
+      link: "/admin/lead-recovery",
+    });
+  }
+
+  if (newLeads.length > 0) {
+    actions.push({
+      icon: "🎯",
+      title: `${newLeads.length} New Lead${newLeads.length !== 1 ? "s" : ""} in Pipeline`,
+      reason: "New leads captured and ready for qualification or direct outreach.",
+      impact: "high",
+      urgency: "today",
       module: "Lead Recovery",
       link: "/admin/lead-recovery",
     });
@@ -129,18 +171,6 @@ export function ActionCenter() {
       urgency: "today",
       module: "Publishing Center",
       link: "/admin/social-publishing",
-    });
-  }
-
-  if (newLeads.length > 0) {
-    actions.push({
-      icon: "🎯",
-      title: `${newLeads.length} New Lead${newLeads.length !== 1 ? "s" : ""} in Pipeline`,
-      reason: "New leads captured and ready for qualification or direct outreach.",
-      impact: "high",
-      urgency: "today",
-      module: "Lead Recovery",
-      link: "/admin/lead-recovery",
     });
   }
 
@@ -185,7 +215,7 @@ export function ActionCenter() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {actions.map((a, i) => (
-        <ActionItemCard key={i} {...a} isPrimary={i === 0} />
+        <ActionItemCard key={`${a.module}:${a.title}:${i}`} {...a} isPrimary={i === 0} />
       ))}
     </div>
   );

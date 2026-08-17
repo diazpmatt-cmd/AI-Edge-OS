@@ -86,6 +86,7 @@ export default function AssessmentsInboxPage() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   const loadLeads = useCallback(async () => {
     try {
@@ -131,36 +132,49 @@ export default function AssessmentsInboxPage() {
   const proposalsSent = leads.filter(l => l.status === "proposal_sent").length;
 
   // ── Patch helpers ──
-  async function patchLead(id: string, patch: { status?: string; notes?: string }) {
+  async function patchLead(id: string, patch: { status?: string; notes?: string }): Promise<Partial<Assessment> | null> {
+    setMutationError(null);
     try {
       const updated = await apiFetch(`/assessments/${id}`, { method: "PATCH", body: JSON.stringify(patch) }) as Partial<Assessment>;
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updated } : l));
+      return updated;
     } catch (e) {
       console.error("patch failed", e);
+      setMutationError("Update was not saved. Please retry.");
+      return null;
     }
   }
 
   async function handleStatusChange(status: string) {
     if (!selected) return;
     setUpdatingStatus(true);
-    await patchLead(selected.id, { status });
-    setSelected(prev => prev ? { ...prev, status } : prev);
-    setUpdatingStatus(false);
+    try {
+      const updated = await patchLead(selected.id, { status });
+      if (updated) setSelected(prev => prev ? { ...prev, ...updated } : prev);
+    } finally {
+      setUpdatingStatus(false);
+    }
   }
 
   async function saveNotes() {
     if (!selected) return;
     setSavingNotes(true);
-    await patchLead(selected.id, { notes: notesDraft });
-    setSelected(prev => prev ? { ...prev, notes: notesDraft } : prev);
-    setSavingNotes(false);
-    setEditingNotes(false);
+    try {
+      const updated = await patchLead(selected.id, { notes: notesDraft });
+      if (updated) {
+        setSelected(prev => prev ? { ...prev, ...updated } : prev);
+        setEditingNotes(false);
+      }
+    } finally {
+      setSavingNotes(false);
+    }
   }
 
   function openDetail(lead: Assessment) {
     setSelected(lead);
     setNotesDraft(lead.notes ?? "");
     setEditingNotes(false);
+    setMutationError(null);
   }
 
   return (
@@ -365,6 +379,15 @@ export default function AssessmentsInboxPage() {
 
               <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 18 }}>
 
+                {mutationError && (
+                  <div role="alert" style={{
+                    background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)",
+                    borderRadius: 8, padding: "9px 11px", fontSize: 12, color: "#FCA5A5", lineHeight: 1.5,
+                  }}>
+                    {mutationError}
+                  </div>
+                )}
+
                 {/* Business Info */}
                 <DetailSection title="Business Info">
                   <InfoRow label="Industry"  value={selected.industry} />
@@ -468,7 +491,7 @@ export default function AssessmentsInboxPage() {
                           flex: 1, padding: "7px 0", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
                           background: "rgba(0,174,239,0.18)", border: "1px solid rgba(0,174,239,0.4)", color: "#00AEEF",
                         }}>{savingNotes ? "Saving..." : "Save Notes"}</button>
-                        <button onClick={() => { setEditingNotes(false); setNotesDraft(selected.notes ?? ""); }} style={{
+                        <button onClick={() => { setEditingNotes(false); setNotesDraft(selected.notes ?? ""); setMutationError(null); }} style={{
                           padding: "7px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",
                           background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#64748B",
                         }}>Cancel</button>
@@ -486,7 +509,7 @@ export default function AssessmentsInboxPage() {
                         <div style={{ fontSize: 12, color: "#334155", marginBottom: 8, fontStyle: "italic" }}>No notes yet.</div>
                       )}
                       <button
-                        onClick={() => { setNotesDraft(selected.notes ?? ""); setEditingNotes(true); }}
+                        onClick={() => { setNotesDraft(selected.notes ?? ""); setEditingNotes(true); setMutationError(null); }}
                         style={{
                           padding: "6px 14px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer",
                           background: "rgba(0,174,239,0.08)", border: "1px solid rgba(0,174,239,0.25)", color: "#00AEEF",

@@ -6,8 +6,12 @@ import {
 } from "./apollos-admin-access-policy";
 
 describe("Apollos admin access policy", () => {
-  it("fails closed when no allowlist is configured", () => {
+  it("fails closed for unknown users when no allowlist is configured", () => {
     expect(isApollosAdminUser("user_admin", undefined)).toBe(false);
+  });
+
+  it("keeps the canonical owner authorized without an injected allowlist", () => {
+    expect(isApollosAdminUser("user_3HkOtNU3q322CdLb2NMPHpPwpiH", undefined)).toBe(true);
   });
 
   it("matches exact Clerk user IDs only", () => {

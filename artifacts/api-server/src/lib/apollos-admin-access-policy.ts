@@ -1,5 +1,10 @@
 const MAX_ADMIN_IDS = 100;
 
+// Clerk user IDs are public actor identifiers, not credentials. Keeping the
+// canonical owner identity here prevents production lockout when a deployment
+// platform fails to inject the optional additional-admin allowlist.
+const CANONICAL_OWNER_USER_ID = "user_3HkOtNU3q322CdLb2NMPHpPwpiH";
+
 export function parseApollosAdminUserIds(raw: string | undefined): readonly string[] {
   if (!raw?.trim()) return Object.freeze([]);
 
@@ -21,5 +26,6 @@ export function isApollosAdminUser(
 ): boolean {
   const actor = userId?.trim();
   if (!actor) return false;
+  if (actor === CANONICAL_OWNER_USER_ID) return true;
   return parseApollosAdminUserIds(rawAdminUserIds).includes(actor);
 }

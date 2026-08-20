@@ -9,7 +9,8 @@
 - Added a minimal Proof Pack page at `/admin/proof-pack`, linked from Profit Center.
 - Deliberately reports successful recovery and bookings as unavailable because current evidence does not establish the required causal link.
 - Verification: Lead Intelligence CI passes with the focused Proof Pack composer/handler tests plus shared-library, API, and frontend type checks; Coolify stack validation and GHCR production-image build also pass. Local dependency installation was unavailable, so CI is the authoritative executable evidence.
-- Next: review/merge remains an owner boundary. After acceptance, the next Revenue Proof mission is a read-only canonical booking/recovery evidence-link audit; do not infer those outcomes from callbacks or replies.
+- Follow-on audit: `docs/REVENUE-PROOF-BOOKING-RECOVERY-EVIDENCE-AUDIT-V1.md` confirms that current callback/reply aggregates cannot prove recovery, scheduled jobs cannot establish a booking period, and existing attribution does not retain match confidence or verification provenance. The draft now labels attributable revenue partial/observed and uses canonical `collected` payment state for verified revenue.
+- Next: review/merge remains an owner boundary. The exact next mission is `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1`: append tenant-scoped, idempotent Telnyx journey events and build a pure causal recovery composer, with no sends, provider calls, production migration, deployment, or inferred bookings.
 
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 

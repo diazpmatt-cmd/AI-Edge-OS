@@ -31,6 +31,7 @@ describe("buildProofPackReadModel", () => {
     }), from, to, at);
     expect(result.metrics.verifiedRevenue.value).toBe(125);
     expect(result.metrics.attributableRevenue.value).toBe(80);
+    expect(result.metrics.attributableRevenue).toMatchObject({ availability: "partial", verification: "observed" });
     expect(result.revenueLeaks.proofGaps).toBe(1);
   });
 });

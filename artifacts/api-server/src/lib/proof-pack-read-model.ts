@@ -52,6 +52,10 @@ function unavailable(source: string, explanation: string, unit: ProofMetric["uni
   return { availability: "unavailable", value: null, unit, verification: "not_verifiable", source, observedAt: null, explanation };
 }
 
+function partial(value: number, source: string, observedAt: string | null, explanation: string, unit: ProofMetric["unit"] = "count"): ProofMetric {
+  return { availability: "partial", value, unit, verification: "observed", source, observedAt, explanation };
+}
+
 export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date, to: Date, generatedAt = new Date()) {
   const leads = evidence.leads.filter(row => inPeriod(row.receivedAt ?? row.createdAt, from, to));
   const calls = evidence.calls.filter(row => inPeriod(row.createdAt, from, to));
@@ -89,7 +93,7 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date,
       bookings: unavailable("GorillaDesk jobs", "The local job evidence does not preserve a canonical booking event or lead-to-booking link."),
       completedJobs: metric(jobs.length, "GorillaDesk tenant snapshot", latest(jobs.map(row => row.completedAt)), "count", "verified"),
       verifiedRevenue: metric(paidRevenue, "GorillaDesk paid payments", latest(payments.map(row => row.paidAt)), "currency", "verified"),
-      attributableRevenue: metric(attributableRevenue, "revenue attribution", latest(attributions.map(row => row.matchedAt ?? row.updatedAt)), "currency", "verified"),
+      attributableRevenue: partial(attributableRevenue, "revenue attribution", latest(attributions.map(row => row.matchedAt ?? row.updatedAt)), "Attribution records do not yet preserve match method, confidence, or human-verification provenance.", "currency"),
       reviewsObserved: metric(reviewCount, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt))),
       averageRating: averageRating == null ? unavailable("tenant-safe review summaries", "No tenant-safe rating observation is available.", "rating") : metric(averageRating, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "rating"),
       referralsCreated: metric(referrals.length, "referrals", latest(referrals.map(row => row.createdAt))),

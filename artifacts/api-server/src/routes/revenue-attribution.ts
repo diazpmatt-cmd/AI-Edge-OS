@@ -5,8 +5,10 @@ import {
   revenueAttributionTable,
   gorilladeskCustomersTable,
   gorilladeskJobsTable,
+  gorilladeskPaymentsTable,
 } from "@workspace/db";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { collectedPaymentTotalCents } from "../lib/attribution-payment-evidence.js";
 import { matchAttributionCandidate } from "../lib/revenue-attribution-matcher.js";
 
 const router = Router();
@@ -191,22 +193,59 @@ router.post("/revenue-attribution/:id/verify", async (req, res) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     const now = new Date();
 
-    const [row] = await db
-      .update(revenueAttributionTable)
-      .set({
-        verifiedAt: now,
-        verifiedByUserId: userId,
-      })
+    const [candidate] = await db
+      .select()
+      .from(revenueAttributionTable)
       .where(and(
         eq(revenueAttributionTable.id, req.params.id),
         eq(revenueAttributionTable.clientId, tenant.clientId),
         sql`${revenueAttributionTable.matchMethod} IS NOT NULL`,
         sql`${revenueAttributionTable.gorilladeskJobId} IS NOT NULL`,
         sql`${revenueAttributionTable.verifiedAt} IS NULL`,
+      ));
+    if (!candidate?.gorilladeskJobId) {
+      return res.status(404).json({ error: "Unverified attribution candidate with canonical job evidence not found" });
+    }
+
+    const [completedJobs, payments] = await Promise.all([
+      db.select({ id: gorilladeskJobsTable.id }).from(gorilladeskJobsTable).where(and(
+        eq(gorilladeskJobsTable.projectId, tenant.slug),
+        eq(gorilladeskJobsTable.externalId, candidate.gorilladeskJobId),
+        eq(gorilladeskJobsTable.status, "completed"),
+      )),
+      db.select({
+        amountCents: gorilladeskPaymentsTable.amountCents,
+        status: gorilladeskPaymentsTable.status,
+        paidAt: gorilladeskPaymentsTable.paidAt,
+      }).from(gorilladeskPaymentsTable).where(and(
+        eq(gorilladeskPaymentsTable.projectId, tenant.slug),
+        eq(gorilladeskPaymentsTable.jobId, candidate.gorilladeskJobId),
+        eq(gorilladeskPaymentsTable.status, "collected"),
+        sql`${gorilladeskPaymentsTable.paidAt} IS NOT NULL`,
+      )),
+    ]);
+    const collectedCents = collectedPaymentTotalCents(payments);
+    if (completedJobs.length === 0 || collectedCents == null) {
+      return res.status(409).json({ error: "Completed job and collected payment evidence are required before verification" });
+    }
+
+    const [row] = await db
+      .update(revenueAttributionTable)
+      .set({
+        revenue: String(collectedCents / 100),
+        evidenceSource: "gorilladesk_completed_job_and_collected_payment_snapshot",
+        evidenceObservedAt: now,
+        verifiedAt: now,
+        verifiedByUserId: userId,
+      })
+      .where(and(
+        eq(revenueAttributionTable.id, req.params.id),
+        eq(revenueAttributionTable.clientId, tenant.clientId),
+        sql`${revenueAttributionTable.verifiedAt} IS NULL`,
       ))
       .returning();
 
-    if (!row) return res.status(404).json({ error: "Unverified attribution candidate with canonical job evidence not found" });
+    if (!row) return res.status(409).json({ error: "Attribution evidence changed before verification completed" });
     return res.json(rowToDto(row));
   } catch (err) {
     console.error("[revenue-attribution] verify error:", err);

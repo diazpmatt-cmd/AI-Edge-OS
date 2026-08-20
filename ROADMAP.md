@@ -14,6 +14,8 @@ Last updated: 2026-08-20
 - [x] Audit GorillaDesk booking timestamps; current local evidence has service scheduling, completion and ingestion times but no authoritative booked/created time.
 - [x] Preserve attribution match method, confidence, evidence timestamp and human-verification state; Proof Pack now counts only human-verified won attribution revenue and explains excluded legacy evidence.
 - [x] Audit the existing attribution workflow: phone and first-name matches are not distinguished, highest-value customer jobs can become won automatically, and manual status/revenue writes lack a verification transition.
+- [x] Require completed-job and collected-payment links before human verification; use tenant-scoped collected payment totals instead of job estimates.
+- [ ] Audit global GorillaDesk provider-ID uniqueness for cross-tenant collisions before designing a composite `(project_id, external_id)` migration.
 
 ---
 

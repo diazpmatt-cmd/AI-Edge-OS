@@ -82,6 +82,7 @@ jobs:
           src/lib/revenue-leak-read-model.test.ts
           src/routes/revenue-leaks.test.ts
           src/lib/proof-pack-read-model.test.ts
+          src/lib/attribution-payment-evidence.test.ts
           src/lib/revenue-attribution-matcher.test.ts
           src/__tests__/revenue-attribution-tenant-boundary.test.ts
           src/lib/customer-journey-event-store.test.ts

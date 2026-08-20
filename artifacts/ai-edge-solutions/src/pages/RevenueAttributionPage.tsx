@@ -197,10 +197,10 @@ export default function RevenueAttributionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      setMessage("Attribution evidence verified. You can now close out a won result.");
+      setMessage("Completed-job and collected-payment evidence verified. You can now close out a won result.");
       await load();
     } catch {
-      setMessage("Attribution candidate could not be verified.");
+      setMessage("Verification requires a completed job and collected, dated payment evidence for this client.");
     } finally {
       setWorking(false);
     }
@@ -264,7 +264,7 @@ export default function RevenueAttributionPage() {
               {card("Captured leads", String(leads.length), "Attribution records for this client")}
               {card("Matched", String(matched.length), "Matched to known customer/job evidence")}
               {card("Verified won jobs", String(won.length), "Won records with human verification")}
-              {card("Verified attribution", money(attributedRevenue), "Unverified won records are excluded")}
+              {card("Verified attribution", money(attributedRevenue), "Backed by collected job payments")}
               {card("Lead → won", `${conversionRate.toFixed(1)}%`, "Observed conversion, not projected")}
               {card("Average won job", won.length ? money(avgTicket) : "—", "Observed won-job average")}
             </div>

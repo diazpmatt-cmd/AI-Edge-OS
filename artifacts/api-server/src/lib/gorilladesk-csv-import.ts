@@ -306,7 +306,7 @@ export function csvRowToPayment(
     jobId:       jobIdRaw || null,
     amountCents: amountCents ?? 0,
     method:      normalizeMethod(methodRaw),
-    status:      statusRaw ? (statusRaw.toLowerCase().includes("collect") ? "collected" : statusRaw.toLowerCase()) : "collected",
+    status:      statusRaw ? (statusRaw.toLowerCase().includes("collect") ? "collected" : statusRaw.toLowerCase()) : "unknown",
     paidAt:      parseDate(paidAtRaw),
   };
 

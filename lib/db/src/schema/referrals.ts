@@ -439,3 +439,4 @@ export type ReferralProgram = typeof referralProgramsTable.$inferSelect;
 export const insertReferralSchema = createInsertSchema(referralsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertReferral = z.infer<typeof insertReferralSchema>;
 export type Referral = typeof referralsTable.$inferSelect;
+export type ReferralCrmAttribution = typeof referralCrmAttributionsTable.$inferSelect;

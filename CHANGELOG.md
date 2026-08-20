@@ -6,6 +6,12 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Revenue Proof — Proof Pack V1
+
+- Added a read-only, aggregate-only Proof Pack for the authenticated tenant, backed by existing lead, call, GorillaDesk, attribution, review, referral, publishing, and Revenue Leak Detector evidence.
+- Added explicit source, observation time, availability, and verification state for every metric; successful recovery and bookings remain unavailable when canonical causal evidence does not exist.
+- Added a simple Revenue Proof page linked from Profit Center. The response contains no customer-level records or PII and adds no new source-of-truth table.
+
 ### Content Autopilot — Native YouTube Video Rendering
 
 - Added a provider-independent FFmpeg video renderer that turns approved campaign artwork into a 1280×720 H.264/AAC MP4 with OpenAI narration, gentle still-image motion, burned captions, campaign title, and closing call to action.

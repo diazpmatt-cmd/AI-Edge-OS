@@ -24,6 +24,25 @@ tags:
   - name: agent-tasks
     description: Bounded autonomy approval layer — submit and review agent task requests
 paths:
+  /proof-pack:
+    get:
+      operationId: getProofPack
+      tags: [proof-pack]
+      summary: Tenant-safe Revenue Proof Pack
+      description: Returns aggregate-only evidence for the authenticated tenant. Caller-supplied tenant identity is ignored.
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date }, description: Exclusive end date }
+      responses:
+        "200":
+          description: Evidence-backed proof pack
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProofPack" }
+        "401": { description: Unauthorized }
+        "403": { description: Tenant inactive }
+        "404": { description: Tenant not found }
+        "422": { description: Invalid period }
   /diagnostics/health-history:
     get:
       operationId: getDiagnosticsHealthHistory
@@ -491,6 +510,51 @@ paths:
 
 components:
   schemas:
+    ProofMetric:
+      type: object
+      required: [availability, value, unit, verification, source, observedAt, explanation]
+      properties:
+        availability: { type: string, enum: [available, partial, unavailable] }
+        value: { type: [number, "null"] }
+        unit: { type: string, enum: [count, currency, rating, percent] }
+        verification: { type: string, enum: [verified, observed, not_verifiable] }
+        source: { type: string }
+        observedAt: { type: [string, "null"], format: date-time }
+        explanation: { type: [string, "null"] }
+    ProofPack:
+      type: object
+      required: [generatedAt, period, privacy, leadSources, metrics, revenueLeaks]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        period:
+          type: object
+          required: [from, toExclusive]
+          properties:
+            from: { type: string, format: date-time }
+            toExclusive: { type: string, format: date-time }
+        privacy:
+          type: object
+          required: [aggregateOnly, containsPii]
+          properties:
+            aggregateOnly: { type: boolean }
+            containsPii: { type: boolean }
+        leadSources:
+          type: array
+          items:
+            type: object
+            required: [source, count]
+            properties: { source: { type: string }, count: { type: integer } }
+        metrics:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ProofMetric" }
+        revenueLeaks:
+          type: object
+          required: [total, revenueRisks, proofGaps, verifiedRevenueAtIssue]
+          properties:
+            total: { type: integer }
+            revenueRisks: { type: integer }
+            proofGaps: { type: integer }
+            verifiedRevenueAtIssue: { type: number }
     AgentTaskSubmit:
       type: object
       required: [taskType]

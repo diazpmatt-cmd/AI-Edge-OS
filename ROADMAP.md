@@ -2,6 +2,13 @@
 
 Last updated: 2026-08-05
 
+## Revenue Proof — Proof Pack V1
+
+- [x] Define a tenant-safe aggregate Proof Pack contract over canonical systems without adding a second attribution or analytics store.
+- [x] Surface leads by source, missed calls, customer responses, completed jobs, verified/attributable revenue, reviews, referrals, publishing activity, and unresolved revenue leaks where supported.
+- [x] Mark recovery and booking claims unavailable until canonical causal links exist.
+- [ ] Validate the draft pull request in CI and collect real tenant evidence before any customer-facing case study claim.
+
 ---
 
 ## Content Autopilot V2 Media Automation

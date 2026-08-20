@@ -1,5 +1,15 @@
 # Session Handoff
 
+## Latest session: Revenue Proof — Proof Pack V1 (2026-08-19)
+
+**Status:** Implemented on `feature/proof-pack-v1`; local dependency installation was blocked by the execution environment, so CI remains the required verification boundary.
+
+- Added an authenticated tenant-scoped read model and `/api/proof-pack` contract with aggregate-only output and explicit provenance, timestamps, verification, and unavailable states.
+- Reused canonical lead, call, GorillaDesk snapshot, revenue attribution, tenant-safe review summary, referral attribution, social publishing, and Revenue Leak Detector evidence. No migration or new source-of-truth table was added.
+- Added a minimal Proof Pack page at `/admin/proof-pack`, linked from Profit Center.
+- Deliberately reports successful recovery and bookings as unavailable because current evidence does not establish the required causal link.
+- Next: generate API clients, run focused/backend/frontend/type checks in CI, repair mission-related failures, then perform final evidence-integrity review. Do not deploy or merge under this mission.
+
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 
 **Status:** Implemented and locally verified on `feat/referral-enrollment-attribution-v1`.

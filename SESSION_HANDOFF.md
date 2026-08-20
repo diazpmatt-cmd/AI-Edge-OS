@@ -2,13 +2,14 @@
 
 ## Latest session: Revenue Proof — Proof Pack V1 (2026-08-19)
 
-**Status:** Implemented on `feature/proof-pack-v1`; local dependency installation was blocked by the execution environment, so CI remains the required verification boundary.
+**Status:** Implemented on `feature/proof-pack-v1`; draft PR #551 is green at remote head `7786589640ed334d48b8cb5c8a526c1ed2645080`.
 
 - Added an authenticated tenant-scoped read model and `/api/proof-pack` contract with aggregate-only output and explicit provenance, timestamps, verification, and unavailable states.
 - Reused canonical lead, call, GorillaDesk snapshot, revenue attribution, tenant-safe review summary, referral attribution, social publishing, and Revenue Leak Detector evidence. No migration or new source-of-truth table was added.
 - Added a minimal Proof Pack page at `/admin/proof-pack`, linked from Profit Center.
 - Deliberately reports successful recovery and bookings as unavailable because current evidence does not establish the required causal link.
-- Next: generate API clients, run focused/backend/frontend/type checks in CI, repair mission-related failures, then perform final evidence-integrity review. Do not deploy or merge under this mission.
+- Verification: Lead Intelligence CI passes with the focused Proof Pack composer/handler tests plus shared-library, API, and frontend type checks; Coolify stack validation and GHCR production-image build also pass. Local dependency installation was unavailable, so CI is the authoritative executable evidence.
+- Next: review/merge remains an owner boundary. After acceptance, the next Revenue Proof mission is a read-only canonical booking/recovery evidence-link audit; do not infer those outcomes from callbacks or replies.
 
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 

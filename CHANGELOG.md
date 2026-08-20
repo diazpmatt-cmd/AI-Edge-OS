@@ -11,7 +11,7 @@ All notable changes to the AI Edge Solutions platform.
 - Added a read-only, aggregate-only Proof Pack for the authenticated tenant, backed by existing lead, call, canonical collected GorillaDesk payments, attribution, review, referral, publishing, and Revenue Leak Detector evidence.
 - Added explicit source, observation time, availability, and verification state for every metric; successful recovery and bookings remain unavailable when canonical causal evidence does not exist.
 - Added a simple Revenue Proof page linked from Profit Center. The response contains no customer-level records or PII and adds no new source-of-truth table.
-- Reused the customer-journey ledger for idempotent tenant-scoped Telnyx call, recovery-text, and classified-reply evidence. Proof Pack counts recovery only for a complete provider-parent chain and labels unlinked replies partial.
+- Reused the customer-journey ledger for idempotent tenant-scoped Telnyx call, API-accepted text, carrier-delivered text, and classified-reply evidence. Proof Pack counts recovery only for a complete provider-parent chain and labels unlinked replies partial.
 
 ### Content Autopilot — Native YouTube Video Rendering
 

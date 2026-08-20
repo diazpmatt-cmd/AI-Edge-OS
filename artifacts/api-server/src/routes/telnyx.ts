@@ -301,7 +301,10 @@ router.post("/telnyx/webhook", async (req, res) => {
     const body      = req.body as any;
     const eventType = body?.data?.event_type ?? "";
     const payload   = body?.data?.payload ?? {};
-    const destination = payload?.to?.[0]?.phone_number ?? payload?.to?.phone_number ?? payload?.to ?? "";
+    const isOutboundMessageEvent = (eventType === "message.sent" || eventType === "message.finalized") && payload?.direction === "outbound";
+    const destination = isOutboundMessageEvent
+      ? payload?.from?.phone_number ?? payload?.from ?? ""
+      : payload?.to?.[0]?.phone_number ?? payload?.to?.phone_number ?? payload?.to ?? "";
     const endpoint = await resolveCommunicationEndpoint("telnyx", destination);
     if (!endpoint && (eventType === "call.hangup" || eventType === "message.received")) return;
 
@@ -408,7 +411,7 @@ router.post("/telnyx/webhook", async (req, res) => {
               if (result.messageId && canonicalCallId) {
                 await appendJourneyEvidence({
                   clientId: endpoint.clientId,
-                  eventType: "recovery_text_sent",
+                  eventType: "recovery_text_accepted",
                   source: "telnyx",
                   canonicalRecordType: "telnyx_message",
                   canonicalRecordId: result.messageId,
@@ -430,6 +433,23 @@ router.post("/telnyx/webhook", async (req, res) => {
             }
           }
         }
+      }
+    }
+
+    if (eventType === "message.finalized" && endpoint && payload?.direction === "outbound") {
+      const messageId = typeof payload?.id === "string" ? payload.id.trim() : "";
+      const deliveryStatus = payload?.to?.[0]?.status ?? null;
+      if (messageId && deliveryStatus === "delivered") {
+        await appendJourneyEvidence({
+          clientId: endpoint.clientId,
+          eventType: "recovery_text_delivered",
+          source: "telnyx",
+          canonicalRecordType: "telnyx_message",
+          canonicalRecordId: messageId,
+          phone: payload?.to?.[0]?.phone_number ?? null,
+          metadata: { deliveryStatus },
+          occurredAt: body?.data?.occurred_at ? new Date(body.data.occurred_at) : undefined,
+        }).catch(error => console.error("[TELNYX] journey delivery evidence error:", error));
       }
     }
 

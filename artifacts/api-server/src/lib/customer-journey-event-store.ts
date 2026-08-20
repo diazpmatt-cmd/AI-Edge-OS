@@ -1,7 +1,7 @@
 import { pool } from "@workspace/db";
 import { normalizeJourneyEmail, normalizeJourneyPhone } from "@workspace/db";
 
-export type JourneyEvidenceEventType = "missed_call_observed" | "recovery_text_sent" | "customer_reply_observed";
+export type JourneyEvidenceEventType = "missed_call_observed" | "recovery_text_accepted" | "recovery_text_delivered" | "customer_reply_observed";
 
 export type JourneyEvidenceInput = {
   clientId: string;

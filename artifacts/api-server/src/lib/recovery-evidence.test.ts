@@ -7,7 +7,8 @@ describe("buildRecoveryEvidence", () => {
   it("counts only a complete same-tenant parent chain", () => {
     const result = buildRecoveryEvidence([
       event({ eventType: "missed_call_observed", canonicalRecordType: "telnyx_call", canonicalRecordId: "call-1" }),
-      event({ eventType: "recovery_text_sent", canonicalRecordType: "telnyx_message", canonicalRecordId: "out-1", metadata: { parentCallId: "call-1" } }),
+      event({ eventType: "recovery_text_accepted", canonicalRecordType: "telnyx_message", canonicalRecordId: "out-1", metadata: { parentCallId: "call-1" } }),
+      event({ eventType: "recovery_text_delivered", canonicalRecordType: "telnyx_message", canonicalRecordId: "out-1" }),
       event({ eventType: "customer_reply_observed", canonicalRecordType: "telnyx_message", canonicalRecordId: "in-1", metadata: { parentMessageId: "out-1" } }),
       event({ clientId: "tenant-b", eventType: "customer_reply_observed", canonicalRecordType: "telnyx_message", canonicalRecordId: "in-2", metadata: { parentMessageId: "out-1" } }),
     ], "tenant-a");
@@ -17,6 +18,15 @@ describe("buildRecoveryEvidence", () => {
   it("keeps an unlinked reply partial rather than calling it recovered", () => {
     const result = buildRecoveryEvidence([event({ eventType: "customer_reply_observed", canonicalRecordType: "telnyx_message", canonicalRecordId: "in-1" })], "tenant-a");
     expect(result).toMatchObject({ verifiedRecoveries: 0, unlinkedReplies: 1, evidenceState: "partial" });
+  });
+
+  it("does not count API acceptance as carrier delivery", () => {
+    const result = buildRecoveryEvidence([
+      event({ eventType: "missed_call_observed", canonicalRecordType: "telnyx_call", canonicalRecordId: "call-1" }),
+      event({ eventType: "recovery_text_accepted", canonicalRecordType: "telnyx_message", canonicalRecordId: "out-1", metadata: { parentCallId: "call-1" } }),
+      event({ eventType: "customer_reply_observed", canonicalRecordType: "telnyx_message", canonicalRecordId: "in-1", metadata: { parentMessageId: "out-1" } }),
+    ], "tenant-a");
+    expect(result).toMatchObject({ recoveryTextsSent: 0, verifiedRecoveries: 0 });
   });
 
   it("reports unavailable when no canonical events exist", () => {

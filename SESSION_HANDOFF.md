@@ -1,5 +1,17 @@
 # Session Handoff
 
+## Latest session: Revenue Proof — Payment-to-Job Link Integrity V1 (2026-08-20)
+
+**Status:** Implemented on stacked branch `feature/payment-job-link-integrity-v1`; draft PR #553 is open against `feature/attribution-provenance-v1`. Lead Intelligence CI run 483 and GHCR production-images run 398 passed at the implementation head before this documentation-only closeout.
+
+- Reused existing tenant-scoped GorillaDesk jobs and individual payments; no new revenue or attribution store was added.
+- Human verification now requires the linked job to be completed and positive, dated, exact-`collected` payments to link to that job inside the authenticated tenant project.
+- Verified attribution revenue is replaced with collected-payment totals rather than the job estimate. Aggregate-only, unlinked, outstanding, undated, zero-value, and cross-tenant evidence fails closed.
+- Missing CSV payment status now imports as `unknown` instead of being fabricated as `collected`.
+- Verification passed shared-library, API, and frontend type checks; 159/159 focused API tests; 4/4 frontend tests; API/runtime, web, MCP, and Git-worker off-production builds; and pull-only compose validation.
+- Audit finding: legacy GorillaDesk job, customer, and payment provider IDs are globally unique instead of tenant-composite. No schema migration was added or executed because existing data must be checked for collisions first.
+- Next: `GORILLADESK-TENANT-COMPOSITE-ID-AUDIT-V1` — read-only collision/import-upsert audit and migration design only. No production migration, provider sync, deployment, merge, or customer write.
+
 ## Latest session: Revenue Proof — Attribution Provenance V1 (2026-08-20)
 
 **Status:** Implemented on stacked branch `feature/attribution-provenance-v1`; draft PR #552 is open against `feature/proof-pack-v1`. Lead Intelligence CI run 481 and GHCR production-images run 396 passed at the implementation head before this documentation-only closeout.

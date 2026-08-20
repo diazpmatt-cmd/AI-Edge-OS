@@ -12,7 +12,8 @@
 - Follow-on audit: `docs/REVENUE-PROOF-BOOKING-RECOVERY-EVIDENCE-AUDIT-V1.md` confirms that current callback/reply aggregates cannot prove recovery, scheduled jobs cannot establish a booking period, and existing attribution does not retain match confidence or verification provenance. The draft now labels attributable revenue partial/observed and uses canonical `collected` payment state for verified revenue.
 - Follow-on implementation: `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1` reuses `customer_journey_events` for tenant-scoped, replay-safe Telnyx call/text/reply evidence and adds a pure composer that requires an exact parent chain. Current inbound SMS lacks a durable outbound parent ID, so replies remain partial and do not count as recovered.
 - Provider-contract audit: Telnyx documents carrier delivery through `message.finalized`, which is now recorded separately from API acceptance. Its inbound `message.received` payload has no outbound parent identifier, so verified reply correlation fails closed.
-- Next: review/merge remains an owner boundary. The exact next mission is `REVENUE-PROOF-BOOKING-TIMESTAMP-AUDIT-V1`: verify whether canonical GorillaDesk evidence supplies an authoritative job-created/booked timestamp. Do not reinterpret `scheduled_for` as booking time.
+- Booking audit: `docs/REVENUE-PROOF-BOOKING-TIMESTAMP-AUDIT-V1.md` confirms the available job import has scheduled, completed and local ingestion timestamps but no authoritative booking timestamp. Bookings remain unavailable.
+- Next: review/merge remains an owner boundary. The exact next mission is `REVENUE-PROOF-ATTRIBUTION-PROVENANCE-V1`: preserve match method, confidence, evidence timestamp and human-verification state in the existing attribution path; first-name-only matching must never become verified.
 
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 

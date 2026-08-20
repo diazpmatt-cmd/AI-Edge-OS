@@ -20,7 +20,8 @@ describe("buildProofPackReadModel", () => {
   it("counts only period evidence and only paid or confirmed revenue", () => {
     const result = buildProofPackReadModel(evidence({
       payments: [
-        { status: "paid", amountCents: 12500, paidAt: at } as any,
+        { status: "collected", amountCents: 12500, paidAt: at } as any,
+        { status: "paid", amountCents: 50000, paidAt: at } as any,
         { status: "outstanding", amountCents: 99000, paidAt: at } as any,
       ],
       attributions: [

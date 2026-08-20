@@ -8,7 +8,7 @@ All notable changes to the AI Edge Solutions platform.
 
 ### Revenue Proof — Proof Pack V1
 
-- Added a read-only, aggregate-only Proof Pack for the authenticated tenant, backed by existing lead, call, GorillaDesk, attribution, review, referral, publishing, and Revenue Leak Detector evidence.
+- Added a read-only, aggregate-only Proof Pack for the authenticated tenant, backed by existing lead, call, canonical collected GorillaDesk payments, attribution, review, referral, publishing, and Revenue Leak Detector evidence.
 - Added explicit source, observation time, availability, and verification state for every metric; successful recovery and bookings remain unavailable when canonical causal evidence does not exist.
 - Added a simple Revenue Proof page linked from Profit Center. The response contains no customer-level records or PII and adds no new source-of-truth table.
 

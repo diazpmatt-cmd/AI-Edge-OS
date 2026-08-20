@@ -57,7 +57,7 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date,
   const calls = evidence.calls.filter(row => inPeriod(row.createdAt, from, to));
   const attributions = evidence.attributions.filter(row => inPeriod(row.matchedAt ?? row.updatedAt, from, to));
   const jobs = evidence.jobs.filter(row => row.status === "completed" && inPeriod(row.completedAt, from, to));
-  const payments = evidence.payments.filter(row => row.status === "paid" && inPeriod(row.paidAt, from, to));
+  const payments = evidence.payments.filter(row => row.status === "collected" && inPeriod(row.paidAt, from, to));
   const referrals = evidence.referrals.filter(row => inPeriod(row.createdAt, from, to));
   const referralAttributions = evidence.referralAttributions.filter(row => row.status === "confirmed" && inPeriod(row.decidedAt ?? row.updatedAt, from, to));
   const posts = evidence.posts.filter(row => inPeriod(row.createdAt, from, to) || inPeriod(row.publishedAt, from, to));

@@ -12,6 +12,7 @@ All notable changes to the AI Edge Solutions platform.
 - Added explicit source, observation time, availability, and verification state for every metric; successful recovery and bookings remain unavailable when canonical causal evidence does not exist.
 - Added a simple Revenue Proof page linked from Profit Center. The response contains no customer-level records or PII and adds no new source-of-truth table.
 - Reused the customer-journey ledger for idempotent tenant-scoped Telnyx call, API-accepted text, carrier-delivered text, and classified-reply evidence. Proof Pack counts recovery only for a complete provider-parent chain and labels unlinked replies partial.
+- Added attribution provenance to the existing revenue-attribution records, downgraded first-name-only matches to candidates, required tenant-scoped human verification backed by stored GorillaDesk job evidence before a won attribution is accepted, and excluded legacy/unverified won revenue from verified Proof Pack totals.
 
 ### Content Autopilot — Native YouTube Video Rendering
 

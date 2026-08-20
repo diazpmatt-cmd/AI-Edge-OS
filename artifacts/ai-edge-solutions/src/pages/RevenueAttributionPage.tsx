@@ -16,6 +16,12 @@ type Lead = {
   notes: string | null;
   gorilladeskJobId: string | null;
   matchedAt: string | null;
+  matchMethod: string | null;
+  matchConfidence: number | null;
+  matchReasons: string[];
+  evidenceSource: string | null;
+  evidenceObservedAt: string | null;
+  verifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -76,7 +82,6 @@ export default function RevenueAttributionPage() {
     revenue: "",
     serviceType: "",
     notes: "",
-    gorilladeskJobId: "",
   });
 
   const load = useCallback(async () => {
@@ -101,7 +106,7 @@ export default function RevenueAttributionPage() {
     void load();
   }, [load]);
 
-  const won = useMemo(() => leads.filter((lead) => lead.status === "won"), [leads]);
+  const won = useMemo(() => leads.filter((lead) => lead.status === "won" && lead.verifiedAt), [leads]);
   const matched = useMemo(
     () => leads.filter((lead) => lead.status === "matched" || lead.status === "won"),
     [leads],
@@ -183,6 +188,24 @@ export default function RevenueAttributionPage() {
     }
   };
 
+  const verifyCandidate = async (lead: Lead) => {
+    setWorking(true);
+    setMessage(null);
+    try {
+      await apiFetch(`/api/revenue-attribution/${lead.id}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      setMessage("Attribution evidence verified. You can now close out a won result.");
+      await load();
+    } catch {
+      setMessage("Attribution candidate could not be verified.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const openCloseout = (lead: Lead) => {
     setSelected(lead);
     setForm({
@@ -190,7 +213,6 @@ export default function RevenueAttributionPage() {
       revenue: lead.revenue == null ? "" : String(lead.revenue),
       serviceType: lead.serviceType ?? "",
       notes: lead.notes ?? "",
-      gorilladeskJobId: lead.gorilladeskJobId ?? "",
     });
   };
 
@@ -206,7 +228,6 @@ export default function RevenueAttributionPage() {
           revenue: form.revenue ? Number(form.revenue) : null,
           serviceType: form.serviceType || null,
           notes: form.notes || null,
-          gorilladeskJobId: form.gorilladeskJobId || null,
         }),
       });
       setSelected(null);
@@ -242,8 +263,8 @@ export default function RevenueAttributionPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
               {card("Captured leads", String(leads.length), "Attribution records for this client")}
               {card("Matched", String(matched.length), "Matched to known customer/job evidence")}
-              {card("Won jobs", String(won.length), "Records explicitly marked won")}
-              {card("Attributed revenue", money(attributedRevenue), "Revenue stored on won jobs only")}
+              {card("Verified won jobs", String(won.length), "Won records with human verification")}
+              {card("Verified attribution", money(attributedRevenue), "Unverified won records are excluded")}
               {card("Lead → won", `${conversionRate.toFixed(1)}%`, "Observed conversion, not projected")}
               {card("Average won job", won.length ? money(avgTicket) : "—", "Observed won-job average")}
             </div>
@@ -317,8 +338,19 @@ export default function RevenueAttributionPage() {
                         <td>{lead.leadSource}</td>
                         <td style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</td>
                         <td>{lead.revenue == null ? "—" : money(lead.revenue)}</td>
-                        <td>{lead.gorilladeskJobId ? `Job ${lead.gorilladeskJobId}` : lead.matchedAt ? "Customer matched" : "Pending"}</td>
-                        <td><button onClick={() => openCloseout(lead)}>Close out</button></td>
+                        <td>
+                          {lead.verifiedAt
+                            ? "Human verified"
+                            : lead.matchMethod
+                              ? `${lead.matchMethod.replaceAll("_", " ")} · ${lead.matchConfidence ?? "—"}%`
+                              : "No match evidence"}
+                        </td>
+                        <td style={{ display: "flex", gap: 6, padding: 8 }}>
+                          {lead.matchMethod && lead.gorilladeskJobId && !lead.verifiedAt && (
+                            <button disabled={working} onClick={() => void verifyCandidate(lead)}>Verify</button>
+                          )}
+                          <button onClick={() => openCloseout(lead)}>Close out</button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -337,7 +369,6 @@ export default function RevenueAttributionPage() {
               </select></label>
               <label>Revenue<input type="number" min="0" step="0.01" value={form.revenue} onChange={(e) => setForm({ ...form, revenue: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
               <label>Service type<input value={form.serviceType} onChange={(e) => setForm({ ...form, serviceType: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
-              <label>GorillaDesk job ID<input value={form.gorilladeskJobId} onChange={(e) => setForm({ ...form, gorilladeskJobId: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
               <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={{ display: "block", width: "100%", minHeight: 90, margin: "6px 0 12px" }} /></label>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button disabled={working} onClick={() => setSelected(null)}>Cancel</button>

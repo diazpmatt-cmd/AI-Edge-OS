@@ -76,7 +76,9 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: s
     return all;
   }, {})).sort(([a], [b]) => a.localeCompare(b)).map(([source, count]) => ({ source, count }));
   const paidRevenue = payments.reduce((sum, row) => sum + row.amountCents, 0) / 100;
-  const attributableRevenue = attributions.filter(row => row.status === "won" && row.revenue != null).reduce((sum, row) => sum + Number(row.revenue), 0);
+  const verifiedAttributions = attributions.filter(row => row.status === "won" && row.revenue != null && row.verifiedAt && row.verifiedByUserId);
+  const unverifiedAttributions = attributions.filter(row => row.status === "won" && row.revenue != null && (!row.verifiedAt || !row.verifiedByUserId));
+  const attributableRevenue = verifiedAttributions.reduce((sum, row) => sum + Number(row.revenue), 0);
   const referralRevenue = referralAttributions.filter(row => row.measuredRevenue != null).reduce((sum, row) => sum + Number(row.measuredRevenue), 0);
   const reviewCount = evidence.reviews.reduce((sum, row) => sum + row.reviewCount, 0);
   const ratedReviews = evidence.reviews.filter(row => row.averageRating != null);
@@ -101,7 +103,9 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: s
       bookings: unavailable("GorillaDesk jobs", "The local job evidence does not preserve a canonical booking event or lead-to-booking link."),
       completedJobs: metric(jobs.length, "GorillaDesk tenant snapshot", latest(jobs.map(row => row.completedAt)), "count", "verified"),
       verifiedRevenue: metric(paidRevenue, "GorillaDesk paid payments", latest(payments.map(row => row.paidAt)), "currency", "verified"),
-      attributableRevenue: partial(attributableRevenue, "revenue attribution", latest(attributions.map(row => row.matchedAt ?? row.updatedAt)), "Attribution records do not yet preserve match method, confidence, or human-verification provenance.", "currency"),
+      attributableRevenue: unverifiedAttributions.length > 0
+        ? partial(attributableRevenue, "human-verified revenue attribution", latest(verifiedAttributions.map(row => row.verifiedAt)), `${unverifiedAttributions.length} observed won attribution record(s) were excluded because human-verification provenance is incomplete.`, "currency")
+        : metric(attributableRevenue, "human-verified revenue attribution", latest(verifiedAttributions.map(row => row.verifiedAt)), "currency", "verified"),
       reviewsObserved: metric(reviewCount, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt))),
       averageRating: averageRating == null ? unavailable("tenant-safe review summaries", "No tenant-safe rating observation is available.", "rating") : metric(averageRating, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "rating"),
       referralsCreated: metric(referrals.length, "referrals", latest(referrals.map(row => row.createdAt))),

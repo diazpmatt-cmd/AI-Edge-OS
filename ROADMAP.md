@@ -1,6 +1,6 @@
 # AI Edge Solutions — BB&B Growth OS Roadmap
 
-Last updated: 2026-08-05
+Last updated: 2026-08-20
 
 ## Revenue Proof — Proof Pack V1
 
@@ -12,7 +12,7 @@ Last updated: 2026-08-05
 - [x] Add tenant-scoped, idempotent Telnyx journey-event links and a pure causal recovery composer; unlinked replies remain partial and do not count as recovered.
 - [ ] Telnyx's documented inbound SMS payload provides no outbound parent ID. Keep verified recovery unavailable unless a future authoritative correlation mechanism exists; keep booking unavailable until an authoritative booking timestamp exists.
 - [x] Audit GorillaDesk booking timestamps; current local evidence has service scheduling, completion and ingestion times but no authoritative booked/created time.
-- [ ] Preserve attribution match method, confidence, evidence timestamp and human-verification state before upgrading attributable revenue from partial to verified.
+- [x] Preserve attribution match method, confidence, evidence timestamp and human-verification state; Proof Pack now counts only human-verified won attribution revenue and explains excluded legacy evidence.
 - [x] Audit the existing attribution workflow: phone and first-name matches are not distinguished, highest-value customer jobs can become won automatically, and manual status/revenue writes lack a verification transition.
 
 ---

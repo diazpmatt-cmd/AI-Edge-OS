@@ -691,6 +691,15 @@ export async function migrateSchema(): Promise<void> {
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE revenue_attribution
+      ADD COLUMN IF NOT EXISTS match_method TEXT,
+      ADD COLUMN IF NOT EXISTS match_confidence INTEGER,
+      ADD COLUMN IF NOT EXISTS match_reasons JSONB,
+      ADD COLUMN IF NOT EXISTS evidence_source TEXT,
+      ADD COLUMN IF NOT EXISTS evidence_observed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS verified_by_user_id TEXT;
   `);
 
   // ── AI Receptionist Settings ───────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   gorilladeskJobsTable,
 } from "@workspace/db";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { matchAttributionCandidate } from "../lib/revenue-attribution-matcher.js";
 
 const router = Router();
 
@@ -39,13 +40,15 @@ function rowToDto(row: typeof revenueAttributionTable.$inferSelect) {
     notes: row.notes,
     gorilladeskJobId: row.gorilladeskJobId,
     matchedAt: row.matchedAt?.toISOString() ?? null,
+    matchMethod: row.matchMethod,
+    matchConfidence: row.matchConfidence,
+    matchReasons: row.matchReasons ?? [],
+    evidenceSource: row.evidenceSource,
+    evidenceObservedAt: row.evidenceObservedAt?.toISOString() ?? null,
+    verifiedAt: row.verifiedAt?.toISOString() ?? null,
     createdAt: row.createdAt?.toISOString(),
     updatedAt: row.updatedAt?.toISOString(),
   };
-}
-
-function normalizePhone(p: string | null | undefined): string {
-  return (p ?? "").replace(/\D/g, "");
 }
 
 async function resolveTenant(req: any, res: any) {
@@ -91,11 +94,16 @@ router.post("/revenue-attribution", async (req, res) => {
       revenue,
       serviceType,
       notes,
-      gorilladeskJobId,
     } = req.body;
 
     if (!customerName || !leadSource) {
       return res.status(400).json({ error: "customerName and leadSource are required" });
+    }
+    if (status != null && !["pending", "unmatched"].includes(status)) {
+      return res.status(400).json({ error: "New attribution records must begin pending or unmatched" });
+    }
+    if (revenue != null && (!Number.isFinite(Number(revenue)) || Number(revenue) < 0)) {
+      return res.status(400).json({ error: "revenue must be a non-negative number" });
     }
 
     const [row] = await db
@@ -110,7 +118,6 @@ router.post("/revenue-attribution", async (req, res) => {
         revenue: revenue != null ? String(revenue) : null,
         serviceType,
         notes,
-        gorilladeskJobId,
       })
       .returning();
     return res.status(201).json(rowToDto(row));
@@ -127,6 +134,29 @@ router.put("/revenue-attribution/:id", async (req, res) => {
     const { id } = req.params;
     const { status, revenue, serviceType, notes, gorilladeskJobId, matchedAt } = req.body;
 
+    if (status !== undefined && !["pending", "unmatched", "matched", "won", "lost"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+    if (revenue !== undefined && revenue != null && (!Number.isFinite(Number(revenue)) || Number(revenue) < 0)) {
+      return res.status(400).json({ error: "revenue must be a non-negative number" });
+    }
+    if (gorilladeskJobId !== undefined) {
+      return res.status(400).json({ error: "GorillaDesk job evidence can only be set by tenant-scoped snapshot matching" });
+    }
+    if (matchedAt !== undefined) {
+      return res.status(400).json({ error: "Match timestamps can only be set by tenant-scoped evidence matching" });
+    }
+    if (status === "won") {
+      const [existing] = await db.select().from(revenueAttributionTable).where(and(
+        eq(revenueAttributionTable.id, id),
+        eq(revenueAttributionTable.clientId, tenant.clientId),
+      ));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      if (!existing.verifiedAt || !existing.verifiedByUserId) {
+        return res.status(409).json({ error: "Human verification is required before attribution can be marked won" });
+      }
+    }
+
     const [row] = await db
       .update(revenueAttributionTable)
       .set({
@@ -136,10 +166,6 @@ router.put("/revenue-attribution/:id", async (req, res) => {
         }),
         ...(serviceType !== undefined && { serviceType }),
         ...(notes !== undefined && { notes }),
-        ...(gorilladeskJobId !== undefined && { gorilladeskJobId }),
-        ...(matchedAt !== undefined && {
-          matchedAt: matchedAt ? new Date(matchedAt) : null,
-        }),
       })
       .where(
         and(
@@ -153,6 +179,37 @@ router.put("/revenue-attribution/:id", async (req, res) => {
     return res.json(rowToDto(row));
   } catch (err) {
     console.error("[revenue-attribution] PUT error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/revenue-attribution/:id/verify", async (req, res) => {
+  try {
+    const tenant = await resolveTenant(req, res);
+    if (!tenant) return;
+    const { userId } = getAuth(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const now = new Date();
+
+    const [row] = await db
+      .update(revenueAttributionTable)
+      .set({
+        verifiedAt: now,
+        verifiedByUserId: userId,
+      })
+      .where(and(
+        eq(revenueAttributionTable.id, req.params.id),
+        eq(revenueAttributionTable.clientId, tenant.clientId),
+        sql`${revenueAttributionTable.matchMethod} IS NOT NULL`,
+        sql`${revenueAttributionTable.gorilladeskJobId} IS NOT NULL`,
+        sql`${revenueAttributionTable.verifiedAt} IS NULL`,
+      ))
+      .returning();
+
+    if (!row) return res.status(404).json({ error: "Unverified attribution candidate with canonical job evidence not found" });
+    return res.json(rowToDto(row));
+  } catch (err) {
+    console.error("[revenue-attribution] verify error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 });
@@ -250,20 +307,39 @@ router.post("/revenue-attribution/match-gorilladesk", async (req, res) => {
     }
 
     const matched: string[] = [];
+    const candidateIds: string[] = [];
     const now = new Date();
     for (const lead of leads) {
-      const leadPhone = normalizePhone(lead.phone);
-      const leadName = lead.customerName.toLowerCase();
-      const gdMatch = gdCustomers.find((customer) => {
-        if (leadPhone && normalizePhone(customer.phone) === leadPhone) return true;
-        const firstName = (customer.name ?? "").toLowerCase().split(" ")[0];
-        return firstName.length > 2 && leadName.startsWith(firstName);
-      });
-      if (!gdMatch) continue;
+      const found = gdCustomers.map((customer) => ({
+        customer,
+        candidate: matchAttributionCandidate(
+          { name: lead.customerName, phone: lead.phone },
+          { name: customer.name, phone: customer.phone },
+        ),
+      })).find(item => item.candidate?.method === "normalized_phone")
+        ?? gdCustomers.map((customer) => ({
+          customer,
+          candidate: matchAttributionCandidate(
+            { name: lead.customerName, phone: lead.phone },
+            { name: customer.name, phone: customer.phone },
+          ),
+        })).find(item => item.candidate != null);
+      if (!found?.candidate) continue;
+      const isObservedMatch = found.candidate.method === "normalized_phone";
 
       const updated = await db
         .update(revenueAttributionTable)
-        .set({ status: "matched", matchedAt: now })
+        .set({
+          status: isObservedMatch ? "matched" : "unmatched",
+          matchedAt: isObservedMatch ? now : null,
+          matchMethod: found.candidate.method,
+          matchConfidence: found.candidate.confidence,
+          matchReasons: found.candidate.reasons,
+          evidenceSource: "gorilladesk_customer_snapshot",
+          evidenceObservedAt: now,
+          verifiedAt: null,
+          verifiedByUserId: null,
+        })
         .where(
           and(
             eq(revenueAttributionTable.id, lead.id),
@@ -271,12 +347,16 @@ router.post("/revenue-attribution/match-gorilladesk", async (req, res) => {
           ),
         )
         .returning({ id: revenueAttributionTable.id });
-      if (updated.length === 1) matched.push(lead.id);
+      if (updated.length === 1) {
+        candidateIds.push(lead.id);
+        if (isObservedMatch) matched.push(lead.id);
+      }
     }
 
     return res.json({
       matched: matched.length,
       ids: matched,
+      candidateIds,
       totalChecked: leads.length,
       gdCustomers: gdCustomers.length,
       message: `Matched ${matched.length} of ${leads.length} unmatched leads against ${gdCustomers.length} tenant-scoped GorillaDesk customers`,
@@ -312,12 +392,6 @@ router.post("/revenue-attribution/sync-gorilladesk-jobs", async (req, res) => {
         .where(eq(revenueAttributionTable.clientId, tenant.clientId)),
     ]);
 
-    const customerByPhone = new Map<string, (typeof gdCustomers)[number]>();
-    for (const customer of gdCustomers) {
-      const phone = normalizePhone(customer.phone);
-      if (phone) customerByPhone.set(phone, customer);
-    }
-
     const jobByCustomerId = new Map<string, (typeof gdJobs)[number]>();
     for (const job of gdJobs) {
       if (!job.customerId) continue;
@@ -333,33 +407,42 @@ router.post("/revenue-attribution/sync-gorilladesk-jobs", async (req, res) => {
 
     for (const lead of allLeads) {
       if (["won", "lost"].includes(lead.status)) continue;
+      if (lead.verifiedAt) continue;
 
-      const leadPhone = normalizePhone(lead.phone);
-      const leadName = lead.customerName.toLowerCase();
-      let matchedCustomer = leadPhone ? customerByPhone.get(leadPhone) : undefined;
-      if (!matchedCustomer) {
-        matchedCustomer = gdCustomers.find((customer) => {
-          const firstName = customer.name.toLowerCase().split(" ")[0];
-          return firstName.length > 2 && leadName.startsWith(firstName);
-        });
-      }
-      if (!matchedCustomer) continue;
+      const found = gdCustomers.map((customer) => ({
+        customer,
+        candidate: matchAttributionCandidate(
+          { name: lead.customerName, phone: lead.phone },
+          { name: customer.name, phone: customer.phone },
+        ),
+      })).find(item => item.candidate?.method === "normalized_phone")
+        ?? gdCustomers.map((customer) => ({
+          customer,
+          candidate: matchAttributionCandidate(
+            { name: lead.customerName, phone: lead.phone },
+            { name: customer.name, phone: customer.phone },
+          ),
+        })).find(item => item.candidate != null);
+      if (!found?.candidate) continue;
+      const matchedCustomer = found.customer;
+      const isObservedMatch = found.candidate.method === "normalized_phone";
 
       const matchedJob = matchedCustomer.externalId
         ? jobByCustomerId.get(matchedCustomer.externalId)
         : undefined;
-      const updates: Partial<typeof revenueAttributionTable.$inferInsert> & {
-        status: string;
-        matchedAt: Date;
-      } = {
-        status:
-          matchedJob?.status === "completed"
-            ? "won"
-            : "matched",
-        matchedAt: now,
+      const updates: Partial<typeof revenueAttributionTable.$inferInsert> = {
+        status: isObservedMatch ? "matched" : "unmatched",
+        matchedAt: isObservedMatch ? now : null,
+        matchMethod: found.candidate.method,
+        matchConfidence: found.candidate.confidence,
+        matchReasons: found.candidate.reasons,
+        evidenceSource: "gorilladesk_local_snapshot",
+        evidenceObservedAt: now,
+        verifiedAt: null,
+        verifiedByUserId: null,
       };
 
-      if (matchedJob) {
+      if (matchedJob && isObservedMatch) {
         if (matchedJob.amountCents && matchedJob.amountCents > 0) {
           updates.revenue = String(matchedJob.amountCents / 100);
           revenueTotal += matchedJob.amountCents / 100;
@@ -378,7 +461,7 @@ router.post("/revenue-attribution/sync-gorilladesk-jobs", async (req, res) => {
           ),
         )
         .returning({ id: revenueAttributionTable.id });
-      if (updated.length === 1) {
+      if (updated.length === 1 && isObservedMatch) {
         matchedCount++;
         matchedIds.push(lead.id);
       }

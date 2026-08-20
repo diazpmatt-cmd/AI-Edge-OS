@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, numeric } from "drizzle-orm/pg-core";
+import { integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const revenueAttributionTable = pgTable("revenue_attribution", {
   id:               uuid("id").primaryKey().defaultRandom(),
@@ -13,6 +13,13 @@ export const revenueAttributionTable = pgTable("revenue_attribution", {
   notes:            text("notes"),
   gorilladeskJobId: text("gorilladesk_job_id"),
   matchedAt:        timestamp("matched_at", { withTimezone: true }),
+  matchMethod:      text("match_method"),
+  matchConfidence:  integer("match_confidence"),
+  matchReasons:     jsonb("match_reasons").$type<string[]>(),
+  evidenceSource:   text("evidence_source"),
+  evidenceObservedAt: timestamp("evidence_observed_at", { withTimezone: true }),
+  verifiedAt:       timestamp("verified_at", { withTimezone: true }),
+  verifiedByUserId: text("verified_by_user_id"),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

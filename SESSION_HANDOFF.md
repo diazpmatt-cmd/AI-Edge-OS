@@ -10,7 +10,8 @@
 - Deliberately reports successful recovery and bookings as unavailable because current evidence does not establish the required causal link.
 - Verification: Lead Intelligence CI passes with the focused Proof Pack composer/handler tests plus shared-library, API, and frontend type checks; Coolify stack validation and GHCR production-image build also pass. Local dependency installation was unavailable, so CI is the authoritative executable evidence.
 - Follow-on audit: `docs/REVENUE-PROOF-BOOKING-RECOVERY-EVIDENCE-AUDIT-V1.md` confirms that current callback/reply aggregates cannot prove recovery, scheduled jobs cannot establish a booking period, and existing attribution does not retain match confidence or verification provenance. The draft now labels attributable revenue partial/observed and uses canonical `collected` payment state for verified revenue.
-- Next: review/merge remains an owner boundary. The exact next mission is `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1`: append tenant-scoped, idempotent Telnyx journey events and build a pure causal recovery composer, with no sends, provider calls, production migration, deployment, or inferred bookings.
+- Follow-on implementation: `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1` reuses `customer_journey_events` for tenant-scoped, replay-safe Telnyx call/text/reply evidence and adds a pure composer that requires an exact parent chain. Current inbound SMS lacks a durable outbound parent ID, so replies remain partial and do not count as recovered.
+- Next: review/merge remains an owner boundary. The exact next mission is `REVENUE-PROOF-REPLY-CORRELATION-V1`: determine whether verified Telnyx payload evidence can supply a durable outbound parent message identifier; fail closed if it cannot. Booking remains unavailable pending an authoritative provider booking timestamp.
 
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 

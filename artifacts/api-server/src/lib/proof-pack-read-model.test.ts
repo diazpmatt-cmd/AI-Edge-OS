@@ -6,12 +6,12 @@ const to = new Date("2026-09-01T00:00:00.000Z");
 const at = new Date("2026-08-12T12:00:00.000Z");
 
 function evidence(overrides: Partial<ProofPackEvidence> = {}): ProofPackEvidence {
-  return { leads: [], calls: [], attributions: [], jobs: [], payments: [], reviews: [], referrals: [], referralAttributions: [], posts: [], ...overrides };
+  return { leads: [], calls: [], attributions: [], jobs: [], payments: [], reviews: [], referrals: [], referralAttributions: [], posts: [], journeyEvents: [], ...overrides };
 }
 
 describe("buildProofPackReadModel", () => {
   it("reports unsupported recovery and booking claims as unavailable", () => {
-    const result = buildProofPackReadModel(evidence(), from, to, at);
+    const result = buildProofPackReadModel(evidence(), "tenant-a", from, to, at);
     expect(result.metrics.successfulRecovery).toMatchObject({ availability: "unavailable", value: null, verification: "not_verifiable" });
     expect(result.metrics.bookings).toMatchObject({ availability: "unavailable", value: null });
     expect(result.privacy).toEqual({ aggregateOnly: true, containsPii: false });
@@ -28,7 +28,7 @@ describe("buildProofPackReadModel", () => {
         { id: "a", status: "won", revenue: "80.00", matchedAt: at, updatedAt: at } as any,
         { id: "b", status: "pending", revenue: "900.00", matchedAt: at, updatedAt: at } as any,
       ],
-    }), from, to, at);
+    }), "tenant-a", from, to, at);
     expect(result.metrics.verifiedRevenue.value).toBe(125);
     expect(result.metrics.attributableRevenue.value).toBe(80);
     expect(result.metrics.attributableRevenue).toMatchObject({ availability: "partial", verification: "observed" });

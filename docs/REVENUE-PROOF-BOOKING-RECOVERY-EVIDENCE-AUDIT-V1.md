@@ -55,8 +55,8 @@ Extend the existing `customer_journey_events` ledger; do not add another source-
 - No event payload stores message bodies, recordings, tokens or unnecessary PII in proof output.
 - Proof Pack changes from unavailable to available only when the required canonical chain exists.
 
-## Recommended mission
+## Implemented follow-on
 
 `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1`
 
-Implement tenant-scoped, idempotent journey-event writes for verified Telnyx call/text events and expose a pure recovery-evidence composer. Keep booking evidence unavailable unless the existing GorillaDesk import can supply an authoritative booking timestamp. Do not send messages, enable the legacy scheduler, call providers, migrate production, or deploy.
+Implemented on the Proof Pack draft branch by reusing `customer_journey_events`: tenant-scoped replay-safe writes record canonical missed calls, successful recovery-text sends and classified customer replies, while the pure composer requires an exact call → outbound message → inbound reply parent chain. Current Telnyx inbound SMS evidence does not supply the outbound parent ID, so those replies remain partial and verified recovery stays closed. Booking evidence remains unavailable. No provider call, send activation, production migration or deployment was added.

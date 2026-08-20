@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createProofPackHandler } from "./proof-pack.js";
 
 function response() { const res: any = {}; res.status = vi.fn(() => res); res.json = vi.fn(() => res); return res; }
-const empty = { leads: [], calls: [], attributions: [], jobs: [], payments: [], reviews: [], referrals: [], referralAttributions: [], posts: [] };
+const empty = { leads: [], calls: [], attributions: [], jobs: [], payments: [], reviews: [], referrals: [], referralAttributions: [], posts: [], journeyEvents: [] };
 
 describe("createProofPackHandler", () => {
   it("rejects unauthenticated callers before tenant resolution", async () => {

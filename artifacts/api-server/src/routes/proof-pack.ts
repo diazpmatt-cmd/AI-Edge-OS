@@ -2,7 +2,7 @@ import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import {
-  callsTable, gorilladeskJobsTable, gorilladeskPaymentsTable, leadsTable,
+  callsTable, customerJourneyEventsTable, gorilladeskJobsTable, gorilladeskPaymentsTable, leadsTable,
   referralCrmAttributionsTable, referralsTable, revenueAttributionTable,
   socialPostsTable, tenantSafeReviewSummariesTable,
 } from "@workspace/db/schema";
@@ -14,7 +14,7 @@ const router = Router();
 type EvidenceLoader = (clientId: string, slug: string) => Promise<ProofPackEvidence>;
 
 export async function loadProofPackEvidence(clientId: string, slug: string): Promise<ProofPackEvidence> {
-  const [leads, calls, attributions, jobs, payments, reviews, referrals, referralAttributions, posts] = await Promise.all([
+  const [leads, calls, attributions, jobs, payments, reviews, referrals, referralAttributions, posts, journeyEvents] = await Promise.all([
     db.select().from(leadsTable).where(eq(leadsTable.clientId, clientId)),
     db.select().from(callsTable).where(eq(callsTable.clientId, clientId)),
     db.select().from(revenueAttributionTable).where(eq(revenueAttributionTable.clientId, clientId)),
@@ -24,8 +24,9 @@ export async function loadProofPackEvidence(clientId: string, slug: string): Pro
     db.select().from(referralsTable).where(eq(referralsTable.clientId, clientId)),
     db.select().from(referralCrmAttributionsTable).where(eq(referralCrmAttributionsTable.clientId, clientId)),
     db.select().from(socialPostsTable).where(eq(socialPostsTable.clientId, clientId)),
+    db.select().from(customerJourneyEventsTable).where(eq(customerJourneyEventsTable.clientId, clientId)),
   ]);
-  return { leads, calls, attributions, jobs, payments, reviews, referrals, referralAttributions, posts };
+  return { leads, calls, attributions, jobs, payments, reviews, referrals, referralAttributions, posts, journeyEvents };
 }
 
 function period(query: Record<string, unknown>, now: Date): { from: Date; to: Date } | null {
@@ -48,7 +49,7 @@ export function createProofPackHandler(getAuthFn = getAuth, resolveClientFn = re
       const dates = period(req.query ?? {}, nowFn());
       if (!dates) return res.status(422).json({ error: "invalid_proof_pack_period" });
       const evidence = await loadEvidenceFn(tenant.clientId, tenant.slug);
-      return res.json(buildProofPackReadModel(evidence, dates.from, dates.to, nowFn()));
+      return res.json(buildProofPackReadModel(evidence, tenant.clientId, dates.from, dates.to, nowFn()));
     } catch {
       return res.status(500).json({ error: "proof_pack_unavailable" });
     }

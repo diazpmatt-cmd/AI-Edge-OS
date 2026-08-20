@@ -9,7 +9,8 @@ Last updated: 2026-08-05
 - [x] Mark recovery and booking claims unavailable until canonical causal links exist.
 - [ ] Validate the draft pull request in CI and collect real tenant evidence before any customer-facing case study claim.
 - [x] Audit canonical booking and missed-call recovery evidence links; preserve unavailable states because causal provider links are not yet durable.
-- [ ] Add tenant-scoped, idempotent Telnyx journey-event links before reporting successful recovery; keep booking unavailable until an authoritative booking timestamp exists.
+- [x] Add tenant-scoped, idempotent Telnyx journey-event links and a pure causal recovery composer; unlinked replies remain partial and do not count as recovered.
+- [ ] Preserve an explicit outbound-message parent identifier on provider replies before recovery can become verified in live evidence; keep booking unavailable until an authoritative booking timestamp exists.
 
 ---
 

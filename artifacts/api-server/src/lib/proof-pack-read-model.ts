@@ -1,5 +1,6 @@
 import type {
   Call,
+  CustomerJourneyEvent,
   GorilladeskJob,
   GorilladeskPayment,
   Lead,
@@ -10,6 +11,7 @@ import type {
   TenantSafeReviewSummaryRow,
 } from "@workspace/db";
 import { buildRevenueLeakReadModel } from "./revenue-leak-read-model.js";
+import { buildRecoveryEvidence } from "./recovery-evidence.js";
 
 export type Availability = "available" | "partial" | "unavailable";
 
@@ -33,6 +35,7 @@ export type ProofPackEvidence = {
   referrals: readonly Referral[];
   referralAttributions: readonly ReferralCrmAttribution[];
   posts: readonly SocialPost[];
+  journeyEvents: readonly CustomerJourneyEvent[];
 };
 
 function inPeriod(value: Date | null | undefined, from: Date, to: Date): boolean {
@@ -56,7 +59,7 @@ function partial(value: number, source: string, observedAt: string | null, expla
   return { availability: "partial", value, unit, verification: "observed", source, observedAt, explanation };
 }
 
-export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date, to: Date, generatedAt = new Date()) {
+export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: string, from: Date, to: Date, generatedAt = new Date()) {
   const leads = evidence.leads.filter(row => inPeriod(row.receivedAt ?? row.createdAt, from, to));
   const calls = evidence.calls.filter(row => inPeriod(row.createdAt, from, to));
   const attributions = evidence.attributions.filter(row => inPeriod(row.matchedAt ?? row.updatedAt, from, to));
@@ -79,6 +82,7 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date,
   const ratedReviews = evidence.reviews.filter(row => row.averageRating != null);
   const averageRating = ratedReviews.length ? ratedReviews.reduce((sum, row) => sum + Number(row.averageRating), 0) / ratedReviews.length : null;
   const leaks = buildRevenueLeakReadModel(evidence.leads, evidence.attributions, generatedAt);
+  const recovery = buildRecoveryEvidence(evidence.journeyEvents.filter(row => inPeriod(row.occurredAt, from, to)), clientId);
 
   return {
     generatedAt: generatedAt.toISOString(),
@@ -88,7 +92,11 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, from: Date,
     metrics: {
       leadsCaptured: metric(leads.length, "leads", latest(leads.map(row => row.receivedAt ?? row.createdAt))),
       missedCalls: metric(missedCalls, "calls + lead events", latest([...calls.map(row => row.createdAt), ...leads.map(row => row.createdAt)])),
-      successfulRecovery: unavailable("customer journey evidence", "No canonical missed-call-to-recovery link exists; callbacks and replies are not treated as attributable recovery."),
+      successfulRecovery: recovery.evidenceState === "unavailable"
+        ? unavailable("customer journey evidence", "No canonical missed-call-to-recovery events are available; callbacks and replies are not treated as attributable recovery.")
+        : recovery.evidenceState === "partial"
+          ? partial(recovery.verifiedRecoveries, "customer journey evidence", latest(evidence.journeyEvents.map(row => row.occurredAt)), `${recovery.unlinkedReplies} customer reply event(s) lack a complete provider-parent chain.`)
+          : metric(recovery.verifiedRecoveries, "customer journey evidence", latest(evidence.journeyEvents.map(row => row.occurredAt)), "count", "verified"),
       customerResponses: metric(replies.length, "lead events", latest(replies.map(row => row.createdAt))),
       bookings: unavailable("GorillaDesk jobs", "The local job evidence does not preserve a canonical booking event or lead-to-booking link."),
       completedJobs: metric(jobs.length, "GorillaDesk tenant snapshot", latest(jobs.map(row => row.completedAt)), "count", "verified"),

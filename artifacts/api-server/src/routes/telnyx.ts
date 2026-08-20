@@ -6,6 +6,7 @@ import { intakeLead } from "../services/lead-intake";
 import { resolveCommunicationEndpoint } from "../lib/communication-endpoint-resolver.js";
 import { getAuth } from "@clerk/express";
 import { resolveClientActiveCheck } from "../lib/client-resolver.js";
+import { appendJourneyEvidence } from "../lib/customer-journey-event-store.js";
 
 const router = Router();
 
@@ -246,6 +247,18 @@ router.post("/telnyx/sms", async (req, res) => {
       const { status, label } = replyMap[digit];
       console.log(`[TELNYX] Customer replied: ${digit} (${label}) from ${from || "unknown"}`);
 
+      if (msgId) {
+        await appendJourneyEvidence({
+          clientId: endpoint.clientId,
+          eventType: "customer_reply_observed",
+          source: "telnyx",
+          canonicalRecordType: "telnyx_message",
+          canonicalRecordId: msgId,
+          phone: from,
+          metadata: { parentMessageId: null },
+        }).catch(error => console.error("[TELNYX] journey reply evidence error:", error));
+      }
+
       await db.insert(leadsTable).values({
         clientId:   endpoint.clientId,
         clientName: endpoint.clientName,
@@ -308,6 +321,8 @@ router.post("/telnyx/webhook", async (req, res) => {
 
         const since30m = new Date(Date.now() - 30 * 60 * 1000);
         const durNum   = Number(duration) || null;
+        const canonicalCallId = [payload?.call_session_id, payload?.call_control_id, payload?.call_leg_id]
+          .find(value => typeof value === "string" && value.trim())?.trim() ?? null;
 
         await db.insert(leadsTable).values({
           clientId:   endpoint.clientId,
@@ -344,6 +359,18 @@ router.post("/telnyx/webhook", async (req, res) => {
           });
         }
 
+        if (canonicalCallId) {
+          await appendJourneyEvidence({
+            clientId: endpoint.clientId,
+            eventType: "missed_call_observed",
+            source: "telnyx",
+            canonicalRecordType: "telnyx_call",
+            canonicalRecordId: canonicalCallId,
+            phone: from,
+            metadata: { hangupCause, durationSecs: durNum },
+          }).catch(error => console.error("[TELNYX] journey missed-call evidence error:", error));
+        }
+
         // ── Text-back with dedup guard ────────────────────────────────────────
         if (!from) {
           console.warn("[TELNYX] ⚠ Missed call has no caller ID — skipping text-back");
@@ -378,6 +405,17 @@ router.post("/telnyx/webhook", async (req, res) => {
                   status:         "sent",
                 }),
               ]);
+              if (result.messageId && canonicalCallId) {
+                await appendJourneyEvidence({
+                  clientId: endpoint.clientId,
+                  eventType: "recovery_text_sent",
+                  source: "telnyx",
+                  canonicalRecordType: "telnyx_message",
+                  canonicalRecordId: result.messageId,
+                  phone: from,
+                  metadata: { parentCallId: canonicalCallId },
+                }).catch(error => console.error("[TELNYX] journey text-back evidence error:", error));
+              }
             } else {
               console.error(`[TELNYX] Text-back failed to ${from} — ${result.error}`);
               await db.insert(leadsTable).values({
@@ -414,6 +452,17 @@ router.post("/telnyx/webhook", async (req, res) => {
       if (digit in replyMap) {
         const { status, label } = replyMap[digit];
         console.log(`[TELNYX] Customer replied: ${digit} (${label}) from ${from || "unknown"}`);
+        if (msgId) {
+          await appendJourneyEvidence({
+            clientId: endpoint.clientId,
+            eventType: "customer_reply_observed",
+            source: "telnyx",
+            canonicalRecordType: "telnyx_message",
+            canonicalRecordId: msgId,
+            phone: from,
+            metadata: { parentMessageId: null },
+          }).catch(error => console.error("[TELNYX] journey reply evidence error:", error));
+        }
         await db.insert(leadsTable).values({
           clientId:   endpoint.clientId,
           clientName: endpoint.clientName,

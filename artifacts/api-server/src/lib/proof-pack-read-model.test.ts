@@ -25,13 +25,27 @@ describe("buildProofPackReadModel", () => {
         { status: "outstanding", amountCents: 99000, paidAt: at } as any,
       ],
       attributions: [
-        { id: "a", status: "won", revenue: "80.00", matchedAt: at, updatedAt: at } as any,
+        { id: "a", status: "won", revenue: "80.00", matchedAt: at, updatedAt: at, verifiedAt: at, verifiedByUserId: "user-1" } as any,
         { id: "b", status: "pending", revenue: "900.00", matchedAt: at, updatedAt: at } as any,
       ],
     }), "tenant-a", from, to, at);
     expect(result.metrics.verifiedRevenue.value).toBe(125);
     expect(result.metrics.attributableRevenue.value).toBe(80);
-    expect(result.metrics.attributableRevenue).toMatchObject({ availability: "partial", verification: "observed" });
+    expect(result.metrics.attributableRevenue).toMatchObject({ availability: "available", verification: "verified" });
     expect(result.revenueLeaks.proofGaps).toBe(1);
+  });
+
+  it("excludes unverified won attribution revenue and explains the partial evidence", () => {
+    const result = buildProofPackReadModel(evidence({
+      attributions: [
+        { id: "legacy", status: "won", revenue: "500.00", matchedAt: at, updatedAt: at, verifiedAt: null, verifiedByUserId: null } as any,
+      ],
+    }), "tenant-a", from, to, at);
+    expect(result.metrics.attributableRevenue).toMatchObject({
+      availability: "partial",
+      value: 0,
+      verification: "observed",
+    });
+    expect(result.metrics.attributableRevenue.explanation).toContain("excluded");
   });
 });

@@ -39,4 +39,18 @@ describe("revenue attribution tenant and truth boundary", () => {
     expect(routeSource).toContain("Direct GorillaDesk job-provider sync is disabled");
     expect(routeSource).not.toContain("https://api.gorilladesk.com/api/v1/jobs");
   });
+
+  it("requires tenant-scoped human verification before won revenue", () => {
+    expect(routeSource).toContain('/revenue-attribution/:id/verify');
+    expect(routeSource).toContain("verifiedByUserId: userId");
+    expect(routeSource).toContain("revenueAttributionTable.gorilladeskJobId");
+    expect(routeSource).toContain("Human verification is required before attribution can be marked won");
+    expect(routeSource).toContain("GorillaDesk job evidence can only be set by tenant-scoped snapshot matching");
+    expect(routeSource).toContain("revenueAttributionTable.clientId, tenant.clientId");
+  });
+
+  it("does not promote first-name-only candidates to matched revenue", () => {
+    expect(routeSource).toContain('found.candidate.method === "normalized_phone"');
+    expect(routeSource).toContain('status: isObservedMatch ? "matched" : "unmatched"');
+  });
 });

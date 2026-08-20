@@ -47,8 +47,14 @@ Extend the existing attribution record or existing journey ledger—do not add a
 5. Make Proof Pack count verified attributable revenue separately from partial observed attribution.
 6. Backfill old rows as `legacy_unknown`, confidence null and unverified; never infer provenance retrospectively.
 
-## Next recommended mission
+## Implementation status
 
-`REVENUE-PROOF-ATTRIBUTION-PROVENANCE-V1`
+Implemented on `feature/attribution-provenance-v1`:
 
-Implement the nullable provenance fields, pure candidate matcher and fail-closed verification policy on a dedicated branch/PR. No provider sync, customer action, production migration, deployment or retrospective verification.
+- Nullable provenance fields extend the existing attribution record; legacy rows remain unverified and are not reclassified.
+- A pure matcher records normalized-phone or first-name-candidate evidence with explicit confidence and reasons.
+- First-name-only candidates remain unmatched and never receive job/revenue evidence automatically.
+- Human verification is authenticated, tenant-scoped, one-way, and requires canonical stored GorillaDesk job evidence.
+- Proof Pack counts only human-verified won attribution revenue and explicitly reports excluded unverified won records as partial evidence.
+
+No provider sync, customer action, production migration, deployment or retrospective verification was performed.

@@ -1,5 +1,17 @@
 # Session Handoff
 
+## Latest session: Revenue Proof — Attribution Provenance V1 (2026-08-20)
+
+**Status:** Implemented on stacked branch `feature/attribution-provenance-v1`; publication and CI state must be recorded after the draft PR is created.
+
+- Extended the existing `revenue_attribution` record with nullable method, confidence, reasons, source, observation time, and human-verifier fields. No second attribution store was added and no legacy row was retrospectively verified.
+- Replaced boolean phone/name matching with a pure candidate matcher. Exact normalized phone matches are observed candidates; first-name-only matches remain unmatched low-confidence candidates.
+- Stored-job matching no longer promotes any automated match to `won`. A won transition now requires prior authenticated, tenant-scoped human verification, and verification itself requires stored canonical GorillaDesk job evidence.
+- Proof Pack counts only verified won attribution revenue. Legacy/unverified won values are excluded and produce an explicit partial-evidence explanation.
+- Added a minimal Verify action to the existing Revenue Attribution page; no provider write, customer action, production migration, deployment, merge, or retrospective backfill was performed.
+- Local dependency installation is unavailable in this workspace. Focused matcher/provenance tests and affected type checks are included in CI, which is the authoritative executable gate.
+- Next after green CI: audit whether canonical GorillaDesk payment-to-job links can tighten verified attribution without adding a new store or performing provider writes.
+
 ## Latest session: Revenue Proof — Proof Pack V1 (2026-08-19)
 
 **Status:** Implemented on `feature/proof-pack-v1`; draft PR #551 is green at remote head `7786589640ed334d48b8cb5c8a526c1ed2645080`.

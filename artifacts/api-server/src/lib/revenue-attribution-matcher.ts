@@ -9,7 +9,8 @@ export type AttributionCandidate = {
 type MatchParty = { name: string; phone?: string | null };
 
 function normalizePhone(value: string | null | undefined): string {
-  return (value ?? "").replace(/\D/g, "");
+  const digits = (value ?? "").replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
 }
 
 export function matchAttributionCandidate(

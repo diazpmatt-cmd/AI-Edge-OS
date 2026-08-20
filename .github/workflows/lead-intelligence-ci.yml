@@ -81,6 +81,8 @@ jobs:
           src/routes/assessments.test.ts
           src/lib/revenue-leak-read-model.test.ts
           src/routes/revenue-leaks.test.ts
+          src/lib/proof-pack-read-model.test.ts
+          src/routes/proof-pack.test.ts
           src/routes/web-leads-mutation.test.ts
           src/__tests__/telnyx-webhook-security.test.ts
 

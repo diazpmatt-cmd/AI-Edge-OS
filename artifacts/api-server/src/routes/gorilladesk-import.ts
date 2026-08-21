@@ -96,10 +96,10 @@ router.post("/analytics/gorilladesk/sync", async (req, res) => {
   try {
     const result = await syncAllGorillaDeskData(tenant.slug);
     const statusCode = result.ok ? 200 : 207; // 207 Multi-Status when some endpoints unavailable
-    res.status(statusCode).json(result);
+    return res.status(statusCode).json(result);
   } catch {
     console.error("GorillaDesk sync failed");
-    res.status(500).json({ error: "Sync failed" });
+    return res.status(500).json({ error: "Sync failed" });
   }
 });
 
@@ -258,27 +258,3 @@ router.post("/analytics/gorilladesk/import", async (req, res) => {
     if (body.leadSources?.length) {
       const rows = await db.insert(gorilladeskLeadSourcesTable).values(
         body.leadSources.map(l => ({
-          projectId,
-          name:         l.name,
-          jobCount:     l.jobCount,
-          revenueCents: l.revenueCents,
-          period:       l.period,
-        }))
-      ).returning();
-      result.leadSources = { rows_inserted: rows.length };
-    }
-
-    res.json(result);
-  } catch {
-    console.error("GorillaDesk import failed");
-    res.status(500).json({ error: "Import failed" });
-  }
-});
-
-router.post("/analytics/gorilladesk/seed", async (req, res) => {
-  const tenant = await resolveTenant(req, res);
-  if (!tenant) return;
-  return res.status(410).json({ error: "Legacy GorillaDesk seed writes are retired; import canonical tenant evidence instead" });
-});
-
-export default router;

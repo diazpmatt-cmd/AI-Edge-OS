@@ -228,16 +228,23 @@ export async function syncGorillaDeskCustomers(
       const existing = await db
         .select({ id: gorilladeskCustomersTable.id })
         .from(gorilladeskCustomersTable)
-        .where(eq(gorilladeskCustomersTable.externalId, c.id))
+        .where(and(
+          eq(gorilladeskCustomersTable.externalId, c.id),
+          eq(gorilladeskCustomersTable.projectId, projectId),
+        ))
         .limit(1);
 
       if (existing.length > 0) {
         await db
           .update(gorilladeskCustomersTable)
           .set({ name, email: c.email, phone, leadSource: c.source?.name ?? null })
-          .where(eq(gorilladeskCustomersTable.externalId, c.id));
+          .where(and(
+            eq(gorilladeskCustomersTable.externalId, c.id),
+            eq(gorilladeskCustomersTable.projectId, projectId),
+          ));
+        upserted++;
       } else {
-        await db.insert(gorilladeskCustomersTable).values({
+        const inserted = await db.insert(gorilladeskCustomersTable).values({
           projectId,
           externalId:     c.id,
           name,
@@ -248,9 +255,9 @@ export async function syncGorillaDeskCustomers(
           activeServices: 0,
           firstServiceAt: null,
           lastServiceAt:  null,
-        }).onConflictDoNothing();
+        }).onConflictDoNothing().returning({ id: gorilladeskCustomersTable.id });
+        upserted += inserted.length;
       }
-      upserted++;
     }
 
     // Write api_sync customers snapshot

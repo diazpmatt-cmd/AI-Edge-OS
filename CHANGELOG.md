@@ -14,6 +14,7 @@ All notable changes to the AI Edge Solutions platform.
 - Reused the customer-journey ledger for idempotent tenant-scoped Telnyx call, API-accepted text, carrier-delivered text, and classified-reply evidence. Proof Pack counts recovery only for a complete provider-parent chain and labels unlinked replies partial.
 - Added attribution provenance to the existing revenue-attribution records, downgraded first-name-only matches to candidates, required tenant-scoped human verification backed by stored GorillaDesk job evidence before a won attribution is accepted, and excluded legacy/unverified won revenue from verified Proof Pack totals.
 - Tightened attribution verification to require a completed tenant job plus positive, dated, collected payments linked to that job. Verified attribution now uses collected payment totals rather than estimated job amounts; aggregate and unlinked payment rows fail closed.
+- Added migration-free GorillaDesk provider-ID ownership guards: job/payment imports skip and redact foreign-tenant collisions, conflict updates require matching project ownership, and live customer sync scopes lookup/update by project. Global-to-composite constraint migration remains blocked on read-only collision evidence.
 
 ### Content Autopilot — Native YouTube Video Rendering
 

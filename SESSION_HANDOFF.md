@@ -1,5 +1,17 @@
 # Session Handoff
 
+## Latest session: GorillaDesk Tenant Provider-ID Guard V1 (2026-08-20)
+
+**Status:** Implemented on stacked branch `feature/gorilladesk-tenant-id-guard-v1`; draft PR #554 is open against `feature/payment-job-link-integrity-v1`. Lead Intelligence CI run 485 and GHCR production-images run 400 passed at the implementation head before this documentation-only closeout.
+
+- Audited global `external_id` uniqueness and every reusable GorillaDesk job/payment import plus live customer-sync identity path.
+- Job/payment imports now classify provider IDs by project ownership, skip foreign collisions with redacted errors, and condition conflict updates on matching project ownership to close the race window.
+- Live customer sync now scopes lookup and update by project and reports inserts truthfully when a global-key collision is ignored.
+- Added pure ownership classification and source-boundary regression coverage. Verification passed all three type checks, 164/164 focused API tests, 4/4 frontend tests, off-production image builds, and compose validation.
+- No database was accessed; no constraint was changed; no migration was added or executed; the legacy BB&B-hard-coded import routes were not generalized or activated.
+- Exact authorized read-only collision queries and the conditional composite-index migration design are documented in `docs/GORILLADESK-TENANT-COMPOSITE-ID-AUDIT-V1.md`.
+- Remaining boundary: obtain sanitized collision/null/orphan counts or authorize a read-only database query before any `(project_id, external_id)` migration work.
+
 ## Latest session: Revenue Proof — Payment-to-Job Link Integrity V1 (2026-08-20)
 
 **Status:** Implemented on stacked branch `feature/payment-job-link-integrity-v1`; draft PR #553 is open against `feature/attribution-provenance-v1`. Lead Intelligence CI run 483 and GHCR production-images run 398 passed at the implementation head before this documentation-only closeout.

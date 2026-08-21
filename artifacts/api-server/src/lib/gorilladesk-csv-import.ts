@@ -24,7 +24,8 @@ import {
   gorilladeskJobsTable,
   gorilladeskPaymentsTable,
 } from "@workspace/db/schema";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
+import { classifyProviderIds } from "./gorilladesk-tenant-id-integrity.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -344,10 +345,11 @@ export async function upsertJobs(
   const withoutId = jobs.filter(j => j.externalId === null);
 
   // Pre-fetch existing external_ids to distinguish insert vs update
+  let safeWithId = withId;
   const existingIds = new Set<string>();
   if (withId.length > 0) {
     const existingRows = await db
-      .select({ externalId: gorilladeskJobsTable.externalId })
+      .select({ externalId: gorilladeskJobsTable.externalId, projectId: gorilladeskJobsTable.projectId })
       .from(gorilladeskJobsTable)
       .where(
         inArray(
@@ -355,17 +357,21 @@ export async function upsertJobs(
           withId.map(j => j.externalId as string)
         )
       );
-    for (const r of existingRows) {
-      if (r.externalId) existingIds.add(r.externalId);
+    const ownership = classifyProviderIds(withId.map(j => j.externalId as string), existingRows, projectId);
+    for (const id of ownership.owned) existingIds.add(id);
+    safeWithId = withId.filter(job => !ownership.foreign.has(job.externalId as string));
+    if (ownership.foreign.size > 0) {
+      summary.rows_skipped += ownership.foreign.size;
+      summary.validation_errors.push({ row: 0, field: "externalId", message: "Provider job ID belongs to another tenant" });
     }
   }
 
   // Upsert rows that have an externalId
-  if (withId.length > 0) {
+  if (safeWithId.length > 0) {
     await db
       .insert(gorilladeskJobsTable)
       .values(
-        withId.map(j => ({
+        safeWithId.map(j => ({
           projectId,
           externalId:   j.externalId,
           customerId:   j.customerId,
@@ -378,6 +384,7 @@ export async function upsertJobs(
       )
       .onConflictDoUpdate({
         target: gorilladeskJobsTable.externalId,
+        setWhere: eq(gorilladeskJobsTable.projectId, projectId),
         set: {
           status:       sql`excluded.status`,
           serviceType:  sql`excluded.service_type`,
@@ -388,7 +395,7 @@ export async function upsertJobs(
         },
       });
 
-    for (const j of withId) {
+    for (const j of safeWithId) {
       if (existingIds.has(j.externalId as string)) {
         summary.rows_updated++;
       } else {
@@ -438,10 +445,11 @@ export async function upsertPayments(
   const withId    = payments.filter(p => p.externalId !== null);
   const withoutId = payments.filter(p => p.externalId === null);
 
+  let safeWithId = withId;
   const existingIds = new Set<string>();
   if (withId.length > 0) {
     const existingRows = await db
-      .select({ externalId: gorilladeskPaymentsTable.externalId })
+      .select({ externalId: gorilladeskPaymentsTable.externalId, projectId: gorilladeskPaymentsTable.projectId })
       .from(gorilladeskPaymentsTable)
       .where(
         inArray(
@@ -449,16 +457,20 @@ export async function upsertPayments(
           withId.map(p => p.externalId as string)
         )
       );
-    for (const r of existingRows) {
-      if (r.externalId) existingIds.add(r.externalId);
+    const ownership = classifyProviderIds(withId.map(p => p.externalId as string), existingRows, projectId);
+    for (const id of ownership.owned) existingIds.add(id);
+    safeWithId = withId.filter(payment => !ownership.foreign.has(payment.externalId as string));
+    if (ownership.foreign.size > 0) {
+      summary.rows_skipped += ownership.foreign.size;
+      summary.validation_errors.push({ row: 0, field: "externalId", message: "Provider payment ID belongs to another tenant" });
     }
   }
 
-  if (withId.length > 0) {
+  if (safeWithId.length > 0) {
     await db
       .insert(gorilladeskPaymentsTable)
       .values(
-        withId.map(p => ({
+        safeWithId.map(p => ({
           projectId,
           externalId:  p.externalId,
           jobId:       p.jobId,
@@ -470,6 +482,7 @@ export async function upsertPayments(
       )
       .onConflictDoUpdate({
         target: gorilladeskPaymentsTable.externalId,
+        setWhere: eq(gorilladeskPaymentsTable.projectId, projectId),
         set: {
           jobId:       sql`excluded.job_id`,
           amountCents: sql`excluded.amount_cents`,
@@ -479,7 +492,7 @@ export async function upsertPayments(
         },
       });
 
-    for (const p of withId) {
+    for (const p of safeWithId) {
       if (existingIds.has(p.externalId as string)) {
         summary.rows_updated++;
       } else {

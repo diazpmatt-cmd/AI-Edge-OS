@@ -15,7 +15,8 @@ Last updated: 2026-08-20
 - [x] Preserve attribution match method, confidence, evidence timestamp and human-verification state; Proof Pack now counts only human-verified won attribution revenue and explains excluded legacy evidence.
 - [x] Audit the existing attribution workflow: phone and first-name matches are not distinguished, highest-value customer jobs can become won automatically, and manual status/revenue writes lack a verification transition.
 - [x] Require completed-job and collected-payment links before human verification; use tenant-scoped collected payment totals instead of job estimates.
-- [ ] Audit global GorillaDesk provider-ID uniqueness for cross-tenant collisions before designing a composite `(project_id, external_id)` migration.
+- [x] Audit global GorillaDesk provider-ID uniqueness and add migration-free foreign-tenant overwrite guards to job/payment imports and customer sync.
+- [ ] Collect authorized read-only collision counts before designing or executing a composite `(project_id, external_id)` migration.
 
 ---
 

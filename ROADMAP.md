@@ -17,6 +17,8 @@ Last updated: 2026-08-20
 - [x] Require completed-job and collected-payment links before human verification; use tenant-scoped collected payment totals instead of job estimates.
 - [x] Audit global GorillaDesk provider-ID uniqueness and add migration-free foreign-tenant overwrite guards to job/payment imports and customer sync.
 - [ ] Collect authorized read-only collision counts before designing or executing a composite `(project_id, external_id)` migration.
+- [x] Resolve GorillaDesk CSV/JSON import ownership from the authenticated tenant and retire the destructive hard-coded snapshot seed route.
+- [ ] Bind GorillaDesk provider credentials per tenant before enabling reusable live customer sync.
 
 ---
 

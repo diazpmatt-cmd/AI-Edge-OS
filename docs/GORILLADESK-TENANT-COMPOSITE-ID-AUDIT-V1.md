@@ -16,7 +16,9 @@ Keep the existing global uniqueness constraints until real data is checked for c
 | Payments | global `external_id` unique | cross-project upsert could update foreign payment/job/revenue fields | preflight ownership classification plus conflict-update project predicate |
 | Customers | global `external_id` unique | live sync lookup/update ignored project | lookup and update now require matching `project_id`; foreign collision insert is ignored |
 | Payment → job | `project_id` plus `job_id` at read time | unscoped joins could cross tenants | verification queries both sides through authenticated tenant project |
-| Import routes | hard-coded `bed-bugs-and-beyond` project | not reusable multi-tenant onboarding | remain legacy-only; do not expose as generic tenant import routes |
+| CSV/JSON import routes | previously hard-coded `bed-bugs-and-beyond` project | any authenticated user could write BB&B rows | authenticated active-tenant slug is now authoritative |
+| Live provider sync | one global provider credential | unsafe for generic tenant sync | remains fail-closed outside the explicitly configured BB&B tenant |
+| Legacy seed route | deleted collected BB&B payments and inserted fixed totals | destructive, fabricated timing, callable by any authenticated user | retired with HTTP 410; performs no write |
 
 ## Why the schema migration is deferred
 

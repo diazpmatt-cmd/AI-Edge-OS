@@ -258,3 +258,27 @@ router.post("/analytics/gorilladesk/import", async (req, res) => {
     if (body.leadSources?.length) {
       const rows = await db.insert(gorilladeskLeadSourcesTable).values(
         body.leadSources.map(l => ({
+          projectId,
+          name:         l.name,
+          jobCount:     l.jobCount,
+          revenueCents: l.revenueCents,
+          period:       l.period,
+        }))
+      ).returning();
+      result.leadSources = { rows_inserted: rows.length };
+    }
+
+    res.json(result);
+  } catch {
+    console.error("GorillaDesk import failed");
+    res.status(500).json({ error: "Import failed" });
+  }
+});
+
+router.post("/analytics/gorilladesk/seed", async (req, res) => {
+  const tenant = await resolveTenant(req, res);
+  if (!tenant) return;
+  return res.status(410).json({ error: "Legacy GorillaDesk seed writes are retired; import canonical tenant evidence instead" });
+});
+
+export default router;

@@ -1,5 +1,17 @@
 # Session Handoff
 
+## Latest session: GorillaDesk Import Tenant Resolution V1 (2026-08-20)
+
+**Status:** Implemented on stacked branch `feature/gorilladesk-import-tenant-resolution-v1`; draft PR #555 is open against `feature/gorilladesk-tenant-id-guard-v1`. Lead Intelligence CI run 489 and GHCR production-images run 404 passed at implementation head `2e3fff2e73f4b62b28487cb719411e81f3dce044` before this documentation-only closeout.
+
+- Replaced the GorillaDesk import route's hard-coded BB&B project ownership with authenticated active-tenant resolution for JSON and CSV imports.
+- Direct provider sync now fails closed for every tenant except the legacy credential owner until provider credentials are tenant-bound; no OAuth scope, credential, or provider write behavior changed.
+- Retired the destructive legacy seed route with HTTP 410 and removed fabricated snapshot/payment values from the authorized surface.
+- Error responses and logs no longer expose raw provider or database exception details.
+- Added route-boundary tests covering unauthenticated, unresolved, resolved, and non-owner direct-sync paths; CI passed all three type checks, 168/168 focused API tests, 4/4 frontend persistence tests, all off-production image builds, and compose validation.
+- No database query, migration, provider sync, production deployment, merge, or customer action occurred.
+- Remaining boundary: obtain sanitized collision/null/orphan counts or authorize a read-only database query before any tenant-composite provider-ID migration. Provider credentials also require an explicit tenant-binding design before direct sync can be generalized.
+
 ## Latest session: GorillaDesk Tenant Provider-ID Guard V1 (2026-08-20)
 
 **Status:** Implemented on stacked branch `feature/gorilladesk-tenant-id-guard-v1`; draft PR #554 is open against `feature/payment-job-link-integrity-v1`. Lead Intelligence CI run 485 and GHCR production-images run 400 passed at the implementation head before this documentation-only closeout.

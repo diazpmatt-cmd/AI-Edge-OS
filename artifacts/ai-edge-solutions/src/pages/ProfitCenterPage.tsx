@@ -248,6 +248,7 @@ export default function ProfitCenterPage() {
                 <Link to="/admin/revenue-attribution" style={{ color: B.blue, textDecoration: "none", fontWeight: 600 }}>
                   → Operational detail in Revenue Attribution
                 </Link>
+                {" · "}<Link to="/admin/proof-pack" style={{ color: B.emerald, textDecoration: "none", fontWeight: 600 }}>Open tenant-safe Proof Pack →</Link>
               </p>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>

@@ -1,5 +1,21 @@
 # Session Handoff
 
+## Latest session: Revenue Proof — Proof Pack V1 (2026-08-19)
+
+**Status:** Implemented on `feature/proof-pack-v1`; draft PR #551 is green at remote head `7786589640ed334d48b8cb5c8a526c1ed2645080`.
+
+- Added an authenticated tenant-scoped read model and `/api/proof-pack` contract with aggregate-only output and explicit provenance, timestamps, verification, and unavailable states.
+- Reused canonical lead, call, GorillaDesk snapshot, revenue attribution, tenant-safe review summary, referral attribution, social publishing, and Revenue Leak Detector evidence. No migration or new source-of-truth table was added.
+- Added a minimal Proof Pack page at `/admin/proof-pack`, linked from Profit Center.
+- Deliberately reports successful recovery and bookings as unavailable because current evidence does not establish the required causal link.
+- Verification: Lead Intelligence CI passes with the focused Proof Pack composer/handler tests plus shared-library, API, and frontend type checks; Coolify stack validation and GHCR production-image build also pass. Local dependency installation was unavailable, so CI is the authoritative executable evidence.
+- Follow-on audit: `docs/REVENUE-PROOF-BOOKING-RECOVERY-EVIDENCE-AUDIT-V1.md` confirms that current callback/reply aggregates cannot prove recovery, scheduled jobs cannot establish a booking period, and existing attribution does not retain match confidence or verification provenance. The draft now labels attributable revenue partial/observed and uses canonical `collected` payment state for verified revenue.
+- Follow-on implementation: `REVENUE-PROOF-CANONICAL-JOURNEY-LINKS-V1` reuses `customer_journey_events` for tenant-scoped, replay-safe Telnyx call/text/reply evidence and adds a pure composer that requires an exact parent chain. Current inbound SMS lacks a durable outbound parent ID, so replies remain partial and do not count as recovered.
+- Provider-contract audit: Telnyx documents carrier delivery through `message.finalized`, which is now recorded separately from API acceptance. Its inbound `message.received` payload has no outbound parent identifier, so verified reply correlation fails closed.
+- Booking audit: `docs/REVENUE-PROOF-BOOKING-TIMESTAMP-AUDIT-V1.md` confirms the available job import has scheduled, completed and local ingestion timestamps but no authoritative booking timestamp. Bookings remain unavailable.
+- Attribution audit: `docs/REVENUE-PROOF-ATTRIBUTION-PROVENANCE-AUDIT-V1.md` documents missing match provenance, automatic first-name matching, highest-value job selection and unrestricted manual status/revenue transitions. Proof Pack attributable revenue remains partial/observed.
+- Next: review/merge remains an owner boundary. Implement `REVENUE-PROOF-ATTRIBUTION-PROVENANCE-V1` on a dedicated branch/PR with nullable provenance fields, a pure candidate matcher and fail-closed human verification. No provider sync, deployment or retrospective verification.
+
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 
 **Status:** Implemented and locally verified on `feat/referral-enrollment-attribution-v1`.

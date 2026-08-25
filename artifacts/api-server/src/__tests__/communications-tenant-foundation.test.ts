@@ -20,6 +20,13 @@ describe("tenant-owned communications foundation", () => {
     expect(telnyxRoute).toContain('resolveCommunicationEndpoint("telnyx", to)');
     expect(telnyxRoute).toContain("hasRecentTextBack(from, endpoint.clientId)");
     expect(telnyxRoute).toContain("sendTextBack(from, endpoint.e164Number, textBackMessage)");
+    expect(telnyxRoute).toContain('eventType: "missed_call_observed"');
+    expect(telnyxRoute).toContain('eventType: "recovery_text_accepted"');
+    expect(telnyxRoute).toContain('eventType: "recovery_text_delivered"');
+    expect(telnyxRoute).toContain('deliveryStatus === "delivered"');
+    expect(telnyxRoute).toContain('eventType: "customer_reply_observed"');
+    expect(telnyxRoute).toContain("parentCallId: canonicalCallId");
+    expect(telnyxRoute).toContain("parentMessageId: null");
     expect(telnyxRoute).toContain('businessName:       "the business"');
     expect(telnyxRoute).toContain("process.env.NODE_ENV === \"production\"");
   });

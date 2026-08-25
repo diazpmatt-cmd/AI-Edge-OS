@@ -62,7 +62,7 @@ function partial(value: number, source: string, observedAt: string | null, expla
 export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: string, from: Date, to: Date, generatedAt = new Date()) {
   const leads = evidence.leads.filter(row => inPeriod(row.receivedAt ?? row.createdAt, from, to));
   const calls = evidence.calls.filter(row => inPeriod(row.createdAt, from, to));
-  const attributions = evidence.attributions.filter(row => inPeriod(row.matchedAt ?? row.updatedAt, from, to));
+  const attributions = evidence.attributions.filter(row => inPeriod(row.verifiedAt ?? row.matchedAt ?? row.updatedAt, from, to));
   const jobs = evidence.jobs.filter(row => row.status === "completed" && inPeriod(row.completedAt, from, to));
   const payments = evidence.payments.filter(row => row.status === "collected" && inPeriod(row.paidAt, from, to));
   const referrals = evidence.referrals.filter(row => inPeriod(row.createdAt, from, to));
@@ -76,7 +76,10 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: s
     return all;
   }, {})).sort(([a], [b]) => a.localeCompare(b)).map(([source, count]) => ({ source, count }));
   const paidRevenue = payments.reduce((sum, row) => sum + row.amountCents, 0) / 100;
-  const attributableRevenue = attributions.filter(row => row.status === "won" && row.revenue != null).reduce((sum, row) => sum + Number(row.revenue), 0);
+  const verifiedAttributions = attributions.filter(row => row.status === "won" && row.revenue != null && row.verifiedAt != null);
+  const observedAttributions = attributions.filter(row => row.status === "won" && row.revenue != null && row.verifiedAt == null);
+  const attributableRevenue = verifiedAttributions.reduce((sum, row) => sum + Number(row.revenue), 0);
+  const observedAttributableRevenue = observedAttributions.reduce((sum, row) => sum + Number(row.revenue), 0);
   const referralRevenue = referralAttributions.filter(row => row.measuredRevenue != null).reduce((sum, row) => sum + Number(row.measuredRevenue), 0);
   const reviewCount = evidence.reviews.reduce((sum, row) => sum + row.reviewCount, 0);
   const ratedReviews = evidence.reviews.filter(row => row.averageRating != null);
@@ -101,7 +104,10 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: s
       bookings: unavailable("GorillaDesk jobs", "The local job evidence does not preserve a canonical booking event or lead-to-booking link."),
       completedJobs: metric(jobs.length, "GorillaDesk tenant snapshot", latest(jobs.map(row => row.completedAt)), "count", "verified"),
       verifiedRevenue: metric(paidRevenue, "GorillaDesk paid payments", latest(payments.map(row => row.paidAt)), "currency", "verified"),
-      attributableRevenue: partial(attributableRevenue, "revenue attribution", latest(attributions.map(row => row.matchedAt ?? row.updatedAt)), "Attribution records do not yet preserve match method, confidence, or human-verification provenance.", "currency"),
+      attributableRevenue: metric(attributableRevenue, "human-verified revenue attribution", latest(verifiedAttributions.map(row => row.verifiedAt)), "currency", "verified"),
+      observedAttributableRevenue: observedAttributions.length
+        ? partial(observedAttributableRevenue, "unverified revenue attribution", latest(observedAttributions.map(row => row.matchedAt ?? row.updatedAt)), "Legacy or unverified won records are excluded from verified attributable revenue.", "currency")
+        : unavailable("unverified revenue attribution", "No unverified won revenue records were observed in this period.", "currency"),
       reviewsObserved: partial(reviewCount, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "This is the latest tenant-safe review snapshot, not a count of reviews created during the selected period."),
       averageRating: averageRating == null
         ? unavailable("tenant-safe review summaries", "No tenant-safe rating observation is available.", "rating")

@@ -25,14 +25,35 @@ describe("buildProofPackReadModel", () => {
         { status: "outstanding", amountCents: 99000, paidAt: at } as any,
       ],
       attributions: [
-        { id: "a", status: "won", revenue: "80.00", matchedAt: at, updatedAt: at } as any,
+        { id: "a", status: "won", revenue: "80.00", matchedAt: at, updatedAt: at, verifiedAt: at } as any,
         { id: "b", status: "pending", revenue: "900.00", matchedAt: at, updatedAt: at } as any,
       ],
     }), "tenant-a", from, to, at);
     expect(result.metrics.verifiedRevenue.value).toBe(125);
     expect(result.metrics.attributableRevenue.value).toBe(80);
-    expect(result.metrics.attributableRevenue).toMatchObject({ availability: "partial", verification: "observed" });
+    expect(result.metrics.attributableRevenue).toMatchObject({ availability: "available", verification: "verified", value: 80 });
     expect(result.revenueLeaks.proofGaps).toBe(1);
+  });
+
+  it("separates legacy won amounts from human-verified attributable revenue", () => {
+    const result = buildProofPackReadModel(evidence({
+      attributions: [
+        { id: "legacy", status: "won", revenue: "300.00", matchedAt: at, updatedAt: at, verifiedAt: null } as any,
+      ],
+    }), "tenant-a", from, to, at);
+
+    expect(result.metrics.attributableRevenue).toMatchObject({ value: 0, verification: "verified" });
+    expect(result.metrics.observedAttributableRevenue).toMatchObject({ availability: "partial", value: 300, verification: "observed" });
+  });
+
+  it("uses the verification timestamp for verified attributable revenue periods", () => {
+    const result = buildProofPackReadModel(evidence({
+      attributions: [{
+        id: "verified-now", status: "won", revenue: "210.00",
+        matchedAt: new Date("2026-07-01T00:00:00.000Z"), updatedAt: new Date("2026-07-01T00:00:00.000Z"), verifiedAt: at,
+      } as any],
+    }), "tenant-a", from, to, at);
+    expect(result.metrics.attributableRevenue).toMatchObject({ value: 210, observedAt: at.toISOString(), verification: "verified" });
   });
 
   it("labels review totals as current snapshots instead of period activity", () => {

@@ -68,7 +68,7 @@ export function buildRevenueLeakReadModel(
 
   for (const attribution of attributions) {
     if (!new Set(["pending", "unmatched"]).has(attribution.status)) continue;
-    const verifiedRevenue = asMoney(attribution.revenue);
+    const recordedRevenue = asMoney(attribution.revenue);
     items.push({
       id: `attribution_unresolved:${attribution.id}`,
       kind: "attribution_unresolved",
@@ -79,12 +79,13 @@ export function buildRevenueLeakReadModel(
       leadId: attribution.leadId,
       source: attribution.leadSource,
       customerName: attribution.customerName,
-      verifiedRevenue,
+      verifiedRevenue: null,
       evidence: {
         attributionStatus: attribution.status,
         matchedAt: attribution.matchedAt?.toISOString() ?? null,
         gorilladeskJobId: attribution.gorilladeskJobId,
-        hasVerifiedRevenue: verifiedRevenue != null,
+        hasRecordedRevenue: recordedRevenue != null,
+        hasVerifiedRevenue: false,
       },
       recommendedAction: "Reconcile this attribution record against tenant-scoped job evidence before reporting ROI.",
     });

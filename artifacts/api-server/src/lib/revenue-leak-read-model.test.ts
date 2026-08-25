@@ -45,6 +45,13 @@ function attribution(overrides: Partial<RevenueAttribution> = {}): RevenueAttrib
     notes: null,
     gorilladeskJobId: null,
     matchedAt: null,
+    matchMethod: null,
+    matchConfidence: null,
+    evidenceSource: null,
+    evidenceObservedAt: null,
+    evidenceCustomerId: null,
+    verifiedAt: null,
+    verifiedByUserId: null,
     createdAt: new Date("2026-08-15T00:00:00.000Z"),
     updatedAt: new Date("2026-08-16T00:00:00.000Z"),
     ...overrides,
@@ -75,7 +82,7 @@ describe("buildRevenueLeakReadModel", () => {
     ], NOW);
 
     expect(model.summary.proofGaps).toBe(2);
-    expect(model.summary.verifiedRevenueAtIssue).toBe(125);
+    expect(model.summary.verifiedRevenueAtIssue).toBe(0);
     expect(model.items.every(item => item.classification === "proof_gap")).toBe(true);
     expect(model.items.some(item => item.id.endsWith("00000000-0000-4000-8000-000000000022"))).toBe(false);
   });

@@ -24,6 +24,81 @@ tags:
   - name: agent-tasks
     description: Bounded autonomy approval layer — submit and review agent task requests
 paths:
+  /revenue-attribution:
+    get:
+      operationId: listRevenueAttributions
+      tags: [revenue-attribution]
+      summary: List authenticated tenant revenue-attribution evidence
+      responses:
+        "200":
+          description: Tenant-scoped attribution rows
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/RevenueAttribution" } }
+        "401": { description: Unauthorized }
+    post:
+      operationId: createRevenueAttribution
+      tags: [revenue-attribution]
+      summary: Create an unverified tenant-scoped attribution record
+      description: Generic creation cannot create a verified won transition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RevenueAttributionCreateInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevenueAttribution" }
+        "422": { description: Invalid or verification-only status }
+  /revenue-attribution/{id}:
+    put:
+      operationId: updateRevenueAttribution
+      tags: [revenue-attribution]
+      summary: Update mutable, unverified attribution fields
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RevenueAttributionMutableInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevenueAttribution" }
+        "409": { description: Verified evidence is immutable }
+        "422": { description: Verified transition required }
+  /revenue-attribution/{id}/verify:
+    post:
+      operationId: verifyRevenueAttribution
+      tags: [revenue-attribution]
+      summary: Human-verify attribution against a tenant-scoped completed GorillaDesk job
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [gorilladeskJobId]
+              properties:
+                gorilladeskJobId: { type: string }
+                notes: { type: string }
+      responses:
+        "200":
+          description: Human-verified attribution
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RevenueAttribution" }
+        "401": { description: Unauthorized }
+        "404": { description: Attribution not found in authenticated tenant }
+        "422": { description: Tenant-scoped completed job evidence required }
   /proof-pack:
     get:
       operationId: getProofPack
@@ -510,6 +585,53 @@ paths:
 
 components:
   schemas:
+    RevenueAttributionMutableInput:
+      type: object
+      properties:
+        status: { type: string, enum: [pending, unmatched, matched, lost] }
+        revenue: { type: [number, "null"], minimum: 0 }
+        serviceType: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        gorilladeskJobId: { type: [string, "null"] }
+      additionalProperties: false
+    RevenueAttributionCreateInput:
+      type: object
+      required: [customerName, leadSource]
+      properties:
+        leadId: { type: [string, "null"] }
+        customerName: { type: string, minLength: 1 }
+        phone: { type: [string, "null"] }
+        leadSource: { type: string, minLength: 1 }
+        status: { type: string, enum: [pending, unmatched, matched, lost] }
+        revenue: { type: [number, "null"], minimum: 0 }
+        serviceType: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        gorilladeskJobId: { type: [string, "null"] }
+      additionalProperties: false
+    RevenueAttribution:
+      type: object
+      required: [id, clientId, customerName, leadSource, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        leadId: { type: [string, "null"] }
+        clientId: { type: string }
+        customerName: { type: string }
+        phone: { type: [string, "null"] }
+        leadSource: { type: string }
+        status: { type: string, enum: [pending, unmatched, matched, won, lost] }
+        revenue: { type: [number, "null"] }
+        serviceType: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        gorilladeskJobId: { type: [string, "null"] }
+        matchedAt: { type: [string, "null"], format: date-time }
+        matchMethod: { type: [string, "null"], enum: [provider_customer_id, normalized_phone, first_name_candidate, human_verified, legacy_unknown, null] }
+        matchConfidence: { type: [integer, "null"], minimum: 0, maximum: 100 }
+        evidenceSource: { type: [string, "null"] }
+        evidenceObservedAt: { type: [string, "null"], format: date-time }
+        evidenceCustomerId: { type: [string, "null"] }
+        verifiedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     ProofMetric:
       type: object
       required: [availability, value, unit, verification, source, observedAt, explanation]

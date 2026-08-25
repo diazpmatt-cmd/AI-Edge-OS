@@ -1,5 +1,18 @@
 # Session Handoff
 
+## Latest session: Revenue Proof — Attribution Provenance V1
+
+**Status:** Implementation in progress on `feature/revenue-proof-attribution-provenance-v1` from merged Proof Pack commit `2a5510d9c5ea56ed6ce74bcc6a52e3f05ee439d6`.
+
+- Extended the existing attribution record rather than creating another source-of-truth table.
+- Added explicit match method, bounded confidence, evidence source/time/customer, verification time, and verifying operator fields. Legacy matched/won records become `legacy_unknown` and remain unverified.
+- Added a pure candidate matcher: immutable provider IDs and unique normalized phones can produce observed matches; ambiguous phones and first-name-only matches remain candidates and cannot automatically create matches or wins.
+- Added an authenticated verification route that requires a completed GorillaDesk job resolved inside the same tenant, derives revenue from that job, records human verification, and makes verified evidence immutable.
+- Generic create/update routes can no longer set `won`; automatic job matching can no longer set `won` from a completed or highest-value job.
+- Proof Pack now separates verified attributable revenue from unverified legacy/observed won amounts.
+- Standing repository authorization now permits ChatGPT/Codex to commit, push, open mission PRs, repair in-scope CI, and merge verified green mission work without another routine prompt. “Need hands” is the escalation signal. Deployment and other consequence-specific actions remain separate.
+- No provider call, customer action, retrospective verification, production migration, or deployment is included.
+
 ## Latest session: Revenue Proof — Proof Pack V1 (2026-08-19)
 
 **Status:** Implemented on `feature/proof-pack-v1`; draft PR #551 is green at remote head `7786589640ed334d48b8cb5c8a526c1ed2645080`.
@@ -14,7 +27,7 @@
 - Provider-contract audit: Telnyx documents carrier delivery through `message.finalized`, which is now recorded separately from API acceptance. Its inbound `message.received` payload has no outbound parent identifier, so verified reply correlation fails closed.
 - Booking audit: `docs/REVENUE-PROOF-BOOKING-TIMESTAMP-AUDIT-V1.md` confirms the available job import has scheduled, completed and local ingestion timestamps but no authoritative booking timestamp. Bookings remain unavailable.
 - Attribution audit: `docs/REVENUE-PROOF-ATTRIBUTION-PROVENANCE-AUDIT-V1.md` documents missing match provenance, automatic first-name matching, highest-value job selection and unrestricted manual status/revenue transitions. Proof Pack attributable revenue remains partial/observed.
-- Next: review/merge remains an owner boundary. Implement `REVENUE-PROOF-ATTRIBUTION-PROVENANCE-V1` on a dedicated branch/PR with nullable provenance fields, a pure candidate matcher and fail-closed human verification. No provider sync, deployment or retrospective verification.
+- Proof Pack V1 merged through PR #551 at immutable squash commit `2a5510d9c5ea56ed6ce74bcc6a52e3f05ee439d6`. The next mission is the Attribution Provenance V1 implementation above.
 
 ## Latest session: Referral Growth RGE-1 — Customer Enrollment & Attribution (2026-07-24)
 

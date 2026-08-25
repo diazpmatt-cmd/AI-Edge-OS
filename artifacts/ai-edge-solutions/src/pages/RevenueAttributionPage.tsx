@@ -16,6 +16,12 @@ type Lead = {
   notes: string | null;
   gorilladeskJobId: string | null;
   matchedAt: string | null;
+  matchMethod: string | null;
+  matchConfidence: number | null;
+  evidenceSource: string | null;
+  evidenceObservedAt: string | null;
+  evidenceCustomerId: string | null;
+  verifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -101,9 +107,9 @@ export default function RevenueAttributionPage() {
     void load();
   }, [load]);
 
-  const won = useMemo(() => leads.filter((lead) => lead.status === "won"), [leads]);
+  const won = useMemo(() => leads.filter((lead) => lead.status === "won" && lead.verifiedAt), [leads]);
   const matched = useMemo(
-    () => leads.filter((lead) => lead.status === "matched" || lead.status === "won"),
+    () => leads.filter((lead) => lead.status === "matched" || (lead.status === "won" && lead.verifiedAt)),
     [leads],
   );
   const attributedRevenue = useMemo(
@@ -119,7 +125,7 @@ export default function RevenueAttributionPage() {
       const source = lead.leadSource || "Unknown";
       const current = bySource.get(source) ?? { leads: 0, won: 0, revenue: 0 };
       current.leads += 1;
-      if (lead.status === "won") {
+      if (lead.status === "won" && lead.verifiedAt) {
         current.won += 1;
         current.revenue += lead.revenue ?? 0;
       }
@@ -198,19 +204,20 @@ export default function RevenueAttributionPage() {
     if (!selected) return;
     setWorking(true);
     try {
-      await apiFetch(`/api/revenue-attribution/${selected.id}`, {
-        method: "PUT",
+      const verifying = form.status === "won";
+      await apiFetch(`/api/revenue-attribution/${selected.id}${verifying ? "/verify" : ""}`, {
+        method: verifying ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: form.status,
-          revenue: form.revenue ? Number(form.revenue) : null,
+          ...(!verifying && { revenue: form.revenue ? Number(form.revenue) : null }),
           serviceType: form.serviceType || null,
           notes: form.notes || null,
           gorilladeskJobId: form.gorilladeskJobId || null,
         }),
       });
       setSelected(null);
-      setMessage("Lead closeout saved.");
+      setMessage(verifying ? "Revenue verified against the tenant-scoped completed job." : "Lead closeout saved.");
       await load();
     } catch {
       setMessage("Lead closeout could not be saved.");
@@ -242,8 +249,8 @@ export default function RevenueAttributionPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
               {card("Captured leads", String(leads.length), "Attribution records for this client")}
               {card("Matched", String(matched.length), "Matched to known customer/job evidence")}
-              {card("Won jobs", String(won.length), "Records explicitly marked won")}
-              {card("Attributed revenue", money(attributedRevenue), "Revenue stored on won jobs only")}
+              {card("Verified won jobs", String(won.length), "Human-verified against completed job evidence")}
+              {card("Verified attribution", money(attributedRevenue), "Canonical completed-job revenue only")}
               {card("Lead → won", `${conversionRate.toFixed(1)}%`, "Observed conversion, not projected")}
               {card("Average won job", won.length ? money(avgTicket) : "—", "Observed won-job average")}
             </div>
@@ -315,10 +322,10 @@ export default function RevenueAttributionPage() {
                       <tr key={lead.id} style={{ borderTop: `1px solid ${isDark ? "#1E2D48" : "#E2E8F0"}` }}>
                         <td style={{ padding: 12, fontWeight: 650 }}>{lead.customerName}</td>
                         <td>{lead.leadSource}</td>
-                        <td style={{ color: meta.color, fontWeight: 700 }}>{meta.label}</td>
+                        <td style={{ color: meta.color, fontWeight: 700 }}>{lead.status === "won" && !lead.verifiedAt ? "Won (unverified legacy)" : meta.label}</td>
                         <td>{lead.revenue == null ? "—" : money(lead.revenue)}</td>
-                        <td>{lead.gorilladeskJobId ? `Job ${lead.gorilladeskJobId}` : lead.matchedAt ? "Customer matched" : "Pending"}</td>
-                        <td><button onClick={() => openCloseout(lead)}>Close out</button></td>
+                        <td>{lead.verifiedAt ? "Human verified" : lead.matchMethod === "first_name_candidate" ? "First-name candidate only" : lead.gorilladeskJobId ? `Job ${lead.gorilladeskJobId} · unverified` : lead.matchedAt ? `${lead.matchMethod ?? "legacy"} match · unverified` : "Pending"}</td>
+                        <td>{lead.verifiedAt ? <span style={{ color: "#22C55E", fontWeight: 700 }}>Verified</span> : <button onClick={() => openCloseout(lead)}>Close out</button>}</td>
                       </tr>
                     );
                   })}
@@ -335,9 +342,10 @@ export default function RevenueAttributionPage() {
               <label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }}>
                 {Object.keys(STATUS_META).map((status) => <option key={status} value={status}>{STATUS_META[status].label}</option>)}
               </select></label>
-              <label>Revenue<input type="number" min="0" step="0.01" value={form.revenue} onChange={(e) => setForm({ ...form, revenue: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
+              <label>Revenue<input disabled={form.status === "won"} type="number" min="0" step="0.01" value={form.revenue} onChange={(e) => setForm({ ...form, revenue: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
               <label>Service type<input value={form.serviceType} onChange={(e) => setForm({ ...form, serviceType: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
               <label>GorillaDesk job ID<input value={form.gorilladeskJobId} onChange={(e) => setForm({ ...form, gorilladeskJobId: e.target.value })} style={{ display: "block", width: "100%", margin: "6px 0 12px" }} /></label>
+              {form.status === "won" && <p style={{ color: "#6B7280", fontSize: 12 }}>Winning revenue is read from the tenant-scoped completed GorillaDesk job. Typed revenue is never accepted as verification.</p>}
               <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} style={{ display: "block", width: "100%", minHeight: 90, margin: "6px 0 12px" }} /></label>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button disabled={working} onClick={() => setSelected(null)}>Cancel</button>

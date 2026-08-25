@@ -691,6 +691,27 @@ export async function migrateSchema(): Promise<void> {
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE revenue_attribution
+      ADD COLUMN IF NOT EXISTS match_method TEXT,
+      ADD COLUMN IF NOT EXISTS match_confidence INTEGER,
+      ADD COLUMN IF NOT EXISTS evidence_source TEXT,
+      ADD COLUMN IF NOT EXISTS evidence_observed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS evidence_customer_id TEXT,
+      ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS verified_by_user_id TEXT;
+
+    DO $$ BEGIN
+      ALTER TABLE revenue_attribution
+        ADD CONSTRAINT revenue_attribution_match_confidence_bounds
+        CHECK (match_confidence IS NULL OR (match_confidence >= 0 AND match_confidence <= 100));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    UPDATE revenue_attribution
+      SET match_method = 'legacy_unknown'
+      WHERE match_method IS NULL
+        AND (matched_at IS NOT NULL OR status IN ('matched', 'won'));
   `);
 
   // ── AI Receptionist Settings ───────────────────────────────────────────────

@@ -6,6 +6,14 @@ All notable changes to the AI Edge Solutions platform.
 
 ## [Unreleased]
 
+### Revenue Proof — Attribution Provenance V1
+
+- Added nullable provenance fields to the existing revenue-attribution record for match method, confidence, source, evidence time, candidate customer, and authenticated human verification. Legacy matched/won records are labeled `legacy_unknown` without inventing verification.
+- Replaced implicit phone/first-name matching with a pure candidate matcher. Unique normalized-phone matches may become observed matches; ambiguous phone and first-name-only candidates never automatically become matched or won.
+- Added a fail-closed verification transition that derives revenue only from a completed GorillaDesk job in the authenticated tenant and records the verifying operator. Generic create/update routes cannot mark revenue won, and verified evidence is immutable.
+- Split Proof Pack attribution into human-verified attributable revenue and separately labeled unverified observed attribution.
+- Recorded standing authorization for verified green mission commits, pull requests, in-scope CI repair, and merges; production deployment and other consequence-specific boundaries remain separate.
+
 ### Revenue Proof — Proof Pack V1
 
 - Added a read-only, aggregate-only Proof Pack for the authenticated tenant, backed by existing lead, call, canonical collected GorillaDesk payments, attribution, review, referral, publishing, and Revenue Leak Detector evidence.

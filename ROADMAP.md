@@ -7,12 +7,12 @@ Last updated: 2026-08-05
 - [x] Define a tenant-safe aggregate Proof Pack contract over canonical systems without adding a second attribution or analytics store.
 - [x] Surface leads by source, missed calls, customer responses, completed jobs, verified/attributable revenue, reviews, referrals, publishing activity, and unresolved revenue leaks where supported.
 - [x] Mark recovery and booking claims unavailable until canonical causal links exist.
-- [ ] Validate the draft pull request in CI and collect real tenant evidence before any customer-facing case study claim.
+- [x] Validate Proof Pack V1 in CI and merge PR #551. Real tenant evidence is still required before any customer-facing case study claim.
 - [x] Audit canonical booking and missed-call recovery evidence links; preserve unavailable states because causal provider links are not yet durable.
 - [x] Add tenant-scoped, idempotent Telnyx journey-event links and a pure causal recovery composer; unlinked replies remain partial and do not count as recovered.
 - [ ] Telnyx's documented inbound SMS payload provides no outbound parent ID. Keep verified recovery unavailable unless a future authoritative correlation mechanism exists; keep booking unavailable until an authoritative booking timestamp exists.
 - [x] Audit GorillaDesk booking timestamps; current local evidence has service scheduling, completion and ingestion times but no authoritative booked/created time.
-- [ ] Preserve attribution match method, confidence, evidence timestamp and human-verification state before upgrading attributable revenue from partial to verified.
+- [x] Preserve attribution match method, confidence, evidence timestamp and human-verification state; require an authenticated tenant-scoped completed-job verification transition before attributable revenue is verified.
 - [x] Audit the existing attribution workflow: phone and first-name matches are not distinguished, highest-value customer jobs can become won automatically, and manual status/revenue writes lack a verification transition.
 
 ---

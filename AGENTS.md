@@ -16,9 +16,9 @@ Keep this file compact. Do not duplicate or contradict those documents; update t
 - Use one approved task per feature branch and one agent per branch/worktree. Do not let agents concurrently modify the same working tree.
 - Stay within the approved scope and explicit file list. Treat proposals, plans, issue fields, and agent recommendations as non-authoritative until Matthew Diaz records an attributable decision.
 - Approval applies only to the exact task specification revision, expected Git SHA, and authorization category named in that decision.
-- Keep scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions as separate authorization categories. Approval in one category never authorizes another.
+- Keep scope, editing, committing, pushing, merging, deployment, credentials, paid providers, and external actions as separate authorization categories. Matthew's standing authorization covers committing, pushing, opening pull requests, repairing in-scope CI failures, and merging verified green mission-related pull requests without another routine prompt. It does not authorize deployment, credentials, paid providers, customer-facing actions, destructive actions, or unrelated work.
 - Record committed, pushed, pull-request-opened, merged, and deployed milestones only after verifying the corresponding Git, GitHub, or deployment state.
-- Run only the requested verification and review the complete diff before requesting the next authorization.
+- Run the required verification and review the complete diff before merging. Continue autonomously under standing authorization; request Matthew's hands only when direct human action or a still-separate authorization category is genuinely required.
 - Never place credentials, tokens, secrets, raw environment values, private customer data, full conversation transcripts, or unbounded shell output in tasks, reports, commits, or documentation.
 
 ## DAB phase boundary

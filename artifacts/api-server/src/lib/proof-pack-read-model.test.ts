@@ -34,4 +34,20 @@ describe("buildProofPackReadModel", () => {
     expect(result.metrics.attributableRevenue).toMatchObject({ availability: "partial", verification: "observed" });
     expect(result.revenueLeaks.proofGaps).toBe(1);
   });
+
+  it("labels review totals as current snapshots instead of period activity", () => {
+    const observedAt = new Date("2026-07-15T12:00:00.000Z");
+    const result = buildProofPackReadModel(evidence({
+      reviews: [{ reviewCount: 17, averageRating: "4.70", observedAt } as any],
+    }), "tenant-a", from, to, at);
+
+    expect(result.metrics.reviewsObserved).toMatchObject({
+      availability: "partial",
+      value: 17,
+      verification: "observed",
+      observedAt: observedAt.toISOString(),
+    });
+    expect(result.metrics.reviewsObserved.explanation).toContain("latest tenant-safe review snapshot");
+    expect(result.metrics.averageRating).toMatchObject({ availability: "partial", value: 4.7 });
+  });
 });

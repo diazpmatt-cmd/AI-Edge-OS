@@ -102,8 +102,10 @@ export function buildProofPackReadModel(evidence: ProofPackEvidence, clientId: s
       completedJobs: metric(jobs.length, "GorillaDesk tenant snapshot", latest(jobs.map(row => row.completedAt)), "count", "verified"),
       verifiedRevenue: metric(paidRevenue, "GorillaDesk paid payments", latest(payments.map(row => row.paidAt)), "currency", "verified"),
       attributableRevenue: partial(attributableRevenue, "revenue attribution", latest(attributions.map(row => row.matchedAt ?? row.updatedAt)), "Attribution records do not yet preserve match method, confidence, or human-verification provenance.", "currency"),
-      reviewsObserved: metric(reviewCount, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt))),
-      averageRating: averageRating == null ? unavailable("tenant-safe review summaries", "No tenant-safe rating observation is available.", "rating") : metric(averageRating, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "rating"),
+      reviewsObserved: partial(reviewCount, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "This is the latest tenant-safe review snapshot, not a count of reviews created during the selected period."),
+      averageRating: averageRating == null
+        ? unavailable("tenant-safe review summaries", "No tenant-safe rating observation is available.", "rating")
+        : partial(averageRating, "tenant-safe review summaries", latest(evidence.reviews.map(row => row.observedAt)), "This is the latest tenant-safe rating snapshot; the selected period does not establish when individual reviews were created.", "rating"),
       referralsCreated: metric(referrals.length, "referrals", latest(referrals.map(row => row.createdAt))),
       referralRevenue: metric(referralRevenue, "confirmed referral CRM attribution", latest(referralAttributions.map(row => row.decidedAt ?? row.updatedAt)), "currency", "verified"),
       contentCreated: metric(posts.filter(row => inPeriod(row.createdAt, from, to)).length, "social posts", latest(posts.map(row => row.createdAt))),
